@@ -35,7 +35,13 @@ export default function VehiclesPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <p style={{ color: 'var(--text-muted)' }}>Loading board...</p>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: '60vh' }}>
+        <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--border)', borderTopColor: 'transparent' }} />
+      </div>
+    )
+  }
 
   function getTimeInStage(v: VehicleWithStage): string {
     const stage = v.stages[0]
@@ -51,7 +57,8 @@ export default function VehiclesPage() {
     if (v.status === 'completed') return false
     const stage = v.stages[0]
     if (!stage) return false
-    const sla = DEFAULT_SLA_HOURS[stage.status as keyof typeof DEFAULT_SLA_HOURS]
+    const slaKey = v.status as keyof typeof DEFAULT_SLA_HOURS
+    const sla = DEFAULT_SLA_HOURS[slaKey]
     if (!sla) return false
     const elapsed = (Date.now() - new Date(stage.startedAt).getTime()) / 1000 - stage.totalBlockedSeconds
     return elapsed > sla * 3600
@@ -59,14 +66,11 @@ export default function VehiclesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold">Recon Board</h1>
-        <Link
-          href="/vehicles/new"
-          className="px-4 py-2 rounded-lg font-semibold text-sm text-white"
-          style={{ background: 'var(--accent)' }}
-        >
-          + Add Vehicle
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Recon Board</h1>
+        <Link href="/vehicles/new" className="btn btn-primary gap-2">
+          <span style={{ fontSize: '18px', lineHeight: 1 }}>+</span>
+          <span className="hidden sm:inline">Add Vehicle</span>
         </Link>
       </div>
 
@@ -75,13 +79,11 @@ export default function VehiclesPage() {
           const colVehicles = vehicles.filter((v) => v.status === col)
           return (
             <div key={col} className="kanban-column">
-              <div className="flex items-center justify-between mb-3 px-1">
-                <h2 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
+              <div className="kanban-column-header">
+                <span className="kanban-column-title">
                   {STAGE_LABELS[col as keyof typeof STAGE_LABELS]}
-                </h2>
-                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--bg-primary)', color: 'var(--text-muted)' }}>
-                  {colVehicles.length}
                 </span>
+                <span className="kanban-column-count">{colVehicles.length}</span>
               </div>
               <div className="flex flex-col gap-2">
                 {colVehicles.map((v) => (
@@ -101,9 +103,9 @@ export default function VehiclesPage() {
                   />
                 ))}
                 {colVehicles.length === 0 && (
-                  <p className="text-xs text-center py-8" style={{ color: 'var(--text-muted)' }}>
-                    No vehicles
-                  </p>
+                  <div className="text-center py-10 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--border)' }}>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Empty</p>
+                  </div>
                 )}
               </div>
             </div>

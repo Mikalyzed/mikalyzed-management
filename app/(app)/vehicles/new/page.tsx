@@ -46,69 +46,70 @@ export default function AddVehiclePage() {
 
   return (
     <div className="max-w-lg mx-auto">
-      <h1 className="text-xl font-bold mb-6">Add Vehicle</h1>
+      <button onClick={() => router.back()} className="text-sm mb-6 flex items-center gap-1" style={{ color: 'var(--accent)' }}>
+        ← Back
+      </button>
 
-      <form onSubmit={handleSubmit} className="card flex flex-col gap-4" style={{ padding: '24px' }}>
-        <Field label="Stock Number *" name="stockNumber" required />
-        <Field label="VIN" name="vin" placeholder="Optional" />
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Year" name="year" type="number" placeholder="2024" />
-          <Field label="Color" name="color" />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Make *" name="make" required placeholder="Toyota" />
-          <Field label="Model *" name="model" required placeholder="Camry" />
-        </div>
-        <Field label="Trim" name="trim" placeholder="Optional" />
+      <h1 className="text-2xl font-bold tracking-tight mb-6">Add Vehicle</h1>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
         <div>
-          <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>Notes</label>
-          <textarea
-            name="notes"
-            rows={3}
-            className="w-full px-3 py-2 rounded-lg border"
-            style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-primary)', resize: 'vertical' }}
-          />
+          <label className="form-label">Stock Number *</label>
+          <input name="stockNumber" required className="input" placeholder="e.g. A1234" />
         </div>
 
-        {error && <p className="text-sm" style={{ color: 'var(--danger)' }}>{error}</p>}
+        <div>
+          <label className="form-label">VIN</label>
+          <input name="vin" className="input" placeholder="Optional" />
+        </div>
 
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="flex-1 py-3 rounded-lg font-semibold text-sm border"
-            style={{ borderColor: 'var(--border)', color: 'var(--text-secondary)', background: 'transparent' }}
-          >
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="form-label">Year</label>
+            <input name="year" type="number" className="input" placeholder="2024" />
+          </div>
+          <div>
+            <label className="form-label">Color</label>
+            <input name="color" className="input" placeholder="White" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="form-label">Make *</label>
+            <input name="make" required className="input" placeholder="Toyota" />
+          </div>
+          <div>
+            <label className="form-label">Model *</label>
+            <input name="model" required className="input" placeholder="Camry" />
+          </div>
+        </div>
+
+        <div>
+          <label className="form-label">Trim</label>
+          <input name="trim" className="input" placeholder="Optional" />
+        </div>
+
+        <div>
+          <label className="form-label">Notes</label>
+          <textarea name="notes" rows={3} className="input" style={{ resize: 'vertical', minHeight: '80px' }} placeholder="Any notes about this vehicle..." />
+        </div>
+
+        {error && (
+          <div className="px-4 py-3 rounded-xl text-sm" style={{ background: 'rgba(255,69,58,0.1)', color: 'var(--danger)' }}>
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-3 pt-2">
+          <button type="button" onClick={() => router.back()} className="btn btn-secondary flex-1">
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex-1 py-3 rounded-lg font-semibold text-sm text-white"
-            style={{ background: loading ? 'var(--text-muted)' : 'var(--accent)' }}
-          >
+          <button type="submit" disabled={loading} className="btn btn-primary flex-1" style={loading ? { opacity: 0.5 } : {}}>
             {loading ? 'Creating...' : 'Add to Recon'}
           </button>
         </div>
       </form>
-    </div>
-  )
-}
-
-function Field({ label, name, type = 'text', required = false, placeholder = '' }: {
-  label: string; name: string; type?: string; required?: boolean; placeholder?: string
-}) {
-  return (
-    <div>
-      <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>{label}</label>
-      <input
-        name={name}
-        type={type}
-        required={required}
-        placeholder={placeholder}
-        className="w-full px-3 py-2 rounded-lg border"
-        style={{ background: 'var(--bg-primary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
-      />
     </div>
   )
 }

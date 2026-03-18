@@ -29,7 +29,13 @@ export default function DashboardPage() {
       .catch(console.error)
   }, [])
 
-  if (!data) return <p style={{ color: 'var(--text-muted)' }}>Loading dashboard...</p>
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: '60vh' }}>
+        <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--border)', borderTopColor: 'transparent' }} />
+      </div>
+    )
+  }
 
   const isAdmin = data.user.role === 'admin'
   const isWorker = ['mechanic', 'detailer', 'content'].includes(data.user.role)
@@ -37,53 +43,82 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold">Hey, {data.user.name} 👋</h1>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            {isAdmin ? 'Here\'s your operation overview' : 'Here\'s what needs your attention'}
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+            Welcome back, {data.user.name}
           </p>
         </div>
         {isAdmin && (
-          <Link
-            href="/vehicles/new"
-            className="px-4 py-2.5 rounded-lg font-semibold text-sm text-white whitespace-nowrap"
-            style={{ background: 'var(--accent)' }}
-          >
-            + Add Vehicle
+          <Link href="/vehicles/new" className="btn btn-primary gap-2">
+            <span style={{ fontSize: '18px', lineHeight: 1 }}>+</span>
+            <span className="hidden sm:inline">Add Vehicle</span>
           </Link>
         )}
       </div>
 
-      {/* Stats cards */}
+      {/* Stats */}
       {isAdmin && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          <StatCard label="In Pipeline" value={totalPipeline} />
-          <StatCard label="Completed" value={data.pipeline.completed} color="var(--success)" />
-          <StatCard label="Overdue" value={data.overdue} color={data.overdue > 0 ? 'var(--danger)' : undefined} />
-          <StatCard label="Blocked" value={data.blocked} color={data.blocked > 0 ? 'var(--warning)' : undefined} />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="stat-card">
+            <p className="stat-value">{totalPipeline}</p>
+            <p className="stat-label">In Pipeline</p>
+          </div>
+          <div className="stat-card">
+            <p className="stat-value" style={{ color: 'var(--success)' }}>{data.pipeline.completed}</p>
+            <p className="stat-label">Completed</p>
+          </div>
+          <div className="stat-card">
+            <p className="stat-value" style={{ color: data.overdue > 0 ? 'var(--danger)' : 'var(--text-primary)' }}>{data.overdue}</p>
+            <p className="stat-label">Overdue</p>
+          </div>
+          <div className="stat-card">
+            <p className="stat-value" style={{ color: data.blocked > 0 ? 'var(--warning)' : 'var(--text-primary)' }}>{data.blocked}</p>
+            <p className="stat-label">Blocked</p>
+          </div>
         </div>
       )}
 
       {isWorker && (
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <StatCard label="My Tasks" value={data.myTasks} color="var(--accent)" />
-          <StatCard label="Overdue" value={data.overdue} color={data.overdue > 0 ? 'var(--danger)' : undefined} />
+        <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="stat-card">
+            <p className="stat-value" style={{ color: 'var(--accent)' }}>{data.myTasks}</p>
+            <p className="stat-label">My Tasks</p>
+          </div>
+          <div className="stat-card">
+            <p className="stat-value" style={{ color: data.overdue > 0 ? 'var(--danger)' : 'var(--text-primary)' }}>{data.overdue}</p>
+            <p className="stat-label">Overdue</p>
+          </div>
         </div>
       )}
 
-      {/* Pipeline breakdown for admin */}
+      {/* Pipeline */}
       {isAdmin && (
-        <div className="card mb-6">
-          <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-secondary)' }}>
-            Pipeline
-          </h2>
+        <div className="mb-8">
+          <p className="section-label">Pipeline Overview</p>
           <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-            <PipelineStage label="🔧 Mechanic" count={data.pipeline.mechanic} />
-            <PipelineStage label="✨ Detailing" count={data.pipeline.detailing} />
-            <PipelineStage label="📸 Content" count={data.pipeline.content} />
-            <PipelineStage label="🚀 Publish" count={data.pipeline.publish} />
-            <PipelineStage label="✅ Done" count={data.pipeline.completed} />
+            <div className="pipeline-chip">
+              <p className="pipeline-chip-value">{data.pipeline.mechanic}</p>
+              <p className="pipeline-chip-label">Mechanic</p>
+            </div>
+            <div className="pipeline-chip">
+              <p className="pipeline-chip-value">{data.pipeline.detailing}</p>
+              <p className="pipeline-chip-label">Detailing</p>
+            </div>
+            <div className="pipeline-chip">
+              <p className="pipeline-chip-value">{data.pipeline.content}</p>
+              <p className="pipeline-chip-label">Content</p>
+            </div>
+            <div className="pipeline-chip">
+              <p className="pipeline-chip-value">{data.pipeline.publish}</p>
+              <p className="pipeline-chip-label">Publish</p>
+            </div>
+            <div className="pipeline-chip">
+              <p className="pipeline-chip-value" style={{ color: 'var(--success)' }}>{data.pipeline.completed}</p>
+              <p className="pipeline-chip-label">Completed</p>
+            </div>
           </div>
         </div>
       )}
@@ -91,21 +126,26 @@ export default function DashboardPage() {
       {/* Recent vehicles */}
       {data.recentVehicles.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-secondary)' }}>
-            Recent Vehicles
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <p className="section-label" style={{ marginBottom: 0 }}>Recent Vehicles</p>
+            <Link href="/vehicles" className="text-xs font-medium" style={{ color: 'var(--accent)' }}>
+              View All →
+            </Link>
+          </div>
           <div className="flex flex-col gap-2">
             {data.recentVehicles.map((v) => (
-              <Link key={v.id} href={`/vehicles/${v.id}`} className="card flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-sm">#{v.stockNumber}</p>
-                  <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                    {v.year} {v.make} {v.model}
-                  </p>
+              <Link key={v.id} href={`/vehicles/${v.id}`}>
+                <div className="card flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold tracking-tight">#{v.stockNumber}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                      {v.year} {v.make} {v.model}
+                    </p>
+                  </div>
+                  <span className={`badge badge-${v.status}`}>
+                    {v.status}
+                  </span>
                 </div>
-                <span className={`badge badge-${v.status}`}>
-                  {v.status}
-                </span>
               </Link>
             ))}
           </div>
@@ -114,41 +154,20 @@ export default function DashboardPage() {
 
       {/* Empty state */}
       {data.recentVehicles.length === 0 && (
-        <div className="card text-center py-16">
-          <p className="text-3xl mb-3">🚗</p>
-          <p className="font-semibold mb-1">No vehicles yet</p>
-          <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
-            Add your first vehicle to start the recon workflow
+        <div className="card-flat text-center" style={{ padding: '60px 20px' }}>
+          <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.04)', fontSize: '28px' }}>
+            🚗
+          </div>
+          <p className="font-semibold text-lg mb-1">No vehicles yet</p>
+          <p className="text-sm mb-6" style={{ color: 'var(--text-muted)', maxWidth: '300px', margin: '0 auto 24px' }}>
+            Add your first vehicle to start tracking the recon workflow
           </p>
-          <Link
-            href="/vehicles/new"
-            className="inline-block px-6 py-2.5 rounded-lg font-semibold text-sm text-white"
-            style={{ background: 'var(--accent)' }}
-          >
-            + Add Vehicle
+          <Link href="/vehicles/new" className="btn btn-primary">
+            Add First Vehicle
           </Link>
         </div>
       )}
-    </div>
-  )
-}
-
-function StatCard({ label, value, color }: { label: string; value: number; color?: string }) {
-  return (
-    <div className="card text-center py-4">
-      <p className="text-3xl font-bold" style={{ color: color || 'var(--text-primary)' }}>
-        {value}
-      </p>
-      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{label}</p>
-    </div>
-  )
-}
-
-function PipelineStage({ label, count }: { label: string; count: number }) {
-  return (
-    <div className="text-center p-3 rounded-lg" style={{ background: 'var(--bg-primary)' }}>
-      <p className="text-xl font-bold">{count}</p>
-      <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{label}</p>
     </div>
   )
 }

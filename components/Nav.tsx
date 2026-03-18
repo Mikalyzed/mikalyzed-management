@@ -7,80 +7,91 @@ type NavItem = {
   href: string
   label: string
   icon: string
+  mobileIcon: string
 }
 
 const NAV_ITEMS: Record<string, NavItem[]> = {
   admin: [
-    { href: '/dashboard', label: 'Home', icon: '🏠' },
-    { href: '/vehicles', label: 'Board', icon: '📋' },
-    { href: '/transport', label: 'Transport', icon: '🚚' },
-    { href: '/reports', label: 'Reports', icon: '📈' },
+    { href: '/dashboard', label: 'Dashboard', icon: '⌂', mobileIcon: '⌂' },
+    { href: '/vehicles', label: 'Recon Board', icon: '◫', mobileIcon: '◫' },
+    { href: '/transport', label: 'Transport', icon: '⇄', mobileIcon: '⇄' },
+    { href: '/reports', label: 'Reports', icon: '◑', mobileIcon: '◑' },
   ],
   mechanic: [
-    { href: '/dashboard', label: 'Home', icon: '🏠' },
-    { href: '/tasks', label: 'My Tasks', icon: '🔧' },
-    { href: '/vehicles', label: 'Board', icon: '📋' },
+    { href: '/dashboard', label: 'Dashboard', icon: '⌂', mobileIcon: '⌂' },
+    { href: '/tasks', label: 'My Tasks', icon: '☰', mobileIcon: '☰' },
+    { href: '/vehicles', label: 'Board', icon: '◫', mobileIcon: '◫' },
   ],
   detailer: [
-    { href: '/dashboard', label: 'Home', icon: '🏠' },
-    { href: '/tasks', label: 'My Tasks', icon: '✨' },
-    { href: '/vehicles', label: 'Board', icon: '📋' },
+    { href: '/dashboard', label: 'Dashboard', icon: '⌂', mobileIcon: '⌂' },
+    { href: '/tasks', label: 'My Tasks', icon: '☰', mobileIcon: '☰' },
+    { href: '/vehicles', label: 'Board', icon: '◫', mobileIcon: '◫' },
   ],
   content: [
-    { href: '/dashboard', label: 'Home', icon: '🏠' },
-    { href: '/tasks', label: 'My Tasks', icon: '📸' },
-    { href: '/vehicles', label: 'Board', icon: '📋' },
+    { href: '/dashboard', label: 'Dashboard', icon: '⌂', mobileIcon: '⌂' },
+    { href: '/tasks', label: 'My Tasks', icon: '☰', mobileIcon: '☰' },
+    { href: '/vehicles', label: 'Board', icon: '◫', mobileIcon: '◫' },
   ],
   sales: [
-    { href: '/dashboard', label: 'Home', icon: '🏠' },
-    { href: '/transport/new', label: 'Request', icon: '🚚' },
-    { href: '/transport/mine', label: 'My Requests', icon: '📦' },
+    { href: '/dashboard', label: 'Dashboard', icon: '⌂', mobileIcon: '⌂' },
+    { href: '/transport/new', label: 'New Request', icon: '+', mobileIcon: '+' },
+    { href: '/transport/mine', label: 'My Requests', icon: '☰', mobileIcon: '☰' },
   ],
   coordinator: [
-    { href: '/dashboard', label: 'Home', icon: '🏠' },
-    { href: '/transport', label: 'Queue', icon: '🚚' },
+    { href: '/dashboard', label: 'Dashboard', icon: '⌂', mobileIcon: '⌂' },
+    { href: '/transport', label: 'Queue', icon: '☰', mobileIcon: '☰' },
   ],
 }
 
 export default function Nav({ role, userName }: { role: string; userName: string }) {
   const pathname = usePathname()
   const items = NAV_ITEMS[role] || NAV_ITEMS.sales
+  const isActive = (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
 
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex flex-col w-56 fixed left-0 top-0 bottom-0 border-r"
-        style={{ background: 'var(--bg-secondary)', borderColor: 'var(--border)' }}>
-        <div className="p-4 border-b" style={{ borderColor: 'var(--border)' }}>
-          <h1 className="text-lg font-bold">🔧 Mikalyzed</h1>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-            {userName} · <span className="capitalize">{role}</span>
-          </p>
+      <aside className="sidebar hidden md:flex">
+        <div className="px-5 py-5 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold"
+              style={{ background: 'var(--accent)', color: 'white' }}>
+              M
+            </div>
+            <div>
+              <p className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>Mikalyzed</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Management</p>
+            </div>
+          </div>
         </div>
-        <nav className="flex-1 p-3 flex flex-col gap-1">
+
+        <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
+          <p className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+            Menu
+          </p>
           {items.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-              style={{
-                color: pathname === item.href ? 'var(--accent)' : 'var(--text-secondary)',
-                background: pathname === item.href ? 'rgba(59,130,246,0.1)' : 'transparent',
-              }}
+              className={`sidebar-link ${isActive(item.href) ? 'active' : ''}`}
             >
-              <span>{item.icon}</span>
+              <span className="icon" style={{ fontSize: '16px', width: '20px', textAlign: 'center' }}>{item.icon}</span>
               {item.label}
             </Link>
           ))}
         </nav>
-        <div className="p-3 border-t" style={{ borderColor: 'var(--border)' }}>
-          <Link
-            href="/api/auth/logout"
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm"
-            style={{ color: 'var(--text-muted)' }}
-          >
-            🚪 Sign Out
-          </Link>
+
+        <div className="px-3 py-4 border-t" style={{ borderColor: 'var(--border)' }}>
+          <div className="flex items-center gap-3 px-3 py-2">
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold"
+              style={{ background: 'rgba(255,255,255,0.1)', color: 'var(--text-secondary)' }}>
+              {userName.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <p className="text-sm font-medium">{userName}</p>
+              <p className="text-xs capitalize" style={{ color: 'var(--text-muted)' }}>{role}</p>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -90,9 +101,9 @@ export default function Nav({ role, userName }: { role: string; userName: string
           <Link
             key={item.href}
             href={item.href}
-            className={pathname === item.href ? 'active' : ''}
+            className={isActive(item.href) ? 'active' : ''}
           >
-            <span style={{ fontSize: '20px' }}>{item.icon}</span>
+            <span className="nav-icon">{item.mobileIcon}</span>
             <span>{item.label}</span>
           </Link>
         ))}
