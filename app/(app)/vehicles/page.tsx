@@ -28,13 +28,11 @@ export default function VehiclesPage() {
   const [vehicles, setVehicles] = useState<VehicleWithStage[]>([])
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [dragState, setDragState] = useState<{
-    vehicleId: string
-    column: string
-    dropIndex: number | null
-  } | null>(null)
+  const [dragInfo, setDragInfo] = useState<{ vehicleId: string; column: string } | null>(null)
+  const [liveOrder, setLiveOrder] = useState<Record<string, string[]>>({})
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const dragGhostRef = useRef<HTMLDivElement | null>(null)
+  const originalOrderRef = useRef<Record<string, string[]>>({})
 
   useEffect(() => {
     fetch('/api/vehicles')
@@ -50,7 +48,6 @@ export default function VehiclesPage() {
       })
       .catch(() => {})
 
-    // Create offscreen ghost container
     const ghost = document.createElement('div')
     ghost.style.position = 'fixed'
     ghost.style.top = '-9999px'
@@ -62,15 +59,24 @@ export default function VehiclesPage() {
   }, [])
 
   const getColumnVehicles = useCallback(
-    (col: string) => vehicles.filter((v) => v.status === col),
-    [vehicles]
+    (col: string) => {
+      const colVehicles = vehicles.filter((v) => v.status === col)
+      if (dragInfo && liveOrder[col]) {
+        // Return vehicles in the live reordered order
+        return liveOrder[col]
+          .map(id => colVehicles.find(v => v.id === id))
+          .filter(Boolean) as VehicleWithStage[]
+      }
+      return colVehicles
+    },
+    [vehicles, dragInfo, liveOrder]
   )
 
   const handleDragStart = useCallback((e: React.DragEvent, vehicleId: string, column: string) => {
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', vehicleId)
 
-    // Create a custom drag image from the card
+    // Custom drag image
     const cardEl = (e.currentTarget as HTMLElement).querySelector('.vehicle-card-inner') as HTMLElement
     if (cardEl && dragGhostRef.current) {
       const clone = cardEl.cloneNode(true) as HTMLElement
@@ -86,12 +92,17 @@ export default function VehiclesPage() {
       e.dataTransfer.setDragImage(clone, cardEl.offsetWidth / 2, 30)
     }
 
-    setDragState({ vehicleId, column, dropIndex: null })
-  }, [])
+    // Store original order for this column
+    const colVehicles = vehicles.filter(v => v.status === column)
+    const ids = colVehicles.map(v => v.id)
+    originalOrderRef.current = { [column]: ids }
+    setLiveOrder({ [column]: ids })
+    setDragInfo({ vehicleId, column })
+  }, [vehicles])
 
   const handleDragOver = useCallback(
     (e: React.DragEvent, column: string) => {
-      if (!dragState || dragState.column !== column) return
+      if (!dragInfo || dragInfo.column !== column) return
       e.preventDefault()
       e.dataTransfer.dropEffect = 'move'
 
@@ -100,64 +111,79 @@ export default function VehiclesPage() {
 
       const cards = Array.from(container.querySelectorAll('[data-vehicle-id]')) as HTMLElement[]
       const y = e.clientY
-      let dropIdx = cards.length
+      let hoverIdx = cards.length
 
       for (let i = 0; i < cards.length; i++) {
         const rect = cards[i].getBoundingClientRect()
         if (y < rect.top + rect.height / 2) {
-          dropIdx = i
+          hoverIdx = i
           break
         }
       }
 
-      setDragState((prev) => (prev ? { ...prev, dropIndex: dropIdx } : null))
+      // Reorder the live list
+      setLiveOrder(prev => {
+        const currentOrder = prev[column] || originalOrderRef.current[column] || []
+        const dragIdx = currentOrder.indexOf(dragInfo.vehicleId)
+        if (dragIdx === -1) return prev
+
+        // Calculate target index
+        let targetIdx = hoverIdx
+        if (targetIdx > dragIdx) targetIdx = Math.min(targetIdx, currentOrder.length - 1)
+        if (targetIdx === dragIdx) return prev
+
+        const newOrder = [...currentOrder]
+        newOrder.splice(dragIdx, 1)
+        newOrder.splice(targetIdx, 0, dragInfo.vehicleId)
+        return { [column]: newOrder }
+      })
     },
-    [dragState]
+    [dragInfo]
   )
 
   const handleDrop = useCallback(
     async (e: React.DragEvent, column: string) => {
       e.preventDefault()
-      if (!dragState || dragState.column !== column || dragState.dropIndex === null) {
-        setDragState(null)
+      if (!dragInfo || dragInfo.column !== column) {
+        setDragInfo(null)
+        setLiveOrder({})
         return
       }
 
-      const colVehicles = getColumnVehicles(column)
-      const draggedId = dragState.vehicleId
-      const filtered = colVehicles.filter((v) => v.id !== draggedId)
-      const dragged = colVehicles.find((v) => v.id === draggedId)
-      if (!dragged) { setDragState(null); return }
-
-      const dropIdx = Math.min(dragState.dropIndex, filtered.length)
-      filtered.splice(dropIdx, 0, dragged)
-      const orderedIds = filtered.map((v) => v.id)
-
+      const orderedIds = liveOrder[column] || []
+      
+      // Commit the order to vehicle state
       setVehicles((prev) => {
         const others = prev.filter((v) => v.status !== column)
-        const reordered = filtered.map((v, i) => ({
-          ...v,
-          stages: v.stages.map((s, si) => (si === 0 ? { ...s, priority: i } : s)),
-        }))
-        return [...others, ...reordered].sort((a, b) => {
-          const ap = a.stages[0]?.priority ?? 999999
-          const bp = b.stages[0]?.priority ?? 999999
-          return ap - bp
+        const colVehicles = prev.filter((v) => v.status === column)
+        const reordered = orderedIds
+          .map(id => colVehicles.find(v => v.id === id))
+          .filter(Boolean)
+          .map((v, i) => ({
+            ...v!,
+            stages: v!.stages.map((s, si) => (si === 0 ? { ...s, priority: i } : s)),
+          }))
+        return [...others, ...reordered]
+      })
+
+      setDragInfo(null)
+      setLiveOrder({})
+
+      if (orderedIds.length > 0) {
+        await fetch('/api/stages/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stage: column, orderedIds }),
         })
-      })
-
-      setDragState(null)
-
-      await fetch('/api/stages/reorder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage: column, orderedIds }),
-      })
+      }
     },
-    [dragState, getColumnVehicles]
+    [dragInfo, liveOrder]
   )
 
-  const handleDragEnd = useCallback(() => setDragState(null), [])
+  const handleDragEnd = useCallback(() => {
+    setDragInfo(null)
+    setLiveOrder({})
+  }, [])
 
   if (loading) {
     return (
@@ -188,9 +214,6 @@ export default function VehiclesPage() {
     return elapsed > sla * 3600
   }
 
-  // Get the dragged vehicle info for placeholder
-  const draggedVehicle = dragState ? vehicles.find(v => v.id === dragState.vehicleId) : null
-
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -217,148 +240,67 @@ export default function VehiclesPage() {
                 ref={(el) => { columnRefs.current[col] = el }}
                 onDragOver={(e) => handleDragOver(e, col)}
                 onDrop={(e) => handleDrop(e, col)}
-                onDragLeave={() => {
-                  if (dragState?.column === col) {
-                    setDragState((prev) => (prev ? { ...prev, dropIndex: null } : null))
-                  }
-                }}
+                onDragLeave={() => {}}
                 style={{
                   minHeight: '80px',
                   borderRadius: '12px',
-                  transition: 'background 0.15s',
                   padding: '2px',
-                  background: dragState?.column === col && dragState.dropIndex !== null ? 'rgba(223, 253, 110, 0.06)' : 'transparent',
                 }}
               >
-                {colVehicles.map((v, idx) => {
-                  const isDragging = dragState?.vehicleId === v.id
-                  const showPlaceholderBefore = isAdmin && dragState?.column === col && dragState.dropIndex === idx && dragState.vehicleId !== v.id
+                {colVehicles.map((v) => {
+                  const isDragging = dragInfo?.vehicleId === v.id
 
                   return (
-                    <div key={v.id} data-vehicle-id={v.id}>
-                      {/* Drop indicator line */}
-                      {showPlaceholderBefore && (
-                        <div style={{
-                          position: 'relative',
-                          height: '4px',
-                          marginBottom: '4px',
-                        }}>
-                          <div style={{
-                            position: 'absolute',
-                            left: 0,
-                            right: 0,
-                            top: '1px',
-                            height: '2px',
-                            background: '#dffd6e',
-                            borderRadius: '2px',
-                            boxShadow: '0 0 6px rgba(223, 253, 110, 0.5)',
-                          }} />
-                          <div style={{
-                            position: 'absolute',
-                            left: '-4px',
-                            top: '-3px',
-                            width: '8px',
-                            height: '8px',
-                            background: '#dffd6e',
-                            borderRadius: '50%',
-                          }} />
-                          <div style={{
-                            position: 'absolute',
-                            right: '-4px',
-                            top: '-3px',
-                            width: '8px',
-                            height: '8px',
-                            background: '#dffd6e',
-                            borderRadius: '50%',
-                          }} />
+                    <div
+                      key={v.id}
+                      data-vehicle-id={v.id}
+                      draggable={isAdmin}
+                      onDragStart={(e) => handleDragStart(e, v.id, col)}
+                      onDragEnd={handleDragEnd}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'stretch',
+                        opacity: isDragging ? 0.3 : 1,
+                        transform: isDragging ? 'scale(0.97)' : 'none',
+                        transition: 'all 0.2s ease',
+                        cursor: isAdmin ? 'grab' : undefined,
+                      }}
+                    >
+                      {isAdmin && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: '0 6px 0 2px',
+                            color: 'var(--text-muted)',
+                            fontSize: '12px',
+                            userSelect: 'none',
+                            opacity: 0.4,
+                            cursor: 'grab',
+                          }}
+                        >
+                          ⠿
                         </div>
                       )}
-                      <div
-                        draggable={isAdmin}
-                        onDragStart={(e) => handleDragStart(e, v.id, col)}
-                        onDragEnd={handleDragEnd}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'stretch',
-                          opacity: isDragging ? 0.25 : 1,
-                          transform: isDragging ? 'scale(0.97)' : 'none',
-                          transition: 'all 0.2s ease',
-                          cursor: isAdmin ? 'grab' : undefined,
-                        }}
-                      >
-                        {isAdmin && (
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              padding: '0 6px 0 2px',
-                              color: 'var(--text-muted)',
-                              fontSize: '12px',
-                              userSelect: 'none',
-                              opacity: 0.4,
-                              cursor: 'grab',
-                            }}
-                          >
-                            ⠿
-                          </div>
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }} className="vehicle-card-inner">
-                          <VehicleCard
-                            id={v.id}
-                            stockNumber={v.stockNumber}
-                            year={v.year}
-                            make={v.make}
-                            model={v.model}
-                            color={v.color}
-                            status={v.status}
-                            stageStatus={v.stages[0]?.status}
-                            assigneeName={v.currentAssignee?.name}
-                            timeInStage={getTimeInStage(v)}
-                            isOverdue={isOverdue(v)}
-                          />
-                        </div>
+                      <div style={{ flex: 1, minWidth: 0 }} className="vehicle-card-inner">
+                        <VehicleCard
+                          id={v.id}
+                          stockNumber={v.stockNumber}
+                          year={v.year}
+                          make={v.make}
+                          model={v.model}
+                          color={v.color}
+                          status={v.status}
+                          stageStatus={v.stages[0]?.status}
+                          assigneeName={v.currentAssignee?.name}
+                          timeInStage={getTimeInStage(v)}
+                          isOverdue={isOverdue(v)}
+                        />
                       </div>
                     </div>
                   )
                 })}
-                {/* Drop indicator at end */}
-                {isAdmin && dragState?.column === col && dragState.dropIndex === colVehicles.length && (
-                  <div style={{
-                    position: 'relative',
-                    height: '4px',
-                    marginTop: '2px',
-                  }}>
-                    <div style={{
-                      position: 'absolute',
-                      left: 0,
-                      right: 0,
-                      top: '1px',
-                      height: '2px',
-                      background: '#dffd6e',
-                      borderRadius: '2px',
-                      boxShadow: '0 0 6px rgba(223, 253, 110, 0.5)',
-                    }} />
-                    <div style={{
-                      position: 'absolute',
-                      left: '-4px',
-                      top: '-3px',
-                      width: '8px',
-                      height: '8px',
-                      background: '#dffd6e',
-                      borderRadius: '50%',
-                    }} />
-                    <div style={{
-                      position: 'absolute',
-                      right: '-4px',
-                      top: '-3px',
-                      width: '8px',
-                      height: '8px',
-                      background: '#dffd6e',
-                      borderRadius: '50%',
-                    }} />
-                  </div>
-                )}
-                {colVehicles.length === 0 && !dragState && (
+                {colVehicles.length === 0 && !dragInfo && (
                   <div className="text-center py-10 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--border)' }}>
                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Empty</p>
                   </div>
