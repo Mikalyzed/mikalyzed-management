@@ -34,6 +34,7 @@ export default function VehiclesPage() {
     dropIndex: number | null
   } | null>(null)
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const dragGhostRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     fetch('/api/vehicles')
@@ -48,6 +49,16 @@ export default function VehiclesPage() {
         if (data.user?.role === 'admin') setIsAdmin(true)
       })
       .catch(() => {})
+
+    // Create offscreen ghost container
+    const ghost = document.createElement('div')
+    ghost.style.position = 'fixed'
+    ghost.style.top = '-9999px'
+    ghost.style.left = '-9999px'
+    ghost.style.pointerEvents = 'none'
+    document.body.appendChild(ghost)
+    dragGhostRef.current = ghost
+    return () => { document.body.removeChild(ghost) }
   }, [])
 
   const getColumnVehicles = useCallback(
@@ -58,6 +69,23 @@ export default function VehiclesPage() {
   const handleDragStart = useCallback((e: React.DragEvent, vehicleId: string, column: string) => {
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', vehicleId)
+
+    // Create a custom drag image from the card
+    const cardEl = (e.currentTarget as HTMLElement).querySelector('.vehicle-card-inner') as HTMLElement
+    if (cardEl && dragGhostRef.current) {
+      const clone = cardEl.cloneNode(true) as HTMLElement
+      clone.style.width = `${cardEl.offsetWidth}px`
+      clone.style.background = '#ffffff'
+      clone.style.borderRadius = '16px'
+      clone.style.border = '2px solid #dffd6e'
+      clone.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)'
+      clone.style.padding = '16px'
+      clone.style.opacity = '0.95'
+      dragGhostRef.current.innerHTML = ''
+      dragGhostRef.current.appendChild(clone)
+      e.dataTransfer.setDragImage(clone, cardEl.offsetWidth / 2, 30)
+    }
+
     setDragState({ vehicleId, column, dropIndex: null })
   }, [])
 
@@ -105,7 +133,6 @@ export default function VehiclesPage() {
       filtered.splice(dropIdx, 0, dragged)
       const orderedIds = filtered.map((v) => v.id)
 
-      // Optimistic update
       setVehicles((prev) => {
         const others = prev.filter((v) => v.status !== column)
         const reordered = filtered.map((v, i) => ({
@@ -161,6 +188,9 @@ export default function VehiclesPage() {
     return elapsed > sla * 3600
   }
 
+  // Get the dragged vehicle info for placeholder
+  const draggedVehicle = dragState ? vehicles.find(v => v.id === dragState.vehicleId) : null
+
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -192,64 +222,98 @@ export default function VehiclesPage() {
                     setDragState((prev) => (prev ? { ...prev, dropIndex: null } : null))
                   }
                 }}
+                style={{
+                  minHeight: '80px',
+                  borderRadius: '12px',
+                  transition: 'background 0.15s',
+                  padding: '2px',
+                  background: dragState?.column === col && dragState.dropIndex !== null ? 'rgba(223, 253, 110, 0.06)' : 'transparent',
+                }}
               >
-                {colVehicles.map((v, idx) => (
-                  <div key={v.id} data-vehicle-id={v.id}>
-                    {isAdmin && dragState?.column === col && dragState.dropIndex === idx && dragState.vehicleId !== v.id && (
-                      <div style={{ height: '2px', background: '#dffd6e', borderRadius: '1px', margin: '0 0 4px 0' }} />
-                    )}
-                    <div
-                      draggable={isAdmin}
-                      onDragStart={(e) => handleDragStart(e, v.id, col)}
-                      onDragEnd={handleDragEnd}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'stretch',
-                        opacity: dragState?.vehicleId === v.id ? 0.5 : 1,
-                        boxShadow: dragState?.vehicleId === v.id ? '0 4px 12px rgba(0,0,0,0.15)' : undefined,
-                        transition: 'opacity 0.15s',
-                        cursor: isAdmin ? 'grab' : undefined,
-                      }}
-                    >
-                      {isAdmin && (
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            padding: '0 6px 0 2px',
-                            color: 'var(--text-muted)',
-                            fontSize: '12px',
-                            userSelect: 'none',
-                            opacity: 0.5,
-                            cursor: 'grab',
-                          }}
-                        >
-                          ⠿
+                {colVehicles.map((v, idx) => {
+                  const isDragging = dragState?.vehicleId === v.id
+                  const showPlaceholderBefore = isAdmin && dragState?.column === col && dragState.dropIndex === idx && dragState.vehicleId !== v.id
+
+                  return (
+                    <div key={v.id} data-vehicle-id={v.id}>
+                      {/* Drop placeholder */}
+                      {showPlaceholderBefore && draggedVehicle && (
+                        <div style={{
+                          border: '2px dashed #dffd6e',
+                          borderRadius: '14px',
+                          padding: '14px 16px',
+                          marginBottom: '6px',
+                          background: 'rgba(223, 253, 110, 0.08)',
+                          opacity: 0.7,
+                        }}>
+                          <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                            #{draggedVehicle.stockNumber} — {draggedVehicle.year} {draggedVehicle.make} {draggedVehicle.model}
+                          </p>
                         </div>
                       )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <VehicleCard
-                          id={v.id}
-                          stockNumber={v.stockNumber}
-                          year={v.year}
-                          make={v.make}
-                          model={v.model}
-                          color={v.color}
-                          status={v.status}
-                          stageStatus={v.stages[0]?.status}
-                          assigneeName={v.currentAssignee?.name}
-                          timeInStage={getTimeInStage(v)}
-                          isOverdue={isOverdue(v)}
-                        />
+                      <div
+                        draggable={isAdmin}
+                        onDragStart={(e) => handleDragStart(e, v.id, col)}
+                        onDragEnd={handleDragEnd}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'stretch',
+                          opacity: isDragging ? 0.25 : 1,
+                          transform: isDragging ? 'scale(0.97)' : 'none',
+                          transition: 'all 0.2s ease',
+                          cursor: isAdmin ? 'grab' : undefined,
+                        }}
+                      >
+                        {isAdmin && (
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: '0 6px 0 2px',
+                              color: 'var(--text-muted)',
+                              fontSize: '12px',
+                              userSelect: 'none',
+                              opacity: 0.4,
+                              cursor: 'grab',
+                            }}
+                          >
+                            ⠿
+                          </div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }} className="vehicle-card-inner">
+                          <VehicleCard
+                            id={v.id}
+                            stockNumber={v.stockNumber}
+                            year={v.year}
+                            make={v.make}
+                            model={v.model}
+                            color={v.color}
+                            status={v.status}
+                            stageStatus={v.stages[0]?.status}
+                            assigneeName={v.currentAssignee?.name}
+                            timeInStage={getTimeInStage(v)}
+                            isOverdue={isOverdue(v)}
+                          />
+                        </div>
                       </div>
                     </div>
+                  )
+                })}
+                {/* Drop placeholder at end */}
+                {isAdmin && dragState?.column === col && dragState.dropIndex === colVehicles.length && draggedVehicle && (
+                  <div style={{
+                    border: '2px dashed #dffd6e',
+                    borderRadius: '14px',
+                    padding: '14px 16px',
+                    background: 'rgba(223, 253, 110, 0.08)',
+                    opacity: 0.7,
+                  }}>
+                    <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                      #{draggedVehicle.stockNumber} — {draggedVehicle.year} {draggedVehicle.make} {draggedVehicle.model}
+                    </p>
                   </div>
-                ))}
-                {/* Drop indicator at end */}
-                {isAdmin && dragState?.column === col && dragState.dropIndex === colVehicles.length && (
-                  <div style={{ height: '2px', background: '#dffd6e', borderRadius: '1px' }} />
                 )}
-                {colVehicles.length === 0 && (
+                {colVehicles.length === 0 && !dragState && (
                   <div className="text-center py-10 rounded-xl" style={{ background: 'rgba(255,255,255,0.02)', border: '1px dashed var(--border)' }}>
                     <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Empty</p>
                   </div>
