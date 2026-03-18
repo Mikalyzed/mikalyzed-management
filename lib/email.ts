@@ -4,7 +4,7 @@ const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null
 
-const DEFAULT_FROM = 'Mikalyzed Auto Boutique <notifications@mikalyzedautoboutique.com>'
+const DEFAULT_FROM = 'Mikalyzed Auto Boutique <management@mikalyzedautoboutique.com>'
 
 export async function sendNotificationEmail({
   to,
