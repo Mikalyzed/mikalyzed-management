@@ -30,13 +30,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               margin-right: 40px !important;
               padding: 40px 32px !important;
               padding-bottom: 40px !important;
-              max-width: 1200px !important;
-            }
-          }
-          @media (min-width: 1440px) {
-            .main-content {
-              margin-right: auto !important;
-              padding: 40px 48px !important;
             }
           }
         `}</style>
