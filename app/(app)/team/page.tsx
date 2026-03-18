@@ -26,6 +26,7 @@ export default function TeamPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [addName, setAddName] = useState('')
   const [addEmail, setAddEmail] = useState('')
+  const [addPassword, setAddPassword] = useState('')
   const [addRole, setAddRole] = useState('sales')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -48,13 +49,14 @@ export default function TeamPage() {
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: addName, email: addEmail, role: addRole }),
+        body: JSON.stringify({ name: addName, email: addEmail, password: addPassword, role: addRole }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
       setShowAdd(false)
       setAddName('')
       setAddEmail('')
+      setAddPassword('')
       setAddRole('sales')
       load()
     } catch { setError('Network error') }
@@ -114,6 +116,15 @@ export default function TeamPage() {
               <div>
                 <label className="form-label">Email *</label>
                 <input type="email" value={addEmail} onChange={(e) => setAddEmail(e.target.value)} required className="input" placeholder="john@mikalyzed.com" />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="form-label">Password *</label>
+                <input type="text" value={addPassword} onChange={(e) => setAddPassword(e.target.value)} required className="input" placeholder="Set their password" />
+              </div>
+              <div className="flex items-end">
+                <p className="text-xs pb-3" style={{ color: 'var(--text-muted)' }}>Each person has their own password to sign in</p>
               </div>
             </div>
             <div>

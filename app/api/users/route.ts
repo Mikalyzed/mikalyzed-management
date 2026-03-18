@@ -15,10 +15,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Admin only' }, { status: 403 })
   }
 
-  const { name, email, role } = await request.json()
+  const { name, email, password, role } = await request.json()
 
-  if (!name || !email || !role) {
-    return NextResponse.json({ error: 'Name, email, and role are required' }, { status: 400 })
+  if (!name || !email || !role || !password) {
+    return NextResponse.json({ error: 'Name, email, password, and role are required' }, { status: 400 })
   }
 
   const existing = await prisma.user.findUnique({ where: { email } })
@@ -31,6 +31,7 @@ export async function POST(request: Request) {
       clerkId: `temp_${Date.now()}`,
       name,
       email,
+      password,
       role,
     },
   })

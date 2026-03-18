@@ -13,6 +13,7 @@ model User {
   name      String
   email     String   @unique
   role      String   @default("sales")
+  password  String   @default("")
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
 
