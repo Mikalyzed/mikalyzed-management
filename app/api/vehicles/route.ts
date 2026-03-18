@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
-import { DEFAULT_CHECKLISTS } from '@/lib/constants'
+import { DEFAULT_CHECKLISTS, STAGE_LABELS } from '@/lib/constants'
+import { sendNotificationEmail } from '@/lib/email'
+import { newVehicleEmail } from '@/lib/email-templates'
 
 export async function GET(request: Request) {
   const user = await getSessionUser()
@@ -130,6 +132,31 @@ export async function POST(request: Request) {
 
     return v
   })
+
+  // Fire-and-forget: notify assignee
+  if (mechAssigneeId) {
+    prisma.user.findUnique({ where: { id: mechAssigneeId } }).then((assignee) => {
+      if (!assignee) return
+      const vehicleDesc = `${year ?? ''} ${make} ${model} (${stockNumber})`.trim()
+      const { subject, html } = newVehicleEmail({
+        vehicleDesc,
+        assigneeName: assignee.name,
+        stage: STAGE_LABELS.mechanic,
+        vehicleId: vehicle.id,
+      })
+      sendNotificationEmail({ to: assignee.email, subject, html }).catch(() => {})
+      prisma.notification.create({
+        data: {
+          userId: assignee.id,
+          type: 'new_vehicle',
+          title: subject,
+          message: `${vehicleDesc} added to ${STAGE_LABELS.mechanic}`,
+          entityType: 'vehicle',
+          entityId: vehicle.id,
+        },
+      }).catch(() => {})
+    }).catch(() => {})
+  }
 
   return NextResponse.json({ vehicle }, { status: 201 })
 }

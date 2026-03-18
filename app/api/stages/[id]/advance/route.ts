@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
-import { NEXT_STAGE, DEFAULT_CHECKLISTS } from '@/lib/constants'
+import { NEXT_STAGE, DEFAULT_CHECKLISTS, STAGE_LABELS } from '@/lib/constants'
 import type { Stage } from '@/lib/constants'
+import { sendNotificationEmail } from '@/lib/email'
+import { stageAdvanceEmail } from '@/lib/email-templates'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
@@ -85,6 +87,40 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     })
   })
+
+  // Fire-and-forget: email + in-app notification for next stage assignee
+  if (nextStage !== 'completed') {
+    const newStageRecord = await prisma.vehicleStage.findFirst({
+      where: { vehicleId: stage.vehicleId, stage: nextStage },
+      orderBy: { createdAt: 'desc' },
+      include: { assignee: true, vehicle: true },
+    })
+    if (newStageRecord?.assignee) {
+      const vehicleDesc = `${stage.vehicle.year ?? ''} ${stage.vehicle.make} ${stage.vehicle.model} (${stage.vehicle.stockNumber})`.trim()
+      const fromLabel = STAGE_LABELS[stage.stage as Stage] || stage.stage
+      const toLabel = STAGE_LABELS[nextStage as Stage] || nextStage
+      const { subject, html } = stageAdvanceEmail({
+        vehicleDesc,
+        fromStage: fromLabel,
+        toStage: toLabel,
+        assigneeName: newStageRecord.assignee.name,
+        vehicleId: stage.vehicleId,
+      })
+      // Send email (don't await)
+      sendNotificationEmail({ to: newStageRecord.assignee.email, subject, html }).catch(() => {})
+      // In-app notification
+      prisma.notification.create({
+        data: {
+          userId: newStageRecord.assignee.id,
+          type: 'stage_advance',
+          title: subject,
+          message: `${vehicleDesc} moved from ${fromLabel} to ${toLabel}`,
+          entityType: 'vehicle',
+          entityId: stage.vehicleId,
+        },
+      }).catch(() => {})
+    }
+  }
 
   return NextResponse.json({ success: true, nextStage })
 }

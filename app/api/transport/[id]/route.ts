@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
+import { sendNotificationEmail } from '@/lib/email'
+import { transportUpdateEmail } from '@/lib/email-templates'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -52,6 +54,32 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       details: body,
     },
   })
+
+  // Fire-and-forget: notify requester
+  prisma.transportRequest.findUnique({
+    where: { id },
+    include: { requestedBy: true },
+  }).then((tr) => {
+    if (!tr?.requestedBy) return
+    const vehicleDesc = tr.vehicleDescription || 'Transport request'
+    const { subject, html } = transportUpdateEmail({
+      vehicleDesc,
+      status: updated.status,
+      updatedBy: user!.name,
+      transportId: id,
+    })
+    sendNotificationEmail({ to: tr.requestedBy.email, subject, html }).catch(() => {})
+    prisma.notification.create({
+      data: {
+        userId: tr.requestedBy.id,
+        type: 'transport_update',
+        title: subject,
+        message: `${vehicleDesc} — status: ${updated.status}`,
+        entityType: 'transport',
+        entityId: id,
+      },
+    }).catch(() => {})
+  }).catch(() => {})
 
   return NextResponse.json({ request: updated })
 }
