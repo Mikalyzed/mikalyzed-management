@@ -6,11 +6,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div>
       <Nav role="admin" userName="Fernando" />
-      <main className="main-content p-4 md:py-8 md:px-10 md:pr-16" style={{ marginLeft: '0px' }}>
+      <main className="main-content" style={{ padding: '16px' }}>
         <style>{`
           @media (min-width: 768px) {
             .main-content {
               margin-left: 272px !important;
+              margin-right: 32px !important;
+              padding: 32px 0 !important;
             }
           }
         `}</style>
