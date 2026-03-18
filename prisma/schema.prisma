@@ -84,12 +84,16 @@ model TransportRequest {
   id                 String    @id @default(uuid())
   vehicleId          String?   @map("vehicle_id")
   vehicleDescription String?   @map("vehicle_description")
+  vin                String?
+  trailerType        String?   @map("trailer_type") // enclosed, open
+  clientName         String?   @map("client_name")
+  clientPhone        String?   @map("client_phone")
   requestedById      String    @map("requested_by")
   pickupLocation     String    @map("pickup_location")
   deliveryLocation   String    @map("delivery_location")
   urgency            String    @default("standard")
   preferredDate      DateTime? @map("preferred_date")
-  transportType      String?   @map("transport_type")
+  transportType      String?   @map("transport_type") // internal, third_party
   status             String    @default("requested")
   coordinatorId      String?   @map("coordinator_id")
   carrierInfo        String?   @map("carrier_info")

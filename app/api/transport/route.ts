@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { vehicleId, vehicleDescription, pickupLocation, deliveryLocation, urgency, preferredDate, notes } = body
+  const { vehicleId, vehicleDescription, vin, trailerType, pickupLocation, deliveryLocation, clientName, clientPhone, urgency, preferredDate, notes } = body
 
   if (!pickupLocation || !deliveryLocation) {
     return NextResponse.json({ error: 'Pickup and delivery locations required' }, { status: 400 })
@@ -29,6 +29,10 @@ export async function POST(request: Request) {
     data: {
       vehicleId: vehicleId || null,
       vehicleDescription: vehicleDescription || null,
+      vin: vin || null,
+      trailerType: trailerType || null,
+      clientName: clientName || null,
+      clientPhone: clientPhone || null,
       requestedById: user.id,
       pickupLocation,
       deliveryLocation,
