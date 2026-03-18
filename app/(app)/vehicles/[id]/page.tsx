@@ -38,7 +38,7 @@ const STAGE_LABELS: Record<string, string> = {
   mechanic: 'Mechanic', detailing: 'Detailing', content: 'Content', publish: 'Publish', completed: 'Completed',
 }
 const STAGE_ICONS: Record<string, string> = {
-  mechanic: '🔧', detailing: '✨', content: '📸', publish: '🚀', completed: '✅',
+  mechanic: '', detailing: '', content: '', publish: '', completed: '',
 }
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending', in_progress: 'In Progress', blocked: 'Blocked', done: 'Done',
@@ -146,7 +146,7 @@ export default function VehicleDetailPage() {
           borderRadius: '12px',
           flexWrap: 'wrap',
         }}>
-          <span style={{ fontSize: '20px' }}>{stageIcon}</span>
+          {stageIcon && <span style={{ fontSize: '20px' }}>{stageIcon}</span>}
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: '14px', fontWeight: 600 }}>{stageLabel}</p>
             {currentStage && (
@@ -212,7 +212,7 @@ export default function VehicleDetailPage() {
                 onClick={() => { setEditing(true); setEditChecklist([...currentStage.checklist]); setNewTaskText('') }}
                 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', minHeight: 'auto', padding: '4px 8px' }}
               >
-                ✏️ Edit
+                Edit
               </button>
             )}
           </div>
@@ -417,7 +417,7 @@ export default function VehicleDetailPage() {
                   background: 'var(--bg-primary)',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '16px' }}>{STAGE_ICONS[s.stage] || '✅'}</span>
+                    {STAGE_ICONS[s.stage] && <span style={{ fontSize: '16px' }}>{STAGE_ICONS[s.stage]}</span>}
                     <div>
                       <p style={{ fontSize: '13px', fontWeight: 600 }}>{STAGE_LABELS[s.stage] || s.stage}</p>
                       <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
