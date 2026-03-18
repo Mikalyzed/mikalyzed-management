@@ -236,19 +236,41 @@ export default function VehiclesPage() {
 
                   return (
                     <div key={v.id} data-vehicle-id={v.id}>
-                      {/* Drop placeholder */}
-                      {showPlaceholderBefore && draggedVehicle && (
+                      {/* Drop indicator line */}
+                      {showPlaceholderBefore && (
                         <div style={{
-                          border: '2px dashed #dffd6e',
-                          borderRadius: '14px',
-                          padding: '14px 16px',
-                          marginBottom: '6px',
-                          background: 'rgba(223, 253, 110, 0.08)',
-                          opacity: 0.7,
+                          position: 'relative',
+                          height: '4px',
+                          marginBottom: '4px',
                         }}>
-                          <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                            #{draggedVehicle.stockNumber} — {draggedVehicle.year} {draggedVehicle.make} {draggedVehicle.model}
-                          </p>
+                          <div style={{
+                            position: 'absolute',
+                            left: 0,
+                            right: 0,
+                            top: '1px',
+                            height: '2px',
+                            background: '#dffd6e',
+                            borderRadius: '2px',
+                            boxShadow: '0 0 6px rgba(223, 253, 110, 0.5)',
+                          }} />
+                          <div style={{
+                            position: 'absolute',
+                            left: '-4px',
+                            top: '-3px',
+                            width: '8px',
+                            height: '8px',
+                            background: '#dffd6e',
+                            borderRadius: '50%',
+                          }} />
+                          <div style={{
+                            position: 'absolute',
+                            right: '-4px',
+                            top: '-3px',
+                            width: '8px',
+                            height: '8px',
+                            background: '#dffd6e',
+                            borderRadius: '50%',
+                          }} />
                         </div>
                       )}
                       <div
@@ -299,18 +321,41 @@ export default function VehiclesPage() {
                     </div>
                   )
                 })}
-                {/* Drop placeholder at end */}
-                {isAdmin && dragState?.column === col && dragState.dropIndex === colVehicles.length && draggedVehicle && (
+                {/* Drop indicator at end */}
+                {isAdmin && dragState?.column === col && dragState.dropIndex === colVehicles.length && (
                   <div style={{
-                    border: '2px dashed #dffd6e',
-                    borderRadius: '14px',
-                    padding: '14px 16px',
-                    background: 'rgba(223, 253, 110, 0.08)',
-                    opacity: 0.7,
+                    position: 'relative',
+                    height: '4px',
+                    marginTop: '2px',
                   }}>
-                    <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                      #{draggedVehicle.stockNumber} — {draggedVehicle.year} {draggedVehicle.make} {draggedVehicle.model}
-                    </p>
+                    <div style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      top: '1px',
+                      height: '2px',
+                      background: '#dffd6e',
+                      borderRadius: '2px',
+                      boxShadow: '0 0 6px rgba(223, 253, 110, 0.5)',
+                    }} />
+                    <div style={{
+                      position: 'absolute',
+                      left: '-4px',
+                      top: '-3px',
+                      width: '8px',
+                      height: '8px',
+                      background: '#dffd6e',
+                      borderRadius: '50%',
+                    }} />
+                    <div style={{
+                      position: 'absolute',
+                      right: '-4px',
+                      top: '-3px',
+                      width: '8px',
+                      height: '8px',
+                      background: '#dffd6e',
+                      borderRadius: '50%',
+                    }} />
                   </div>
                 )}
                 {colVehicles.length === 0 && !dragState && (
