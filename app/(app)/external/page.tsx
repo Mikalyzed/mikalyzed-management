@@ -128,19 +128,47 @@ export default function ExternalRepairsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2 mb-6">
-        {['active', 'returned', 'all'].map((f) => (
-          <button key={f} onClick={() => setFilter(f)}
-            className="px-4 py-2 rounded-lg text-sm font-semibold capitalize"
-            style={{
-              background: filter === f ? 'var(--bg-sidebar)' : 'var(--bg-card)',
-              color: filter === f ? 'var(--accent)' : 'var(--text-secondary)',
-              border: filter === f ? 'none' : '1px solid var(--border)',
-              minHeight: '36px',
-            }}>
-            {f} {f === 'active' && `(${repairs.filter(r => r.status !== 'returned').length})`}
-          </button>
-        ))}
+      <div style={{
+        display: 'flex',
+        gap: '4px',
+        marginBottom: '24px',
+        padding: '4px',
+        background: '#f0f0ec',
+        borderRadius: '12px',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+      }}>
+        {['active', 'returned', 'all'].map((f) => {
+          const count = f === 'active' ? repairs.filter(r => r.status !== 'returned').length
+            : f === 'returned' ? repairs.filter(r => r.status === 'returned').length
+            : repairs.length
+          const active = filter === f
+          return (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              style={{
+                flex: 1,
+                padding: '10px 16px',
+                borderRadius: '9px',
+                fontSize: '13px',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+                border: 'none',
+                minHeight: 'auto',
+                transition: 'all 0.15s ease',
+                background: active ? '#ffffff' : 'transparent',
+                color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                boxShadow: active ? 'var(--shadow-sm)' : 'none',
+                textTransform: 'capitalize',
+              }}
+            >
+              {f}
+              {count > 0 && <span style={{ marginLeft: '4px', opacity: 0.5 }}>{count}</span>}
+            </button>
+          )
+        })}
       </div>
 
       {/* Add form */}
