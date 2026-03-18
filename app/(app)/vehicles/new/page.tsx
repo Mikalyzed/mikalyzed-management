@@ -40,7 +40,6 @@ export default function AddVehiclePage() {
 
     const form = new FormData(e.currentTarget)
 
-    // Build mechanic checklist
     let mechanicChecklist: string[] = []
     if (fullInspection) {
       mechanicChecklist = [...DEFAULT_INSPECTION, ...customTasks]
@@ -82,92 +81,187 @@ export default function AddVehiclePage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto">
-      <button onClick={() => router.back()} className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>
+    <div style={{ maxWidth: '520px', margin: '0 auto' }}>
+      <button onClick={() => router.back()} style={{ fontSize: '14px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', marginBottom: '24px', display: 'block', minHeight: 'auto' }}>
         ← Back
       </button>
 
-      <h1 className="text-2xl font-bold tracking-tight mb-6">Add Vehicle</h1>
+      <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: '32px' }}>Add Vehicle</h1>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        <div>
-          <label className="form-label">Stock Number *</label>
-          <input name="stockNumber" required className="input" placeholder="e.g. A1234" />
-        </div>
+      <form onSubmit={handleSubmit}>
+        {/* Vehicle Info Card */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid var(--border)',
+          borderRadius: '16px',
+          padding: '24px',
+          marginBottom: '16px',
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '20px' }}>
+            Vehicle Information
+          </p>
 
-        <div>
-          <label className="form-label">VIN</label>
-          <input name="vin" className="input" placeholder="Optional" />
-        </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Stock Number *</label>
+              <input name="stockNumber" required className="input" placeholder="e.g. N018750" />
+            </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="form-label">Year</label>
-            <input name="year" type="number" className="input" placeholder="2024" />
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>VIN</label>
+              <input name="vin" className="input" placeholder="Optional" />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Year</label>
+                <input name="year" type="number" className="input" placeholder="2024" />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Color</label>
+                <input name="color" className="input" placeholder="White" />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Make *</label>
+                <input name="make" required className="input" placeholder="Toyota" />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Model *</label>
+                <input name="model" required className="input" placeholder="Camry" />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Trim</label>
+              <input name="trim" className="input" placeholder="Optional" />
+            </div>
           </div>
-          <div>
-            <label className="form-label">Color</label>
-            <input name="color" className="input" placeholder="White" />
-          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="form-label">Make *</label>
-            <input name="make" required className="input" placeholder="Toyota" />
-          </div>
-          <div>
-            <label className="form-label">Model *</label>
-            <input name="model" required className="input" placeholder="Camry" />
-          </div>
-        </div>
+        {/* Mechanic Tasks Card */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid var(--border)',
+          borderRadius: '16px',
+          padding: '24px',
+          marginBottom: '16px',
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '20px' }}>
+            Mechanic Tasks
+          </p>
 
-        <div>
-          <label className="form-label">Trim</label>
-          <input name="trim" className="input" placeholder="Optional" />
-        </div>
-
-        {/* Mechanic Tasks */}
-        <div>
-          <label className="form-label">Mechanic Tasks</label>
-
-          {/* Full inspection toggle */}
-          <label className="card flex items-center gap-3 cursor-pointer mb-3" style={{ padding: '14px 16px' }}>
+          {/* General Inspection Toggle */}
+          <label style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '14px',
+            padding: '14px 16px',
+            borderRadius: '12px',
+            border: fullInspection ? '2px solid #1a1a1a' : '1px solid var(--border)',
+            background: fullInspection ? '#fafaf8' : '#ffffff',
+            cursor: 'pointer',
+            marginBottom: '20px',
+            transition: 'all 0.15s ease',
+          }}>
+            <span style={{
+              width: '22px',
+              height: '22px',
+              borderRadius: '6px',
+              border: fullInspection ? 'none' : '2px solid #d4d4d4',
+              background: fullInspection ? '#1a1a1a' : 'transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              {fullInspection && <span style={{ color: '#dffd6e', fontSize: '13px', fontWeight: 700 }}>✓</span>}
+            </span>
             <input
               type="checkbox"
               checked={fullInspection}
               onChange={(e) => setFullInspection(e.target.checked)}
-              className="w-5 h-5 accent-black rounded"
+              style={{ display: 'none' }}
             />
             <div>
-              <p className="font-semibold text-sm">General Inspection</p>
-              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>General Inspection</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
                 Full checklist: oil, brakes, tires, engine, AC, electrical, test drive, body
               </p>
             </div>
           </label>
 
-          {/* Custom tasks */}
-          <div className="flex gap-2 mb-2">
+          {/* Add task input */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: customTasks.length > 0 ? '16px' : '0' }}>
             <input
               value={newTask}
               onChange={(e) => setNewTask(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTask() } }}
-              className="input flex-1"
+              className="input"
               placeholder="Add a specific task..."
+              style={{ flex: 1 }}
             />
-            <button type="button" onClick={addTask} className="btn btn-secondary" style={{ padding: '10px 16px' }}>
+            <button
+              type="button"
+              onClick={addTask}
+              style={{
+                padding: '12px 20px',
+                borderRadius: '12px',
+                border: '1px solid var(--border)',
+                background: '#ffffff',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+                minHeight: '44px',
+                boxShadow: 'var(--shadow-sm)',
+                transition: 'all 0.15s',
+              }}
+            >
               Add
             </button>
           </div>
 
+          {/* Task list */}
           {customTasks.length > 0 && (
-            <div className="flex flex-col gap-1.5">
+            <div style={{
+              borderRadius: '12px',
+              border: '1px solid var(--border)',
+              overflow: 'hidden',
+            }}>
               {customTasks.map((task, i) => (
-                <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)' }}>
-                  <span className="text-sm">{task}</span>
-                  <button type="button" onClick={() => removeTask(i)} className="text-xs font-medium" style={{ color: 'var(--danger)', minHeight: 'auto' }}>
-                    ✕
+                <div key={i} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '14px 16px',
+                  borderBottom: i < customTasks.length - 1 ? '1px solid var(--border-light)' : 'none',
+                  background: '#ffffff',
+                }}>
+                  <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>{task}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeTask(i)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--text-muted)',
+                      fontSize: '18px',
+                      lineHeight: 1,
+                      minHeight: 'auto',
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.background = 'var(--danger-bg)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none' }}
+                  >
+                    ×
                   </button>
                 </div>
               ))}
@@ -175,26 +269,77 @@ export default function AddVehiclePage() {
           )}
 
           {!fullInspection && customTasks.length === 0 && (
-            <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
               No tasks added — mechanic will just need to inspect and clear
             </p>
           )}
         </div>
 
-        <div>
-          <label className="form-label">Notes</label>
+        {/* Notes Card */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid var(--border)',
+          borderRadius: '16px',
+          padding: '24px',
+          marginBottom: '24px',
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+            Notes
+          </p>
           <textarea name="notes" rows={3} className="input" style={{ resize: 'vertical', minHeight: '80px' }} placeholder="Any notes about this vehicle..." />
         </div>
 
         {error && (
-          <div className="px-4 py-3 rounded-xl text-sm" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>
+          <div style={{
+            padding: '14px 18px',
+            borderRadius: '12px',
+            fontSize: '14px',
+            background: 'var(--danger-bg)',
+            color: 'var(--danger)',
+            border: '1px solid var(--danger-border)',
+            marginBottom: '16px',
+          }}>
             {error}
           </div>
         )}
 
-        <div className="flex gap-3 pt-2">
-          <button type="button" onClick={() => router.back()} className="btn btn-secondary flex-1">Cancel</button>
-          <button type="submit" disabled={loading} className="btn btn-primary flex-1" style={loading ? { opacity: 0.5 } : {}}>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            style={{
+              flex: 1,
+              padding: '14px',
+              borderRadius: '12px',
+              border: '1px solid var(--border)',
+              background: '#ffffff',
+              fontSize: '15px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              color: 'var(--text-primary)',
+              minHeight: '48px',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              flex: 1,
+              padding: '14px',
+              borderRadius: '12px',
+              border: 'none',
+              background: '#1a1a1a',
+              color: '#dffd6e',
+              fontSize: '15px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              minHeight: '48px',
+              opacity: loading ? 0.5 : 1,
+            }}
+          >
             {loading ? 'Creating...' : 'Add to Recon'}
           </button>
         </div>
