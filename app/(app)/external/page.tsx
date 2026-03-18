@@ -239,94 +239,176 @@ export default function ExternalRepairsPage() {
 
       {/* Repairs list */}
       {filtered.length === 0 ? (
-        <div className="card-flat text-center" style={{ padding: '48px 20px' }}>
-          <p className="text-lg mb-1">No external repairs</p>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>All vehicles are in-house</p>
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '16px', padding: '48px 20px', textAlign: 'center' }}>
+          <p style={{ fontSize: '16px', marginBottom: '4px' }}>No external repairs</p>
+          <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>All vehicles are in-house</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filtered.map((r) => {
             const daysOut = getDaysOut(r.sentDate)
-            const overdue = r.estimatedDays && daysOut > r.estimatedDays && r.status !== 'returned'
+            const overdue = !!(r.estimatedDays && daysOut > r.estimatedDays && r.status !== 'returned')
 
             return (
-              <div key={r.id} className="card" style={overdue ? { borderColor: 'var(--danger-border)', background: 'var(--danger-bg)' } : {}}>
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="font-bold">#{r.stockNumber} — {r.year} {r.make} {r.model}</p>
-                    {r.color && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{r.color}</p>}
+              <div key={r.id} style={{
+                background: overdue ? 'var(--danger-bg)' : '#ffffff',
+                border: `1px solid ${overdue ? 'var(--danger-border)' : 'var(--border)'}`,
+                borderRadius: '16px',
+                overflow: 'hidden',
+                boxShadow: 'var(--shadow-sm)',
+              }}>
+                {/* Header */}
+                <div style={{ padding: '20px 24px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <div>
+                      <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+                        STOCK #{r.stockNumber}
+                      </p>
+                      <p style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '-0.01em' }}>
+                        {r.year} {r.make} {r.model}
+                      </p>
+                      {r.color && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>{r.color}</p>}
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                      {overdue && <span className="badge badge-blocked">Overdue</span>}
+                      <span className={`badge ${r.status === 'returned' ? 'badge-done' : r.status === 'ready' ? 'badge-content' : r.status === 'in_progress' ? 'badge-in-progress' : 'badge-pending'}`}>
+                        {STATUS_LABELS[r.status]}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {overdue && <span className="badge badge-blocked">Overdue</span>}
-                    <span className={`badge ${r.status === 'returned' ? 'badge-done' : r.status === 'ready' ? 'badge-content' : 'badge-pending'}`}>
-                      {STATUS_LABELS[r.status]}
-                    </span>
+
+                  {/* Info grid */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                    gap: '16px',
+                    padding: '16px',
+                    background: 'var(--bg-primary)',
+                    borderRadius: '12px',
+                  }}>
+                    <div>
+                      <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Shop</p>
+                      <p style={{ fontSize: '14px', fontWeight: 600 }}>{r.shopName}</p>
+                      {r.shopPhone && <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{r.shopPhone}</p>}
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Repair</p>
+                      <p style={{ fontSize: '14px', fontWeight: 500 }}>{r.repairDescription}</p>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Timeline</p>
+                      <p style={{ fontSize: '14px', fontWeight: 600, color: overdue ? 'var(--danger)' : 'var(--text-primary)' }}>
+                        {daysOut} day{daysOut !== 1 ? 's' : ''} out
+                      </p>
+                      {r.estimatedDays && (
+                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{r.estimatedDays}d estimated</p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 text-sm">
-                  <div>
-                    <p style={{ color: 'var(--text-muted)' }}>Shop</p>
-                    <p className="font-medium">{r.shopName}</p>
-                    {r.shopPhone && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{r.shopPhone}</p>}
-                  </div>
-                  <div>
-                    <p style={{ color: 'var(--text-muted)' }}>Repair</p>
-                    <p className="font-medium">{r.repairDescription}</p>
-                  </div>
-                  <div>
-                    <p style={{ color: 'var(--text-muted)' }}>Timeline</p>
-                    <p className="font-medium">
-                      {daysOut} day{daysOut !== 1 ? 's' : ''} out
-                      {r.estimatedDays && <span style={{ color: 'var(--text-muted)' }}> / {r.estimatedDays}d est.</span>}
-                    </p>
-                    {r.expectedReturn && <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Expected: {new Date(r.expectedReturn).toLocaleDateString()}</p>}
-                  </div>
-                </div>
-
-                {/* Notes */}
+                {/* Notes section */}
                 {editId === r.id ? (
-                  <div className="mb-3">
+                  <div style={{ padding: '0 24px 16px' }}>
                     <textarea
                       id={`notes-${r.id}`}
                       defaultValue={r.notes || ''}
-                      className="input text-sm"
+                      className="input"
                       rows={2}
-                      style={{ resize: 'vertical', minHeight: '50px' }}
+                      style={{ resize: 'vertical', minHeight: '60px', fontSize: '14px' }}
                       placeholder="Add update notes..."
+                      autoFocus
                     />
-                    <div className="flex gap-2 mt-2">
-                      <button onClick={() => setEditId(null)} className="text-xs font-medium" style={{ color: 'var(--text-muted)', minHeight: 'auto' }}>Cancel</button>
-                      <button onClick={() => {
-                        const el = document.getElementById(`notes-${r.id}`) as HTMLTextAreaElement
-                        updateNotes(r.id, el.value)
-                      }} className="text-xs font-semibold" style={{ color: 'var(--text-primary)', minHeight: 'auto' }}>Save</button>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                      <button
+                        onClick={() => setEditId(null)}
+                        style={{
+                          padding: '8px 18px', borderRadius: '10px', border: '1px solid var(--border)',
+                          background: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer', minHeight: 'auto',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => {
+                          const el = document.getElementById(`notes-${r.id}`) as HTMLTextAreaElement
+                          updateNotes(r.id, el.value)
+                        }}
+                        style={{
+                          padding: '8px 18px', borderRadius: '10px', border: 'none',
+                          background: '#1a1a1a', color: '#dffd6e', fontSize: '13px', fontWeight: 600, cursor: 'pointer', minHeight: 'auto',
+                        }}
+                      >
+                        Save Notes
+                      </button>
                     </div>
                   </div>
                 ) : r.notes ? (
-                  <p className="text-sm mb-3 px-3 py-2 rounded-lg cursor-pointer" style={{ background: 'var(--bg-primary)' }} onClick={() => setEditId(r.id)}>
+                  <div
+                    onClick={() => setEditId(r.id)}
+                    style={{
+                      margin: '0 24px 16px', padding: '12px 14px', borderRadius: '10px',
+                      background: 'var(--bg-primary)', cursor: 'pointer', fontSize: '14px',
+                      color: 'var(--text-secondary)', lineHeight: 1.5,
+                    }}
+                  >
                     {r.notes}
-                  </p>
+                  </div>
                 ) : null}
 
                 {/* Actions */}
                 {r.status !== 'returned' && (
-                  <div className="flex gap-2">
-                    <button onClick={() => setEditId(r.id)} className="text-xs font-medium px-3 py-1.5 rounded-lg" style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', minHeight: '32px' }}>
-                      Update Notes
+                  <div style={{
+                    display: 'flex', gap: '8px', padding: '16px 24px',
+                    borderTop: '1px solid var(--border-light)',
+                  }}>
+                    <button
+                      onClick={() => setEditId(r.id)}
+                      style={{
+                        padding: '10px 20px', borderRadius: '10px',
+                        border: '1px solid var(--border)', background: '#ffffff',
+                        fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                        color: 'var(--text-secondary)', minHeight: '40px',
+                      }}
+                    >
+                      {r.notes ? 'Edit Notes' : 'Add Notes'}
                     </button>
                     {r.status === 'sent' && (
-                      <button onClick={() => updateStatus(r.id, 'in_progress')} className="text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: 'var(--info-bg)', color: 'var(--info)', border: '1px solid var(--info-border)', minHeight: '32px' }}>
+                      <button
+                        onClick={() => updateStatus(r.id, 'in_progress')}
+                        style={{
+                          flex: 1, padding: '10px 20px', borderRadius: '10px',
+                          border: '1px solid var(--info-border)', background: 'var(--info-bg)',
+                          fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                          color: 'var(--info)', minHeight: '40px',
+                        }}
+                      >
                         Mark In Progress
                       </button>
                     )}
                     {r.status === 'in_progress' && (
-                      <button onClick={() => updateStatus(r.id, 'ready')} className="text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: 'var(--warning-bg)', color: '#d97706', border: '1px solid var(--warning-border)', minHeight: '32px' }}>
+                      <button
+                        onClick={() => updateStatus(r.id, 'ready')}
+                        style={{
+                          flex: 1, padding: '10px 20px', borderRadius: '10px',
+                          border: '1px solid var(--warning-border)', background: 'var(--warning-bg)',
+                          fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                          color: '#d97706', minHeight: '40px',
+                        }}
+                      >
                         Ready for Pickup
                       </button>
                     )}
                     {r.status === 'ready' && (
-                      <button onClick={() => updateStatus(r.id, 'returned')} className="text-xs font-semibold px-3 py-1.5 rounded-lg" style={{ background: 'var(--success-bg)', color: '#16a34a', border: '1px solid var(--success-border)', minHeight: '32px' }}>
+                      <button
+                        onClick={() => updateStatus(r.id, 'returned')}
+                        style={{
+                          flex: 1, padding: '10px 20px', borderRadius: '10px',
+                          border: '1px solid var(--success-border)', background: 'var(--success-bg)',
+                          fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                          color: '#16a34a', minHeight: '40px',
+                        }}
+                      >
                         Mark Returned
                       </button>
                     )}
