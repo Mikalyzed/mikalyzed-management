@@ -28,6 +28,13 @@ export async function GET(request: Request) {
     orderBy: { createdAt: 'desc' },
   })
 
+  // Sort vehicles by their current stage priority
+  vehicles.sort((a, b) => {
+    const aPriority = a.stages[0]?.priority ?? 999999
+    const bPriority = b.stages[0]?.priority ?? 999999
+    return aPriority - bPriority
+  })
+
   return NextResponse.json({ vehicles })
 }
 
@@ -86,6 +93,13 @@ export async function POST(request: Request) {
       note: '',
     }))
 
+    // Set priority to max + 1 so new vehicles go to bottom
+    const maxPriority = await tx.vehicleStage.aggregate({
+      where: { stage: 'mechanic', status: { not: 'done' } },
+      _max: { priority: true },
+    })
+    const nextPriority = (maxPriority._max.priority ?? -1) + 1
+
     const stage = await tx.vehicleStage.create({
       data: {
         vehicleId: v.id,
@@ -93,6 +107,7 @@ export async function POST(request: Request) {
         status: mechAssigneeId ? 'pending' : 'pending',
         assigneeId: mechAssigneeId,
         checklist,
+        priority: nextPriority,
       },
     })
 

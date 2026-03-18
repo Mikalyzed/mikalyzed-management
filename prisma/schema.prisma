@@ -70,6 +70,7 @@ model VehicleStage {
   completedAt         DateTime? @map("completed_at")
   blockedAt           DateTime? @map("blocked_at")
   totalBlockedSeconds Int       @default(0) @map("total_blocked_seconds")
+  priority            Int       @default(0)
   createdAt           DateTime  @default(now()) @map("created_at")
 
   vehicle             Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)

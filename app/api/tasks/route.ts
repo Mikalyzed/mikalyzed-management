@@ -24,7 +24,7 @@ export async function GET(request: Request) {
         },
       },
     },
-    orderBy: { startedAt: 'asc' },
+    orderBy: [{ priority: 'asc' }, { startedAt: 'asc' }],
   })
 
   return NextResponse.json({ tasks })

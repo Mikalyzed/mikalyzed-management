@@ -45,24 +45,42 @@ export default function MyTasksPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {tasks.map((t) => {
+          {tasks.map((t, idx) => {
             const elapsed = (Date.now() - new Date(t.startedAt).getTime()) / 1000 - t.totalBlockedSeconds
             const hours = Math.floor(elapsed / 3600)
             const timeStr = hours < 1 ? `${Math.floor(elapsed / 60)}m` : hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`
 
             return (
-              <VehicleCard
-                key={t.id}
-                id={t.vehicle.id}
-                stockNumber={t.vehicle.stockNumber}
-                year={t.vehicle.year}
-                make={t.vehicle.make}
-                model={t.vehicle.model}
-                color={t.vehicle.color}
-                status={t.vehicle.status}
-                stageStatus={t.status}
-                timeInStage={timeStr}
-              />
+              <div key={t.id} style={{ position: 'relative' }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '8px',
+                    left: '8px',
+                    zIndex: 2,
+                    background: 'var(--bg-secondary, #f5f5f7)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    padding: '1px 6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  #{idx + 1}
+                </div>
+                <VehicleCard
+                  id={t.vehicle.id}
+                  stockNumber={t.vehicle.stockNumber}
+                  year={t.vehicle.year}
+                  make={t.vehicle.make}
+                  model={t.vehicle.model}
+                  color={t.vehicle.color}
+                  status={t.vehicle.status}
+                  stageStatus={t.status}
+                  timeInStage={timeStr}
+                />
+              </div>
             )
           })}
         </div>
