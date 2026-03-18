@@ -52,9 +52,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     } else {
       // Create next stage
       const config = await tx.stageConfig.findUnique({ where: { stage: nextStage } })
-      const checklist = DEFAULT_CHECKLISTS[nextStage as Stage]?.map((item) => ({
+      const checklistItems = (config?.defaultChecklist as string[] | undefined)?.length
+        ? config!.defaultChecklist as string[]
+        : DEFAULT_CHECKLISTS[nextStage as Stage] || []
+      const checklist = checklistItems.map((item: string) => ({
         item, done: false, note: '',
-      })) || []
+      }))
 
       const newStage = await tx.vehicleStage.create({
         data: {

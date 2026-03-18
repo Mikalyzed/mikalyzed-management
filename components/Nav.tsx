@@ -13,6 +13,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { href: '/external', label: 'External Repairs' },
     { href: '/reports', label: 'Reports' },
     { href: '/team', label: 'Team' },
+    { href: '/settings', label: 'Settings' },
   ],
   mechanic: [
     { href: '/dashboard', label: 'Dashboard' },

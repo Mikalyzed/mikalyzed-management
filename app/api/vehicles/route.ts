@@ -86,9 +86,13 @@ export async function POST(request: Request) {
     })
 
     // Create mechanic stage with custom or default checklist
+    const mechConfig = await tx.stageConfig.findUnique({ where: { stage: 'mechanic' } })
+    const configChecklist = (mechConfig?.defaultChecklist as string[] | undefined)?.length
+      ? mechConfig!.defaultChecklist as string[]
+      : null
     const checklistItems = mechanicChecklist && mechanicChecklist.length > 0
       ? mechanicChecklist
-      : DEFAULT_CHECKLISTS.mechanic
+      : configChecklist || DEFAULT_CHECKLISTS.mechanic
     const checklist = checklistItems.map((item: string) => ({
       item,
       done: false,

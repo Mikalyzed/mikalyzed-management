@@ -2,8 +2,15 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const role = searchParams.get('role')
+
+  const where: Record<string, unknown> = { isActive: true }
+  if (role) where.role = role
+
   const users = await prisma.user.findMany({
+    where,
     orderBy: { createdAt: 'asc' },
   })
   return NextResponse.json({ users })
