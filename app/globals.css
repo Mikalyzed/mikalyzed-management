@@ -133,6 +133,7 @@ input, select, textarea {
   }
   .main-content {
     padding-bottom: 0;
+    max-width: calc(100vw - 14rem); /* prevent content from overflowing behind sidebar */
   }
 }
 
