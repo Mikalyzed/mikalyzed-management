@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { StageBadge, StatusBadge } from '@/components/StageBadge'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
 
@@ -35,116 +34,223 @@ type Vehicle = {
   stages: Stage[]
 }
 
+const STAGE_LABELS: Record<string, string> = {
+  mechanic: 'Mechanic', detailing: 'Detailing', content: 'Content', publish: 'Publish', completed: 'Completed',
+}
+const STAGE_ICONS: Record<string, string> = {
+  mechanic: '🔧', detailing: '✨', content: '📸', publish: '🚀', completed: '✅',
+}
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending', in_progress: 'In Progress', blocked: 'Blocked', done: 'Done',
+}
+const STATUS_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+  pending: { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
+  in_progress: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+  blocked: { bg: '#fef2f2', color: '#ef4444', border: '#fecaca' },
+  done: { bg: '#f0f0ec', color: '#9a9a9a', border: '#e8e8e4' },
+}
+
 export default function VehicleDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const refresh = () => fetch(`/api/vehicles/${id}`).then(r => r.json()).then(d => setVehicle(d.vehicle))
+
   useEffect(() => {
-    fetch(`/api/vehicles/${id}`)
-      .then((r) => r.json())
-      .then((data) => setVehicle(data.vehicle))
-      .catch(console.error)
-      .finally(() => setLoading(false))
+    refresh().finally(() => setLoading(false))
   }, [id])
 
-  if (loading) return <p style={{ color: 'var(--text-muted)' }}>Loading...</p>
-  if (!vehicle) return <p style={{ color: 'var(--danger)' }}>Vehicle not found</p>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: '60vh' }}>
+        <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#e8e8e4', borderTopColor: 'transparent' }} />
+      </div>
+    )
+  }
+  if (!vehicle) return <p style={{ color: 'var(--danger)', textAlign: 'center', marginTop: '40px' }}>Vehicle not found</p>
 
   const currentStage = vehicle.stages.find((s) => s.status !== 'done')
   const completedStages = vehicle.stages.filter((s) => s.status === 'done')
+  const stageIcon = STAGE_ICONS[vehicle.status] || '📋'
+  const stageLabel = STAGE_LABELS[vehicle.status] || vehicle.status
+
+  // Time in current stage
+  let timeStr = ''
+  if (currentStage) {
+    const elapsed = (Date.now() - new Date(currentStage.startedAt).getTime()) / 1000
+    const hours = Math.floor(elapsed / 3600)
+    if (hours < 1) timeStr = `${Math.floor(elapsed / 60)}m`
+    else if (hours < 24) timeStr = `${hours}h`
+    else timeStr = `${Math.floor(hours / 24)}d ${hours % 24}h`
+  }
 
   return (
     <div className="max-w-2xl mx-auto">
-      {/* Header */}
-      <button onClick={() => router.back()} className="text-sm mb-4 flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
+      {/* Back */}
+      <button onClick={() => router.back()} className="text-sm mb-5 flex items-center gap-1" style={{ color: 'var(--text-muted)', minHeight: 'auto' }}>
         ← Back
       </button>
 
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold">#{vehicle.stockNumber}</h1>
-          <p style={{ color: 'var(--text-secondary)' }}>
-            {vehicle.year} {vehicle.make} {vehicle.model}
-            {vehicle.color && ` · ${vehicle.color}`}
-            {vehicle.trim && ` · ${vehicle.trim}`}
-          </p>
-          {vehicle.vin && <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>VIN: {vehicle.vin}</p>}
+      {/* Hero Card */}
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid var(--border)',
+        borderRadius: '20px',
+        padding: '24px',
+        marginBottom: '16px',
+        boxShadow: 'var(--shadow)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+          <div>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '4px' }}>
+              STOCK #{vehicle.stockNumber}
+            </p>
+            <h1 style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+              {vehicle.year} {vehicle.make} {vehicle.model}
+            </h1>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+              {vehicle.color && (
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{vehicle.color}</span>
+              )}
+              {vehicle.trim && (
+                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>· {vehicle.trim}</span>
+              )}
+              {vehicle.vin && (
+                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>· VIN: {vehicle.vin}</span>
+              )}
+            </div>
+          </div>
         </div>
-        <StageBadge stage={vehicle.status} />
+
+        {/* Status row */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '12px 16px',
+          background: 'var(--bg-primary)',
+          borderRadius: '12px',
+          flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: '20px' }}>{stageIcon}</span>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: '14px', fontWeight: 600 }}>{stageLabel}</p>
+            {currentStage && (
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                {STATUS_LABELS[currentStage.status] || currentStage.status}
+                {timeStr && ` · ${timeStr}`}
+                {currentStage.assignee && ` · ${currentStage.assignee.name}`}
+              </p>
+            )}
+            {vehicle.status === 'completed' && (
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Completed {vehicle.completedAt && new Date(vehicle.completedAt).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+          {currentStage && (
+            <span style={{
+              padding: '4px 12px',
+              borderRadius: '100px',
+              fontSize: '12px',
+              fontWeight: 600,
+              background: STATUS_COLORS[currentStage.status]?.bg || '#f5f5f3',
+              color: STATUS_COLORS[currentStage.status]?.color || '#9a9a9a',
+              border: `1px solid ${STATUS_COLORS[currentStage.status]?.border || '#e8e8e4'}`,
+            }}>
+              {STATUS_LABELS[currentStage.status] || currentStage.status}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Notes */}
       {vehicle.notes && (
-        <div className="card mb-4">
-          <p className="text-xs font-semibold mb-1" style={{ color: 'var(--text-muted)' }}>NOTES</p>
-          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{vehicle.notes}</p>
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid var(--border)',
+          borderRadius: '16px',
+          padding: '16px 20px',
+          marginBottom: '16px',
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Notes</p>
+          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{vehicle.notes}</p>
         </div>
       )}
 
-      {/* Current Stage */}
+      {/* Checklist & Actions */}
       {currentStage && (
-        <div className="card mb-4" style={{ borderColor: 'var(--accent)', borderWidth: '2px' }}>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <StageBadge stage={currentStage.stage} />
-              <StatusBadge status={currentStage.status} />
-            </div>
-            {currentStage.assignee && (
-              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                👤 {currentStage.assignee.name}
-              </span>
-            )}
-          </div>
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid var(--border)',
+          borderRadius: '16px',
+          padding: '20px',
+          marginBottom: '16px',
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+            Tasks ({currentStage.checklist.filter(c => c.done).length}/{currentStage.checklist.length})
+          </p>
 
-          {/* Checklist */}
-          <StageChecklist stageId={currentStage.id} checklist={currentStage.checklist} onUpdate={() => {
-            fetch(`/api/vehicles/${id}`).then(r => r.json()).then(d => setVehicle(d.vehicle))
-          }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            {currentStage.checklist.map((item, i) => (
+              <ChecklistRow key={i} item={item} index={i} stageId={currentStage.id} onUpdate={refresh} />
+            ))}
+          </div>
 
           {/* Stage notes */}
           {currentStage.notes && (
-            <p className="text-sm mt-3 p-2 rounded" style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
+            <p style={{
+              fontSize: '13px',
+              marginTop: '12px',
+              padding: '10px 12px',
+              borderRadius: '8px',
+              background: 'var(--bg-primary)',
+              color: 'var(--text-secondary)',
+              lineHeight: 1.4,
+            }}>
               {currentStage.notes}
             </p>
           )}
 
           {/* Actions */}
-          <div className="flex gap-2 mt-4">
+          <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
             {currentStage.status === 'pending' && (
-              <ActionButton label="Start Working" onClick={async () => {
+              <ActionBtn label="Start Working" style="primary" onClick={async () => {
                 await fetch(`/api/stages/${currentStage.id}`, {
                   method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ status: 'in_progress' }),
                 })
-                fetch(`/api/vehicles/${id}`).then(r => r.json()).then(d => setVehicle(d.vehicle))
+                refresh()
               }} />
             )}
             {currentStage.status === 'in_progress' && (
               <>
-                <ActionButton label="Advance →" color="var(--success)" onClick={async () => {
+                <ActionBtn label="Advance to Next Stage →" style="success" onClick={async () => {
                   await fetch(`/api/stages/${currentStage.id}/advance`, { method: 'POST' })
-                  fetch(`/api/vehicles/${id}`).then(r => r.json()).then(d => setVehicle(d.vehicle))
+                  refresh()
                 }} />
-                <ActionButton label="Block" color="var(--danger)" onClick={async () => {
+                <ActionBtn label="Block" style="danger" onClick={async () => {
                   const note = prompt('Block reason:')
                   if (!note) return
                   await fetch(`/api/stages/${currentStage.id}`, {
                     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: 'blocked', blockNote: note }),
                   })
-                  fetch(`/api/vehicles/${id}`).then(r => r.json()).then(d => setVehicle(d.vehicle))
+                  refresh()
                 }} />
               </>
             )}
             {currentStage.status === 'blocked' && (
-              <ActionButton label="Unblock" color="var(--warning)" onClick={async () => {
+              <ActionBtn label="Unblock" style="warning" onClick={async () => {
                 await fetch(`/api/stages/${currentStage.id}`, {
                   method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ status: 'in_progress' }),
                 })
-                fetch(`/api/vehicles/${id}`).then(r => r.json()).then(d => setVehicle(d.vehicle))
+                refresh()
               }} />
             )}
           </div>
@@ -153,79 +259,162 @@ export default function VehicleDetailPage() {
 
       {/* Stage History */}
       {completedStages.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text-muted)' }}>
-            COMPLETED STAGES
-          </h2>
-          <div className="flex flex-col gap-2">
-            {completedStages.map((s) => (
-              <div key={s.id} className="card" style={{ opacity: 0.7 }}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <StageBadge stage={s.stage} />
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      ✅ {s.assignee?.name || 'Unassigned'}
-                    </span>
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid var(--border)',
+          borderRadius: '16px',
+          padding: '20px',
+          marginBottom: '16px',
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+            Completed Stages
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {completedStages.map((s) => {
+              const dur = s.completedAt && s.startedAt
+                ? Math.round((new Date(s.completedAt).getTime() - new Date(s.startedAt).getTime()) / 3600000)
+                : null
+              return (
+                <div key={s.id} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  background: 'var(--bg-primary)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '16px' }}>{STAGE_ICONS[s.stage] || '✅'}</span>
+                    <div>
+                      <p style={{ fontSize: '13px', fontWeight: 600 }}>{STAGE_LABELS[s.stage] || s.stage}</p>
+                      <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        {s.assignee?.name || 'Unassigned'}
+                        {dur !== null && ` · ${dur < 24 ? `${dur}h` : `${Math.floor(dur / 24)}d`}`}
+                      </p>
+                    </div>
                   </div>
-                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                     {s.completedAt && new Date(s.completedAt).toLocaleDateString()}
                   </span>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
 
       {/* Meta */}
-      <div className="mt-6 text-xs" style={{ color: 'var(--text-muted)' }}>
-        <p>Added by {vehicle.createdBy?.name || 'System'} on {new Date(vehicle.createdAt).toLocaleDateString()}</p>
-        {vehicle.completedAt && <p>Completed on {new Date(vehicle.completedAt).toLocaleDateString()}</p>}
-      </div>
+      <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0 24px' }}>
+        Added by {vehicle.createdBy?.name || 'System'} on {new Date(vehicle.createdAt).toLocaleDateString()}
+      </p>
     </div>
   )
 }
 
-function StageChecklist({ stageId, checklist, onUpdate }: {
-  stageId: string; checklist: ChecklistItem[]; onUpdate: () => void
+function ChecklistRow({ item, index, stageId, onUpdate }: {
+  item: ChecklistItem; index: number; stageId: string; onUpdate: () => void
 }) {
-  async function toggleItem(index: number) {
-    const updated = [...checklist]
-    updated[index] = { ...updated[index], done: !updated[index].done }
-    await fetch(`/api/stages/${stageId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ checklist: updated }),
-    })
-    onUpdate()
+  const [toggling, setToggling] = useState(false)
+
+  async function toggle() {
+    setToggling(true)
+    try {
+      const res = await fetch(`/api/stages/${stageId}`)
+      const data = await res.json()
+      const checklist = data.stage?.checklist || []
+      if (checklist[index]) {
+        checklist[index].done = !checklist[index].done
+        await fetch(`/api/stages/${stageId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ checklist }),
+        })
+      }
+      onUpdate()
+    } finally {
+      setToggling(false)
+    }
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      {checklist.map((item, i) => (
-        <button
-          key={i}
-          onClick={() => toggleItem(i)}
-          className="flex items-center gap-2 text-left text-sm py-1.5 px-2 rounded hover:bg-white/5"
-        >
-          <span style={{ opacity: item.done ? 1 : 0.3 }}>{item.done ? '✅' : '⬜'}</span>
-          <span style={{ color: item.done ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: item.done ? 'line-through' : 'none' }}>
-            {item.item}
-          </span>
-        </button>
-      ))}
-    </div>
+    <button
+      onClick={toggle}
+      disabled={toggling}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '10px 12px',
+        borderRadius: '10px',
+        border: 'none',
+        background: 'transparent',
+        cursor: 'pointer',
+        width: '100%',
+        textAlign: 'left',
+        transition: 'background 0.15s',
+        minHeight: '44px',
+        opacity: toggling ? 0.5 : 1,
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-primary)')}
+      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+    >
+      <span style={{
+        width: '22px',
+        height: '22px',
+        borderRadius: '6px',
+        border: item.done ? 'none' : '2px solid #d4d4d4',
+        background: item.done ? '#1a1a1a' : 'transparent',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        transition: 'all 0.15s',
+      }}>
+        {item.done && <span style={{ color: '#dffd6e', fontSize: '13px', fontWeight: 700 }}>✓</span>}
+      </span>
+      <span style={{
+        fontSize: '14px',
+        color: item.done ? 'var(--text-muted)' : 'var(--text-primary)',
+        textDecoration: item.done ? 'line-through' : 'none',
+        fontWeight: 500,
+      }}>
+        {item.item}
+      </span>
+    </button>
   )
 }
 
-function ActionButton({ label, onClick, color }: { label: string; onClick: () => void; color?: string }) {
+function ActionBtn({ label, onClick, style: btnStyle }: { label: string; onClick: () => void; style: 'primary' | 'success' | 'danger' | 'warning' }) {
+  const [loading, setLoading] = useState(false)
+  const styles: Record<string, { bg: string; color: string; border: string }> = {
+    primary: { bg: '#1a1a1a', color: '#dffd6e', border: '#1a1a1a' },
+    success: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+    danger: { bg: '#fef2f2', color: '#ef4444', border: '#fecaca' },
+    warning: { bg: '#fffbeb', color: '#d97706', border: '#fde68a' },
+  }
+  const s = styles[btnStyle]
+
   return (
     <button
-      onClick={onClick}
-      className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white"
-      style={{ background: color || 'var(--accent)' }}
+      onClick={async () => { setLoading(true); await onClick(); setLoading(false) }}
+      disabled={loading}
+      style={{
+        flex: btnStyle === 'danger' ? '0 0 auto' : 1,
+        padding: '10px 20px',
+        borderRadius: '12px',
+        border: `1px solid ${s.border}`,
+        background: s.bg,
+        color: s.color,
+        fontSize: '14px',
+        fontWeight: 600,
+        cursor: 'pointer',
+        minHeight: '44px',
+        opacity: loading ? 0.5 : 1,
+        transition: 'opacity 0.15s',
+      }}
     >
-      {label}
+      {loading ? '...' : label}
     </button>
   )
 }
