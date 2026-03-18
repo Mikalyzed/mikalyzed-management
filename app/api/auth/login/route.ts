@@ -7,7 +7,9 @@ export async function POST(request: Request) {
     const { email, password } = await request.json()
 
     // Simple password check — will be replaced by Clerk
-    if (password !== process.env.APP_PASSWORD) {
+    const appPassword = process.env.APP_PASSWORD
+    console.log('Login attempt:', { email, passwordMatch: password === appPassword, envSet: !!appPassword })
+    if (password !== appPassword) {
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
