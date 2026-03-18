@@ -64,7 +64,7 @@ export default function Nav({ role, userName }: { role: string; userName: string
         </div>
 
         {/* Nav links */}
-        <nav className="flex-1 px-4 pt-4 flex flex-col gap-0 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+        <nav className="flex-1 px-4 pt-5 pb-4 flex flex-col border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
           {items.map((item) => (
             <Link
               key={item.href}

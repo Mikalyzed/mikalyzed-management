@@ -45,22 +45,21 @@ export default function DashboardPage() {
   return (
     <div>
       {/* Top bar with date */}
-      <div className="top-bar">
-        <div />
-        <span className="top-bar-date">{today}</span>
+      <div className="flex items-center justify-end" style={{ marginBottom: '24px' }}>
+        <span className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>{today}</span>
       </div>
 
       {/* Header */}
-      <div className="mb-8">
+      <div style={{ marginBottom: '32px' }}>
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+        <p className="text-sm" style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
           Welcome back! Here&apos;s what&apos;s happening at the shop today.
         </p>
       </div>
 
       {/* Stat cards */}
       {isAdmin && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" style={{ marginBottom: '32px' }}>
           <div className="stat-card" style={{ borderLeft: '3px solid #dffd6e' }}>
             <p className="stat-label">In Pipeline</p>
             <p className="stat-value">{totalPipeline}</p>
@@ -84,12 +83,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Pipeline + Quick Actions side by side on desktop */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Pipeline overview */}
+      {/* Pipeline + Quick Actions — aligned at same baseline */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ alignItems: 'start' }}>
+        {/* Left: Pipeline + Vehicles */}
         {isAdmin && (
           <div className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-4">
+            {/* Pipeline header */}
+            <div className="flex items-center justify-between" style={{ marginBottom: '16px' }}>
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-bold">Recon Pipeline</h2>
                 {data.overdue > 0 && (
@@ -103,7 +103,8 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-3 md:grid-cols-5 gap-3 mb-6">
+            {/* Pipeline chips */}
+            <div className="grid grid-cols-3 md:grid-cols-5 gap-3" style={{ marginBottom: '24px' }}>
               <div className="pipeline-chip">
                 <p className="pipeline-chip-value">{data.pipeline.mechanic}</p>
                 <p className="pipeline-chip-label">Mechanic</p>
@@ -126,13 +127,13 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Recent vehicles as cards */}
+            {/* Recent vehicles */}
             {data.recentVehicles.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {data.recentVehicles.slice(0, 4).map((v) => (
                   <Link key={v.id} href={`/vehicles/${v.id}`}>
                     <div className="card">
-                      <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-start justify-between" style={{ marginBottom: '8px' }}>
                         <span className="text-sm font-bold" style={{ color: 'var(--text-secondary)' }}>#{v.stockNumber}</span>
                         <span className={`badge badge-${v.status}`}>{v.status}</span>
                       </div>
@@ -147,12 +148,12 @@ export default function DashboardPage() {
             {/* Empty state */}
             {data.recentVehicles.length === 0 && (
               <div className="card-flat text-center" style={{ padding: '48px 20px' }}>
-                <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-                  style={{ background: '#f5f5f3', fontSize: '24px' }}>
+                <div className="w-14 h-14 rounded-2xl mx-auto flex items-center justify-center"
+                  style={{ background: '#f5f5f3', fontSize: '24px', marginBottom: '16px' }}>
                   🚗
                 </div>
-                <p className="font-bold text-lg mb-1">No vehicles yet</p>
-                <p className="text-sm mb-6" style={{ color: 'var(--text-muted)', maxWidth: '280px', margin: '0 auto 24px' }}>
+                <p className="font-bold text-lg" style={{ marginBottom: '4px' }}>No vehicles yet</p>
+                <p className="text-sm" style={{ color: 'var(--text-muted)', maxWidth: '280px', margin: '0 auto 24px' }}>
                   Add your first vehicle to start tracking the recon workflow
                 </p>
                 <Link href="/vehicles/new" className="btn btn-primary">
@@ -163,26 +164,26 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Quick actions sidebar */}
+        {/* Right: Quick Actions — same top baseline as Recon Pipeline */}
         <div>
-          <h2 className="text-lg font-bold mb-4">Quick Actions</h2>
+          <h2 className="text-lg font-bold" style={{ marginBottom: '16px' }}>Quick Actions</h2>
           <div className="flex flex-col gap-3">
             <Link href="/vehicles/new" className="card flex items-center gap-3" style={{ padding: '16px' }}>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#dffd6e', fontSize: '18px' }}>+</div>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold" style={{ background: '#dffd6e', color: '#1a1a1a', fontSize: '18px', flexShrink: 0 }}>+</div>
               <div>
                 <p className="font-semibold text-sm">Add Vehicle</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Start recon process</p>
               </div>
             </Link>
             <Link href="/vehicles" className="card flex items-center gap-3" style={{ padding: '16px' }}>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f0f0ec', fontSize: '16px' }}>◫</div>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f0f0ec', fontSize: '16px', flexShrink: 0 }}>◫</div>
               <div>
                 <p className="font-semibold text-sm">Recon Board</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>View pipeline</p>
               </div>
             </Link>
             <Link href="/transport" className="card flex items-center gap-3" style={{ padding: '16px' }}>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f0f0ec', fontSize: '16px' }}>⇄</div>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f0f0ec', fontSize: '16px', flexShrink: 0 }}>⇄</div>
               <div>
                 <p className="font-semibold text-sm">Transport</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Manage requests</p>
@@ -191,9 +192,9 @@ export default function DashboardPage() {
           </div>
 
           {data.blocked > 0 && (
-            <div className="mt-4 p-4 rounded-xl" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)' }}>
+            <div className="p-4 rounded-xl" style={{ background: 'var(--warning-bg)', border: '1px solid var(--warning-border)', marginTop: '16px' }}>
               <p className="text-sm font-semibold" style={{ color: '#92400e' }}>⚠ {data.blocked} Blocked</p>
-              <p className="text-xs mt-1" style={{ color: '#a16207' }}>Vehicles waiting on resolution</p>
+              <p className="text-xs" style={{ color: '#a16207', marginTop: '4px' }}>Vehicles waiting on resolution</p>
             </div>
           )}
         </div>
