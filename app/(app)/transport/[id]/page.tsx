@@ -22,9 +22,10 @@ type TransportDetail = {
   updatedAt: string
 }
 
-const STATUS_FLOW = ['requested', 'scheduled', 'in_transit', 'delivered']
+const STATUS_FLOW = ['requested', 'accepted', 'scheduled', 'in_transit', 'delivered']
 const STATUS_LABELS: Record<string, string> = {
   requested: 'Requested',
+  accepted: 'Accepted',
   scheduled: 'Scheduled',
   in_transit: 'In Transit',
   delivered: 'Delivered',
@@ -99,7 +100,7 @@ export default function TransportDetailPage() {
         </div>
         <div className="flex gap-2">
           {req.urgency === 'rush' && <span className="badge badge-rush">Rush</span>}
-          <span className={`badge badge-${req.status === 'in_transit' ? 'in-progress' : req.status === 'delivered' ? 'done' : 'pending'}`}>
+          <span className={`badge badge-${req.status === 'in_transit' ? 'in-progress' : req.status === 'delivered' ? 'done' : req.status === 'accepted' ? 'in-progress' : 'pending'}`}>
             {STATUS_LABELS[req.status]}
           </span>
         </div>
@@ -180,7 +181,7 @@ export default function TransportDetailPage() {
         {nextStatus && (
           <button onClick={() => updateStatus(nextStatus)} disabled={updating}
             className="btn btn-primary w-full" style={updating ? { opacity: 0.5 } : {}}>
-            {updating ? 'Updating...' : `Mark as ${STATUS_LABELS[nextStatus]}`}
+            {updating ? 'Updating...' : nextStatus === 'accepted' ? 'Accept Request' : `Mark as ${STATUS_LABELS[nextStatus]}`}
           </button>
         )}
 

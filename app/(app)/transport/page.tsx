@@ -17,9 +17,10 @@ type TransportRequest = {
   createdAt: string
 }
 
-const STATUS_ORDER = ['requested', 'scheduled', 'in_transit', 'delivered']
+const STATUS_ORDER = ['requested', 'accepted', 'scheduled', 'in_transit', 'delivered']
 const STATUS_LABELS: Record<string, string> = {
   requested: 'Requested',
+  accepted: 'Accepted',
   scheduled: 'Scheduled',
   in_transit: 'In Transit',
   delivered: 'Delivered',
@@ -108,7 +109,7 @@ export default function TransportPage() {
                     </div>
                     <div className="flex gap-2">
                       {req.urgency === 'rush' && <span className="badge badge-rush">Rush</span>}
-                      <span className={`badge badge-${req.status === 'in_transit' ? 'in-progress' : req.status === 'delivered' ? 'done' : 'pending'}`}>
+                      <span className={`badge badge-${req.status === 'in_transit' ? 'in-progress' : req.status === 'delivered' ? 'done' : req.status === 'accepted' ? 'in-progress' : 'pending'}`}>
                         {STATUS_LABELS[req.status]}
                       </span>
                     </div>
