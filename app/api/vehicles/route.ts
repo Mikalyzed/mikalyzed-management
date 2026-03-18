@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId } = body
+  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist } = body
 
   if (!stockNumber || !make || !model) {
     return NextResponse.json({ error: 'Stock number, make, and model are required' }, { status: 400 })
@@ -76,8 +76,11 @@ export async function POST(request: Request) {
       },
     })
 
-    // Create mechanic stage
-    const checklist = DEFAULT_CHECKLISTS.mechanic.map((item) => ({
+    // Create mechanic stage with custom or default checklist
+    const checklistItems = mechanicChecklist && mechanicChecklist.length > 0
+      ? mechanicChecklist
+      : DEFAULT_CHECKLISTS.mechanic
+    const checklist = checklistItems.map((item: string) => ({
       item,
       done: false,
       note: '',
