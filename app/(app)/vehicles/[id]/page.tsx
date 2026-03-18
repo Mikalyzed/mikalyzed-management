@@ -55,11 +55,23 @@ export default function VehicleDetailPage() {
   const router = useRouter()
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editChecklist, setEditChecklist] = useState<ChecklistItem[]>([])
+  const [newTaskText, setNewTaskText] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const refresh = () => fetch(`/api/vehicles/${id}`).then(r => r.json()).then(d => setVehicle(d.vehicle))
 
   useEffect(() => {
     refresh().finally(() => setLoading(false))
+    // Check if admin
+    const cookies = document.cookie.split(';').reduce((acc, c) => {
+      const [k, v] = c.trim().split('=')
+      acc[k] = v
+      return acc
+    }, {} as Record<string, string>)
+    if (cookies.mm_user_role === 'admin') setIsAdmin(true)
   }, [id])
 
   if (loading) {
@@ -191,15 +203,135 @@ export default function VehicleDetailPage() {
           marginBottom: '16px',
           boxShadow: 'var(--shadow-sm)',
         }}>
-          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
-            Tasks ({currentStage.checklist.filter(c => c.done).length}/{currentStage.checklist.length})
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            {currentStage.checklist.map((item, i) => (
-              <ChecklistRow key={i} item={item} index={i} stageId={currentStage.id} onUpdate={refresh} />
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Tasks ({currentStage.checklist.filter(c => c.done).length}/{currentStage.checklist.length})
+            </p>
+            {isAdmin && !editing && (
+              <button
+                onClick={() => { setEditing(true); setEditChecklist([...currentStage.checklist]); setNewTaskText('') }}
+                style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', minHeight: 'auto', padding: '4px 8px' }}
+              >
+                ✏️ Edit
+              </button>
+            )}
           </div>
+
+          {!editing ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              {currentStage.checklist.map((item, i) => (
+                <ChecklistRow key={i} item={item} index={i} stageId={currentStage.id} onUpdate={refresh} />
+              ))}
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
+                {editChecklist.map((item, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '8px 12px', borderRadius: '10px',
+                    background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                  }}>
+                    <input
+                      value={item.item}
+                      onChange={(e) => {
+                        const updated = [...editChecklist]
+                        updated[i] = { ...updated[i], item: e.target.value }
+                        setEditChecklist(updated)
+                      }}
+                      style={{
+                        flex: 1, border: 'none', background: 'transparent',
+                        fontSize: '14px', fontWeight: 500, outline: 'none',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
+                    <button
+                      onClick={() => setEditChecklist(editChecklist.filter((_, idx) => idx !== i))}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: 'var(--danger)', fontSize: '14px', fontWeight: 700,
+                        minHeight: 'auto', padding: '2px 6px',
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Add new task */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <input
+                  value={newTaskText}
+                  onChange={(e) => setNewTaskText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newTaskText.trim()) {
+                      e.preventDefault()
+                      setEditChecklist([...editChecklist, { item: newTaskText.trim(), done: false, note: '' }])
+                      setNewTaskText('')
+                    }
+                  }}
+                  placeholder="Add a task..."
+                  style={{
+                    flex: 1, padding: '10px 14px', borderRadius: '10px',
+                    border: '1px solid var(--border)', background: '#fff',
+                    fontSize: '14px', outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    if (!newTaskText.trim()) return
+                    setEditChecklist([...editChecklist, { item: newTaskText.trim(), done: false, note: '' }])
+                    setNewTaskText('')
+                  }}
+                  style={{
+                    padding: '10px 16px', borderRadius: '10px',
+                    border: '1px solid var(--border)', background: '#fff',
+                    fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: 'auto',
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+
+              {/* Save / Cancel */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setEditing(false)}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '10px',
+                    border: '1px solid var(--border)', background: '#fff',
+                    fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true)
+                    const filtered = editChecklist.filter(c => c.item.trim())
+                    await fetch(`/api/stages/${currentStage.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ checklist: filtered }),
+                    })
+                    setEditing(false)
+                    setSaving(false)
+                    refresh()
+                  }}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '10px',
+                    border: 'none', background: '#1a1a1a', color: '#dffd6e',
+                    fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px',
+                    opacity: saving ? 0.5 : 1,
+                  }}
+                >
+                  {saving ? 'Saving...' : 'Save Tasks'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Stage notes */}
           {currentStage.notes && (
