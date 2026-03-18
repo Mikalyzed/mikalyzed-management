@@ -19,6 +19,7 @@ export default function AddVehiclePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [fullInspection, setFullInspection] = useState(false)
+  const [startingStage, setStartingStage] = useState('mechanic')
   const [customTasks, setCustomTasks] = useState<string[]>([])
   const [newTask, setNewTask] = useState('')
 
@@ -58,6 +59,7 @@ export default function AddVehiclePage() {
       color: form.get('color'),
       trim: form.get('trim'),
       notes: form.get('notes'),
+      startingStage,
       mechanicChecklist,
     }
 
@@ -142,7 +144,48 @@ export default function AddVehiclePage() {
           </div>
         </div>
 
-        {/* Mechanic Tasks Card */}
+        {/* Starting Stage */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid var(--border)',
+          borderRadius: '16px',
+          padding: '24px',
+          marginBottom: '16px',
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+            Starting Stage
+          </p>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {(['mechanic', 'detailing', 'content', 'publish'] as const).map((stage) => {
+              const labels: Record<string, string> = { mechanic: 'Mechanic', detailing: 'Detailing', content: 'Content', publish: 'Publish' }
+              const active = startingStage === stage
+              return (
+                <button
+                  key={stage}
+                  type="button"
+                  onClick={() => setStartingStage(stage)}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '10px',
+                    border: active ? '2px solid #1a1a1a' : '1px solid var(--border)',
+                    background: active ? '#fafaf8' : '#ffffff',
+                    fontSize: '14px',
+                    fontWeight: active ? 600 : 500,
+                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    minHeight: 'auto',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  {labels[stage]}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Tasks Card */}
         <div style={{
           background: '#ffffff',
           border: '1px solid var(--border)',
@@ -152,7 +195,7 @@ export default function AddVehiclePage() {
           boxShadow: 'var(--shadow-sm)',
         }}>
           <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '20px' }}>
-            Mechanic Tasks
+            {startingStage === 'mechanic' ? 'Mechanic' : startingStage === 'detailing' ? 'Detailing' : startingStage === 'content' ? 'Content' : 'Publish'} Tasks
           </p>
 
           {/* General Inspection Toggle */}

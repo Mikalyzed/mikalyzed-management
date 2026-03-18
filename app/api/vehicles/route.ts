@@ -48,7 +48,9 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist } = body
+  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist, startingStage: rawStartingStage } = body
+  const validStages = ['mechanic', 'detailing', 'content', 'publish']
+  const startingStage = validStages.includes(rawStartingStage) ? rawStartingStage : 'mechanic'
 
   if (!stockNumber || !make || !model) {
     return NextResponse.json({ error: 'Stock number, make, and model are required' }, { status: 400 })
@@ -60,11 +62,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Stock number already exists' }, { status: 409 })
   }
 
-  // Determine assignee — use provided, or find default mechanic
-  let mechAssigneeId = assigneeId
-  if (!mechAssigneeId) {
-    const config = await prisma.stageConfig.findUnique({ where: { stage: 'mechanic' } })
-    mechAssigneeId = config?.defaultAssigneeId || null
+  // Determine assignee — use provided, or find default for starting stage
+  let stageAssigneeId = assigneeId
+  if (!stageAssigneeId) {
+    const config = await prisma.stageConfig.findUnique({ where: { stage: startingStage } })
+    stageAssigneeId = config?.defaultAssigneeId || null
   }
 
   // Create vehicle + first stage in transaction
@@ -79,20 +81,20 @@ export async function POST(request: Request) {
         color: color || null,
         trim: trim || null,
         notes: notes || null,
-        status: 'mechanic',
-        currentAssigneeId: mechAssigneeId,
+        status: startingStage,
+        currentAssigneeId: stageAssigneeId,
         createdById: user.id,
       },
     })
 
-    // Create mechanic stage with custom or default checklist
-    const mechConfig = await tx.stageConfig.findUnique({ where: { stage: 'mechanic' } })
-    const configChecklist = (mechConfig?.defaultChecklist as string[] | undefined)?.length
-      ? mechConfig!.defaultChecklist as string[]
+    // Create stage with custom or default checklist
+    const stageConfig = await tx.stageConfig.findUnique({ where: { stage: startingStage } })
+    const configChecklist = (stageConfig?.defaultChecklist as string[] | undefined)?.length
+      ? stageConfig!.defaultChecklist as string[]
       : null
     const checklistItems = mechanicChecklist && mechanicChecklist.length > 0
       ? mechanicChecklist
-      : configChecklist || DEFAULT_CHECKLISTS.mechanic
+      : configChecklist || DEFAULT_CHECKLISTS[startingStage as keyof typeof DEFAULT_CHECKLISTS] || ['Inspect & clear']
     const checklist = checklistItems.map((item: string) => ({
       item,
       done: false,
@@ -101,7 +103,7 @@ export async function POST(request: Request) {
 
     // Set priority to max + 1 so new vehicles go to bottom
     const maxPriority = await tx.vehicleStage.aggregate({
-      where: { stage: 'mechanic', status: { not: 'done' } },
+      where: { stage: startingStage, status: { not: 'done' } },
       _max: { priority: true },
     })
     const nextPriority = (maxPriority._max.priority ?? -1) + 1
@@ -109,9 +111,9 @@ export async function POST(request: Request) {
     const stage = await tx.vehicleStage.create({
       data: {
         vehicleId: v.id,
-        stage: 'mechanic',
-        status: mechAssigneeId ? 'pending' : 'pending',
-        assigneeId: mechAssigneeId,
+        stage: startingStage,
+        status: 'pending',
+        assigneeId: stageAssigneeId,
         checklist,
         priority: nextPriority,
       },
@@ -138,14 +140,14 @@ export async function POST(request: Request) {
   })
 
   // Fire-and-forget: notify assignee
-  if (mechAssigneeId) {
-    prisma.user.findUnique({ where: { id: mechAssigneeId } }).then((assignee) => {
+  if (stageAssigneeId) {
+    prisma.user.findUnique({ where: { id: stageAssigneeId } }).then((assignee) => {
       if (!assignee) return
       const vehicleDesc = `${year ?? ''} ${make} ${model} (${stockNumber})`.trim()
       const { subject, html } = newVehicleEmail({
         vehicleDesc,
         assigneeName: assignee.name,
-        stage: STAGE_LABELS.mechanic,
+        stage: STAGE_LABELS[startingStage as keyof typeof STAGE_LABELS] || startingStage,
         vehicleId: vehicle.id,
       })
       sendNotificationEmail({ to: assignee.email, subject, html }).catch(() => {})
@@ -154,7 +156,7 @@ export async function POST(request: Request) {
           userId: assignee.id,
           type: 'new_vehicle',
           title: subject,
-          message: `${vehicleDesc} added to ${STAGE_LABELS.mechanic}`,
+          message: `${vehicleDesc} added to ${STAGE_LABELS[startingStage as keyof typeof STAGE_LABELS] || startingStage}`,
           entityType: 'vehicle',
           entityId: vehicle.id,
         },
