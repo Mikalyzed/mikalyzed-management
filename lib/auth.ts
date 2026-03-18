@@ -1,23 +1,20 @@
-import { cookies } from 'next/headers'
 import { prisma } from './db'
 import type { Role } from './constants'
 
-export async function getSessionUser(request?: Request) {
-  // Use next/headers cookies (works reliably in API routes)
-  const cookieStore = await cookies()
-  const session = cookieStore.get('mm_session')
-
-  if (!session?.value) return null
-
-  try {
-    const decoded = JSON.parse(atob(session.value))
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+// Temporary: no auth, auto-create/return admin user
+export async function getSessionUser(_request?: Request) {
+  let user = await prisma.user.findFirst({ where: { role: 'admin' } })
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        clerkId: 'temp_admin',
+        name: 'Fernando',
+        email: 'fernando@mikalyzed.com',
+        role: 'admin',
+      },
     })
-    return user
-  } catch {
-    return null
   }
+  return user
 }
 
 export function requireRole(userRole: string, allowed: Role[]): boolean {
