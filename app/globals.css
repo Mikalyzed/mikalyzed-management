@@ -119,14 +119,14 @@ input, select, textarea { font-size: 16px; font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 16px;
+  padding: 8px 16px;
   border-radius: var(--radius-xs);
   font-size: 14px;
   font-weight: 500;
   color: var(--text-sidebar);
   text-decoration: none;
   transition: all 0.15s ease;
-  min-height: 42px;
+  min-height: 36px;
 }
 .sidebar-link:hover {
   background: var(--bg-sidebar-hover);

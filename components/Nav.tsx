@@ -63,7 +63,7 @@ export default function Nav({ role, userName }: { role: string; userName: string
         </div>
 
         {/* Nav links */}
-        <nav className="flex-1 px-4 flex flex-col gap-1">
+        <nav className="flex-1 px-4 flex flex-col gap-0">
           {items.map((item) => (
             <Link
               key={item.href}
