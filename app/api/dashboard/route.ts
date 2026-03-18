@@ -70,6 +70,7 @@ export async function GET(request: Request) {
       year: true,
       make: true,
       model: true,
+      color: true,
       status: true,
     },
   })
