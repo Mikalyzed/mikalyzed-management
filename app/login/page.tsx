@@ -26,7 +26,9 @@ export default function LoginPage() {
         setError(data.error || 'Login failed')
         return
       }
-      router.push('/dashboard')
+      // Small delay to ensure cookie is set before redirect
+      await new Promise(r => setTimeout(r, 200))
+      window.location.href = '/dashboard'
     } catch {
       setError('Network error')
     } finally {
