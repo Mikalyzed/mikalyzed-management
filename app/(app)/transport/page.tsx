@@ -64,22 +64,44 @@ export default function TransportPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-2 mb-6 overflow-x-auto">
-        {['all', ...STATUS_ORDER].map((s) => (
-          <button
-            key={s}
-            onClick={() => setFilter(s)}
-            className="px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors"
-            style={{
-              background: filter === s ? 'var(--bg-sidebar)' : 'var(--bg-card)',
-              color: filter === s ? 'var(--accent)' : 'var(--text-secondary)',
-              border: filter === s ? 'none' : '1px solid var(--border)',
-            }}
-          >
-            {s === 'all' ? 'All' : STATUS_LABELS[s]}
-            {s === 'all' && ` (${requests.length})`}
-          </button>
-        ))}
+      <div style={{
+        display: 'flex',
+        gap: '4px',
+        marginBottom: '24px',
+        padding: '4px',
+        background: '#f0f0ec',
+        borderRadius: '12px',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+      }}>
+        {['all', ...STATUS_ORDER].map((s) => {
+          const count = s === 'all' ? requests.length : requests.filter(r => r.status === s).length
+          const active = filter === s
+          return (
+            <button
+              key={s}
+              onClick={() => setFilter(s)}
+              style={{
+                flex: 1,
+                padding: '10px 16px',
+                borderRadius: '9px',
+                fontSize: '13px',
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                cursor: 'pointer',
+                border: 'none',
+                minHeight: 'auto',
+                transition: 'all 0.15s ease',
+                background: active ? '#ffffff' : 'transparent',
+                color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                boxShadow: active ? 'var(--shadow-sm)' : 'none',
+              }}
+            >
+              {s === 'all' ? 'All' : STATUS_LABELS[s]}
+              {count > 0 && <span style={{ marginLeft: '4px', opacity: 0.5 }}>{count}</span>}
+            </button>
+          )
+        })}
       </div>
 
       {/* Requests list */}
