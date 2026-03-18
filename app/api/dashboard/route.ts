@@ -4,7 +4,7 @@ import { getSessionUser } from '@/lib/auth'
 import { DEFAULT_SLA_HOURS } from '@/lib/constants'
 
 export async function GET(request: Request) {
-  const user = await getSessionUser(request)
+  const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // Pipeline counts

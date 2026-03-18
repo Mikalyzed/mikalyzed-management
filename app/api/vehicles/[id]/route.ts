@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getSessionUser(request)
+  const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
@@ -33,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getSessionUser(request)
+  const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!requireRole(user.role, ['admin'])) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -57,7 +57,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getSessionUser(request)
+  const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!requireRole(user.role, ['admin'])) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

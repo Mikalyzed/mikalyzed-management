@@ -11,6 +11,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { href: '/vehicles', label: 'Recon Board' },
     { href: '/transport', label: 'Transport' },
     { href: '/reports', label: 'Reports' },
+    { href: '/team', label: 'Team' },
   ],
   mechanic: [
     { href: '/dashboard', label: 'Dashboard' },
@@ -76,15 +77,20 @@ export default function Nav({ role, userName }: { role: string; userName: string
 
         {/* User */}
         <div className="px-4 py-5 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-          <div className="flex items-center gap-3 px-2">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
-              style={{ background: '#dffd6e', color: '#1a1a1a' }}>
-              {userName.charAt(0).toUpperCase()}
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+                style={{ background: '#dffd6e', color: '#1a1a1a' }}>
+                {userName.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="text-sm font-medium" style={{ color: '#fff' }}>{userName}</p>
+                <p className="text-xs capitalize" style={{ color: '#666' }}>{role}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium" style={{ color: '#fff' }}>{userName}</p>
-              <p className="text-xs capitalize" style={{ color: '#666' }}>{role}</p>
-            </div>
+            <a href="/api/auth/logout" className="text-xs" style={{ color: '#666', minHeight: 'auto' }}>
+              Sign Out
+            </a>
           </div>
         </div>
       </aside>

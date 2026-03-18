@@ -4,7 +4,7 @@ import { getSessionUser, requireRole } from '@/lib/auth'
 import { DEFAULT_CHECKLISTS } from '@/lib/constants'
 
 export async function GET(request: Request) {
-  const user = await getSessionUser(request)
+  const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const user = await getSessionUser(request)
+  const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!requireRole(user.role, ['admin'])) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

@@ -5,7 +5,7 @@ import { NEXT_STAGE, DEFAULT_CHECKLISTS } from '@/lib/constants'
 import type { Stage } from '@/lib/constants'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await getSessionUser(request)
+  const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params

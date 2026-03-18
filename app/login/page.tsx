@@ -1,14 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -20,18 +18,18 @@ export default function LoginPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
+        credentials: 'same-origin',
       })
       const data = await res.json()
       if (!res.ok) {
         setError(data.error || 'Login failed')
+        setLoading(false)
         return
       }
-      // Small delay to ensure cookie is set before redirect
-      await new Promise(r => setTimeout(r, 200))
+      // Force full page reload to pick up cookie
       window.location.href = '/dashboard'
     } catch {
       setError('Network error')
-    } finally {
       setLoading(false)
     }
   }
@@ -40,64 +38,50 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--bg-primary)' }}>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-            🔧 Mikalyzed
-          </h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>
-            Management System
-          </p>
+          <div className="w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center text-xl font-bold"
+            style={{ background: '#dffd6e', color: '#1a1a1a' }}>
+            M
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">Mikalyzed</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Management System</p>
         </div>
 
-        <form onSubmit={handleLogin} className="card" style={{ padding: '24px' }}>
-          <div className="mb-4">
-            <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
-              Email
-            </label>
+        <form onSubmit={handleLogin} className="card flex flex-col gap-4" style={{ padding: '28px' }}>
+          <div>
+            <label className="form-label">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-lg border"
-              style={{
-                background: 'var(--bg-primary)',
-                borderColor: 'var(--border)',
-                color: 'var(--text-primary)',
-              }}
+              className="input"
+              placeholder="you@mikalyzed.com"
             />
           </div>
 
-          <div className="mb-4">
-            <label className="block text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>
-              Password
-            </label>
+          <div>
+            <label className="form-label">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-3 py-2 rounded-lg border"
-              style={{
-                background: 'var(--bg-primary)',
-                borderColor: 'var(--border)',
-                color: 'var(--text-primary)',
-              }}
+              className="input"
+              placeholder="••••••••"
             />
           </div>
 
           {error && (
-            <p className="text-sm mb-4" style={{ color: 'var(--danger)' }}>
+            <div className="px-4 py-3 rounded-xl text-sm" style={{ background: 'var(--danger-bg)', color: 'var(--danger)' }}>
               {error}
-            </p>
+            </div>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 rounded-lg font-semibold text-white transition-colors"
-            style={{
-              background: loading ? 'var(--text-muted)' : 'var(--accent)',
-            }}
+            className="btn btn-primary w-full"
+            style={loading ? { opacity: 0.5 } : {}}
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
