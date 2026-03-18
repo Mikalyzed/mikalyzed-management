@@ -117,28 +117,36 @@ export default function ExternalRepairsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '28px' }}>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">External Repairs</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: 700, letterSpacing: '-0.02em' }}>External Repairs</h1>
+          <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginTop: '4px' }}>
             Track vehicles sent to outside shops
           </p>
         </div>
-        <button onClick={() => setShowAdd(true)} className="btn btn-primary">+ Add Repair</button>
+        <button
+          onClick={() => setShowAdd(true)}
+          style={{
+            padding: '10px 22px', borderRadius: '12px', border: 'none',
+            background: '#1a1a1a', color: '#dffd6e',
+            fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px',
+            display: 'flex', alignItems: 'center', gap: '6px',
+          }}
+        >
+          + Add Repair
+        </button>
       </div>
 
       {/* Filters */}
       <div style={{
         display: 'flex',
-        gap: '4px',
         marginBottom: '24px',
-        padding: '4px',
-        background: '#f0f0ec',
+        border: '1px solid var(--border)',
         borderRadius: '12px',
-        overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
+        overflow: 'hidden',
+        background: '#ffffff',
       }}>
-        {['active', 'returned', 'all'].map((f) => {
+        {['active', 'returned', 'all'].map((f, i) => {
           const count = f === 'active' ? repairs.filter(r => r.status !== 'returned').length
             : f === 'returned' ? repairs.filter(r => r.status === 'returned').length
             : repairs.length
@@ -149,23 +157,37 @@ export default function ExternalRepairsPage() {
               onClick={() => setFilter(f)}
               style={{
                 flex: 1,
-                padding: '10px 16px',
-                borderRadius: '9px',
-                fontSize: '13px',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
+                padding: '12px 16px',
+                fontSize: '14px',
+                fontWeight: active ? 700 : 500,
                 cursor: 'pointer',
                 border: 'none',
+                borderRight: i < 2 ? '1px solid var(--border)' : 'none',
                 minHeight: 'auto',
                 transition: 'all 0.15s ease',
-                background: active ? '#ffffff' : 'transparent',
+                background: active ? 'var(--bg-primary)' : '#ffffff',
                 color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-                boxShadow: active ? 'var(--shadow-sm)' : 'none',
                 textTransform: 'capitalize',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
               }}
             >
               {f}
-              {count > 0 && <span style={{ marginLeft: '4px', opacity: 0.5 }}>{count}</span>}
+              {count > 0 && (
+                <span style={{
+                  background: active ? '#1a1a1a' : '#e8e8e4',
+                  color: active ? '#dffd6e' : 'var(--text-muted)',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  padding: '2px 8px',
+                  borderRadius: '100px',
+                  lineHeight: '16px',
+                }}>
+                  {count}
+                </span>
+              )}
             </button>
           )
         })}
@@ -298,7 +320,7 @@ export default function ExternalRepairsPage() {
                     <div>
                       <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Timeline</p>
                       <p style={{ fontSize: '14px', fontWeight: 600, color: overdue ? 'var(--danger)' : 'var(--text-primary)' }}>
-                        {daysOut} day{daysOut !== 1 ? 's' : ''} out
+                        {overdue && '⚠ '}{daysOut} day{daysOut !== 1 ? 's' : ''} out
                       </p>
                       {r.estimatedDays && (
                         <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{r.estimatedDays}d estimated</p>
@@ -359,16 +381,25 @@ export default function ExternalRepairsPage() {
                 {/* Actions */}
                 {r.status !== 'returned' && (
                   <div style={{
-                    display: 'flex', gap: '8px', padding: '16px 24px',
-                    borderTop: '1px solid var(--border-light)',
+                    display: 'flex',
+                    margin: '0 24px 20px',
+                    border: '1px solid var(--border)',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
                   }}>
                     <button
                       onClick={() => setEditId(r.id)}
                       style={{
-                        padding: '10px 20px', borderRadius: '10px',
-                        border: '1px solid var(--border)', background: '#ffffff',
-                        fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                        color: 'var(--text-secondary)', minHeight: '40px',
+                        padding: '12px 20px',
+                        background: '#ffffff',
+                        border: 'none',
+                        borderRight: '1px solid var(--border)',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        color: 'var(--text-primary)',
+                        minHeight: '44px',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {r.notes ? 'Edit Notes' : 'Add Notes'}
@@ -377,10 +408,10 @@ export default function ExternalRepairsPage() {
                       <button
                         onClick={() => updateStatus(r.id, 'in_progress')}
                         style={{
-                          flex: 1, padding: '10px 20px', borderRadius: '10px',
-                          border: '1px solid var(--info-border)', background: 'var(--info-bg)',
-                          fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                          color: 'var(--info)', minHeight: '40px',
+                          flex: 1, padding: '12px 20px',
+                          background: '#ffffff', border: 'none',
+                          fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                          color: 'var(--text-primary)', minHeight: '44px',
                         }}
                       >
                         Mark In Progress
@@ -390,10 +421,10 @@ export default function ExternalRepairsPage() {
                       <button
                         onClick={() => updateStatus(r.id, 'ready')}
                         style={{
-                          flex: 1, padding: '10px 20px', borderRadius: '10px',
-                          border: '1px solid var(--warning-border)', background: 'var(--warning-bg)',
-                          fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                          color: '#d97706', minHeight: '40px',
+                          flex: 1, padding: '12px 20px',
+                          background: '#ffffff', border: 'none',
+                          fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                          color: 'var(--text-primary)', minHeight: '44px',
                         }}
                       >
                         Ready for Pickup
@@ -403,10 +434,10 @@ export default function ExternalRepairsPage() {
                       <button
                         onClick={() => updateStatus(r.id, 'returned')}
                         style={{
-                          flex: 1, padding: '10px 20px', borderRadius: '10px',
-                          border: '1px solid var(--success-border)', background: 'var(--success-bg)',
-                          fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                          color: '#16a34a', minHeight: '40px',
+                          flex: 1, padding: '12px 20px',
+                          background: '#ffffff', border: 'none',
+                          fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                          color: 'var(--text-primary)', minHeight: '44px',
                         }}
                       >
                         Mark Returned
