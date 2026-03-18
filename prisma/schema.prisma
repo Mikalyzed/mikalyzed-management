@@ -145,6 +145,29 @@ model ActivityLog {
   @@map("activity_log")
 }
 
+model ExternalRepair {
+  id                String    @id @default(uuid())
+  stockNumber       String    @map("stock_number")
+  year              Int?
+  make              String
+  model             String
+  color             String?
+  shopName          String    @map("shop_name")
+  shopPhone         String?   @map("shop_phone")
+  repairDescription String    @map("repair_description")
+  estimatedDays     Int?      @map("estimated_days")
+  sentDate          DateTime  @map("sent_date")
+  expectedReturn    DateTime? @map("expected_return")
+  status            String    @default("sent") // sent, in_progress, ready, returned
+  notes             String?
+  createdById       String?   @map("created_by")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("external_repairs")
+}
+
 model StageConfig {
   id                String   @id @default(uuid())
   stage             String   @unique
