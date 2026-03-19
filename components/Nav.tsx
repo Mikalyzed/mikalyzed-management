@@ -51,7 +51,7 @@ export default function Nav({ role, userName }: { role: string; userName: string
       {/* Desktop sidebar */}
       <aside className="sidebar hidden md:flex">
         {/* Logo */}
-        <div className="px-6 pt-8 pb-6">
+        <div className="px-6 pt-7 pb-5">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold"
               style={{ background: '#dffd6e', color: '#1a1a1a' }}>
@@ -65,7 +65,7 @@ export default function Nav({ role, userName }: { role: string; userName: string
         </div>
 
         {/* Nav links */}
-        <nav className="flex-1 px-4 pt-5 pb-4 flex flex-col border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+        <nav className="flex-1 px-4 pt-4 pb-4 flex flex-col border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
           {items.map((item) => (
             <Link
               key={item.href}
@@ -78,7 +78,7 @@ export default function Nav({ role, userName }: { role: string; userName: string
         </nav>
 
         {/* User */}
-        <div className="px-4 py-5 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
+        <div className="px-4 py-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"

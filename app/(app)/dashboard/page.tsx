@@ -95,14 +95,14 @@ export default function DashboardPage() {
       )}
 
       {/* Pipeline + Quick Actions — aligned at same baseline */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ alignItems: 'start' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-3" style={{ alignItems: 'start', gap: '32px' }}>
         {/* Left: Pipeline + Vehicles */}
         {isAdmin && (
           <div className="lg:col-span-2">
             {/* Pipeline header */}
             <div className="flex items-center justify-between" style={{ marginBottom: '16px' }}>
               <div className="flex items-center gap-3">
-                <h2 className="text-lg font-bold dash-section-header">Recon Pipeline</h2>
+                <h2 className="text-lg font-bold dash-section-header" style={{ lineHeight: '28px' }}>Recon Pipeline</h2>
                 {data.overdue > 0 && (
                   <span className="badge badge-blocked" style={{ fontSize: '11px' }}>
                     {data.overdue} overdue
@@ -177,7 +177,7 @@ export default function DashboardPage() {
 
         {/* Right: Quick Actions — same top baseline as Recon Pipeline */}
         <div>
-          <h2 className="text-lg font-bold dash-section-header" style={{ marginBottom: '16px' }}>Quick Actions</h2>
+          <h2 className="text-lg font-bold dash-section-header" style={{ marginBottom: '16px', lineHeight: '28px' }}>Quick Actions</h2>
           <div className="flex flex-col gap-3">
             <Link href="/vehicles/new" className="card dash-quick-action flex items-center gap-3" style={{ padding: '16px' }}>
               <div className="action-icon w-10 h-10 rounded-xl flex items-center justify-center font-bold" style={{ background: '#dffd6e', color: '#1a1a1a', fontSize: '18px', flexShrink: 0 }}>+</div>

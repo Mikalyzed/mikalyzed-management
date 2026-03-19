@@ -41,7 +41,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Overview stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-4" style={{ gap: '16px', marginBottom: '32px' }}>
         <div className="stat-card" style={{ borderLeft: '3px solid #dffd6e' }}>
           <p className="stat-label">Total Vehicles</p>
           <p className="stat-value">{data.totalVehicles}</p>
@@ -63,7 +63,7 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2" style={{ gap: '24px' }}>
         {/* Avg time per stage */}
         <div className="card">
           <h2 className="text-lg font-bold mb-4">Avg Time Per Stage</h2>

@@ -110,31 +110,31 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="p-6 md:p-10 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-1" style={{ color: '#1a1a1a' }}>Settings</h1>
-      <p className="text-sm mb-8" style={{ color: '#888' }}>Configure stages, notifications, and defaults</p>
+    <div>
+      <div style={{ marginBottom: '32px' }}>
+        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <p className="text-sm" style={{ color: 'var(--text-muted)', marginTop: '4px' }}>
+          Configure stages, notifications, and defaults
+        </p>
+      </div>
 
       {/* Stage Configuration */}
-      <section className="mb-10">
-        <h2 className="text-lg font-semibold mb-4" style={{ color: '#1a1a1a' }}>Stage Configuration</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <section style={{ marginBottom: '32px' }}>
+        <p style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '16px' }}>
+          Stage Configuration
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '16px' }}>
           {stages.map((stage, idx) => (
-            <div
-              key={stage.stage}
-              className="rounded-2xl border p-5"
-              style={{ background: '#fff', borderColor: '#e5e5e5' }}
-            >
-              <h3 className="font-semibold mb-4" style={{ color: '#1a1a1a' }}>
+            <div key={stage.stage} className="card">
+              <h3 className="font-semibold" style={{ marginBottom: '16px' }}>
                 {STAGE_LABELS[stage.stage]}
               </h3>
 
               {/* Default Assignee */}
-              <label className="block text-xs font-medium mb-1" style={{ color: '#888' }}>
-                Default Assignee
-              </label>
+              <label className="form-label">Default Assignee</label>
               <select
-                className="w-full rounded-lg border px-3 py-2 text-sm mb-4"
-                style={{ borderColor: '#e5e5e5', color: '#1a1a1a', background: '#fafafa' }}
+                className="input"
+                style={{ marginBottom: '16px' }}
                 value={stage.defaultAssigneeId || ''}
                 onChange={(e) => updateStage(idx, 'defaultAssigneeId', e.target.value || null)}
               >
@@ -147,33 +147,37 @@ export default function SettingsPage() {
               </select>
 
               {/* SLA Hours */}
-              <label className="block text-xs font-medium mb-1" style={{ color: '#888' }}>
-                SLA Hours
-              </label>
+              <label className="form-label">SLA Hours</label>
               <input
                 type="number"
                 min={1}
-                className="w-full rounded-lg border px-3 py-2 text-sm mb-4"
-                style={{ borderColor: '#e5e5e5', color: '#1a1a1a', background: '#fafafa' }}
+                className="input"
+                style={{ marginBottom: '16px' }}
                 value={stage.slaHours}
                 onChange={(e) => updateStage(idx, 'slaHours', parseInt(e.target.value) || 1)}
               />
 
               {/* Checklist */}
-              <label className="block text-xs font-medium mb-2" style={{ color: '#888' }}>
-                Default Checklist
-              </label>
-              <div className="space-y-1 mb-2">
+              <label className="form-label" style={{ marginBottom: '8px' }}>Default Checklist</label>
+              <div style={{ marginBottom: '12px' }}>
                 {stage.defaultChecklist.map((item, itemIdx) => (
-                  <div key={itemIdx} className="flex items-center gap-2 group">
-                    <span className="text-sm flex-1" style={{ color: '#333' }}>{item}</span>
+                  <div
+                    key={itemIdx}
+                    className="flex items-center justify-between group"
+                    style={{
+                      padding: '10px 12px',
+                      borderBottom: '1px solid var(--border)',
+                      ...(itemIdx === 0 ? { borderTop: '1px solid var(--border)' } : {}),
+                    }}
+                  >
+                    <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{item}</span>
                     <button
                       type="button"
                       onClick={() => removeChecklistItem(idx, itemIdx)}
                       className="text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                      style={{ color: '#e55' }}
+                      style={{ color: 'var(--danger)', minHeight: 'auto' }}
                     >
-                      ✕
+                      Remove
                     </button>
                   </div>
                 ))}
@@ -181,9 +185,9 @@ export default function SettingsPage() {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="New item…"
-                  className="flex-1 rounded-lg border px-3 py-1.5 text-sm"
-                  style={{ borderColor: '#e5e5e5', color: '#1a1a1a', background: '#fafafa' }}
+                  placeholder="New item..."
+                  className="input"
+                  style={{ flex: 1 }}
                   value={newItems[stage.stage] || ''}
                   onChange={(e) => setNewItems((prev) => ({ ...prev, [stage.stage]: e.target.value }))}
                   onKeyDown={(e) => e.key === 'Enter' && addChecklistItem(idx)}
@@ -191,8 +195,8 @@ export default function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => addChecklistItem(idx)}
-                  className="text-xs font-medium px-3 py-1.5 rounded-lg"
-                  style={{ background: '#f0f0f0', color: '#333' }}
+                  className="btn btn-secondary"
+                  style={{ whiteSpace: 'nowrap' }}
                 >
                   Add
                 </button>
@@ -203,41 +207,43 @@ export default function SettingsPage() {
       </section>
 
       {/* Notification Preferences */}
-      <section className="mb-10">
-        <h2 className="text-lg font-semibold mb-4" style={{ color: '#1a1a1a' }}>Notifications</h2>
-        <div className="rounded-2xl border p-5" style={{ background: '#fff', borderColor: '#e5e5e5' }}>
-          <div className="flex items-center justify-between mb-4">
+      <section style={{ marginBottom: '32px' }}>
+        <p style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '16px' }}>
+          Notifications
+        </p>
+        <div className="card">
+          <div className="flex items-center justify-between" style={{ marginBottom: '16px' }}>
             <div>
-              <p className="text-sm font-medium" style={{ color: '#1a1a1a' }}>Email Notifications</p>
-              <p className="text-xs" style={{ color: '#888' }}>Send email alerts when stages advance or vehicles are assigned</p>
+              <p className="text-sm font-medium">Email Notifications</p>
+              <p className="text-xs" style={{ color: 'var(--text-muted)', marginTop: '2px' }}>Send email alerts when stages advance or vehicles are assigned</p>
             </div>
             <button
               type="button"
               onClick={() => setEmailNotifications(!emailNotifications)}
-              className="w-12 h-7 rounded-full relative transition-colors"
-              style={{ background: emailNotifications ? '#dffd6e' : '#e5e5e5' }}
+              className="rounded-full relative transition-colors"
+              style={{ width: '48px', height: '28px', background: emailNotifications ? '#dffd6e' : 'var(--border)', flexShrink: 0, minHeight: 'auto', border: 'none' }}
             >
               <span
-                className="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-transform"
-                style={{ left: emailNotifications ? '1.375rem' : '0.125rem' }}
+                className="absolute rounded-full bg-white shadow transition-transform"
+                style={{ width: '24px', height: '24px', top: '2px', left: emailNotifications ? '22px' : '2px' }}
               />
             </button>
           </div>
-          <div>
-            <p className="text-xs font-medium mb-1" style={{ color: '#888' }}>From Address</p>
-            <p className="text-sm" style={{ color: '#555' }}>management@mikalyzedautoboutique.com</p>
+          <div style={{ paddingTop: '16px', borderTop: '1px solid var(--border)' }}>
+            <label className="form-label">From Address</label>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>management@mikalyzedautoboutique.com</p>
           </div>
         </div>
       </section>
 
       {/* General */}
-      <section className="mb-10">
-        <h2 className="text-lg font-semibold mb-4" style={{ color: '#1a1a1a' }}>General</h2>
-        <div className="rounded-2xl border p-5" style={{ background: '#fff', borderColor: '#e5e5e5' }}>
-          <div>
-            <p className="text-sm font-medium" style={{ color: '#1a1a1a' }}>App Password</p>
-            <p className="text-xs mt-1" style={{ color: '#888' }}>Set via environment variable</p>
-          </div>
+      <section style={{ marginBottom: '32px' }}>
+        <p style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '16px' }}>
+          General
+        </p>
+        <div className="card">
+          <p className="text-sm font-medium">App Password</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)', marginTop: '4px' }}>Set via environment variable</p>
         </div>
       </section>
 
@@ -246,13 +252,13 @@ export default function SettingsPage() {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-6 py-2.5 rounded-xl text-sm font-semibold transition-opacity"
-          style={{ background: '#dffd6e', color: '#1a1a1a', opacity: saving ? 0.6 : 1 }}
+          className="btn btn-primary"
+          style={{ opacity: saving ? 0.6 : 1 }}
         >
-          {saving ? 'Saving…' : 'Save Settings'}
+          {saving ? 'Saving...' : 'Save Settings'}
         </button>
         {message && (
-          <p className="text-sm font-medium" style={{ color: message.includes('success') ? '#22c55e' : '#e55' }}>
+          <p className="text-sm font-medium" style={{ color: message.includes('success') ? 'var(--success)' : 'var(--danger)' }}>
             {message}
           </p>
         )}

@@ -65,7 +65,7 @@ input, select, textarea { font-size: 16px; font-family: inherit; }
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 24px;
   box-shadow: var(--shadow-sm);
   transition: all 0.2s ease;
 }
@@ -77,7 +77,7 @@ input, select, textarea { font-size: 16px; font-family: inherit; }
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 24px;
 }
 
 /* ═══ Badges ═══ */
@@ -297,9 +297,9 @@ input, select, textarea { font-size: 16px; font-family: inherit; }
 
 /* ═══ Sections ═══ */
 .section-label {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 12px;
@@ -379,7 +379,7 @@ input, select, textarea { font-size: 16px; font-family: inherit; }
 
 /* ═══ Mobile Polish ═══ */
 @media (max-width: 767px) {
-  .card { padding: 18px; border-radius: 14px; }
+  .card { padding: 20px; border-radius: 14px; }
   .stat-card { padding: 18px 16px; }
   .stat-value { font-size: 28px; }
   .badge { padding: 5px 14px; font-size: 12px; }
