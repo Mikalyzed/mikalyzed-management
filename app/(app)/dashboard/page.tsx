@@ -216,6 +216,63 @@ function MyAssignments({ data }: { data: DashboardData }) {
   )
 }
 
+// ─── Add Button Dropdown ───
+function AddButton() {
+  const [open, setOpen] = useState(false)
+
+  const actions = [
+    { href: '/vehicles/new', label: 'Add Vehicle' },
+    { href: '/calendar/new', label: 'Calendar Item' },
+    { href: '/events/new', label: 'New Event' },
+    { href: '/transport/new', label: 'Transport Request' },
+    { href: '/external', label: 'External Repair' },
+  ]
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          width: 38, height: 38, borderRadius: 10,
+          background: '#1a1a1a', color: '#dffd6e',
+          border: 'none', cursor: 'pointer',
+          fontSize: 20, fontWeight: 700,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          minHeight: 'auto',
+          transition: 'transform 0.2s',
+          transform: open ? 'rotate(45deg)' : 'none',
+        }}
+      >+</button>
+
+      {open && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+          <div style={{
+            position: 'absolute', top: 44, right: 0, zIndex: 51,
+            background: '#fff', border: '1px solid var(--border)',
+            borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
+            padding: '6px', minWidth: 200,
+          }}>
+            {actions.map(a => (
+              <Link key={a.href} href={a.href} onClick={() => setOpen(false)} style={{
+                display: 'block', padding: '10px 14px', borderRadius: 8,
+                fontSize: 14, fontWeight: 500, color: 'var(--text-primary)',
+                textDecoration: 'none', minHeight: 'auto',
+                transition: 'background 0.1s',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-primary)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+              >
+                {a.label}
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Dashboard ───
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
@@ -234,20 +291,17 @@ export default function DashboardPage() {
 
   const isAdmin = data.user.role === 'admin'
   const totalPipeline = data.pipeline.mechanic + data.pipeline.detailing + data.pipeline.content + data.pipeline.publish
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   const hasAssignments = data.myReconTasks.length > 0 || data.myEventTasks.length > 0 || data.myCalendarItems.length > 0
 
   return (
     <div>
-      {/* Date */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
-        <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)' }}>{today}</span>
-      </div>
-
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em' }}>Dashboard</h1>
-        <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>Welcome back, {data.user.name}.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 32 }}>
+        <div>
+          <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em' }}>Dashboard</h1>
+          <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>Welcome back, {data.user.name}.</p>
+        </div>
+        {isAdmin && <AddButton />}
       </div>
 
       {/* ═══ Admin Stats ═══ */}
@@ -353,31 +407,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          <div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Quick Actions</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
-              {[
-                { href: '/vehicles/new', label: 'Add Vehicle', sub: 'Start recon process', icon: '+', bg: '#dffd6e' },
-                { href: '/calendar/new', label: 'New Calendar Item', sub: 'Schedule off-site', icon: '◎', bg: '#f0f0ec' },
-                { href: '/events/new', label: 'New Event', sub: 'Plan an event', icon: '★', bg: '#f0f0ec' },
-                { href: '/transport/new', label: 'Transport Request', sub: 'Request pickup/delivery', icon: '⇄', bg: '#f0f0ec' },
-              ].map(action => (
-                <Link key={action.href} href={action.href} style={{ textDecoration: 'none', color: 'inherit' }}>
-                  <div className="card" style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{
-                      width: 40, height: 40, borderRadius: 10, background: action.bg,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 18, fontWeight: 700, color: '#1a1a1a', flexShrink: 0,
-                    }}>{action.icon}</div>
-                    <div>
-                      <p style={{ fontSize: 14, fontWeight: 600 }}>{action.label}</p>
-                      <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{action.sub}</p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
         </div>
       )}
     </div>
