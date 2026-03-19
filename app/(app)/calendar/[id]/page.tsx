@@ -224,19 +224,21 @@ export default function CalendarItemDetail() {
       )}
 
       {/* Actions */}
-      {!isDone && !editing && (
+      {!editing && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {item.status === 'scheduled' && (
+          {!isDone && item.status === 'scheduled' && (
             <button className="btn btn-secondary" onClick={() => updateStatus('confirmed')} style={{ flex: 1 }}>Confirm</button>
           )}
-          {(item.status === 'scheduled' || item.status === 'confirmed') && (
+          {!isDone && (item.status === 'scheduled' || item.status === 'confirmed') && (
             <button className="btn btn-secondary" onClick={() => updateStatus('in_progress')} style={{ flex: 1 }}>Start</button>
           )}
-          {item.status !== 'completed' && (
+          {!isDone && (
             <button className="btn btn-success" onClick={() => updateStatus('completed')} style={{ flex: 1 }}>Complete</button>
           )}
-          <button className="btn btn-danger" onClick={() => updateStatus('cancelled')}>Cancel</button>
-          <button className="btn btn-secondary" onClick={handleDelete} style={{ fontSize: 13 }}>Delete</button>
+          {!isDone && (
+            <button className="btn btn-danger" onClick={() => updateStatus('cancelled')}>Cancel</button>
+          )}
+          <button className="btn btn-secondary" onClick={handleDelete} style={{ fontSize: 13, color: 'var(--danger)', marginLeft: 'auto' }}>Delete</button>
         </div>
       )}
     </div>

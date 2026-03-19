@@ -77,8 +77,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (user.role !== 'admin') return NextResponse.json({ error: 'Admin only' }, { status: 403 })
-
   const { id } = await params
   await prisma.calendarItem.delete({ where: { id } })
   return NextResponse.json({ success: true })

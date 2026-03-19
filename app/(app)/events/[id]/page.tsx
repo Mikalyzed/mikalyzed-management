@@ -172,9 +172,12 @@ export default function EventDetailPage() {
               <span>· {EVENT_TYPE_LABELS[event.type as keyof typeof EVENT_TYPE_LABELS] || event.type}</span>
             </div>
           </div>
-          <span className={`badge badge-${event.status === 'active' ? 'in-progress' : event.status === 'completed' ? 'done' : event.status === 'cancelled' ? 'blocked' : 'pending'}`}>
-            {EVENT_STATUS_LABELS[event.status as keyof typeof EVENT_STATUS_LABELS] || event.status}
-          </span>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span className={`badge badge-${event.status === 'active' ? 'in-progress' : event.status === 'completed' ? 'done' : event.status === 'cancelled' ? 'blocked' : 'pending'}`}>
+              {EVENT_STATUS_LABELS[event.status as keyof typeof EVENT_STATUS_LABELS] || event.status}
+            </span>
+            <Link href={`/events/${eventId}/edit`} className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: 13, minHeight: 34 }}>Edit</Link>
+          </div>
         </div>
 
         {event.description && (
@@ -203,31 +206,31 @@ export default function EventDetailPage() {
         </div>
 
         {/* Status actions */}
-        {!isDone && (
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-            {event.status === 'draft' && (
-              <button className="btn btn-primary" onClick={() => updateEventStatus('planned')} style={{ fontSize: 13, padding: '8px 16px', minHeight: 36 }}>
-                Publish Event
-              </button>
-            )}
-            {event.status === 'planned' && (
-              <button className="btn btn-primary" onClick={() => updateEventStatus('active')} style={{ fontSize: 13, padding: '8px 16px', minHeight: 36 }}>
-                Mark Active
-              </button>
-            )}
-            {event.status === 'active' && (
-              <button className="btn btn-success" onClick={() => updateEventStatus('completed')} style={{ fontSize: 13, padding: '8px 16px', minHeight: 36 }}>
-                Complete Event
-              </button>
-            )}
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          {event.status === 'draft' && (
+            <button className="btn btn-primary" onClick={() => updateEventStatus('planned')} style={{ fontSize: 13, padding: '8px 16px', minHeight: 36 }}>
+              Publish Event
+            </button>
+          )}
+          {event.status === 'planned' && (
+            <button className="btn btn-primary" onClick={() => updateEventStatus('active')} style={{ fontSize: 13, padding: '8px 16px', minHeight: 36 }}>
+              Mark Active
+            </button>
+          )}
+          {event.status === 'active' && (
+            <button className="btn btn-success" onClick={() => updateEventStatus('completed')} style={{ fontSize: 13, padding: '8px 16px', minHeight: 36 }}>
+              Complete Event
+            </button>
+          )}
+          {!isDone && (
             <button className="btn btn-danger" onClick={() => updateEventStatus('cancelled')} style={{ fontSize: 13, padding: '8px 16px', minHeight: 36 }}>
               Cancel
             </button>
-            <button className="btn btn-secondary" onClick={handleDelete} style={{ fontSize: 13, padding: '8px 16px', minHeight: 36, marginLeft: 'auto' }}>
-              Delete
-            </button>
-          </div>
-        )}
+          )}
+          <button className="btn btn-secondary" onClick={handleDelete} style={{ fontSize: 13, padding: '8px 16px', minHeight: 36, marginLeft: 'auto', color: 'var(--danger)' }}>
+            Delete Event
+          </button>
+        </div>
       </div>
 
       {/* Person filter */}
