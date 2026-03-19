@@ -227,6 +227,11 @@ export default function EventDetailPage() {
               Cancel
             </button>
           )}
+          {(event.status === 'cancelled' || event.status === 'completed') && (
+            <button className="btn btn-secondary" onClick={() => updateEventStatus('planned')} style={{ fontSize: 13, padding: '8px 16px', minHeight: 36 }}>
+              Reopen
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={handleDelete} style={{ fontSize: 13, padding: '8px 16px', minHeight: 36, marginLeft: 'auto', color: 'var(--danger)' }}>
             Delete Event
           </button>
