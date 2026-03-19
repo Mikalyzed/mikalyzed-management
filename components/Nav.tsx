@@ -18,6 +18,8 @@ const ICONS: Record<string, string> = {
   newrequest: 'M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
   myrequests: 'M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z',
   queue: 'M3.75 5.25h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5',
+  calendar: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5',
+  events: 'M16.5 6v.75m0 3v.75m0 3v.75m0 3V18m-9-5.25h5.25M7.5 15h3M3.375 5.25c-.621 0-1.125.504-1.125 1.125v3.026a2.999 2.999 0 0 1 0 5.198v3.026c0 .621.504 1.125 1.125 1.125h17.25c.621 0 1.125-.504 1.125-1.125v-3.026a2.999 2.999 0 0 1 0-5.198V6.375c0-.621-.504-1.125-1.125-1.125H3.375Z',
 }
 
 const ICON_MAP: Record<string, string> = {
@@ -27,6 +29,8 @@ const ICON_MAP: Record<string, string> = {
   '/transport/new': 'newrequest',
   '/transport/mine': 'myrequests',
   '/external': 'external',
+  '/calendar': 'calendar',
+  '/events': 'events',
   '/reports': 'reports',
   '/team': 'team',
   '/settings': 'settings',
@@ -49,6 +53,8 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { href: '/vehicles', label: 'Recon Board', icon: 'board' },
     { href: '/transport', label: 'Transport', icon: 'transport' },
     { href: '/external', label: 'External Repairs', icon: 'external' },
+    { href: '/calendar', label: 'Calendar', icon: 'calendar' },
+    { href: '/events', label: 'Events', icon: 'events' },
     { href: '/reports', label: 'Reports', icon: 'reports' },
     { href: '/team', label: 'Team', icon: 'team' },
     { href: '/settings', label: 'Settings', icon: 'settings' },
