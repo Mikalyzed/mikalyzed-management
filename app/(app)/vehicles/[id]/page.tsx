@@ -349,43 +349,87 @@ export default function VehicleDetailPage() {
           )}
 
           {/* Actions */}
-          <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-            {currentStage.status === 'pending' && (
-              <ActionBtn label="Start Working" style="primary" onClick={async () => {
-                await fetch(`/api/stages/${currentStage.id}`, {
-                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ status: 'in_progress' }),
-                })
-                refresh()
-              }} />
-            )}
-            {currentStage.status === 'in_progress' && (
-              <>
-                <ActionBtn label="Advance to Next Stage →" style="success" onClick={async () => {
-                  await fetch(`/api/stages/${currentStage.id}/advance`, { method: 'POST' })
-                  refresh()
-                }} />
-                <ActionBtn label="Block" style="danger" onClick={async () => {
-                  const note = prompt('Block reason:')
-                  if (!note) return
-                  await fetch(`/api/stages/${currentStage.id}`, {
-                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: 'blocked', blockNote: note }),
-                  })
-                  refresh()
-                }} />
-              </>
-            )}
-            {currentStage.status === 'blocked' && (
-              <ActionBtn label="Unblock" style="warning" onClick={async () => {
-                await fetch(`/api/stages/${currentStage.id}`, {
-                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ status: 'in_progress' }),
-                })
-                refresh()
-              }} />
-            )}
-          </div>
+          {(() => {
+            const allDone = currentStage.checklist.length > 0 && currentStage.checklist.every(c => c.done)
+            const doneCount = currentStage.checklist.filter(c => c.done).length
+            const totalCount = currentStage.checklist.length
+            return (
+              <div style={{ marginTop: '16px' }}>
+                {/* Progress indicator */}
+                {currentStage.status === 'in_progress' && totalCount > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: allDone ? '#16a34a' : 'var(--text-muted)' }}>
+                        {allDone ? 'All tasks complete — ready to advance' : `${totalCount - doneCount} task${totalCount - doneCount !== 1 ? 's' : ''} remaining`}
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: allDone ? '#16a34a' : 'var(--text-secondary)' }}>
+                        {doneCount}/{totalCount}
+                      </span>
+                    </div>
+                    <div style={{ height: 6, background: '#f0f0ec', borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${totalCount > 0 ? (doneCount / totalCount) * 100 : 0}%`,
+                        height: '100%',
+                        background: allDone ? '#22c55e' : '#1a1a1a',
+                        borderRadius: 3,
+                        transition: 'width 0.3s ease',
+                      }} />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {currentStage.status === 'pending' && (
+                    <ActionBtn label="Start Working" style="primary" onClick={async () => {
+                      await fetch(`/api/stages/${currentStage.id}`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'in_progress' }),
+                      })
+                      refresh()
+                    }} />
+                  )}
+                  {currentStage.status === 'in_progress' && (
+                    <>
+                      {allDone ? (
+                        <ActionBtn label="Advance to Next Stage →" style="success" onClick={async () => {
+                          await fetch(`/api/stages/${currentStage.id}/advance`, { method: 'POST' })
+                          refresh()
+                        }} />
+                      ) : (
+                        <div style={{
+                          flex: 1, padding: '10px 20px', borderRadius: 12,
+                          border: '1px solid var(--border)', background: '#f5f5f3',
+                          fontSize: 14, fontWeight: 600, color: 'var(--text-muted)',
+                          textAlign: 'center', minHeight: 44,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          Complete all tasks to advance
+                        </div>
+                      )}
+                      <ActionBtn label="Block" style="danger" onClick={async () => {
+                        const note = prompt('Block reason:')
+                        if (!note) return
+                        await fetch(`/api/stages/${currentStage.id}`, {
+                          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status: 'blocked', blockNote: note }),
+                        })
+                        refresh()
+                      }} />
+                    </>
+                  )}
+                  {currentStage.status === 'blocked' && (
+                    <ActionBtn label="Unblock" style="warning" onClick={async () => {
+                      await fetch(`/api/stages/${currentStage.id}`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'in_progress' }),
+                      })
+                      refresh()
+                    }} />
+                  )}
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )}
 
