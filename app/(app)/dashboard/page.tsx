@@ -290,7 +290,6 @@ export default function DashboardPage() {
   }
 
   const isAdmin = data.user.role === 'admin'
-  const totalPipeline = data.pipeline.mechanic + data.pipeline.detailing + data.pipeline.content + data.pipeline.publish
   const hasAssignments = data.myReconTasks.length > 0 || data.myEventTasks.length > 0 || data.myCalendarItems.length > 0
 
   return (
@@ -304,24 +303,22 @@ export default function DashboardPage() {
         {isAdmin && <AddButton />}
       </div>
 
-      {/* ═══ Admin Stats ═══ */}
+      {/* ═══ Recon Pipeline ═══ */}
       {isAdmin && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 32 }}>
-          <div className="stat-card" style={{ borderLeft: '3px solid #dffd6e' }}>
-            <p className="stat-label">In Pipeline</p>
-            <p className="stat-value">{totalPipeline}</p>
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700 }}>Recon Pipeline</h2>
+            <Link href="/vehicles" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>View all →</Link>
           </div>
-          <div className="stat-card" style={{ borderLeft: '3px solid var(--warning)' }}>
-            <p className="stat-label">In Progress</p>
-            <p className="stat-value">{data.pipeline.mechanic + data.pipeline.detailing}</p>
-          </div>
-          <div className="stat-card" style={{ borderLeft: '3px solid var(--success)' }}>
-            <p className="stat-label">Completed</p>
-            <p className="stat-value">{data.pipeline.completed}</p>
-          </div>
-          <div className="stat-card" style={{ borderLeft: data.overdue > 0 ? '3px solid var(--danger)' : '3px solid var(--border)' }}>
-            <p className="stat-label">Overdue</p>
-            <p className="stat-value" style={{ color: data.overdue > 0 ? 'var(--danger)' : undefined }}>{data.overdue}</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 10 }}>
+            {(['mechanic', 'detailing', 'content', 'publish', 'completed'] as const).map(stage => (
+              <div key={stage} className="pipeline-chip">
+                <p className="pipeline-chip-value" style={{ color: stage === 'completed' ? 'var(--success)' : undefined }}>
+                  {data.pipeline[stage]}
+                </p>
+                <p className="pipeline-chip-label">{STAGE_LABELS[stage] || 'Done'}</p>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -371,42 +368,42 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ═══ Pipeline + Quick Actions (admin) ═══ */}
-      {isAdmin && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 32 }}>
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h2 style={{ fontSize: 18, fontWeight: 700 }}>Recon Pipeline</h2>
-              <Link href="/vehicles" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>View all →</Link>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 10, marginBottom: 20 }}>
-              {(['mechanic', 'detailing', 'content', 'publish', 'completed'] as const).map(stage => (
-                <div key={stage} className="pipeline-chip">
-                  <p className="pipeline-chip-value" style={{ color: stage === 'completed' ? 'var(--success)' : undefined }}>
-                    {data.pipeline[stage]}
-                  </p>
-                  <p className="pipeline-chip-label">{STAGE_LABELS[stage] || 'Done'}</p>
-                </div>
-              ))}
-            </div>
-            {data.recentVehicles.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
-                {data.recentVehicles.slice(0, 4).map(v => (
-                  <Link key={v.id} href={`/vehicles/${v.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                    <div className="card" style={{ padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>#{v.stockNumber}</span>
-                        <span className={`badge badge-${v.status}`} style={{ fontSize: 11 }}>{v.status}</span>
-                      </div>
-                      <p style={{ fontSize: 14, fontWeight: 600 }}>{v.year} {v.make} {v.model}</p>
-                      {v.color && <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{v.color}</p>}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            )}
+      {/* ═══ Upcoming Calendar (admin) ═══ */}
+      {isAdmin && data.myCalendarItems.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700 }}>Upcoming Schedule</h2>
+            <Link href="/calendar" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>View all →</Link>
           </div>
-
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {data.myCalendarItems.slice(0, 5).map(item => {
+              const typeColor = CALENDAR_TYPE_COLORS[item.type as keyof typeof CALENDAR_TYPE_COLORS] || '#6b7280'
+              const typeLabel = CALENDAR_TYPE_LABELS[item.type as keyof typeof CALENDAR_TYPE_LABELS] || item.type
+              const itemDate = new Date(item.date)
+              const isToday = new Date().toDateString() === itemDate.toDateString()
+              return (
+                <Link key={item.id} href={`/calendar/${item.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                  <div className="card" style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, borderLeft: `4px solid ${typeColor}` }}>
+                    <div style={{ minWidth: 50, textAlign: 'center' }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: isToday ? '#1a1a1a' : 'var(--text-secondary)' }}>
+                        {isToday ? 'Today' : itemDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        {itemDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                      </div>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{item.title}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {item.location && <span>{item.location} · </span>}
+                        {typeLabel}
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>
