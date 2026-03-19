@@ -24,9 +24,9 @@ export default function NewCalendarItem() {
   const [eventId, setEventId] = useState('')
 
   useEffect(() => {
-    fetch('/api/users').then(r => r.json()).then(u => setUsers(u.filter((x: { isActive: boolean }) => x.isActive)))
-    fetch('/api/vehicles').then(r => r.json()).then(v => setVehicles(v))
-    fetch('/api/events').then(r => r.json()).then(e => setEvents(e))
+    fetch('/api/users').then(r => r.json()).then(d => setUsers((d.users || d).filter((x: { isActive: boolean }) => x.isActive)))
+    fetch('/api/vehicles').then(r => r.json()).then(d => setVehicles(d.vehicles || d))
+    fetch('/api/events').then(r => r.json()).then(d => setEvents(Array.isArray(d) ? d : []))
   }, [])
 
   async function handleSubmit(e: React.FormEvent) {

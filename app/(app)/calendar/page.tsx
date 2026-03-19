@@ -52,7 +52,7 @@ export default function CalendarPage() {
   const [assigneeFilter, setAssigneeFilter] = useState('')
 
   useEffect(() => {
-    fetch('/api/users').then(r => r.json()).then(u => setUsers(u.filter((x: { isActive: boolean }) => x.isActive)))
+    fetch('/api/users').then(r => r.json()).then(d => setUsers((d.users || d).filter((x: { isActive: boolean }) => x.isActive)))
   }, [])
 
   useEffect(() => {
