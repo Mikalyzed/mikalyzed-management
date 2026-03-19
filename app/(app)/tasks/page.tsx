@@ -36,6 +36,12 @@ export default function MyTasksPage() {
 
   return (
     <div>
+      <style>{`
+        @media (max-width: 767px) {
+          .tasks-list { gap: 12px !important; }
+          .task-item-wrapper .card { padding: 18px !important; }
+        }
+      `}</style>
       <h1 className="text-xl font-bold mb-4">My Tasks</h1>
 
       {tasks.length === 0 ? (
@@ -44,14 +50,14 @@ export default function MyTasksPage() {
           <p className="text-sm mt-2" style={{ color: 'var(--text-muted)' }}>No tasks right now</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="tasks-list flex flex-col gap-2">
           {tasks.map((t, idx) => {
             const elapsed = (Date.now() - new Date(t.startedAt).getTime()) / 1000 - t.totalBlockedSeconds
             const hours = Math.floor(elapsed / 3600)
             const timeStr = hours < 1 ? `${Math.floor(elapsed / 60)}m` : hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`
 
             return (
-              <div key={t.id} style={{ position: 'relative' }}>
+              <div key={t.id} className="task-item-wrapper" style={{ position: 'relative' }}>
                 <div
                   style={{
                     position: 'absolute',

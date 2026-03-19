@@ -44,6 +44,17 @@ export default function DashboardPage() {
 
   return (
     <div>
+      <style>{`
+        @media (max-width: 767px) {
+          .dash-section-header { font-size: 18px !important; }
+          .dash-stats-grid { gap: 16px !important; }
+          .dash-pipeline-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 12px !important; }
+          .dash-quick-action { padding: 18px !important; }
+          .dash-quick-action .action-icon { width: 44px !important; height: 44px !important; font-size: 20px !important; }
+          .dash-vehicles-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+          .dash-section { margin-bottom: 40px !important; }
+        }
+      `}</style>
       {/* Top bar with date */}
       <div className="flex items-center justify-end" style={{ marginBottom: '24px' }}>
         <span className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>{today}</span>
@@ -59,7 +70,7 @@ export default function DashboardPage() {
 
       {/* Stat cards */}
       {isAdmin && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" style={{ marginBottom: '32px' }}>
+        <div className="dash-stats-grid dash-section grid grid-cols-2 lg:grid-cols-4 gap-4" style={{ marginBottom: '32px' }}>
           <div className="stat-card" style={{ borderLeft: '3px solid #dffd6e' }}>
             <p className="stat-label">In Pipeline</p>
             <p className="stat-value">{totalPipeline}</p>
@@ -91,7 +102,7 @@ export default function DashboardPage() {
             {/* Pipeline header */}
             <div className="flex items-center justify-between" style={{ marginBottom: '16px' }}>
               <div className="flex items-center gap-3">
-                <h2 className="text-lg font-bold">Recon Pipeline</h2>
+                <h2 className="text-lg font-bold dash-section-header">Recon Pipeline</h2>
                 {data.overdue > 0 && (
                   <span className="badge badge-blocked" style={{ fontSize: '11px' }}>
                     {data.overdue} overdue
@@ -104,7 +115,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Pipeline chips */}
-            <div className="grid grid-cols-3 md:grid-cols-5 gap-3" style={{ marginBottom: '24px' }}>
+            <div className="dash-pipeline-grid grid grid-cols-3 md:grid-cols-5 gap-3" style={{ marginBottom: '24px' }}>
               <div className="pipeline-chip">
                 <p className="pipeline-chip-value">{data.pipeline.mechanic}</p>
                 <p className="pipeline-chip-label">Mechanic</p>
@@ -129,7 +140,7 @@ export default function DashboardPage() {
 
             {/* Recent vehicles */}
             {data.recentVehicles.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="dash-vehicles-grid grid grid-cols-1 md:grid-cols-2 gap-3">
                 {data.recentVehicles.slice(0, 4).map((v) => (
                   <Link key={v.id} href={`/vehicles/${v.id}`}>
                     <div className="card">
@@ -166,24 +177,24 @@ export default function DashboardPage() {
 
         {/* Right: Quick Actions — same top baseline as Recon Pipeline */}
         <div>
-          <h2 className="text-lg font-bold" style={{ marginBottom: '16px' }}>Quick Actions</h2>
+          <h2 className="text-lg font-bold dash-section-header" style={{ marginBottom: '16px' }}>Quick Actions</h2>
           <div className="flex flex-col gap-3">
-            <Link href="/vehicles/new" className="card flex items-center gap-3" style={{ padding: '16px' }}>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold" style={{ background: '#dffd6e', color: '#1a1a1a', fontSize: '18px', flexShrink: 0 }}>+</div>
+            <Link href="/vehicles/new" className="card dash-quick-action flex items-center gap-3" style={{ padding: '16px' }}>
+              <div className="action-icon w-10 h-10 rounded-xl flex items-center justify-center font-bold" style={{ background: '#dffd6e', color: '#1a1a1a', fontSize: '18px', flexShrink: 0 }}>+</div>
               <div>
                 <p className="font-semibold text-sm">Add Vehicle</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Start recon process</p>
               </div>
             </Link>
-            <Link href="/vehicles" className="card flex items-center gap-3" style={{ padding: '16px' }}>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f0f0ec', fontSize: '16px', flexShrink: 0 }}>◫</div>
+            <Link href="/vehicles" className="card dash-quick-action flex items-center gap-3" style={{ padding: '16px' }}>
+              <div className="action-icon w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f0f0ec', fontSize: '16px', flexShrink: 0 }}>◫</div>
               <div>
                 <p className="font-semibold text-sm">Recon Board</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>View pipeline</p>
               </div>
             </Link>
-            <Link href="/transport" className="card flex items-center gap-3" style={{ padding: '16px' }}>
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f0f0ec', fontSize: '16px', flexShrink: 0 }}>⇄</div>
+            <Link href="/transport" className="card dash-quick-action flex items-center gap-3" style={{ padding: '16px' }}>
+              <div className="action-icon w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#f0f0ec', fontSize: '16px', flexShrink: 0 }}>⇄</div>
               <div>
                 <p className="font-semibold text-sm">Transport</p>
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Manage requests</p>

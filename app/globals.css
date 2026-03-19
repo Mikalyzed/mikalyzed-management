@@ -376,3 +376,17 @@ input, select, textarea { font-size: 16px; font-family: inherit; }
   color: var(--text-muted);
   font-weight: 500;
 }
+
+/* ═══ Mobile Polish ═══ */
+@media (max-width: 767px) {
+  .card { padding: 18px; border-radius: 14px; }
+  .stat-card { padding: 18px 16px; }
+  .stat-value { font-size: 28px; }
+  .badge { padding: 5px 14px; font-size: 12px; }
+  .btn { min-height: 48px; font-size: 15px; }
+  .pipeline-chip { padding: 14px 10px; }
+  .pipeline-chip-value { font-size: 20px; }
+  .bottom-nav a { font-size: 11px; gap: 3px; }
+  .kanban-column { min-width: 260px; }
+  .input { padding: 14px 16px; }
+}

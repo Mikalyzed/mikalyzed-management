@@ -51,6 +51,14 @@ export default function TransportPage() {
 
   return (
     <div>
+      <style>{`
+        @media (max-width: 767px) {
+          .transport-card { padding: 18px !important; }
+          .transport-locations { flex-direction: column !important; gap: 4px !important; }
+          .transport-locations .loc-arrow { display: none; }
+          .transport-filter-tabs button { padding: 10px 12px !important; font-size: 12px !important; }
+        }
+      `}</style>
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Transport</h1>
@@ -73,7 +81,7 @@ export default function TransportPage() {
         borderRadius: '12px',
         overflowX: 'auto',
         WebkitOverflowScrolling: 'touch',
-      }}>
+      }} className="transport-filter-tabs">
         {['all', ...STATUS_ORDER].map((s) => {
           const count = s === 'all' ? requests.length : requests.filter(r => r.status === s).length
           const active = filter === s
@@ -121,7 +129,7 @@ export default function TransportPage() {
 
             return (
               <Link key={req.id} href={`/transport/${req.id}`}>
-                <div className="card">
+                <div className="card transport-card">
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <p className="font-semibold">{vehicleName}</p>
@@ -136,9 +144,9 @@ export default function TransportPage() {
                       </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  <div className="transport-locations flex items-center gap-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
                     <span>📍 {req.pickupLocation}</span>
-                    <span>→</span>
+                    <span className="loc-arrow">→</span>
                     <span>📍 {req.deliveryLocation}</span>
                   </div>
                   {req.transportType && (
