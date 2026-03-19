@@ -75,12 +75,91 @@ export async function GET(request: Request) {
     },
   })
 
+  // ─── My Assignments (all roles) ───
+
+  // Recon tasks assigned to me
+  const myReconTasks = await prisma.vehicleStage.findMany({
+    where: {
+      assigneeId: user.id,
+      status: { not: 'done' },
+    },
+    include: {
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  })
+
+  // Event tasks assigned to me
+  const myEventTasks = await prisma.eventTask.findMany({
+    where: {
+      assigneeId: user.id,
+      status: { not: 'completed' },
+    },
+    include: {
+      section: {
+        include: {
+          event: { select: { id: true, name: true, date: true } },
+        },
+      },
+    },
+    orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+    take: 10,
+  })
+
+  // Calendar items assigned to me (upcoming)
+  const myCalendarItems = await prisma.calendarItem.findMany({
+    where: {
+      assignees: { some: { userId: user.id } },
+      status: { notIn: ['completed', 'cancelled'] },
+      date: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) }, // include today
+    },
+    include: {
+      vehicle: { select: { id: true, stockNumber: true, make: true, model: true } },
+      event: { select: { id: true, name: true } },
+    },
+    orderBy: { date: 'asc' },
+    take: 10,
+  })
+
+  // Upcoming events (for admin)
+  const upcomingEvents = user.role === 'admin' ? await prisma.event.findMany({
+    where: {
+      status: { in: ['draft', 'planned', 'active'] },
+    },
+    include: {
+      owner: { select: { id: true, name: true } },
+      sections: {
+        include: {
+          tasks: { select: { id: true, status: true } },
+        },
+      },
+    },
+    orderBy: { date: 'asc' },
+    take: 5,
+  }) : []
+
+  const upcomingEventsWithProgress = upcomingEvents.map(e => {
+    let total = 0, completed = 0
+    e.sections.forEach(s => { total += s.tasks.length; completed += s.tasks.filter(t => t.status === 'completed').length })
+    return {
+      id: e.id, name: e.name, date: e.date, status: e.status,
+      owner: e.owner,
+      progress: total > 0 ? Math.round((completed / total) * 100) : 0,
+      totalTasks: total, completedTasks: completed,
+    }
+  })
+
   return NextResponse.json({
-    user: { name: user.name, role: user.role },
+    user: { name: user.name, role: user.role, id: user.id },
     pipeline,
     overdue,
     blocked,
     myTasks,
     recentVehicles,
+    myReconTasks,
+    myEventTasks,
+    myCalendarItems,
+    upcomingEvents: upcomingEventsWithProgress,
   })
 }
