@@ -1,5 +1,16 @@
 @import 'tailwindcss';
 
+/* Nav responsive — desktop sidebar hidden on mobile, mobile elements hidden on desktop */
+.desktop-sidebar { display: none !important; }
+.mobile-topbar { display: flex !important; }
+.mobile-only { display: block !important; }
+
+@media (min-width: 768px) {
+  .desktop-sidebar { display: flex !important; }
+  .mobile-topbar { display: none !important; }
+  .mobile-only { display: none !important; }
+}
+
 :root {
   --bg-primary: #f8f8f6;
   --bg-secondary: #ffffff;

@@ -107,10 +107,11 @@ export default function Nav({ role, userName }: { role: string; userName: string
   return (
     <>
       {/* Desktop sidebar — unchanged */}
-      <aside style={{
+      <aside className="desktop-sidebar" style={{
         position: 'fixed', left: 0, top: 0, bottom: 0, width: 260,
-        background: '#141414', display: 'flex', flexDirection: 'column', zIndex: 40,
-      }} className="hidden md:flex">
+        background: '#141414', flexDirection: 'column', zIndex: 40,
+        display: 'none',
+      }}>
         <div style={{ padding: '28px 24px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
@@ -165,7 +166,7 @@ export default function Nav({ role, userName }: { role: string; userName: string
 
       {/* Mobile: top bar with hamburger — hidden when drawer is open */}
       {!mobileOpen && (
-        <div className="md:hidden" style={{
+        <div className="mobile-topbar" style={{
           position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
           background: '#141414', padding: '14px 16px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -189,13 +190,13 @@ export default function Nav({ role, userName }: { role: string; userName: string
 
       {/* Mobile: side drawer */}
       {/* Backdrop */}
-      <div onClick={() => setMobileOpen(false)} className="md:hidden" style={{
+      <div onClick={() => setMobileOpen(false)} className="mobile-only" style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 59,
         opacity: mobileOpen ? 1 : 0, pointerEvents: mobileOpen ? 'auto' : 'none',
         transition: 'opacity 0.25s ease',
       }} />
       {/* Drawer */}
-      <aside className="md:hidden" style={{
+      <aside className="mobile-only" style={{
         position: 'fixed', top: 0, left: 0, bottom: 0, width: 280, zIndex: 60,
         background: '#141414', display: 'flex', flexDirection: 'column',
         transform: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
