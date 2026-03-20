@@ -221,61 +221,56 @@ export default function LeadsPage() {
                           </div>
 
                           {/* Action icons row */}
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', borderTop: '1px solid var(--border-light)', paddingTop: 8 }}
+                          <div style={{ display: 'flex', gap: 2, alignItems: 'center', borderTop: '1px solid var(--border-light)', paddingTop: 8 }}
                             onClick={e => e.preventDefault()}
                           >
-                            {/* Phone */}
                             {opp.contact.phone && (
                               <a href={`tel:${opp.contact.phone}`} onClick={e => e.stopPropagation()}
-                                style={{ color: 'var(--text-muted)', display: 'flex', padding: 4 }} title="Call">
-                                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28 }} title="Call">
+                                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
                                 </svg>
                               </a>
                             )}
-                            {/* SMS */}
                             {opp.contact.phone && (
                               <a href={`sms:${opp.contact.phone}`} onClick={e => e.stopPropagation()}
-                                style={{ color: 'var(--text-muted)', display: 'flex', padding: 4 }} title="Text">
-                                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28 }} title="Text">
+                                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
                                 </svg>
                               </a>
                             )}
-                            {/* Email */}
                             {opp.contact.email && (
                               <a href={`mailto:${opp.contact.email}`} onClick={e => e.stopPropagation()}
-                                style={{ color: 'var(--text-muted)', display: 'flex', padding: 4 }} title="Email">
-                                <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28 }} title="Email">
+                                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
                                 </svg>
                               </a>
                             )}
-                            {/* Notes count */}
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 2, padding: 4, position: 'relative' }} title="Notes">
-                              <svg width="16" height="16" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" viewBox="0 0 24 24">
+                            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28 }} title="Notes">
+                              <svg width="15" height="15" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                               </svg>
                               {opp._count.notes > 0 && (
                                 <span style={{
-                                  position: 'absolute', top: 0, right: -2,
+                                  marginLeft: -6, marginTop: -10,
                                   background: '#3b82f6', color: '#fff', fontSize: 9, fontWeight: 700,
-                                  width: 15, height: 15, borderRadius: '50%',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  width: 14, height: 14, borderRadius: '50%',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                                 }}>{opp._count.notes}</span>
                               )}
                             </span>
-                            {/* Tasks count */}
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 2, padding: 4, position: 'relative' }} title="Tasks">
-                              <svg width="16" height="16" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" viewBox="0 0 24 24">
+                            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28 }} title="Tasks">
+                              <svg width="15" height="15" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                               </svg>
                               {opp._count.tasks > 0 && (
                                 <span style={{
-                                  position: 'absolute', top: 0, right: -2,
+                                  marginLeft: -6, marginTop: -10,
                                   background: '#22c55e', color: '#fff', fontSize: 9, fontWeight: 700,
-                                  width: 15, height: 15, borderRadius: '50%',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  width: 14, height: 14, borderRadius: '50%',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                                 }}>{opp._count.tasks}</span>
                               )}
                             </span>
