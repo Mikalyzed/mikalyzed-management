@@ -12,8 +12,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const stage = await prisma.vehicleStage.findUnique({ where: { id } })
   if (!stage) return NextResponse.json({ error: 'Stage not found' }, { status: 404 })
 
-  // Only assigned user or admin
-  if (stage.assigneeId !== user.id && user.role !== 'admin') {
+  // Authorization: assigned user, admin, or matching role for the stage
+  const stageName = stage.stage.toLowerCase()
+  const roleMatchesStage =
+    (user.role === 'mechanic' && stageName === 'mechanic') ||
+    (user.role === 'detailer' && stageName === 'detailing') ||
+    (user.role === 'content' && stageName === 'content') ||
+    (user.role === 'coordinator' && stageName === 'publish')
+
+  if (stage.assigneeId !== user.id && user.role !== 'admin' && !roleMatchesStage) {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 
