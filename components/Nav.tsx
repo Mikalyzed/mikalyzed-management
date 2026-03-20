@@ -72,6 +72,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { href: '/tasks', label: 'My Tasks', icon: 'tasks' },
     { href: '/vehicles', label: 'Board', icon: 'board' },
+    { href: '/transport', label: 'Transport', icon: 'transport' },
   ],
   detailer: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
