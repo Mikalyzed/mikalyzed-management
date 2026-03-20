@@ -3,12 +3,15 @@ import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 import { DEFAULT_PIPELINES } from '@/lib/crm'
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { searchParams } = new URL(request.url)
+  const includeInactive = searchParams.get('all') === '1' && user.role === 'admin'
+
   const pipelines = await prisma.pipeline.findMany({
-    where: { isActive: true },
+    where: includeInactive ? {} : { isActive: true },
     include: {
       stages: { orderBy: { sortOrder: 'asc' } },
       _count: { select: { opportunities: true } },
