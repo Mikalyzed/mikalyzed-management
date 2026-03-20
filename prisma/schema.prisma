@@ -29,6 +29,12 @@ model User {
   ownedEvents      Event[]           @relation("EventOwner")
   createdEvents    Event[]           @relation("EventCreatedBy")
   assignedEventTasks EventTask[]     @relation("EventTaskAssignee")
+  createdContacts  Contact[]         @relation("ContactCreatedBy")
+  assignedOpps     Opportunity[]     @relation("OpportunityAssignee")
+  createdNotes     OpportunityNote[] @relation("NoteCreatedBy")
+  assignedOppTasks OpportunityTask[] @relation("OppTaskAssignee")
+  createdOppTasks  OpportunityTask[] @relation("OppTaskCreatedBy")
+  activityActions  ActivityEvent[]   @relation("ActivityActor")
 
   @@map("users")
 }
@@ -57,6 +63,8 @@ model Vehicle {
   stages           VehicleStage[]
   transportRequests TransportRequest[]
   calendarItems    CalendarItem[]
+  opportunities    Opportunity[]    @relation("OpportunityVehicle")
+  vehicleInterests VehicleInterest[] @relation("VehicleInterestVehicle")
 
   @@index([status])
   @@index([currentAssigneeId])
@@ -184,6 +192,182 @@ model StageConfig {
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@map("stage_config")
+}
+
+// ═══ CRM ═══
+
+model Pipeline {
+  id          String   @id @default(uuid())
+  name        String
+  color       String   @default("#3b82f6")
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  stages        PipelineStage[]
+  opportunities Opportunity[]
+
+  @@map("pipelines")
+}
+
+model PipelineStage {
+  id          String   @id @default(uuid())
+  pipelineId  String   @map("pipeline_id")
+  name        String
+  type        String   @default("open") // open, won, lost
+  color       String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  pipeline      Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  opportunities Opportunity[]
+
+  @@index([pipelineId])
+  @@map("pipeline_stages")
+}
+
+model Contact {
+  id             String   @id @default(uuid())
+  firstName      String   @map("first_name")
+  lastName       String   @map("last_name")
+  email          String?
+  phone          String?
+  secondaryPhone String?  @map("secondary_phone")
+  address        String?
+  city           String?
+  state          String?
+  zip            String?
+  source         String   @default("other") // website, meta_ad, phone_call, walk_in, referral, other
+  tags           String[] @default([])
+  notes          String?
+  createdById    String?  @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  createdBy       User?            @relation("ContactCreatedBy", fields: [createdById], references: [id])
+  opportunities   Opportunity[]
+  vehicleInterests VehicleInterest[]
+
+  @@index([email])
+  @@index([phone])
+  @@map("contacts")
+}
+
+model Opportunity {
+  id              String    @id @default(uuid())
+  contactId       String    @map("contact_id")
+  pipelineId      String    @map("pipeline_id")
+  stageId         String    @map("stage_id")
+  assigneeId      String?   @map("assignee_id")
+  vehicleId       String?   @map("vehicle_id")
+  vehicleInterest String?   @map("vehicle_interest")
+  source          String    @default("other")
+  sourceDetail    String?   @map("source_detail")
+  value           Int?      // deal value in cents
+  lostReason      String?   @map("lost_reason")
+  lostNotes       String?   @map("lost_notes")
+  appointmentDate DateTime? @map("appointment_date")
+  firstContactAt  DateTime? @map("first_contact_at")
+  wonAt           DateTime? @map("won_at")
+  lostAt          DateTime? @map("lost_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  contact    Contact        @relation(fields: [contactId], references: [id])
+  pipeline   Pipeline       @relation(fields: [pipelineId], references: [id])
+  stage      PipelineStage  @relation(fields: [stageId], references: [id])
+  assignee   User?          @relation("OpportunityAssignee", fields: [assigneeId], references: [id])
+  vehicle    Vehicle?       @relation("OpportunityVehicle", fields: [vehicleId], references: [id])
+  tasks      OpportunityTask[]
+  notes      OpportunityNote[]
+  activities ActivityEvent[]
+
+  @@index([contactId])
+  @@index([pipelineId, stageId])
+  @@index([assigneeId])
+  @@index([vehicleId])
+  @@map("opportunities")
+}
+
+model OpportunityNote {
+  id             String   @id @default(uuid())
+  opportunityId  String   @map("opportunity_id")
+  body           String
+  createdById    String?  @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  opportunity  Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  createdBy    User?       @relation("NoteCreatedBy", fields: [createdById], references: [id])
+
+  @@index([opportunityId])
+  @@map("opportunity_notes")
+}
+
+model OpportunityTask {
+  id             String    @id @default(uuid())
+  opportunityId  String    @map("opportunity_id")
+  title          String
+  dueDate        DateTime? @map("due_date")
+  assigneeId     String?   @map("assignee_id")
+  status         String    @default("pending") // pending, completed
+  completedAt    DateTime? @map("completed_at")
+  notes          String?
+  createdById    String?   @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  opportunity  Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  assignee     User?       @relation("OppTaskAssignee", fields: [assigneeId], references: [id])
+  createdBy    User?       @relation("OppTaskCreatedBy", fields: [createdById], references: [id])
+
+  @@index([opportunityId])
+  @@index([assigneeId])
+  @@map("opportunity_tasks")
+}
+
+model ActivityEvent {
+  id             String   @id @default(uuid())
+  opportunityId  String   @map("opportunity_id")
+  type           String   // lead_created, stage_changed, assigned, note_added, task_created, task_completed, call_logged, sms_sent, sms_received, email_sent, appointment_set
+  description    String
+  metadata       Json?
+  actorId        String?  @map("actor_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  opportunity  Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  actor        User?       @relation("ActivityActor", fields: [actorId], references: [id])
+
+  @@index([opportunityId, createdAt])
+  @@map("activity_events")
+}
+
+model VehicleInterest {
+  id          String   @id @default(uuid())
+  contactId   String   @map("contact_id")
+  vehicleId   String?  @map("vehicle_id")
+  make        String?
+  model       String?
+  yearMin     Int?     @map("year_min")
+  yearMax     Int?     @map("year_max")
+  priceMax    Int?     @map("price_max")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  vehicle  Vehicle? @relation("VehicleInterestVehicle", fields: [vehicleId], references: [id])
+
+  @@index([contactId])
+  @@index([make, model])
+  @@map("vehicle_interests")
+}
+
+model RoundRobinState {
+  id              String   @id @default(uuid())
+  pipelineId      String   @unique @map("pipeline_id")
+  lastAssignedId  String   @map("last_assigned_id")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("round_robin_state")
 }
 
 // ═══ Calendar ═══

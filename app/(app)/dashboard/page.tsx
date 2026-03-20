@@ -221,6 +221,7 @@ function AddButton() {
   const [open, setOpen] = useState(false)
 
   const actions = [
+    { href: '/leads/new', label: 'New Lead' },
     { href: '/vehicles/new', label: 'Add Vehicle' },
     { href: '/calendar/new', label: 'Calendar Item' },
     { href: '/events/new', label: 'New Event' },
