@@ -41,11 +41,11 @@ export default function PipelinesPage() {
           <div key={p.id} className="card" style={{ padding: 0, overflow: 'hidden', opacity: p.isActive ? 1 : 0.5 }}>
             <div style={{ height: 4, background: p.color }} />
             <div style={{ padding: '18px 22px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
                   <h2 style={{ fontSize: 18, fontWeight: 700 }}>{p.name}</h2>
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', background: '#f5f5f3', padding: '3px 10px', borderRadius: 6 }}>
-                    {p._count.opportunities} opportunities
+                    {p._count.opportunities} opps
                   </span>
                   {!p.isActive && (
                     <span style={{ fontSize: 11, fontWeight: 600, color: '#ef4444', background: '#fef2f2', padding: '3px 10px', borderRadius: 6 }}>

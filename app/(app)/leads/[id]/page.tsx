@@ -169,21 +169,19 @@ export default function LeadDetailPage() {
           </div>
 
           {/* Assignee + actions */}
-          <div style={{ display: 'flex', gap: 12, marginTop: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>Assigned:</span>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 auto', minWidth: 0 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Assigned:</span>
               <select value={opp.assignee?.id || ''} onChange={e => changeAssignee(e.target.value)}
-                style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13, background: '#fff', minHeight: 30 }}>
+                style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13, background: '#fff', minHeight: 30, flex: '1 1 auto', minWidth: 0 }}>
                 <option value="">Unassigned</option>
                 {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             </div>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-              <button onClick={handleDelete} style={{
-                fontSize: 12, color: 'var(--danger)', background: 'none', border: '1px solid var(--danger-border)',
-                padding: '5px 12px', borderRadius: 6, cursor: 'pointer', minHeight: 30,
-              }}>Delete</button>
-            </div>
+            <button onClick={handleDelete} style={{
+              fontSize: 12, color: 'var(--danger)', background: 'none', border: '1px solid var(--danger-border)',
+              padding: '5px 12px', borderRadius: 6, cursor: 'pointer', minHeight: 30, flexShrink: 0,
+            }}>Delete</button>
           </div>
         </div>
       </div>

@@ -216,8 +216,8 @@ export default function VehiclesPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between" style={{ marginBottom: 24 }}>
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Recon Board</h1>
+      <div className="page-header" style={{ marginBottom: 24 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Recon Board</h1>
         <Link href="/vehicles/new" className="btn btn-primary gap-2">
           <span style={{ fontSize: '18px', lineHeight: 1 }}>+</span>
           <span className="hidden sm:inline">Add Vehicle</span>

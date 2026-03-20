@@ -100,7 +100,7 @@ export default function NewLeadPage() {
         <div className="card" style={{ padding: 24, marginBottom: 16 }}>
           <div className="section-label" style={{ marginBottom: 16 }}>Contact Info</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', gap: 12 }}>
+            <div className="form-row">
               <div style={{ flex: 1 }}>
                 <label className="form-label">First Name</label>
                 <input className="input" value={firstName} onChange={e => setFirstName(e.target.value)} required />
@@ -110,7 +110,7 @@ export default function NewLeadPage() {
                 <input className="input" value={lastName} onChange={e => setLastName(e.target.value)} required />
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 12 }}>
+            <div className="form-row">
               <div style={{ flex: 1 }}>
                 <label className="form-label">Phone</label>
                 <input className="input" type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 (305) 555-1234" />
@@ -127,7 +127,7 @@ export default function NewLeadPage() {
         <div className="card" style={{ padding: 24, marginBottom: 16 }}>
           <div className="section-label" style={{ marginBottom: 16 }}>Opportunity</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', gap: 12 }}>
+            <div className="form-row">
               <div style={{ flex: 1 }}>
                 <label className="form-label">Pipeline</label>
                 <select className="input" value={pipelineId} onChange={e => setPipelineId(e.target.value)}>

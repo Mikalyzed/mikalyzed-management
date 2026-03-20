@@ -296,9 +296,9 @@ export default function DashboardPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+      <div className="page-header" style={{ marginBottom: 28 }}>
         <div>
-          <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-0.02em' }}>Dashboard</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Dashboard</h1>
           <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>Welcome back, {data.user.name}.</p>
         </div>
         {isAdmin && <AddButton />}

@@ -34,7 +34,7 @@ export default function ContactsPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+      <div className="page-header">
         <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Contacts</h1>
           <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>{total} contacts</p>

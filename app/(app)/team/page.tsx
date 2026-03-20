@@ -199,43 +199,45 @@ export default function TeamPage() {
       <div className="flex flex-col gap-3">
         {users.map((u) => (
           <div key={u.id} className="card" style={{ opacity: u.isActive ? 1 : 0.5, padding: '16px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold"
-                  style={{ background: u.isActive ? '#dffd6e' : 'var(--border)', color: '#1a1a1a', flexShrink: 0 }}>
-                  {u.name.charAt(0).toUpperCase()}
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <p className="font-semibold" style={{ fontSize: 15 }}>{u.name}</p>
-                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{u.email}</p>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 14, fontWeight: 700, flexShrink: 0,
+                background: u.isActive ? '#dffd6e' : 'var(--border)', color: '#1a1a1a',
+              }}>
+                {u.name.charAt(0).toUpperCase()}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{
-                  fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6,
-                  background: '#f5f5f3', color: 'var(--text-secondary)', textTransform: 'capitalize',
-                }}>
-                  {u.role}
-                </span>
-                <button onClick={() => openEdit(u)} style={{
-                  padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)',
-                  background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  color: 'var(--text-secondary)', minHeight: 34,
-                }}>
-                  Edit
-                </button>
-                <button
-                  onClick={() => toggleActive(u.id, u.isActive)}
-                  className="text-xs font-medium px-3 py-1.5 rounded-lg"
-                  style={{
-                    background: u.isActive ? 'var(--danger-bg)' : 'var(--success-bg)',
-                    color: u.isActive ? 'var(--danger)' : 'var(--success)',
-                    minHeight: '32px',
-                  }}
-                >
-                  {u.isActive ? 'Disable' : 'Enable'}
-                </button>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <p style={{ fontSize: 15, fontWeight: 600 }}>{u.name}</p>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{u.email}</p>
               </div>
+              <span style={{
+                fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6,
+                background: '#f5f5f3', color: 'var(--text-secondary)', textTransform: 'capitalize', flexShrink: 0,
+              }}>
+                {u.role}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => openEdit(u)} style={{
+                padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)',
+                background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                color: 'var(--text-secondary)', minHeight: 34,
+              }}>
+                Edit
+              </button>
+              <button
+                onClick={() => toggleActive(u.id, u.isActive)}
+                style={{
+                  padding: '6px 14px', borderRadius: 8, border: 'none',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  background: u.isActive ? 'var(--danger-bg)' : 'var(--success-bg)',
+                  color: u.isActive ? 'var(--danger)' : 'var(--success)',
+                  minHeight: '34px',
+                }}
+              >
+                {u.isActive ? 'Disable' : 'Enable'}
+              </button>
             </div>
           </div>
         ))}

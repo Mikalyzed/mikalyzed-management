@@ -112,20 +112,18 @@ export default function LeadsPage() {
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+      <div className="page-header">
+        <div>
           <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Leads</h1>
-          {/* Pipeline selector */}
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={activePipelineId} onChange={e => setActivePipelineId(e.target.value)}
             style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, fontWeight: 600, background: '#fff', minHeight: 38 }}>
             {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <span style={{ fontSize: 13, fontWeight: 600, color: '#3b82f6', background: '#eff6ff', padding: '4px 12px', borderRadius: 20 }}>
-            {totalOpps} opportunities
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#3b82f6', background: '#eff6ff', padding: '4px 10px', borderRadius: 20 }}>
+            {totalOpps}
           </span>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {/* Board/List toggle */}
           <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
             <button onClick={() => setViewMode('board')} style={{
               padding: '7px 12px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, minHeight: 34,
@@ -138,26 +136,24 @@ export default function LeadsPage() {
               color: viewMode === 'list' ? '#dffd6e' : 'var(--text-muted)',
             }}>List</button>
           </div>
-          <Link href="/leads/new" className="btn btn-primary" style={{ fontSize: 13 }}>+ Add Opportunity</Link>
+          <Link href="/leads/new" className="btn btn-primary" style={{ fontSize: 13 }}>+ Add</Link>
         </div>
       </div>
 
       {/* Filters row */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
         <select value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)}
-          style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: '#fff', minHeight: 34 }}>
+          style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: '#fff', minHeight: 34, flex: '0 0 auto' }}>
           <option value="">All Reps</option>
           {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
         </select>
         <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}
-          style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: '#fff', minHeight: 34 }}>
+          style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: '#fff', minHeight: 34, flex: '0 0 auto' }}>
           <option value="">All Sources</option>
           {Object.entries(LEAD_SOURCE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <div style={{ marginLeft: 'auto' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search Opportunities"
-            style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: '#fff', minHeight: 34, minWidth: 200 }} />
-        </div>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
+          style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: '#fff', minHeight: 34, flex: '1 1 140px', minWidth: 0 }} />
       </div>
 
       {loading ? (
@@ -296,7 +292,8 @@ export default function LeadsPage() {
       ) : (
         /* LIST VIEW */
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 600 }}>
             <thead>
               <tr style={{ background: 'var(--bg-primary)', borderBottom: '1px solid var(--border)' }}>
                 <th style={{ padding: '10px 16px', textAlign: 'left', fontWeight: 600, color: 'var(--text-muted)' }}>Name</th>
@@ -351,6 +348,7 @@ export default function LeadsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
