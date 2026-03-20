@@ -14,6 +14,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const data: Record<string, unknown> = {}
   if (body.role) data.role = body.role
   if (body.name) data.name = body.name
+  if (body.email) data.email = body.email
   if (body.password) data.password = body.password
   if (body.isActive !== undefined) data.isActive = body.isActive
 
