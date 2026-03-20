@@ -2,6 +2,20 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getSessionUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const stage = await prisma.vehicleStage.findUnique({
+    where: { id },
+    include: { assignee: { select: { id: true, name: true } } },
+  })
+  if (!stage) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  return NextResponse.json({ stage })
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -12,15 +26,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const stage = await prisma.vehicleStage.findUnique({ where: { id } })
   if (!stage) return NextResponse.json({ error: 'Stage not found' }, { status: 404 })
 
-  // Authorization: assigned user, admin, or matching role for the stage
-  const stageName = stage.stage.toLowerCase()
-  const roleMatchesStage =
-    (user.role === 'mechanic' && stageName === 'mechanic') ||
-    (user.role === 'detailer' && stageName === 'detailing') ||
-    (user.role === 'content' && stageName === 'content') ||
-    (user.role === 'coordinator' && stageName === 'publish')
-
-  if (stage.assigneeId !== user.id && user.role !== 'admin' && !roleMatchesStage) {
+  // Only assigned user or admin can update
+  if (stage.assigneeId !== user.id && user.role !== 'admin') {
     return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
   }
 
