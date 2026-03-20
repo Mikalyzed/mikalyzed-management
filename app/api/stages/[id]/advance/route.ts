@@ -12,6 +12,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { id } = await params
 
+  // Optional body for next stage configuration
+  let body: { dueDate?: string; scopeName?: string; checklist?: { item: string; done: boolean; note: string }[] } = {}
+  try { body = await request.json() } catch { /* no body is fine */ }
+
   const stage = await prisma.vehicleStage.findUnique({
     where: { id },
     include: { vehicle: true },
@@ -52,12 +56,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     } else {
       // Create next stage
       const config = await tx.stageConfig.findUnique({ where: { stage: nextStage } })
-      const checklistItems = (config?.defaultChecklist as string[] | undefined)?.length
-        ? config!.defaultChecklist as string[]
-        : DEFAULT_CHECKLISTS[nextStage as Stage] || []
-      const checklist = checklistItems.map((item: string) => ({
-        item, done: false, note: '',
-      }))
+
+      // Use custom checklist from body (scope template), or fall back to defaults
+      let checklist: { item: string; done: boolean; note: string }[]
+      if (body.checklist && body.checklist.length > 0) {
+        checklist = body.checklist
+      } else {
+        const checklistItems = (config?.defaultChecklist as string[] | undefined)?.length
+          ? config!.defaultChecklist as string[]
+          : DEFAULT_CHECKLISTS[nextStage as Stage] || []
+        checklist = checklistItems.map((item: string) => ({
+          item, done: false, note: '',
+        }))
+      }
 
       const newStage = await tx.vehicleStage.create({
         data: {
@@ -66,6 +77,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           status: 'pending',
           assigneeId: config?.defaultAssigneeId || null,
           checklist,
+          dueDate: body.dueDate ? new Date(body.dueDate) : null,
+          scopeName: body.scopeName || null,
         },
       })
 

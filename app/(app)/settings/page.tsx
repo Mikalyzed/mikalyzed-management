@@ -248,7 +248,7 @@ export default function SettingsPage() {
       </section>
 
       {/* Save */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4" style={{ marginBottom: 40 }}>
         <button
           onClick={handleSave}
           disabled={saving}
@@ -263,6 +263,114 @@ export default function SettingsPage() {
           </p>
         )}
       </div>
+
+      {/* Work Scopes */}
+      <WorkScopeManager />
     </div>
+  )
+}
+
+function WorkScopeManager() {
+  type Template = { id: string; stage: string; name: string; checklist: { item: string }[]; isActive: boolean }
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [loading, setLoading] = useState(true)
+  const [addingStage, setAddingStage] = useState('')
+  const [newName, setNewName] = useState('')
+  const [newChecklist, setNewChecklist] = useState('')
+
+  const STAGES = ['mechanic', 'detailing', 'content', 'publish'] as const
+
+  function load() {
+    fetch('/api/stage-templates').then(r => r.json()).then(d => { setTemplates(d); setLoading(false) })
+  }
+  useEffect(() => { load() }, [])
+
+  async function addTemplate() {
+    if (!addingStage || !newName.trim()) return
+    const items = newChecklist.split('\n').filter(l => l.trim()).map(l => ({ item: l.trim(), done: false, note: '' }))
+    await fetch('/api/stage-templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: addingStage, name: newName, checklist: items }),
+    })
+    setNewName('')
+    setNewChecklist('')
+    setAddingStage('')
+    load()
+  }
+
+  async function deleteTemplate(id: string) {
+    if (!confirm('Delete this scope?')) return
+    await fetch(`/api/stage-templates/${id}`, { method: 'DELETE' })
+    load()
+  }
+
+  return (
+    <section style={{ marginBottom: 32 }}>
+      <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 16 }}>
+        Work Scopes
+      </p>
+      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+        Define work scope templates per stage. When advancing a vehicle, you can pick a scope to set the right checklist.
+      </p>
+
+      {loading ? <p style={{ color: 'var(--text-muted)' }}>Loading...</p> : (
+        <>
+          {STAGES.map(stage => {
+            const stageTemplates = templates.filter(t => t.stage === stage)
+            return (
+              <div key={stage} style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, textTransform: 'capitalize' }}>
+                    {STAGE_LABELS[stage as Stage] || stage}
+                  </p>
+                  <button onClick={() => setAddingStage(addingStage === stage ? '' : stage)} style={{
+                    fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer',
+                  }}>
+                    {addingStage === stage ? 'Cancel' : '+ Add Scope'}
+                  </button>
+                </div>
+
+                {stageTemplates.length === 0 && addingStage !== stage && (
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>No scopes defined — default checklist will be used.</p>
+                )}
+
+                {stageTemplates.map(t => (
+                  <div key={t.id} className="card" style={{ padding: '12px 16px', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <p style={{ fontSize: 14, fontWeight: 600 }}>{t.name}</p>
+                        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {t.checklist.map(c => c.item).join(' · ')}
+                        </p>
+                      </div>
+                      <button onClick={() => deleteTemplate(t.id)} style={{
+                        fontSize: 11, color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer',
+                      }}>Delete</button>
+                    </div>
+                  </div>
+                ))}
+
+                {addingStage === stage && (
+                  <div className="card" style={{ padding: 16, marginBottom: 8, borderColor: '#1a1a1a', borderWidth: 2 }}>
+                    <div style={{ marginBottom: 12 }}>
+                      <label className="form-label">Scope Name</label>
+                      <input className="input" value={newName} onChange={e => setNewName(e.target.value)}
+                        placeholder={`e.g. ${stage === 'detailing' ? 'Wet Sand & Buff' : stage === 'mechanic' ? 'Full Service' : 'Standard'}`} />
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <label className="form-label">Checklist Items (one per line)</label>
+                      <textarea className="input" value={newChecklist} onChange={e => setNewChecklist(e.target.value)} rows={4}
+                        placeholder={`e.g.\nWet sand panels\nBuff compound\nPolish\nFinal wipe`} style={{ resize: 'vertical' }} />
+                    </div>
+                    <button onClick={addTemplate} className="btn btn-primary" style={{ fontSize: 13 }}>Save Scope</button>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </>
+      )}
+    </section>
   )
 }

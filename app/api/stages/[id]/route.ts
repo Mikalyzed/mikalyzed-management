@@ -71,6 +71,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     data.notes = body.notes
   }
 
+  // Update due date
+  if (body.dueDate !== undefined) {
+    data.dueDate = body.dueDate ? new Date(body.dueDate) : null
+  }
+
+  // Update scope
+  if (body.scopeName !== undefined) {
+    data.scopeName = body.scopeName || null
+  }
+
   const updated = await prisma.vehicleStage.update({
     where: { id },
     data,

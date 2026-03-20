@@ -12,8 +12,17 @@ type Stage = {
   assignee: { id: string; name: string } | null
   checklist: ChecklistItem[]
   notes: string | null
+  dueDate: string | null
+  scopeName: string | null
   startedAt: string
   completedAt: string | null
+}
+
+type ScopeTemplate = {
+  id: string
+  stage: string
+  name: string
+  checklist: { item: string; done: boolean; note: string }[]
 }
 
 type Vehicle = {
@@ -60,6 +69,11 @@ export default function VehicleDetailPage() {
   const [editChecklist, setEditChecklist] = useState<ChecklistItem[]>([])
   const [newTaskText, setNewTaskText] = useState('')
   const [saving, setSaving] = useState(false)
+  const [showAdvanceModal, setShowAdvanceModal] = useState(false)
+  const [scopeTemplates, setScopeTemplates] = useState<ScopeTemplate[]>([])
+  const [selectedScope, setSelectedScope] = useState('')
+  const [advanceDueDate, setAdvanceDueDate] = useState('')
+  const [advanceChecklist, setAdvanceChecklist] = useState<ChecklistItem[]>([])
 
   const refresh = () => fetch(`/api/vehicles/${id}`).then(r => r.json()).then(d => setVehicle(d.vehicle))
 
@@ -150,11 +164,23 @@ export default function VehicleDetailPage() {
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: '14px', fontWeight: 600 }}>{stageLabel}</p>
             {currentStage && (
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                {STATUS_LABELS[currentStage.status] || currentStage.status}
-                {timeStr && ` · ${timeStr}`}
-                {currentStage.assignee && ` · ${currentStage.assignee.name}`}
-              </p>
+              <>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  {STATUS_LABELS[currentStage.status] || currentStage.status}
+                  {currentStage.scopeName && ` · ${currentStage.scopeName}`}
+                  {timeStr && ` · ${timeStr}`}
+                  {currentStage.assignee && ` · ${currentStage.assignee.name}`}
+                </p>
+                {currentStage.dueDate && (
+                  <p style={{
+                    fontSize: '11px', fontWeight: 600, marginTop: 2,
+                    color: new Date(currentStage.dueDate) < new Date() && currentStage.status !== 'done' ? '#ef4444' : 'var(--text-muted)',
+                  }}>
+                    Due: {new Date(currentStage.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    {new Date(currentStage.dueDate) < new Date() && currentStage.status !== 'done' && ' (OVERDUE)'}
+                  </p>
+                )}
+              </>
             )}
             {vehicle.status === 'completed' && (
               <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -392,8 +418,21 @@ export default function VehicleDetailPage() {
                     <>
                       {allDone ? (
                         <ActionBtn label="Advance to Next Stage →" style="success" onClick={async () => {
-                          await fetch(`/api/stages/${currentStage.id}/advance`, { method: 'POST' })
-                          refresh()
+                          // Fetch scope templates for next stage
+                          const NEXT: Record<string, string> = { mechanic: 'detailing', detailing: 'content', content: 'publish', publish: 'completed' }
+                          const next = NEXT[currentStage.stage]
+                          if (next === 'completed') {
+                            await fetch(`/api/stages/${currentStage.id}/advance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
+                            refresh()
+                            return
+                          }
+                          const tmplRes = await fetch(`/api/stage-templates?stage=${next}`)
+                          const tmpls = await tmplRes.json()
+                          setScopeTemplates(tmpls)
+                          setSelectedScope('')
+                          setAdvanceDueDate('')
+                          setAdvanceChecklist([])
+                          setShowAdvanceModal(true)
                         }} />
                       ) : (
                         <div style={{
@@ -484,6 +523,90 @@ export default function VehicleDetailPage() {
       <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0 24px' }}>
         Added by {vehicle.createdBy?.name || 'System'} on {new Date(vehicle.createdAt).toLocaleDateString()}
       </p>
+
+      {/* Advance Modal — pick scope + deadline for next stage */}
+      {showAdvanceModal && currentStage && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Advance to Next Stage</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
+              Configure the next stage before advancing.
+            </p>
+
+            {/* Due Date */}
+            <div style={{ marginBottom: 16 }}>
+              <label className="form-label">Due Date</label>
+              <input type="date" className="input" value={advanceDueDate} onChange={e => setAdvanceDueDate(e.target.value)} />
+            </div>
+
+            {/* Scope Templates */}
+            {scopeTemplates.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <label className="form-label">Work Scope</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button type="button" onClick={() => { setSelectedScope(''); setAdvanceChecklist([]) }}
+                    style={{
+                      padding: '10px 14px', borderRadius: 10, border: `2px solid ${!selectedScope ? '#1a1a1a' : 'var(--border)'}`,
+                      background: !selectedScope ? '#1a1a1a' : '#fff', color: !selectedScope ? '#dffd6e' : 'var(--text-secondary)',
+                      fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left', minHeight: 42,
+                    }}>
+                    Use default checklist
+                  </button>
+                  {scopeTemplates.map(t => (
+                    <button key={t.id} type="button" onClick={() => {
+                      setSelectedScope(t.name)
+                      setAdvanceChecklist((t.checklist as { item: string }[]).map(c => ({ item: c.item, done: false, note: '' })))
+                    }}
+                      style={{
+                        padding: '10px 14px', borderRadius: 10, border: `2px solid ${selectedScope === t.name ? '#1a1a1a' : 'var(--border)'}`,
+                        background: selectedScope === t.name ? '#1a1a1a' : '#fff', color: selectedScope === t.name ? '#dffd6e' : 'var(--text-secondary)',
+                        fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left', minHeight: 42,
+                      }}>
+                      {t.name}
+                      <span style={{ display: 'block', fontSize: 11, fontWeight: 400, marginTop: 2, color: selectedScope === t.name ? '#b0b0b0' : 'var(--text-muted)' }}>
+                        {(t.checklist as { item: string }[]).map(c => c.item).join(', ')}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Preview checklist if scope selected */}
+            {advanceChecklist.length > 0 && (
+              <div style={{ marginBottom: 16, padding: 14, background: 'var(--bg-primary)', borderRadius: 10 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Checklist Preview
+                </p>
+                {advanceChecklist.map((c, i) => (
+                  <p key={i} style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '3px 0' }}>
+                    {i + 1}. {c.item}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button onClick={() => setShowAdvanceModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={async () => {
+                await fetch(`/api/stages/${currentStage.id}/advance`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    dueDate: advanceDueDate || null,
+                    scopeName: selectedScope || null,
+                    checklist: advanceChecklist.length > 0 ? advanceChecklist : undefined,
+                  }),
+                })
+                setShowAdvanceModal(false)
+                refresh()
+              }} className="btn btn-primary" style={{ flex: 1 }}>
+                Advance
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -80,6 +80,8 @@ model VehicleStage {
   checklist           Json      @default("[]")
   notes               String?
   photos              String[]  @default([])
+  dueDate             DateTime? @map("due_date")
+  scopeName           String?   @map("scope_name")
   startedAt           DateTime  @default(now()) @map("started_at")
   completedAt         DateTime? @map("completed_at")
   blockedAt           DateTime? @map("blocked_at")
@@ -192,6 +194,19 @@ model StageConfig {
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@map("stage_config")
+}
+
+model StageTemplate {
+  id        String   @id @default(uuid())
+  stage     String
+  name      String
+  checklist Json     @default("[]")
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([stage, name])
+  @@map("stage_templates")
 }
 
 // ═══ CRM ═══
