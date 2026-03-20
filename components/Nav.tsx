@@ -163,27 +163,29 @@ export default function Nav({ role, userName }: { role: string; userName: string
         </div>
       </aside>
 
-      {/* Mobile: top bar with hamburger */}
-      <div className="md:hidden" style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
-        background: '#141414', padding: '14px 16px',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{
-            width: 30, height: 30, borderRadius: 8, background: '#dffd6e', color: '#1a1a1a',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800,
-          }}>M</div>
-          <p style={{ fontSize: 13, fontWeight: 700, color: '#fff', letterSpacing: '0.04em' }}>MIKALYZED</p>
-        </div>
-        <button onClick={() => setMobileOpen(!mobileOpen)} style={{
-          background: 'none', border: 'none', cursor: 'pointer', padding: 6, color: '#fff',
+      {/* Mobile: top bar with hamburger — hidden when drawer is open */}
+      {!mobileOpen && (
+        <div className="md:hidden" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+          background: '#141414', padding: '14px 16px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
-          <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-          </svg>
-        </button>
-      </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: 8, background: '#dffd6e', color: '#1a1a1a',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800,
+            }}>M</div>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#fff', letterSpacing: '0.04em' }}>MIKALYZED</p>
+          </div>
+          <button onClick={() => setMobileOpen(true)} style={{
+            background: 'none', border: 'none', cursor: 'pointer', padding: 6, color: '#fff',
+          }}>
+            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* Mobile: side drawer */}
       {/* Backdrop */}
