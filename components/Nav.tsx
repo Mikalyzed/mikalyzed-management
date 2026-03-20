@@ -1,11 +1,11 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 type NavItem = { href: string; label: string; icon: string }
 
-// SVG icon paths (heroicons outline style)
 const ICONS: Record<string, string> = {
   dashboard: 'M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z',
   board: 'M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z',
@@ -97,37 +97,25 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
 
 export default function Nav({ role, userName }: { role: string; userName: string }) {
   const pathname = usePathname()
+  const [mobileOpen, setMobileOpen] = useState(false)
   const items = NAV_ITEMS[role] || NAV_ITEMS.sales
   const isActive = (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
 
+  // Close menu on navigation
+  useEffect(() => { setMobileOpen(false) }, [pathname])
+
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — unchanged */}
       <aside style={{
-        position: 'fixed',
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: 260,
-        background: '#141414',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 40,
+        position: 'fixed', left: 0, top: 0, bottom: 0, width: 260,
+        background: '#141414', display: 'flex', flexDirection: 'column', zIndex: 40,
       }} className="hidden md:flex">
-        {/* Logo */}
         <div style={{ padding: '28px 24px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
-              width: 36,
-              height: 36,
-              borderRadius: 10,
-              background: '#dffd6e',
-              color: '#1a1a1a',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 15,
-              fontWeight: 800,
+              width: 36, height: 36, borderRadius: 10, background: '#dffd6e', color: '#1a1a1a',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800,
             }}>M</div>
             <div>
               <p style={{ fontSize: 14, fontWeight: 700, color: '#fff', letterSpacing: '0.04em', lineHeight: 1.2 }}>MIKALYZED</p>
@@ -135,41 +123,19 @@ export default function Nav({ role, userName }: { role: string; userName: string
             </div>
           </div>
         </div>
-
-        {/* Nav links */}
         <nav style={{ flex: 1, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {items.map((item) => {
             const active = isActive(item.href)
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 14,
-                  padding: '10px 14px',
-                  borderRadius: 10,
-                  fontSize: 14,
-                  fontWeight: active ? 600 : 500,
-                  color: active ? '#dffd6e' : '#808080',
-                  background: active ? 'rgba(223, 253, 110, 0.1)' : 'transparent',
-                  textDecoration: 'none',
-                  transition: 'all 0.15s ease',
-                  minHeight: 42,
-                }}
-                onMouseEnter={(e) => {
-                  if (!active) {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
-                    e.currentTarget.style.color = '#b0b0b0'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!active) {
-                    e.currentTarget.style.background = 'transparent'
-                    e.currentTarget.style.color = '#808080'
-                  }
-                }}
+              <Link key={item.href} href={item.href} style={{
+                display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', borderRadius: 10,
+                fontSize: 14, fontWeight: active ? 600 : 500,
+                color: active ? '#dffd6e' : '#808080',
+                background: active ? 'rgba(223, 253, 110, 0.1)' : 'transparent',
+                textDecoration: 'none', transition: 'all 0.15s ease', minHeight: 42,
+              }}
+                onMouseEnter={(e) => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#b0b0b0' } }}
+                onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#808080' } }}
               >
                 <NavIcon href={item.href} size={20} />
                 {item.label}
@@ -177,77 +143,102 @@ export default function Nav({ role, userName }: { role: string; userName: string
             )
           })}
         </nav>
-
-        {/* User section at bottom */}
-        <div style={{
-          padding: '16px 16px 20px',
-          borderTop: '1px solid rgba(255,255,255,0.06)',
-        }}>
+        <div style={{ padding: '16px 16px 20px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                background: '#dffd6e',
-                color: '#1a1a1a',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 13,
-                fontWeight: 700,
-              }}>
-                {userName.charAt(0).toUpperCase()}
-              </div>
+                width: 32, height: 32, borderRadius: '50%', background: '#dffd6e', color: '#1a1a1a',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700,
+              }}>{userName.charAt(0).toUpperCase()}</div>
               <div>
                 <p style={{ fontSize: 13, fontWeight: 600, color: '#e0e0e0' }}>{userName}</p>
                 <p style={{ fontSize: 11, color: '#555', textTransform: 'capitalize' }}>{role}</p>
               </div>
             </div>
-            <a href="/api/auth/logout" style={{
-              fontSize: 12,
-              color: '#555',
-              textDecoration: 'none',
-              minHeight: 'auto',
-              transition: 'color 0.15s',
-            }}
+            <a href="/api/auth/logout" style={{ fontSize: 12, color: '#555', textDecoration: 'none', minHeight: 'auto' }}
               onMouseEnter={(e) => { e.currentTarget.style.color = '#999' }}
               onMouseLeave={(e) => { e.currentTarget.style.color = '#555' }}
-            >
-              Sign Out
-            </a>
+            >Sign Out</a>
           </div>
         </div>
       </aside>
 
-      {/* Mobile bottom nav */}
-      <nav className="bottom-nav md:hidden">
-        {items.slice(0, 5).map((item) => {
-          const active = isActive(item.href)
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 3,
-                color: active ? '#1a1a1a' : '#999',
-                textDecoration: 'none',
-                fontSize: 10,
-                fontWeight: active ? 600 : 500,
-                minHeight: 44,
-                justifyContent: 'center',
-                padding: '0 8px',
-              }}
-            >
-              <NavIcon href={item.href} size={22} />
-              <span>{item.label}</span>
-            </Link>
-          )
-        })}
-      </nav>
+      {/* Mobile: top bar + hamburger */}
+      <div className="md:hidden" style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+        background: '#141414', padding: '12px 16px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 8, background: '#dffd6e', color: '#1a1a1a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800,
+          }}>M</div>
+          <p style={{ fontSize: 13, fontWeight: 700, color: '#fff', letterSpacing: '0.04em' }}>MIKALYZED</p>
+        </div>
+        <button onClick={() => setMobileOpen(!mobileOpen)} style={{
+          background: 'none', border: 'none', cursor: 'pointer', padding: 6, color: '#fff',
+        }}>
+          {mobileOpen ? (
+            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          ) : (
+            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+            </svg>
+          )}
+        </button>
+      </div>
+
+      {/* Mobile: slide-down menu */}
+      {mobileOpen && (
+        <>
+          {/* Backdrop */}
+          <div onClick={() => setMobileOpen(false)} className="md:hidden" style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 49,
+          }} />
+          {/* Menu */}
+          <div className="md:hidden" style={{
+            position: 'fixed', top: 54, left: 0, right: 0, zIndex: 51,
+            background: '#141414', borderBottomLeftRadius: 16, borderBottomRightRadius: 16,
+            padding: '8px 12px 16px', maxHeight: 'calc(100vh - 54px)', overflowY: 'auto',
+          }}>
+            <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {items.map((item) => {
+                const active = isActive(item.href)
+                return (
+                  <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} style={{
+                    display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', borderRadius: 10,
+                    fontSize: 15, fontWeight: active ? 600 : 500,
+                    color: active ? '#dffd6e' : '#999',
+                    background: active ? 'rgba(223, 253, 110, 0.1)' : 'transparent',
+                    textDecoration: 'none', minHeight: 46,
+                  }}>
+                    <NavIcon href={item.href} size={20} />
+                    {item.label}
+                  </Link>
+                )
+              })}
+            </nav>
+            {/* User + sign out */}
+            <div style={{
+              marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px 4px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%', background: '#dffd6e', color: '#1a1a1a',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700,
+                }}>{userName.charAt(0).toUpperCase()}</div>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#ccc' }}>{userName}</span>
+                <span style={{ fontSize: 11, color: '#555', textTransform: 'capitalize' }}>{role}</span>
+              </div>
+              <a href="/api/auth/logout" style={{ fontSize: 12, color: '#666', textDecoration: 'none' }}>Sign Out</a>
+            </div>
+          </div>
+        </>
+      )}
     </>
   )
 }
