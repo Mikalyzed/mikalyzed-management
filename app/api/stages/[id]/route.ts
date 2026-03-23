@@ -35,14 +35,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // Update status
   if (body.status) {
-    const validTransitions: Record<string, string[]> = {
-      pending: ['in_progress'],
-      in_progress: ['blocked', 'done'],
-      blocked: ['in_progress'],
-      done: [],
-    }
-    if (!validTransitions[stage.status]?.includes(body.status)) {
-      return NextResponse.json({ error: `Cannot transition from ${stage.status} to ${body.status}` }, { status: 400 })
+    // Admins can set any status; non-admins follow transition rules
+    if (user.role !== 'admin') {
+      const validTransitions: Record<string, string[]> = {
+        pending: ['in_progress'],
+        in_progress: ['blocked', 'done'],
+        blocked: ['in_progress'],
+        done: [],
+      }
+      if (!validTransitions[stage.status]?.includes(body.status)) {
+        return NextResponse.json({ error: `Cannot transition from ${stage.status} to ${body.status}` }, { status: 400 })
+      }
     }
 
     data.status = body.status
@@ -50,7 +53,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // Handle blocked time tracking
     if (body.status === 'blocked') {
       data.blockedAt = new Date()
-      if (!body.blockNote) {
+      if (!body.blockNote && user.role !== 'admin') {
         return NextResponse.json({ error: 'Block reason is required' }, { status: 400 })
       }
     }
