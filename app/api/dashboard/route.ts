@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     content: await prisma.vehicle.count({ where: { status: 'content' } }),
     publish: await prisma.vehicle.count({ where: { status: 'publish' } }),
     completed: await prisma.vehicle.count({ where: { status: 'completed' } }),
+    externalRepairs: await prisma.externalRepair.count({ where: { status: { notIn: ['completed', 'cancelled'] } } }),
   }
 
   // Overdue count — vehicles where current stage exceeds SLA

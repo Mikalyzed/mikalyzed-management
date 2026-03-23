@@ -6,7 +6,7 @@ import { CALENDAR_TYPE_LABELS, CALENDAR_TYPE_COLORS } from '@/lib/calendar'
 
 type DashboardData = {
   user: { name: string; role: string; id: string }
-  pipeline: { mechanic: number; detailing: number; content: number; publish: number; completed: number }
+  pipeline: { mechanic: number; detailing: number; content: number; publish: number; completed: number; externalRepairs: number }
   overdue: number
   blocked: number
   myTasks: number
@@ -311,15 +311,22 @@ export default function DashboardPage() {
             <h2 style={{ fontSize: 18, fontWeight: 700 }}>Recon Pipeline</h2>
             <Link href="/vehicles" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>View all →</Link>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 10 }}>
-            {(['mechanic', 'detailing', 'content', 'publish', 'completed'] as const).map(stage => (
-              <div key={stage} className="pipeline-chip">
-                <p className="pipeline-chip-value" style={{ color: stage === 'completed' ? 'var(--success)' : undefined }}>
-                  {data.pipeline[stage]}
-                </p>
-                <p className="pipeline-chip-label">{STAGE_LABELS[stage] || 'Done'}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            {(['mechanic', 'detailing', 'content', 'publish'] as const).map(stage => (
+              <div key={stage} className="pipeline-chip" style={{ flex: '1 1 100px' }}>
+                <p className="pipeline-chip-value">{data.pipeline[stage]}</p>
+                <p className="pipeline-chip-label">{STAGE_LABELS[stage]}</p>
               </div>
             ))}
+            <div style={{ width: 1, height: 40, background: 'var(--border)', flexShrink: 0 }} />
+            <Link href="/external" style={{ flex: '1 1 100px', textDecoration: 'none', color: 'inherit' }}>
+              <div className="pipeline-chip">
+                <p className="pipeline-chip-value" style={{ color: data.pipeline.externalRepairs > 0 ? '#e67e22' : 'var(--text-muted)' }}>
+                  {data.pipeline.externalRepairs}
+                </p>
+                <p className="pipeline-chip-label">External</p>
+              </div>
+            </Link>
           </div>
         </div>
       )}
