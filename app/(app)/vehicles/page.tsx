@@ -20,6 +20,7 @@ type VehicleWithStage = {
     startedAt: string
     totalBlockedSeconds: number
     priority: number
+    estimatedHours: number | null
   }>
 }
 
@@ -207,7 +208,13 @@ export default function VehiclesPage() {
   function isOverdue(v: VehicleWithStage): boolean {
     if (v.status === 'completed') return false
     const stage = v.stages[0]
-    if (!stage) return false
+    if (!stage || stage.status !== 'in_progress') return false
+    // Use estimated hours if set, otherwise fall back to default SLA
+    const estHours = stage.estimatedHours
+    if (estHours) {
+      const elapsed = (Date.now() - new Date(stage.startedAt).getTime()) / 1000 - stage.totalBlockedSeconds
+      return elapsed > estHours * 3600
+    }
     const slaKey = v.status as keyof typeof DEFAULT_SLA_HOURS
     const sla = DEFAULT_SLA_HOURS[slaKey]
     if (!sla) return false

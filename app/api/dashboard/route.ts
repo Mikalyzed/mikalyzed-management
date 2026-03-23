@@ -39,7 +39,10 @@ export async function GET(request: Request) {
       blocked++
       continue
     }
-    const slaHours = DEFAULT_SLA_HOURS[stage.stage as keyof typeof DEFAULT_SLA_HOURS] || 24
+    if (stage.status !== 'in_progress') continue
+    // Use estimated hours if set, otherwise fall back to default SLA
+    const estHours = stage.estimatedHours
+    const slaHours = estHours || DEFAULT_SLA_HOURS[stage.stage as keyof typeof DEFAULT_SLA_HOURS] || 24
     const elapsed = (now.getTime() - stage.startedAt.getTime()) / 1000 - stage.totalBlockedSeconds
     if (elapsed > slaHours * 3600) overdue++
   }
