@@ -2,9 +2,34 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 
-const WORK_START = 9 // 9 AM
-const WORK_END = 19   // 7 PM
+const WORK_START = 9 // 9 AM ET
+const WORK_END = 19   // 7 PM ET
 const HOURS_PER_DAY = WORK_END - WORK_START // 10 hours
+const TZ = 'America/New_York'
+
+// Get hour (with fractional minutes) in ET
+function etHour(d: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(d)
+  const h = parseInt(parts.find(p => p.type === 'hour')!.value)
+  const m = parseInt(parts.find(p => p.type === 'minute')!.value)
+  return h + m / 60
+}
+
+// Get day-of-week in ET (0=Sun)
+function etDay(d: Date): number {
+  const wd = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short' }).format(d)
+  return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(wd)
+}
+
+// Set time to a specific ET hour (approximate — set UTC to ET equivalent)
+function setEtHour(d: Date, hour: number, min = 0): void {
+  // Get current ET offset by comparing
+  const utcStr = d.toLocaleString('en-US', { timeZone: 'UTC' })
+  const etStr = d.toLocaleString('en-US', { timeZone: TZ })
+  const diffMs = new Date(utcStr).getTime() - new Date(etStr).getTime()
+  const offsetHours = diffMs / 3600000 // positive means ET is behind UTC
+  d.setUTCHours(hour + offsetHours, min, 0, 0)
+}
 
 export async function GET() {
   const user = await getSessionUser()
@@ -24,23 +49,21 @@ export async function GET() {
   })
 
   // Build schedule blocks by stacking jobs sequentially
-  // Start from today at 9 AM or now (whichever is later during work hours)
+  // Start from now (if within work hours) or next work window
   const now = new Date()
   let cursor = new Date(now)
 
-  // If before work hours today, start at 9 AM
-  if (cursor.getHours() < WORK_START) {
-    cursor.setHours(WORK_START, 0, 0, 0)
-  }
-  // If after work hours, start next day 9 AM
-  if (cursor.getHours() >= WORK_END) {
+  const nowEtH = etHour(cursor)
+  if (nowEtH < WORK_START) {
+    setEtHour(cursor, WORK_START)
+  } else if (nowEtH >= WORK_END) {
     cursor.setDate(cursor.getDate() + 1)
-    cursor.setHours(WORK_START, 0, 0, 0)
+    setEtHour(cursor, WORK_START)
   }
   // Skip weekends
-  while (cursor.getDay() === 0 || cursor.getDay() === 6) {
+  while (etDay(cursor) === 0 || etDay(cursor) === 6) {
     cursor.setDate(cursor.getDate() + 1)
-    cursor.setHours(WORK_START, 0, 0, 0)
+    setEtHour(cursor, WORK_START)
   }
 
   // Sort: in_progress first, then blocked, then pending (by priority)
@@ -85,31 +108,41 @@ export async function GET() {
   return NextResponse.json({ schedule, workHours: { start: WORK_START, end: WORK_END } })
 }
 
-// Add work hours to a date, respecting 9-7 work window and skipping weekends
+// Add work hours to a date, respecting 9-7 ET work window and skipping weekends
 function addWorkHours(from: Date, hours: number): Date {
   const result = new Date(from)
   let remaining = hours
 
   while (remaining > 0) {
     // Skip weekends
-    while (result.getDay() === 0 || result.getDay() === 6) {
+    while (etDay(result) === 0 || etDay(result) === 6) {
       result.setDate(result.getDate() + 1)
-      result.setHours(WORK_START, 0, 0, 0)
+      setEtHour(result, WORK_START)
     }
+
+    const currentH = etHour(result)
 
     // If before work hours, jump to start
-    if (result.getHours() < WORK_START) {
-      result.setHours(WORK_START, 0, 0, 0)
+    if (currentH < WORK_START) {
+      setEtHour(result, WORK_START)
     }
 
-    const hoursLeftToday = WORK_END - result.getHours() - result.getMinutes() / 60
+    const hNow = etHour(result)
+    const hoursLeftToday = WORK_END - hNow
+    if (hoursLeftToday <= 0) {
+      result.setDate(result.getDate() + 1)
+      setEtHour(result, WORK_START)
+      continue
+    }
+
     if (remaining <= hoursLeftToday) {
-      result.setMinutes(result.getMinutes() + remaining * 60)
+      // Add remaining hours in milliseconds
+      result.setTime(result.getTime() + remaining * 3600000)
       remaining = 0
     } else {
       remaining -= hoursLeftToday
       result.setDate(result.getDate() + 1)
-      result.setHours(WORK_START, 0, 0, 0)
+      setEtHour(result, WORK_START)
     }
   }
 
