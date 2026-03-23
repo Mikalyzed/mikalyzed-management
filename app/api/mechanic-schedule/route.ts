@@ -53,23 +53,11 @@ export async function GET() {
 
   const schedule = stages.map(stage => {
     const hours = stage.estimatedHours || 2 // default 2 hours if not set
-    let startTime: Date
-    let endTime: Date
 
-    if (stage.status === 'in_progress') {
-      // In progress — started at startedAt, estimate end
-      startTime = new Date(stage.startedAt)
-      endTime = addWorkHours(startTime, hours)
-    } else if (stage.status === 'blocked') {
-      // Blocked — show at its started position but flagged
-      startTime = new Date(stage.blockedAt || stage.startedAt)
-      endTime = addWorkHours(startTime, hours)
-    } else {
-      // Pending — stack after cursor
-      startTime = new Date(cursor)
-      endTime = addWorkHours(cursor, hours)
-      cursor = new Date(endTime)
-    }
+    // All jobs stack forward from today — no historical dates
+    const startTime = new Date(cursor)
+    const endTime = addWorkHours(cursor, hours)
+    cursor = new Date(endTime)
 
     return {
       id: stage.id,
