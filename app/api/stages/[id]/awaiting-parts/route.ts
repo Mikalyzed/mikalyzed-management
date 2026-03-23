@@ -8,7 +8,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { id } = await params
   const body = await req.json()
-  const { awaitingParts, expectedDate } = body
+  const { awaitingParts, expectedDate, partName, trackingNumber } = body
 
   const stage = await prisma.vehicleStage.findUnique({ where: { id } })
   if (!stage) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -20,6 +20,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         awaitingParts: true,
         awaitingPartsDate: expectedDate ? new Date(expectedDate) : null,
         awaitingPartsSince: new Date(),
+        awaitingPartsName: partName || null,
+        awaitingPartsTracking: trackingNumber || null,
         status: 'blocked',
       },
     })
@@ -42,6 +44,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           awaitingParts: false,
           awaitingPartsDate: null,
           awaitingPartsSince: null,
+          awaitingPartsName: null,
+          awaitingPartsTracking: null,
           status: 'in_progress',
           priority: 0,
         },

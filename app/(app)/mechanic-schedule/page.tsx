@@ -28,6 +28,8 @@ type AwaitingPart = {
   status: string
   awaitingPartsDate: string | null
   awaitingPartsSince: string | null
+  awaitingPartsName: string | null
+  awaitingPartsTracking: string | null
 }
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
@@ -51,6 +53,8 @@ export default function MechanicSchedulePage() {
   const [completing, setCompleting] = useState(false)
   const [showAwaitingPrompt, setShowAwaitingPrompt] = useState(false)
   const [expectedDate, setExpectedDate] = useState('')
+  const [partName, setPartName] = useState('')
+  const [trackingNumber, setTrackingNumber] = useState('')
 
   const fetchSchedule = useCallback(() => {
     fetch('/api/mechanic-schedule').then(r => r.json()).then(d => {
@@ -109,9 +113,16 @@ export default function MechanicSchedulePage() {
     await fetch(`/api/stages/${selectedBlock.id}/awaiting-parts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ awaitingParts: true, expectedDate: expectedDate || undefined }),
+      body: JSON.stringify({
+        awaitingParts: true,
+        expectedDate: expectedDate || undefined,
+        partName: partName || undefined,
+        trackingNumber: trackingNumber || undefined,
+      }),
     })
     setSaving(false)
+    setPartName('')
+    setTrackingNumber('')
     closeModal()
     fetchSchedule()
   }
@@ -134,11 +145,12 @@ export default function MechanicSchedulePage() {
     days.get(day)!.push(block)
   })
 
-  // Stats
-  const totalHours = schedule.reduce((sum, b) => sum + (b.estimatedHours || 2), 0)
-  const inProgress = schedule.find(b => b.status === 'in_progress')
-  const queuedCount = schedule.filter(b => b.status === 'pending').length
-  const blockedCount = schedule.filter(b => b.status === 'blocked').length
+  // Stats — deduplicate continuation segments (only count unique vehicle stage IDs)
+  const uniqueBlocks = schedule.filter(b => !b.isContination)
+  const totalHours = uniqueBlocks.reduce((sum, b) => sum + (b.estimatedHours || 2), 0)
+  const inProgress = uniqueBlocks.find(b => b.status === 'in_progress')
+  const queuedCount = uniqueBlocks.filter(b => b.status === 'pending').length
+  const blockedCount = uniqueBlocks.filter(b => b.status === 'blocked').length
 
   const allDone = modalChecklist.length > 0 && modalChecklist.every(c => c.done)
 
@@ -151,7 +163,7 @@ export default function MechanicSchedulePage() {
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 10, marginBottom: 24 }}>
         <div className="pipeline-chip">
-          <p className="pipeline-chip-value">{schedule.length}</p>
+          <p className="pipeline-chip-value">{uniqueBlocks.length}</p>
           <p className="pipeline-chip-label">Total Jobs</p>
         </div>
         <div className="pipeline-chip">
@@ -198,7 +210,9 @@ export default function MechanicSchedulePage() {
                     <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                       {desc}{v.color ? ` · ${v.color}` : ''}
                     </p>
+                    {ap.awaitingPartsName && <p style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>{ap.awaitingPartsName}</p>}
                     {expDate && <p style={{ fontSize: 12, color: '#92400e' }}>Expected: {expDate}</p>}
+                    {ap.awaitingPartsTracking && <p style={{ fontSize: 11, color: '#b45309' }}>Tracking: {ap.awaitingPartsTracking}</p>}
                   </div>
                   <button
                     onClick={() => partsArrived(ap.id)}
@@ -426,11 +440,33 @@ export default function MechanicSchedulePage() {
             {/* Awaiting Parts Prompt */}
             {showAwaitingPrompt ? (
               <div style={{ marginBottom: 16, padding: 16, background: '#fffbeb', borderRadius: 12, border: '1px solid #f59e0b' }}>
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#92400e' }}>What part was ordered?</p>
+                <input
+                  type="text"
+                  placeholder="e.g. Brake pads, alternator..."
+                  value={partName}
+                  onChange={e => setPartName(e.target.value)}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e5e5',
+                    fontSize: 14, marginBottom: 10, boxSizing: 'border-box',
+                  }}
+                />
                 <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#92400e' }}>Expected delivery date (optional)</p>
                 <input
                   type="date"
                   value={expectedDate}
                   onChange={e => setExpectedDate(e.target.value)}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e5e5',
+                    fontSize: 14, marginBottom: 10, boxSizing: 'border-box',
+                  }}
+                />
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#92400e' }}>Tracking number (optional)</p>
+                <input
+                  type="text"
+                  placeholder="Tracking #"
+                  value={trackingNumber}
+                  onChange={e => setTrackingNumber(e.target.value)}
                   style={{
                     width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e5e5',
                     fontSize: 14, marginBottom: 10, boxSizing: 'border-box',

@@ -162,6 +162,8 @@ export async function GET() {
     status: s.status,
     awaitingPartsDate: s.awaitingPartsDate?.toISOString() || null,
     awaitingPartsSince: s.awaitingPartsSince?.toISOString() || null,
+    awaitingPartsName: s.awaitingPartsName || null,
+    awaitingPartsTracking: s.awaitingPartsTracking || null,
   }))
 
   return NextResponse.json({ schedule: flattened, awaitingParts, workHours: { start: WORK_START, end: WORK_END } })
