@@ -19,6 +19,7 @@ type ScheduleBlock = {
   isContination?: boolean
   segmentIndex?: number
   totalSegments?: number
+  pauseReason?: string | null
 }
 
 type AwaitingPart = {
@@ -55,6 +56,14 @@ export default function MechanicSchedulePage() {
   const [expectedDate, setExpectedDate] = useState('')
   const [partName, setPartName] = useState('')
   const [trackingNumber, setTrackingNumber] = useState('')
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [newTaskName, setNewTaskName] = useState('')
+  const [newTaskHours, setNewTaskHours] = useState('')
+  const [noExtraHours, setNoExtraHours] = useState(false)
+  const [addingTask, setAddingTask] = useState(false)
+  const [showPausePrompt, setShowPausePrompt] = useState(false)
+  const [pauseReason, setPauseReason] = useState('')
+  const [startingNext, setStartingNext] = useState(false)
 
   const fetchSchedule = useCallback(() => {
     fetch('/api/mechanic-schedule').then(r => r.json()).then(d => {
@@ -72,6 +81,14 @@ export default function MechanicSchedulePage() {
     setModalChecklist(JSON.parse(JSON.stringify(block.checklist || [])))
     setShowAwaitingPrompt(false)
     setExpectedDate('')
+    setPartName('')
+    setTrackingNumber('')
+    setShowAddTask(false)
+    setNewTaskName('')
+    setNewTaskHours('')
+    setNoExtraHours(false)
+    setShowPausePrompt(false)
+    setPauseReason('')
   }
 
   const closeModal = () => {
@@ -127,6 +144,46 @@ export default function MechanicSchedulePage() {
     fetchSchedule()
   }
 
+  // Add task to checklist
+  const addTask = async () => {
+    if (!selectedBlock || !newTaskName.trim()) return
+    setAddingTask(true)
+    const updatedChecklist = [...modalChecklist, { item: newTaskName.trim(), done: false, note: '' }]
+    const extraHours = noExtraHours ? 0 : parseFloat(newTaskHours) || 0
+    const body: Record<string, unknown> = { checklist: updatedChecklist }
+    if (extraHours > 0) {
+      body.estimatedHours = (selectedBlock.estimatedHours || 2) + extraHours
+    }
+    await fetch(`/api/stages/${selectedBlock.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    setModalChecklist(updatedChecklist)
+    setNewTaskName('')
+    setNewTaskHours('')
+    setNoExtraHours(false)
+    setShowAddTask(false)
+    setAddingTask(false)
+    fetchSchedule()
+  }
+
+  // Start next vehicle
+  const startNextVehicle = async () => {
+    if (!selectedBlock || !pauseReason.trim()) return
+    setStartingNext(true)
+    await fetch(`/api/stages/${selectedBlock.id}/start-next`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pauseReason: pauseReason.trim() }),
+    })
+    setStartingNext(false)
+    setShowPausePrompt(false)
+    setPauseReason('')
+    closeModal()
+    fetchSchedule()
+  }
+
   // Parts arrived
   const partsArrived = async (stageId: string) => {
     await fetch(`/api/stages/${stageId}/awaiting-parts`, {
@@ -148,7 +205,7 @@ export default function MechanicSchedulePage() {
   // Stats — deduplicate continuation segments (only count unique vehicle stage IDs)
   const uniqueBlocks = schedule.filter(b => !b.isContination)
   const totalHours = uniqueBlocks.reduce((sum, b) => sum + (b.estimatedHours || 2), 0)
-  const inProgress = uniqueBlocks.find(b => b.status === 'in_progress')
+  const inProgressCount = uniqueBlocks.filter(b => b.status === 'in_progress').length
   const queuedCount = uniqueBlocks.filter(b => b.status === 'pending').length
   const blockedCount = uniqueBlocks.filter(b => b.status === 'blocked').length
 
@@ -167,7 +224,7 @@ export default function MechanicSchedulePage() {
           <p className="pipeline-chip-label">Total Jobs</p>
         </div>
         <div className="pipeline-chip">
-          <p className="pipeline-chip-value" style={{ color: '#3b82f6' }}>{inProgress ? 1 : 0}</p>
+          <p className="pipeline-chip-value" style={{ color: '#3b82f6' }}>{inProgressCount}</p>
           <p className="pipeline-chip-label">Active</p>
         </div>
         <div className="pipeline-chip">
@@ -297,6 +354,11 @@ export default function MechanicSchedulePage() {
                                 <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                                   {desc}{vehicle.color ? ` · ${vehicle.color}` : ''}
                                 </p>
+                                {block.pauseReason && (
+                                  <p style={{ fontSize: 11, fontWeight: 600, color: '#f59e0b', marginTop: 4 }}>
+                                    Paused: {block.pauseReason}
+                                  </p>
+                                )}
                               </div>
                               <span style={{
                                 fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
@@ -436,6 +498,139 @@ export default function MechanicSchedulePage() {
                 </div>
               )}
             </div>
+
+            {/* Add Task */}
+            <div style={{ marginBottom: 16 }}>
+              {!showAddTask ? (
+                <button
+                  onClick={() => setShowAddTask(true)}
+                  style={{
+                    width: '100%', padding: '10px 0', borderRadius: 10, border: '1px dashed #d1d5db',
+                    background: 'transparent', color: 'var(--text-secondary)', fontWeight: 600,
+                    fontSize: 13, cursor: 'pointer',
+                  }}
+                >
+                  + Add Task
+                </button>
+              ) : (
+                <div style={{ padding: 14, background: '#f8f8f6', borderRadius: 12, border: '1px solid #e5e5e5' }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--text-secondary)' }}>New Task</p>
+                  <input
+                    type="text"
+                    placeholder="Task name"
+                    value={newTaskName}
+                    onChange={e => setNewTaskName(e.target.value)}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e5e5',
+                      fontSize: 14, marginBottom: 10, boxSizing: 'border-box',
+                    }}
+                  />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 10, cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={noExtraHours}
+                      onChange={e => setNoExtraHours(e.target.checked)}
+                      style={{ width: 16, height: 16 }}
+                    />
+                    No additional hours needed
+                  </label>
+                  {!noExtraHours && (
+                    <input
+                      type="number"
+                      placeholder="Additional hours"
+                      step="0.5"
+                      min="0"
+                      value={newTaskHours}
+                      onChange={e => setNewTaskHours(e.target.value)}
+                      style={{
+                        width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e5e5',
+                        fontSize: 14, marginBottom: 10, boxSizing: 'border-box',
+                      }}
+                    />
+                  )}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={addTask}
+                      disabled={!newTaskName.trim() || addingTask}
+                      style={{
+                        flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+                        background: newTaskName.trim() ? '#dffd6e' : '#e5e5e5',
+                        color: '#1a1a1a', fontWeight: 700, fontSize: 13,
+                        cursor: newTaskName.trim() ? 'pointer' : 'not-allowed',
+                        opacity: addingTask ? 0.6 : 1,
+                      }}
+                    >
+                      {addingTask ? 'Adding...' : 'Add'}
+                    </button>
+                    <button
+                      onClick={() => { setShowAddTask(false); setNewTaskName(''); setNewTaskHours(''); setNoExtraHours(false) }}
+                      style={{
+                        padding: '10px 16px', borderRadius: 10, border: '1px solid #e5e5e5',
+                        background: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Start Next Vehicle */}
+            {selectedBlock.status === 'in_progress' && queuedCount > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                {!showPausePrompt ? (
+                  <button
+                    onClick={() => setShowPausePrompt(true)}
+                    style={{
+                      width: '100%', padding: '12px 0', borderRadius: 12, border: '1px solid #3b82f6',
+                      background: '#eff6ff', color: '#1e40af', fontWeight: 700, fontSize: 14,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Start Next Vehicle
+                  </button>
+                ) : (
+                  <div style={{ padding: 14, background: '#eff6ff', borderRadius: 12, border: '1px solid #3b82f6' }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#1e40af' }}>Why are you pausing this vehicle?</p>
+                    <input
+                      type="text"
+                      placeholder="e.g. Waiting for bed to dry"
+                      value={pauseReason}
+                      onChange={e => setPauseReason(e.target.value)}
+                      style={{
+                        width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e5e5',
+                        fontSize: 14, marginBottom: 10, boxSizing: 'border-box',
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={startNextVehicle}
+                        disabled={!pauseReason.trim() || startingNext}
+                        style={{
+                          flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+                          background: pauseReason.trim() ? '#3b82f6' : '#e5e5e5',
+                          color: '#fff', fontWeight: 700, fontSize: 13,
+                          cursor: pauseReason.trim() ? 'pointer' : 'not-allowed',
+                          opacity: startingNext ? 0.6 : 1,
+                        }}
+                      >
+                        {startingNext ? 'Starting...' : 'Confirm'}
+                      </button>
+                      <button
+                        onClick={() => { setShowPausePrompt(false); setPauseReason('') }}
+                        style={{
+                          padding: '10px 16px', borderRadius: 10, border: '1px solid #e5e5e5',
+                          background: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Awaiting Parts Prompt */}
             {showAwaitingPrompt ? (

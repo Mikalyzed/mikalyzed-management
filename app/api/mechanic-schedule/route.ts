@@ -138,6 +138,7 @@ export async function GET() {
       // Split into day segments for display
       segments: splitIntoDays(startTime, endTime),
       priority: stage.priority,
+      pauseReason: stage.pauseReason || null,
     }
   })
 
