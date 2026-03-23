@@ -5,6 +5,12 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 type NavItem = { href: string; label: string; icon: string }
+type NavGroup = { label: string; icon: string; children: NavItem[] }
+type NavEntry = NavItem | NavGroup
+
+function isGroup(entry: NavEntry): entry is NavGroup {
+  return 'children' in entry
+}
 
 const ICONS: Record<string, string> = {
   dashboard: 'M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z',
@@ -23,6 +29,9 @@ const ICONS: Record<string, string> = {
   leads: 'M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6',
   contacts: 'M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z',
   pipelines: 'M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z',
+  sales: 'M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z',
+  chevron_down: 'm19.5 8.25-7.5 7.5-7.5-7.5',
+  chevron_right: 'm8.25 4.5 7.5 7.5-7.5 7.5',
 }
 
 const ICON_MAP: Record<string, string> = {
@@ -41,11 +50,12 @@ const ICON_MAP: Record<string, string> = {
   '/team': 'team',
   '/settings': 'settings',
   '/tasks': 'tasks',
+  '/task-board': 'tasks',
+  '/mechanic-schedule': 'calendar',
 }
 
-function NavIcon({ href, size = 20 }: { href: string; size?: number }) {
-  const iconKey = ICON_MAP[href] || 'dashboard'
-  const d = ICONS[iconKey]
+function NavIcon({ name, size = 20 }: { name: string; size?: number }) {
+  const d = ICONS[name] || ICONS.dashboard
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
       <path d={d} />
@@ -53,14 +63,18 @@ function NavIcon({ href, size = 20 }: { href: string; size?: number }) {
   )
 }
 
-const NAV_ITEMS: Record<string, NavItem[]> = {
+const NAV_ITEMS: Record<string, NavEntry[]> = {
   admin: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { href: '/vehicles', label: 'Recon Board', icon: 'board' },
     { href: '/transport', label: 'Transport', icon: 'transport' },
-    { href: '/leads', label: 'Leads', icon: 'leads' },
-    { href: '/contacts', label: 'Contacts', icon: 'contacts' },
-    { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
+    {
+      label: 'Sales', icon: 'sales', children: [
+        { href: '/leads', label: 'Leads', icon: 'leads' },
+        { href: '/contacts', label: 'Contacts', icon: 'contacts' },
+        { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
+      ],
+    },
     { href: '/task-board', label: 'Task Board', icon: 'tasks' },
     { href: '/mechanic-schedule', label: 'Mechanic Schedule', icon: 'calendar' },
     { href: '/external', label: 'External Repairs', icon: 'external' },
@@ -100,6 +114,71 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
   ],
 }
 
+function NavLink({ item, active, onClick, indent = false }: { item: NavItem; active: boolean; onClick?: () => void; indent?: boolean }) {
+  return (
+    <Link href={item.href} onClick={onClick} style={{
+      display: 'flex', alignItems: 'center', gap: indent ? 10 : 14,
+      padding: indent ? '8px 14px 8px 48px' : '10px 14px', borderRadius: 10,
+      fontSize: indent ? 13 : 14, fontWeight: active ? 600 : 500,
+      color: active ? '#dffd6e' : '#808080',
+      background: active ? 'rgba(223, 253, 110, 0.1)' : 'transparent',
+      textDecoration: 'none', transition: 'all 0.15s ease', minHeight: indent ? 36 : 42,
+    }}
+      onMouseEnter={(e) => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#b0b0b0' } }}
+      onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#808080' } }}
+    >
+      {!indent && <NavIcon name={ICON_MAP[item.href] || item.icon} size={20} />}
+      {item.label}
+    </Link>
+  )
+}
+
+function NavGroupSection({ group, pathname, onClick }: { group: NavGroup; pathname: string; onClick?: () => void }) {
+  const childPaths = group.children.map(c => c.href)
+  const hasActive = childPaths.some(h => pathname === h || pathname.startsWith(h + '/'))
+  const [open, setOpen] = useState(hasActive)
+
+  // Auto-open when navigating to a child
+  useEffect(() => { if (hasActive) setOpen(true) }, [hasActive])
+
+  return (
+    <div>
+      <button onClick={() => setOpen(!open)} style={{
+        display: 'flex', alignItems: 'center', gap: 14,
+        padding: '10px 14px', borderRadius: 10, width: '100%',
+        fontSize: 14, fontWeight: hasActive ? 600 : 500, border: 'none', cursor: 'pointer',
+        color: hasActive ? '#dffd6e' : '#808080',
+        background: 'transparent',
+        transition: 'all 0.15s ease', minHeight: 42,
+      }}
+        onMouseEnter={(e) => { if (!hasActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#b0b0b0' } }}
+        onMouseLeave={(e) => { if (!hasActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = hasActive ? '#dffd6e' : '#808080' } }}
+      >
+        <NavIcon name={group.icon} size={20} />
+        <span style={{ flex: 1, textAlign: 'left' }}>{group.label}</span>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+          style={{ transition: 'transform 0.2s ease', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}
+        >
+          <path d={ICONS.chevron_down} />
+        </svg>
+      </button>
+      {open && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {group.children.map(child => (
+            <NavLink
+              key={child.href}
+              item={child}
+              active={pathname === child.href || pathname.startsWith(child.href + '/')}
+              onClick={onClick}
+              indent
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Nav({ role, userName }: { role: string; userName: string }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -109,9 +188,18 @@ export default function Nav({ role, userName }: { role: string; userName: string
   // Close menu on navigation
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
+  function renderNavEntries(entries: NavEntry[], onItemClick?: () => void) {
+    return entries.map((entry, i) => {
+      if (isGroup(entry)) {
+        return <NavGroupSection key={entry.label} group={entry} pathname={pathname} onClick={onItemClick} />
+      }
+      return <NavLink key={entry.href} item={entry} active={isActive(entry.href)} onClick={onItemClick} />
+    })
+  }
+
   return (
     <>
-      {/* Desktop sidebar — unchanged */}
+      {/* Desktop sidebar */}
       <aside className="desktop-sidebar" style={{
         position: 'fixed', left: 0, top: 0, bottom: 0, width: 260,
         background: '#141414', flexDirection: 'column', zIndex: 40,
@@ -129,25 +217,8 @@ export default function Nav({ role, userName }: { role: string; userName: string
             </div>
           </div>
         </div>
-        <nav style={{ flex: 1, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {items.map((item) => {
-            const active = isActive(item.href)
-            return (
-              <Link key={item.href} href={item.href} style={{
-                display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', borderRadius: 10,
-                fontSize: 14, fontWeight: active ? 600 : 500,
-                color: active ? '#dffd6e' : '#808080',
-                background: active ? 'rgba(223, 253, 110, 0.1)' : 'transparent',
-                textDecoration: 'none', transition: 'all 0.15s ease', minHeight: 42,
-              }}
-                onMouseEnter={(e) => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#b0b0b0' } }}
-                onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#808080' } }}
-              >
-                <NavIcon href={item.href} size={20} />
-                {item.label}
-              </Link>
-            )
-          })}
+        <nav style={{ flex: 1, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+          {renderNavEntries(items)}
         </nav>
         <div style={{ padding: '16px 16px 20px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
@@ -169,7 +240,7 @@ export default function Nav({ role, userName }: { role: string; userName: string
         </div>
       </aside>
 
-      {/* Mobile: top bar with hamburger — hidden when drawer is open */}
+      {/* Mobile: top bar with hamburger */}
       {!mobileOpen && (
         <div className="mobile-topbar" style={{
           position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
@@ -193,14 +264,13 @@ export default function Nav({ role, userName }: { role: string; userName: string
         </div>
       )}
 
-      {/* Mobile: side drawer */}
-      {/* Backdrop */}
+      {/* Mobile: backdrop */}
       <div onClick={() => setMobileOpen(false)} className="mobile-only" style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 59,
         opacity: mobileOpen ? 1 : 0, pointerEvents: mobileOpen ? 'auto' : 'none',
         transition: 'opacity 0.25s ease',
       }} />
-      {/* Drawer */}
+      {/* Mobile: side drawer */}
       <aside className="mobile-only" style={{
         position: 'fixed', top: 0, left: 0, bottom: 0, width: 280, zIndex: 60,
         background: '#141414', display: 'flex', flexDirection: 'column',
@@ -208,7 +278,6 @@ export default function Nav({ role, userName }: { role: string; userName: string
         transition: 'transform 0.25s ease',
         paddingTop: 'env(safe-area-inset-top)',
       }}>
-        {/* Header with close */}
         <div style={{ padding: '20px 20px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
@@ -229,26 +298,10 @@ export default function Nav({ role, userName }: { role: string; userName: string
           </button>
         </div>
 
-        {/* Nav items */}
         <nav style={{ flex: 1, padding: '4px 10px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
-          {items.map((item) => {
-            const active = isActive(item.href)
-            return (
-              <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} style={{
-                display: 'flex', alignItems: 'center', gap: 14, padding: '11px 14px', borderRadius: 10,
-                fontSize: 15, fontWeight: active ? 600 : 500,
-                color: active ? '#dffd6e' : '#888',
-                background: active ? 'rgba(223, 253, 110, 0.1)' : 'transparent',
-                textDecoration: 'none', minHeight: 44,
-              }}>
-                <NavIcon href={item.href} size={20} />
-                {item.label}
-              </Link>
-            )
-          })}
+          {renderNavEntries(items, () => setMobileOpen(false))}
         </nav>
 
-        {/* User footer */}
         <div style={{ padding: '14px 16px 20px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingBottom: 'max(20px, env(safe-area-inset-bottom))' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
