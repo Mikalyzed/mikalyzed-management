@@ -212,9 +212,40 @@ export default function VehicleDetailPage() {
               <label className="form-label">Notes</label>
               <textarea className="input" rows={2} value={editInfo.notes} onChange={e => setEditInfo({ ...editInfo, notes: e.target.value })} style={{ resize: 'vertical' }} />
             </div>
+            {/* Stage settings */}
+            {currentStage && (
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginBottom: 8 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                  Stage Settings
+                </p>
+                <div className="form-row" style={{ marginBottom: 8, gap: 8 }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label">Status</label>
+                    <select className="input" id="edit-stage-status" defaultValue={currentStage.status} style={{ fontSize: 13 }}>
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="blocked">Blocked</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label">Est. Hours</label>
+                    <input type="number" className="input" id="edit-stage-hours" step="0.5" min="0" placeholder="e.g. 4"
+                      defaultValue={currentStage.estimatedHours || ''} style={{ fontSize: 13 }} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 8 }}>
+                  <label className="form-label">Due Date</label>
+                  <input type="date" className="input" id="edit-stage-due"
+                    defaultValue={currentStage.dueDate ? new Date(currentStage.dueDate).toISOString().split('T')[0] : ''}
+                    style={{ fontSize: 13 }} />
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setEditingInfo(false)} className="btn btn-secondary" style={{ fontSize: 13 }}>Cancel</button>
               <button onClick={async () => {
+                // Save vehicle info
                 await fetch(`/api/vehicles/${vehicle.id}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
@@ -229,6 +260,21 @@ export default function VehicleDetailPage() {
                     notes: editInfo.notes || null,
                   }),
                 })
+                // Save stage settings
+                if (currentStage) {
+                  const status = (document.getElementById('edit-stage-status') as HTMLSelectElement)?.value
+                  const hours = (document.getElementById('edit-stage-hours') as HTMLInputElement)?.value
+                  const due = (document.getElementById('edit-stage-due') as HTMLInputElement)?.value
+                  await fetch(`/api/stages/${currentStage.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      status,
+                      estimatedHours: hours || null,
+                      dueDate: due || null,
+                    }),
+                  })
+                }
                 setEditingInfo(false)
                 refresh()
               }} className="btn btn-primary" style={{ fontSize: 13 }}>Save</button>
@@ -339,53 +385,6 @@ export default function VehicleDetailPage() {
           marginBottom: '16px',
           boxShadow: 'var(--shadow-sm)',
         }}>
-          {/* Schedule fields (admin only — inside edit mode) */}
-          {isAdmin && editing && (() => {
-            const stageEditId = `stage-edit-${currentStage.id}`
-            return (
-              <div style={{ marginBottom: 16, padding: 14, background: 'var(--bg-primary)', borderRadius: 10 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-                  Stage Settings
-                </p>
-                <div className="form-row" style={{ marginBottom: 8, gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <label className="form-label">Status</label>
-                    <select className="input" id={`${stageEditId}-status`} defaultValue={currentStage.status} style={{ fontSize: 13 }}>
-                      <option value="pending">Pending</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="blocked">Blocked</option>
-                    </select>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label className="form-label">Est. Hours</label>
-                    <input type="number" className="input" id={`${stageEditId}-hours`} step="0.5" min="0" placeholder="e.g. 4"
-                      defaultValue={currentStage.estimatedHours || ''} style={{ fontSize: 13 }} />
-                  </div>
-                </div>
-                <div style={{ marginBottom: 8 }}>
-                  <label className="form-label">Due Date</label>
-                  <input type="date" className="input" id={`${stageEditId}-due`}
-                    defaultValue={currentStage.dueDate ? new Date(currentStage.dueDate).toISOString().split('T')[0] : ''}
-                    style={{ fontSize: 13 }} />
-                </div>
-                <button onClick={async () => {
-                  const status = (document.getElementById(`${stageEditId}-status`) as HTMLSelectElement)?.value
-                  const hours = (document.getElementById(`${stageEditId}-hours`) as HTMLInputElement)?.value
-                  const due = (document.getElementById(`${stageEditId}-due`) as HTMLInputElement)?.value
-                  await fetch(`/api/stages/${currentStage.id}`, {
-                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      status,
-                      estimatedHours: hours || null,
-                      dueDate: due || null,
-                    }),
-                  })
-                  refresh()
-                }} className="btn btn-primary" style={{ fontSize: 12, padding: '6px 16px' }}>Save Stage Settings</button>
-              </div>
-            )
-          })()}
-
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Tasks ({currentStage.checklist.filter(c => c.done).length}/{currentStage.checklist.length})
