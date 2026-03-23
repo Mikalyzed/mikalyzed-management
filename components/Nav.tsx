@@ -61,6 +61,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { href: '/leads', label: 'Leads', icon: 'leads' },
     { href: '/contacts', label: 'Contacts', icon: 'contacts' },
     { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
+    { href: '/task-board', label: 'Task Board', icon: 'tasks' },
     { href: '/external', label: 'External Repairs', icon: 'external' },
     { href: '/calendar', label: 'Calendar', icon: 'calendar' },
     { href: '/events', label: 'Events', icon: 'events' },
@@ -83,6 +84,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { href: '/tasks', label: 'My Tasks', icon: 'tasks' },
     { href: '/vehicles', label: 'Board', icon: 'board' },
+    { href: '/task-board', label: 'Task Board', icon: 'tasks' },
   ],
   sales: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },

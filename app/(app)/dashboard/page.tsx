@@ -26,6 +26,9 @@ type DashboardData = {
     vehicle: { id: string; stockNumber: string; make: string; model: string } | null
     event: { id: string; name: string } | null
   }>
+  myBoardTasks: Array<{
+    id: string; title: string; category: string; status: string; priority: number; dueDate: string | null
+  }>
   upcomingEvents: Array<{
     id: string; name: string; date: string; status: string
     owner: { id: string; name: string }
@@ -42,16 +45,18 @@ function MyAssignments({ data }: { data: DashboardData }) {
   const hasRecon = data.myReconTasks.length > 0
   const hasEvents = data.myEventTasks.length > 0
   const hasCalendar = data.myCalendarItems.length > 0
+  const hasBoardTasks = (data.myBoardTasks || []).length > 0
 
   // Count how many categories have items
-  const categories = [hasRecon, hasEvents, hasCalendar].filter(Boolean).length
+  const categories = [hasRecon, hasEvents, hasCalendar, hasBoardTasks].filter(Boolean).length
   const showTabs = categories > 1
 
-  const [filter, setFilter] = useState<'all' | 'recon' | 'events' | 'calendar'>('all')
+  const [filter, setFilter] = useState<'all' | 'recon' | 'events' | 'calendar' | 'tasks'>('all')
 
   const tabs: { key: typeof filter; label: string; count: number }[] = []
-  tabs.push({ key: 'all', label: 'All', count: data.myReconTasks.length + data.myEventTasks.length + data.myCalendarItems.length })
-  if (hasRecon) tabs.push({ key: 'recon', label: 'Recon Board', count: data.myReconTasks.length })
+  tabs.push({ key: 'all', label: 'All', count: data.myReconTasks.length + data.myEventTasks.length + data.myCalendarItems.length + (data.myBoardTasks || []).length })
+  if (hasRecon) tabs.push({ key: 'recon', label: 'Recon', count: data.myReconTasks.length })
+  if (hasBoardTasks) tabs.push({ key: 'tasks', label: 'Tasks', count: (data.myBoardTasks || []).length })
   if (hasEvents) tabs.push({ key: 'events', label: 'Events', count: data.myEventTasks.length })
   if (hasCalendar) tabs.push({ key: 'calendar', label: 'Calendar', count: data.myCalendarItems.length })
 
@@ -211,6 +216,40 @@ function MyAssignments({ data }: { data: DashboardData }) {
             })}
           </>
         )}
+
+        {/* Board Tasks */}
+        {(filter === 'all' || filter === 'tasks') && hasBoardTasks && (
+          <>
+            {filter === 'all' && categories > 1 && (
+              <div className="section-label" style={{ marginTop: 12 }}>Tasks</div>
+            )}
+            {(data.myBoardTasks || []).map(task => {
+              const catColors: Record<string, string> = { content: '#8b5cf6', marketing: '#3b82f6', admin: '#64748b', operations: '#f59e0b' }
+              const catLabels: Record<string, string> = { content: 'Content', marketing: 'Marketing', admin: 'Admin', operations: 'Operations' }
+              const color = catColors[task.category] || '#888'
+              return (
+                <Link key={task.id} href="/task-board" style={{ textDecoration: 'none', color: 'inherit' }}>
+                  <div className="card" style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, borderLeft: `4px solid ${color}` }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{task.title}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {catLabels[task.category] || task.category}
+                        {task.dueDate && ` · Due ${new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 6,
+                      background: task.priority === 2 ? '#fef2f2' : task.priority === 1 ? '#fffbeb' : `${color}15`,
+                      color: task.priority === 2 ? '#ef4444' : task.priority === 1 ? '#f59e0b' : color,
+                    }}>
+                      {task.priority === 2 ? 'Urgent' : task.priority === 1 ? 'High' : catLabels[task.category] || 'Task'}
+                    </span>
+                  </div>
+                </Link>
+              )
+            })}
+          </>
+        )}
       </div>
     </div>
   )
@@ -291,7 +330,7 @@ export default function DashboardPage() {
   }
 
   const isAdmin = data.user.role === 'admin'
-  const hasAssignments = data.myReconTasks.length > 0 || data.myEventTasks.length > 0 || data.myCalendarItems.length > 0
+  const hasAssignments = data.myReconTasks.length > 0 || data.myEventTasks.length > 0 || data.myCalendarItems.length > 0 || (data.myBoardTasks || []).length > 0
 
   return (
     <div>

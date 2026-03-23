@@ -123,6 +123,16 @@ export async function GET(request: Request) {
     take: 10,
   })
 
+  // Board tasks assigned to me
+  const myBoardTasks = await prisma.task.findMany({
+    where: {
+      assigneeId: user.id,
+      status: { not: 'done' },
+    },
+    orderBy: [{ priority: 'desc' }, { dueDate: 'asc' }, { createdAt: 'desc' }],
+    take: 10,
+  })
+
   // Upcoming events (for admin)
   const upcomingEvents = user.role === 'admin' ? await prisma.event.findMany({
     where: {
@@ -161,6 +171,7 @@ export async function GET(request: Request) {
     myReconTasks,
     myEventTasks,
     myCalendarItems,
+    myBoardTasks,
     upcomingEvents: upcomingEventsWithProgress,
   })
 }

@@ -35,6 +35,8 @@ model User {
   assignedOppTasks OpportunityTask[] @relation("OppTaskAssignee")
   createdOppTasks  OpportunityTask[] @relation("OppTaskCreatedBy")
   activityActions  ActivityEvent[]   @relation("ActivityActor")
+  assignedTasks    Task[]            @relation("TaskAssignee")
+  createdTasks     Task[]            @relation("TaskCreator")
 
   @@map("users")
 }
@@ -194,6 +196,29 @@ model StageConfig {
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@map("stage_config")
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  category    String    @default("content") // content, marketing, admin, operations
+  status      String    @default("todo") // todo, in_progress, done
+  priority    Int       @default(0) // 0=normal, 1=high, 2=urgent
+  assigneeId  String?   @map("assignee_id")
+  createdById String    @map("created_by_id")
+  dueDate     DateTime? @map("due_date")
+  completedAt DateTime? @map("completed_at")
+  sortOrder   Int       @default(0) @map("sort_order")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  assignee    User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy   User      @relation("TaskCreator", fields: [createdById], references: [id])
+
+  @@index([assigneeId])
+  @@index([status])
+  @@map("tasks_board")
 }
 
 model StageTemplate {
