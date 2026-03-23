@@ -332,14 +332,14 @@ export default function MechanicSchedulePage() {
           onClick={closeModal}
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-            zIndex: 1000, padding: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 20,
           }}
         >
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 500,
+              background: '#fff', borderRadius: 20, width: '100%', maxWidth: 500,
               maxHeight: '85vh', overflow: 'auto', padding: '24px 20px',
               boxShadow: '0 -4px 30px rgba(0,0,0,0.15)',
             }}
