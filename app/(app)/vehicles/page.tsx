@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import VehicleCard from '@/components/VehicleCard'
+import KanbanScrollbar from '@/components/KanbanScrollbar'
 import { STAGE_LABELS, DEFAULT_SLA_HOURS } from '@/lib/constants'
 
 type VehicleWithStage = {
@@ -33,6 +34,7 @@ export default function VehiclesPage() {
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const dragGhostRef = useRef<HTMLDivElement | null>(null)
   const originalOrderRef = useRef<Record<string, string[]>>({})
+  const kanbanRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     fetch('/api/vehicles')
       .then((r) => r.json())
@@ -223,7 +225,7 @@ export default function VehiclesPage() {
         </Link>
       </div>
 
-      <div className="kanban-board" style={{ marginTop: 8 }}>
+      <div className="kanban-board" ref={kanbanRef} style={{ marginTop: 8 }}>
         {COLUMNS.map((col) => {
           const colVehicles = getColumnVehicles(col)
           return (
@@ -309,6 +311,7 @@ export default function VehiclesPage() {
           )
         })}
       </div>
+      <KanbanScrollbar boardRef={kanbanRef} />
     </div>
   )
 }

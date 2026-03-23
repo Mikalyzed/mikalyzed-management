@@ -244,27 +244,37 @@ input, select, textarea { font-size: 16px; font-family: inherit; }
 .kanban-board {
   display: flex;
   gap: 16px;
-  overflow-x: scroll;
-  padding-bottom: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: #c0c0c0 #f0f0f0;
+  scrollbar-width: none;
 }
 .kanban-board::-webkit-scrollbar {
-  height: 10px;
-  -webkit-appearance: none;
+  display: none;
 }
-.kanban-board::-webkit-scrollbar-track {
-  background: #f0f0f0;
-  border-radius: 5px;
+.kanban-scrollbar-track {
+  position: sticky;
+  bottom: 0;
+  height: 14px;
+  background: #e8e8e8;
+  border-radius: 7px;
+  margin-top: 8px;
+  cursor: pointer;
+  z-index: 10;
 }
-.kanban-board::-webkit-scrollbar-thumb {
-  background: #b0b0b0;
-  border-radius: 5px;
-  border: 1px solid #f0f0f0;
-}
-.kanban-board::-webkit-scrollbar-thumb:hover {
+.kanban-scrollbar-thumb {
+  height: 100%;
   background: #888;
+  border-radius: 7px;
+  min-width: 40px;
+  cursor: grab;
+}
+.kanban-scrollbar-thumb:hover {
+  background: #666;
+}
+.kanban-scrollbar-thumb:active {
+  background: #555;
+  cursor: grabbing;
 }
 .kanban-column {
   min-width: 300px;

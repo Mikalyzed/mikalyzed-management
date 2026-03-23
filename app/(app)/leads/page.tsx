@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { LEAD_SOURCE_LABELS } from '@/lib/crm'
+import KanbanScrollbar from '@/components/KanbanScrollbar'
 
 type Stage = { id: string; name: string; type: string; sortOrder: number }
 type Pipeline = { id: string; name: string; color: string; stages: Stage[]; _count: { opportunities: number } }
@@ -42,6 +43,7 @@ export default function LeadsPage() {
   const [sourceFilter, setSourceFilter] = useState('')
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board')
+  const kanbanRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     fetch('/api/pipelines').then(r => r.json()).then((data: Pipeline[]) => {
@@ -160,7 +162,8 @@ export default function LeadsPage() {
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Loading...</p>
       ) : viewMode === 'board' ? (
         /* BOARD VIEW */
-        <div className="kanban-board">
+        <>
+        <div className="kanban-board" ref={kanbanRef}>
           {stages.map(stage => {
             const stageOpps = grouped[stage.id] || []
             const total = stageValue(stage.id)
@@ -284,6 +287,8 @@ export default function LeadsPage() {
             )
           })}
         </div>
+        <KanbanScrollbar boardRef={kanbanRef} />
+      </>
       ) : (
         /* LIST VIEW */
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
