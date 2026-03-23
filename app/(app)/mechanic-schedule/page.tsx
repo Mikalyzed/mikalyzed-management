@@ -13,6 +13,10 @@ type ScheduleBlock = {
   startTime: string
   endTime: string
   priority: number
+  segmentHours?: number
+  isContination?: boolean
+  segmentIndex?: number
+  totalSegments?: number
 }
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
@@ -93,7 +97,7 @@ export default function MechanicSchedulePage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {Array.from(days.entries()).map(([day, blocks]) => {
-            const dayHours = blocks.reduce((sum, b) => sum + (b.estimatedHours || 2), 0)
+            const dayHours = blocks.reduce((sum, b) => sum + (b.segmentHours || b.estimatedHours || 2), 0)
             return (
               <div key={day}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -139,7 +143,14 @@ export default function MechanicSchedulePage() {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                               <div>
-                                <p style={{ fontSize: 14, fontWeight: 700 }}>#{vehicle.stockNumber}</p>
+                                <p style={{ fontSize: 14, fontWeight: 700 }}>
+                                  #{vehicle.stockNumber}
+                                  {block.isContination && (
+                                    <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginLeft: 6 }}>
+                                      (continued)
+                                    </span>
+                                  )}
+                                </p>
                                 <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                                   {desc}{vehicle.color ? ` · ${vehicle.color}` : ''}
                                 </p>
@@ -161,7 +172,7 @@ export default function MechanicSchedulePage() {
                                     {doneCount}/{totalCount} tasks
                                   </span>
                                   <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
-                                    {hours}h est.
+                                    {block.segmentHours ? `${block.segmentHours}h / ${hours}h total` : `${hours}h est.`}
                                   </span>
                                 </div>
                                 <div style={{ height: 4, background: '#e0e0e0', borderRadius: 2 }}>

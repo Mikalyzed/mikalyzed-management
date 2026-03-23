@@ -120,11 +120,58 @@ export async function GET() {
       checklist: stage.checklist,
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
+      // Split into day segments for display
+      segments: splitIntoDays(startTime, endTime),
       priority: stage.priority,
     }
   })
 
-  return NextResponse.json({ schedule, workHours: { start: WORK_START, end: WORK_END } })
+  // Flatten: each segment becomes its own entry so the frontend groups by day correctly
+  const flattened = schedule.flatMap(block => {
+    if (!block.segments || block.segments.length <= 1) return [block]
+    return block.segments.map((seg: { start: string; end: string; hours: number }, i: number) => ({
+      ...block,
+      startTime: seg.start,
+      endTime: seg.end,
+      segmentHours: seg.hours,
+      isContination: i > 0,
+      segmentIndex: i,
+      totalSegments: block.segments.length,
+    }))
+  })
+
+  return NextResponse.json({ schedule: flattened, workHours: { start: WORK_START, end: WORK_END } })
+}
+
+// Split a time range into per-day work segments
+function splitIntoDays(start: Date, end: Date): { start: string; end: string; hours: number }[] {
+  const segments: { start: string; end: string; hours: number }[] = []
+  let cursor = new Date(start)
+
+  while (cursor < end) {
+    // Find end of work day for current cursor
+    const dayEnd = new Date(cursor)
+    setEtHour(dayEnd, WORK_END)
+
+    const segEnd = dayEnd < end ? dayEnd : end
+    const hours = (segEnd.getTime() - cursor.getTime()) / 3600000
+
+    if (hours > 0) {
+      segments.push({ start: cursor.toISOString(), end: segEnd.toISOString(), hours: Math.round(hours * 10) / 10 })
+    }
+
+    // Move to next work day
+    cursor = new Date(dayEnd)
+    cursor.setDate(cursor.getDate() + 1)
+    setEtHour(cursor, WORK_START)
+    // Skip weekends
+    while (etDay(cursor) === 0 || etDay(cursor) === 6) {
+      cursor.setDate(cursor.getDate() + 1)
+      setEtHour(cursor, WORK_START)
+    }
+  }
+
+  return segments
 }
 
 // Add work hours to a date, respecting 9-7 ET work window and skipping weekends
