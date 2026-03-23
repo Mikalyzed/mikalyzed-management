@@ -70,6 +70,8 @@ export default function VehicleDetailPage() {
   const [editChecklist, setEditChecklist] = useState<ChecklistItem[]>([])
   const [newTaskText, setNewTaskText] = useState('')
   const [saving, setSaving] = useState(false)
+  const [editingInfo, setEditingInfo] = useState(false)
+  const [editInfo, setEditInfo] = useState({ stockNumber: '', vin: '', year: '', make: '', model: '', color: '', trim: '', notes: '' })
   const [showAdvanceModal, setShowAdvanceModal] = useState(false)
   const [scopeTemplates, setScopeTemplates] = useState<ScopeTemplate[]>([])
   const [selectedScope, setSelectedScope] = useState('')
@@ -130,27 +132,109 @@ export default function VehicleDetailPage() {
         marginBottom: '16px',
         boxShadow: 'var(--shadow)',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-          <div>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '4px' }}>
-              STOCK #{vehicle.stockNumber}
-            </p>
-            <h1 style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-              {vehicle.year} {vehicle.make} {vehicle.model}
-            </h1>
-            <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
-              {vehicle.color && (
-                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{vehicle.color}</span>
-              )}
-              {vehicle.trim && (
-                <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>· {vehicle.trim}</span>
-              )}
-              {vehicle.vin && (
-                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>· VIN: {vehicle.vin}</span>
-              )}
+        {!editingInfo ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+            <div>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '4px' }}>
+                STOCK #{vehicle.stockNumber}
+              </p>
+              <h1 style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+                {vehicle.year} {vehicle.make} {vehicle.model}
+              </h1>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
+                {vehicle.color && (
+                  <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{vehicle.color}</span>
+                )}
+                {vehicle.trim && (
+                  <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>· {vehicle.trim}</span>
+                )}
+                {vehicle.vin && (
+                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>· VIN: {vehicle.vin}</span>
+                )}
+              </div>
+            </div>
+            {isAdmin && (
+              <button onClick={() => {
+                setEditInfo({
+                  stockNumber: vehicle.stockNumber,
+                  vin: vehicle.vin || '',
+                  year: vehicle.year?.toString() || '',
+                  make: vehicle.make,
+                  model: vehicle.model,
+                  color: vehicle.color || '',
+                  trim: vehicle.trim || '',
+                  notes: vehicle.notes || '',
+                })
+                setEditingInfo(true)
+              }} style={{
+                fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', background: 'none',
+                border: '1px solid var(--border)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', minHeight: 'auto',
+              }}>Edit</button>
+            )}
+          </div>
+        ) : (
+          <div style={{ marginBottom: 16 }}>
+            <div className="form-row" style={{ marginBottom: 8 }}>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Stock #</label>
+                <input className="input" value={editInfo.stockNumber} onChange={e => setEditInfo({ ...editInfo, stockNumber: e.target.value })} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">VIN</label>
+                <input className="input" value={editInfo.vin} onChange={e => setEditInfo({ ...editInfo, vin: e.target.value })} />
+              </div>
+            </div>
+            <div className="form-row" style={{ marginBottom: 8 }}>
+              <div style={{ flex: '0 0 80px' }}>
+                <label className="form-label">Year</label>
+                <input className="input" type="number" value={editInfo.year} onChange={e => setEditInfo({ ...editInfo, year: e.target.value })} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Make</label>
+                <input className="input" value={editInfo.make} onChange={e => setEditInfo({ ...editInfo, make: e.target.value })} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Model</label>
+                <input className="input" value={editInfo.model} onChange={e => setEditInfo({ ...editInfo, model: e.target.value })} />
+              </div>
+            </div>
+            <div className="form-row" style={{ marginBottom: 8 }}>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Color</label>
+                <input className="input" value={editInfo.color} onChange={e => setEditInfo({ ...editInfo, color: e.target.value })} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Trim</label>
+                <input className="input" value={editInfo.trim} onChange={e => setEditInfo({ ...editInfo, trim: e.target.value })} />
+              </div>
+            </div>
+            <div style={{ marginBottom: 8 }}>
+              <label className="form-label">Notes</label>
+              <textarea className="input" rows={2} value={editInfo.notes} onChange={e => setEditInfo({ ...editInfo, notes: e.target.value })} style={{ resize: 'vertical' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setEditingInfo(false)} className="btn btn-secondary" style={{ fontSize: 13 }}>Cancel</button>
+              <button onClick={async () => {
+                await fetch(`/api/vehicles/${vehicle.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    stockNumber: editInfo.stockNumber,
+                    vin: editInfo.vin || null,
+                    year: editInfo.year ? parseInt(editInfo.year) : null,
+                    make: editInfo.make,
+                    model: editInfo.model,
+                    color: editInfo.color || null,
+                    trim: editInfo.trim || null,
+                    notes: editInfo.notes || null,
+                  }),
+                })
+                setEditingInfo(false)
+                refresh()
+              }} className="btn btn-primary" style={{ fontSize: 13 }}>Save</button>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Status row */}
         <div style={{

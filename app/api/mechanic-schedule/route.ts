@@ -20,7 +20,7 @@ export async function GET() {
       vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
       assignee: { select: { id: true, name: true } },
     },
-    orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+    orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
   })
 
   // Build schedule blocks by stacking jobs sequentially
@@ -43,8 +43,13 @@ export async function GET() {
     cursor.setHours(WORK_START, 0, 0, 0)
   }
 
-  // For in_progress stage, start from now (it's being worked on)
-  const inProgressStage = stages.find(s => s.status === 'in_progress')
+  // Sort: in_progress first, then blocked, then pending (by priority)
+  stages.sort((a, b) => {
+    const order: Record<string, number> = { in_progress: 0, blocked: 1, pending: 2 }
+    const diff = (order[a.status] ?? 2) - (order[b.status] ?? 2)
+    if (diff !== 0) return diff
+    return a.priority - b.priority
+  })
 
   const schedule = stages.map(stage => {
     const hours = stage.estimatedHours || 2 // default 2 hours if not set
