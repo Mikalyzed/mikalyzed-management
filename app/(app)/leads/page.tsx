@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useRef } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { LEAD_SOURCE_LABELS } from '@/lib/crm'
 
@@ -42,21 +42,6 @@ export default function LeadsPage() {
   const [sourceFilter, setSourceFilter] = useState('')
   const [search, setSearch] = useState('')
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board')
-  const kanbanRef = useRef<HTMLDivElement | null>(null)
-
-  // Mouse wheel → horizontal scroll on kanban board
-  useEffect(() => {
-    const el = kanbanRef.current
-    if (!el) return
-    const handler = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault()
-        el.scrollLeft += e.deltaY
-      }
-    }
-    el.addEventListener('wheel', handler, { passive: false })
-    return () => el.removeEventListener('wheel', handler)
-  }, [loading, viewMode])
 
   useEffect(() => {
     fetch('/api/pipelines').then(r => r.json()).then((data: Pipeline[]) => {
@@ -175,7 +160,7 @@ export default function LeadsPage() {
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Loading...</p>
       ) : viewMode === 'board' ? (
         /* BOARD VIEW */
-        <div className="kanban-board" ref={kanbanRef}>
+        <div className="kanban-board">
           {stages.map(stage => {
             const stageOpps = grouped[stage.id] || []
             const total = stageValue(stage.id)
