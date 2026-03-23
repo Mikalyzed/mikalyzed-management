@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 
 type ReportsData = {
   pipeline: { mechanic: number; detailing: number; content: number; publish: number; completed: number }
-  overdue: Array<{ id: string; stockNumber: string; year: number | null; make: string; model: string; status: string; hoursInStage: number }>
+  vehiclesInStage: Array<{ id: string; stockNumber: string; year: number | null; make: string; model: string; status: string; stageStatus: string; hoursInStage: number }>
   stageTimes: Array<{ stage: string; avgHours: number; count: number }>
   completedThisWeek: number
   completedThisMonth: number
@@ -103,37 +103,44 @@ export default function ReportsPage() {
           )}
         </div>
 
-        {/* Overdue vehicles */}
+        {/* Time in Stage */}
         <div className="card">
           <h2 className="text-lg font-bold mb-4">
-            Overdue Vehicles
-            {data.overdue.length > 0 && (
-              <span className="ml-2 badge badge-blocked text-xs">{data.overdue.length}</span>
+            Time in Stage
+            {data.vehiclesInStage.length > 0 && (
+              <span className="ml-2 text-xs font-normal" style={{ color: 'var(--text-muted)' }}>{data.vehiclesInStage.length} active</span>
             )}
           </h2>
-          {data.overdue.length === 0 ? (
+          {data.vehiclesInStage.length === 0 ? (
             <div className="text-center py-6">
               <p className="text-lg">✅</p>
-              <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Everything is on track</p>
+              <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>No active vehicles</p>
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {data.overdue.map((v) => (
-                <div key={v.id} className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'var(--danger-bg)' }}>
-                  <div>
-                    <p className="text-sm font-semibold">#{v.stockNumber}</p>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {v.year} {v.make} {v.model}
-                    </p>
+              {data.vehiclesInStage.map((v) => {
+                const displayTime = v.hoursInStage < 1
+                  ? `${Math.round(v.hoursInStage * 60)}m`
+                  : v.hoursInStage < 24
+                    ? `${v.hoursInStage.toFixed(1)}h`
+                    : `${(v.hoursInStage / 24).toFixed(1)}d`
+                return (
+                  <div key={v.id} className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'var(--bg-primary)' }}>
+                    <div>
+                      <p className="text-sm font-semibold">#{v.stockNumber}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {v.year} {v.make} {v.model}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`badge badge-${v.status}`}>{v.status}</span>
+                      <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-muted)' }}>
+                        {displayTime}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <span className={`badge badge-${v.status}`}>{v.status}</span>
-                    <p className="text-xs mt-1 font-semibold" style={{ color: 'var(--danger)' }}>
-                      {v.hoursInStage.toFixed(0)}h overdue
-                    </p>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>

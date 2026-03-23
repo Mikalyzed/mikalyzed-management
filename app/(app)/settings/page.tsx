@@ -6,7 +6,6 @@ import type { Stage } from '@/lib/constants'
 
 type StageConfig = {
   stage: Stage
-  slaHours: number
   defaultAssigneeId: string | null
   defaultChecklist: string[]
 }
@@ -145,17 +144,6 @@ export default function SettingsPage() {
                   </option>
                 ))}
               </select>
-
-              {/* SLA Hours */}
-              <label className="form-label">SLA Hours</label>
-              <input
-                type="number"
-                min={1}
-                className="input"
-                style={{ marginBottom: '16px' }}
-                value={stage.slaHours}
-                onChange={(e) => updateStage(idx, 'slaHours', parseInt(e.target.value) || 1)}
-              />
 
               {/* Checklist */}
               <label className="form-label" style={{ marginBottom: '8px' }}>Default Checklist</label>

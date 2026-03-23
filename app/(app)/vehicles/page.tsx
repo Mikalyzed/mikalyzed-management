@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import VehicleCard from '@/components/VehicleCard'
 import KanbanScrollbar from '@/components/KanbanScrollbar'
-import { STAGE_LABELS, DEFAULT_SLA_HOURS } from '@/lib/constants'
+import { STAGE_LABELS } from '@/lib/constants'
 
 type VehicleWithStage = {
   id: string
@@ -205,23 +205,6 @@ export default function VehiclesPage() {
     return `${Math.floor(hours / 24)}d ${hours % 24}h`
   }
 
-  function isOverdue(v: VehicleWithStage): boolean {
-    if (v.status === 'completed') return false
-    const stage = v.stages[0]
-    if (!stage || stage.status !== 'in_progress') return false
-    // Use estimated hours if set, otherwise fall back to default SLA
-    const estHours = stage.estimatedHours
-    if (estHours) {
-      const elapsed = (Date.now() - new Date(stage.startedAt).getTime()) / 1000 - stage.totalBlockedSeconds
-      return elapsed > estHours * 3600
-    }
-    const slaKey = v.status as keyof typeof DEFAULT_SLA_HOURS
-    const sla = DEFAULT_SLA_HOURS[slaKey]
-    if (!sla) return false
-    const elapsed = (Date.now() - new Date(stage.startedAt).getTime()) / 1000 - stage.totalBlockedSeconds
-    return elapsed > sla * 3600
-  }
-
   return (
     <div>
       <div className="page-header" style={{ marginBottom: 24 }}>
@@ -302,7 +285,6 @@ export default function VehiclesPage() {
                           stageStatus={v.stages[0]?.status}
                           assigneeName={v.currentAssignee?.name}
                           timeInStage={getTimeInStage(v)}
-                          isOverdue={isOverdue(v)}
                         />
                       </div>
                     </div>

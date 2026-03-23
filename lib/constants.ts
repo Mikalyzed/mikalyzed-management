@@ -64,13 +64,6 @@ export const DEFAULT_CHECKLISTS: Record<Stage, string[]> = {
   ],
 }
 
-export const DEFAULT_SLA_HOURS: Record<Stage, number> = {
-  mechanic: 48,
-  detailing: 24,
-  content: 24,
-  publish: 12,
-}
-
 export const ROLES = ['admin', 'mechanic', 'detailer', 'content', 'sales', 'coordinator'] as const
 export type Role = (typeof ROLES)[number]
 

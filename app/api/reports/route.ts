@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { DEFAULT_SLA_HOURS } from '@/lib/constants'
 
 export async function GET() {
   const now = new Date()
@@ -25,7 +24,7 @@ export async function GET() {
     where: { status: 'completed', completedAt: { gte: monthAgo } },
   })
 
-  // Overdue
+  // Time in stage for active vehicles
   const activeVehicles = await prisma.vehicle.findMany({
     where: { status: { not: 'completed' } },
     include: {
@@ -37,19 +36,12 @@ export async function GET() {
     },
   })
 
-  const overdue = activeVehicles
-    .filter((v) => {
-      const stage = v.stages[0]
-      if (!stage || stage.status === 'blocked') return false
-      const sla = DEFAULT_SLA_HOURS[stage.stage as keyof typeof DEFAULT_SLA_HOURS] || 24
-      const elapsed = (now.getTime() - stage.startedAt.getTime()) / 1000 - stage.totalBlockedSeconds
-      return elapsed > sla * 3600
-    })
+  const vehiclesInStage = activeVehicles
+    .filter((v) => v.stages[0])
     .map((v) => {
       const stage = v.stages[0]
-      const sla = DEFAULT_SLA_HOURS[stage.stage as keyof typeof DEFAULT_SLA_HOURS] || 24
       const elapsed = (now.getTime() - stage.startedAt.getTime()) / 1000 - stage.totalBlockedSeconds
-      const hoursOverdue = (elapsed / 3600) - sla
+      const hoursInStage = Math.max(0, elapsed / 3600)
       return {
         id: v.id,
         stockNumber: v.stockNumber,
@@ -57,9 +49,11 @@ export async function GET() {
         make: v.make,
         model: v.model,
         status: v.status,
-        hoursInStage: hoursOverdue,
+        stageStatus: stage.status,
+        hoursInStage,
       }
     })
+    .sort((a, b) => b.hoursInStage - a.hoursInStage)
 
   // Avg stage times (completed stages only, last 30 days)
   const completedStages = await prisma.vehicleStage.findMany({
@@ -94,7 +88,7 @@ export async function GET() {
 
   return NextResponse.json({
     pipeline,
-    overdue,
+    vehiclesInStage,
     stageTimes,
     completedThisWeek,
     completedThisMonth,

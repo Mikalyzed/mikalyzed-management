@@ -191,7 +191,6 @@ model ExternalRepair {
 model StageConfig {
   id                String   @id @default(uuid())
   stage             String   @unique
-  slaHours          Int      @default(24) @map("sla_hours")
   defaultAssigneeId String?  @map("default_assignee_id")
   defaultChecklist  Json     @default("[]") @map("default_checklist")
   updatedAt         DateTime @updatedAt @map("updated_at")

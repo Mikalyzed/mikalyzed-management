@@ -58,30 +58,6 @@ ${ctaButton(`${BASE_URL}/vehicles/${vehicleId}`, 'View Vehicle')}
   return { subject, html }
 }
 
-export function overdueAlertEmail({
-  vehicleDesc,
-  stage,
-  hoursOverdue,
-  slaHours,
-  vehicleId,
-}: {
-  vehicleDesc: string
-  stage: string
-  hoursOverdue: number
-  slaHours: number
-  vehicleId: string
-}) {
-  const subject = `⚠️ Overdue: ${vehicleDesc} in ${stage}`
-  const html = layout(`
-<h1 style="margin:0 0 8px;font-size:22px;color:#1d1d1f">Vehicle Overdue</h1>
-<p style="margin:0 0 16px;font-size:15px;color:#86868b">This vehicle has exceeded its SLA in the <strong>${stage}</strong> stage.</p>
-${vehicleBox(vehicleDesc)}
-<p style="font-size:15px;color:#1d1d1f">SLA: <strong>${slaHours}h</strong> · Overdue by <strong>${Math.round(hoursOverdue)}h</strong></p>
-${ctaButton(`${BASE_URL}/vehicles/${vehicleId}`, 'View Vehicle')}
-`)
-  return { subject, html }
-}
-
 export function transportUpdateEmail({
   vehicleDesc,
   status,

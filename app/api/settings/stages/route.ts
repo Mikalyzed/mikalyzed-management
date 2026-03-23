@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
-import { STAGES, DEFAULT_CHECKLISTS, DEFAULT_SLA_HOURS } from '@/lib/constants'
-import type { Stage } from '@/lib/constants'
+import { STAGES, DEFAULT_CHECKLISTS } from '@/lib/constants'
 
 export async function GET() {
   const user = await getSessionUser()
@@ -17,7 +16,6 @@ export async function GET() {
     const cfg = configMap[stage]
     return {
       stage,
-      slaHours: cfg?.slaHours ?? DEFAULT_SLA_HOURS[stage],
       defaultAssigneeId: cfg?.defaultAssigneeId ?? null,
       defaultChecklist: (cfg?.defaultChecklist as string[] | undefined)?.length
         ? cfg!.defaultChecklist as string[]
@@ -43,13 +41,11 @@ export async function PUT(request: Request) {
     await prisma.stageConfig.upsert({
       where: { stage: s.stage },
       update: {
-        slaHours: s.slaHours,
         defaultAssigneeId: s.defaultAssigneeId || null,
         defaultChecklist: s.defaultChecklist || [],
       },
       create: {
         stage: s.stage,
-        slaHours: s.slaHours,
         defaultAssigneeId: s.defaultAssigneeId || null,
         defaultChecklist: s.defaultChecklist || [],
       },

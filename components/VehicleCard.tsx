@@ -14,16 +14,15 @@ type VehicleCardProps = {
   stageStatus?: string
   assigneeName?: string | null
   timeInStage?: string
-  isOverdue?: boolean
 }
 
 export default function VehicleCard({
   id, stockNumber, year, make, model, color,
-  status, stageStatus, assigneeName, timeInStage, isOverdue,
+  status, stageStatus, assigneeName, timeInStage,
 }: VehicleCardProps) {
   return (
     <Link href={`/vehicles/${id}`} className="block">
-      <div className={`card ${isOverdue ? 'overdue-flag' : ''}`}>
+      <div className="card">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
             <p className="text-sm font-semibold tracking-tight">
@@ -47,7 +46,7 @@ export default function VehicleCard({
             )}
           </div>
           {timeInStage && (
-            <span className="text-xs font-medium" style={{ color: isOverdue ? 'var(--danger)' : 'var(--text-muted)' }}>
+            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
               {timeInStage}
             </span>
           )}

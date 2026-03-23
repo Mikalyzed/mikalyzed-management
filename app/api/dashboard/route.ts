@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
-import { DEFAULT_SLA_HOURS } from '@/lib/constants'
 
 export async function GET(request: Request) {
   const user = await getSessionUser()
@@ -17,35 +16,7 @@ export async function GET(request: Request) {
     externalRepairs: await prisma.externalRepair.count({ where: { status: 'sent' } }),
   }
 
-  // Overdue count — vehicles where current stage exceeds SLA
   const now = new Date()
-  const allActive = await prisma.vehicle.findMany({
-    where: { status: { not: 'completed' } },
-    include: {
-      stages: {
-        where: { status: { not: 'done' } },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-      },
-    },
-  })
-
-  let overdue = 0
-  let blocked = 0
-  for (const v of allActive) {
-    const stage = v.stages[0]
-    if (!stage) continue
-    if (stage.status === 'blocked') {
-      blocked++
-      continue
-    }
-    if (stage.status !== 'in_progress') continue
-    // Use estimated hours if set, otherwise fall back to default SLA
-    const estHours = stage.estimatedHours
-    const slaHours = estHours || DEFAULT_SLA_HOURS[stage.stage as keyof typeof DEFAULT_SLA_HOURS] || 24
-    const elapsed = (now.getTime() - stage.startedAt.getTime()) / 1000 - stage.totalBlockedSeconds
-    if (elapsed > slaHours * 3600) overdue++
-  }
 
   // My tasks count (for workers)
   const roleToStage: Record<string, string> = {
@@ -167,8 +138,6 @@ export async function GET(request: Request) {
   return NextResponse.json({
     user: { name: user.name, role: user.role, id: user.id },
     pipeline,
-    overdue,
-    blocked,
     myTasks,
     recentVehicles,
     myReconTasks,

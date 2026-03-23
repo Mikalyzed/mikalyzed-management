@@ -7,8 +7,6 @@ import { CALENDAR_TYPE_LABELS, CALENDAR_TYPE_COLORS } from '@/lib/calendar'
 type DashboardData = {
   user: { name: string; role: string; id: string }
   pipeline: { mechanic: number; detailing: number; content: number; publish: number; completed: number; externalRepairs: number }
-  overdue: number
-  blocked: number
   myTasks: number
   recentVehicles: Array<{
     id: string; stockNumber: string; year: number | null; make: string; model: string; status: string; color: string | null
