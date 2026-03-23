@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import KanbanScrollbar from '@/components/KanbanScrollbar'
-import { useRef } from 'react'
 
 type Task = {
   id: string
@@ -18,13 +17,13 @@ type Task = {
   createdAt: string
 }
 
-type User = { id: string; name: string }
+type User = { id: string; name: string; role: string }
 
-const CATEGORIES = [
-  { value: 'content', label: 'Content', color: '#8b5cf6' },
-  { value: 'marketing', label: 'Marketing', color: '#3b82f6' },
-  { value: 'admin', label: 'Admin', color: '#64748b' },
-  { value: 'operations', label: 'Operations', color: '#f59e0b' },
+const DEPARTMENTS = [
+  { value: 'content', label: 'Content', color: '#8b5cf6', roles: ['content'] },
+  { value: 'marketing', label: 'Marketing', color: '#3b82f6', roles: ['admin'] },
+  { value: 'operations', label: 'Operations', color: '#f59e0b', roles: ['admin', 'coordinator'] },
+  { value: 'admin', label: 'Admin', color: '#64748b', roles: ['admin'] },
 ]
 
 const PRIORITY_LABELS: Record<number, { label: string; color: string }> = {
@@ -39,12 +38,20 @@ const COLUMNS = [
   { key: 'done', label: 'Done' },
 ]
 
+// Map user role to default department
+function defaultDept(role: string): string {
+  if (role === 'content') return 'content'
+  if (role === 'coordinator') return 'operations'
+  return 'content' // admin defaults to content
+}
+
 export default function TaskBoardPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [categoryFilter, setCategoryFilter] = useState('')
+  const [userRole, setUserRole] = useState('')
+  const [activeDept, setActiveDept] = useState('')
   const [assigneeFilter, setAssigneeFilter] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const kanbanRef = useRef<HTMLDivElement | null>(null)
@@ -52,32 +59,37 @@ export default function TaskBoardPage() {
   // New task form
   const [newTitle, setNewTitle] = useState('')
   const [newDesc, setNewDesc] = useState('')
-  const [newCategory, setNewCategory] = useState('content')
   const [newAssignee, setNewAssignee] = useState('')
   const [newDueDate, setNewDueDate] = useState('')
   const [newPriority, setNewPriority] = useState(0)
 
-  function load() {
-    const params = new URLSearchParams()
-    if (categoryFilter) params.set('category', categoryFilter)
-    if (assigneeFilter) params.set('assigneeId', assigneeFilter)
-    fetch(`/api/board-tasks?${params}`).then(r => r.json()).then(d => { setTasks(d); setLoading(false) })
-  }
-
   useEffect(() => {
-    load()
+    const cookies = document.cookie.split(';').reduce((acc: Record<string, string>, c) => {
+      const [k, v] = c.trim().split('='); acc[k] = v; return acc
+    }, {})
+    const role = cookies.mm_user_role || 'admin'
+    setUserRole(role)
+    setIsAdmin(role === 'admin')
+    setActiveDept(defaultDept(role))
+
     fetch('/api/users').then(r => r.json()).then(d => {
       const list = d.users || d
       setUsers(Array.isArray(list) ? list : [])
     })
-    // Check admin
-    const cookies = document.cookie.split(';').reduce((acc: Record<string, string>, c) => {
-      const [k, v] = c.trim().split('='); acc[k] = v; return acc
-    }, {})
-    setIsAdmin(cookies.mm_user_role === 'admin')
   }, [])
 
-  useEffect(() => { if (!loading) load() }, [categoryFilter, assigneeFilter])
+  function load() {
+    if (!activeDept) return
+    const params = new URLSearchParams()
+    params.set('category', activeDept)
+    if (assigneeFilter) params.set('assigneeId', assigneeFilter)
+    fetch(`/api/board-tasks?${params}`).then(r => r.json()).then(d => { setTasks(d); setLoading(false) })
+  }
+
+  useEffect(() => { if (activeDept) { setLoading(true); load() } }, [activeDept, assigneeFilter])
+
+  const dept = DEPARTMENTS.find(d => d.value === activeDept)
+  const deptColor = dept?.color || '#888'
 
   async function addTask() {
     if (!newTitle.trim()) return
@@ -86,11 +98,11 @@ export default function TaskBoardPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: newTitle, description: newDesc || null,
-        category: newCategory, assigneeId: newAssignee || null,
+        category: activeDept, assigneeId: newAssignee || null,
         dueDate: newDueDate || null, priority: newPriority,
       }),
     })
-    setNewTitle(''); setNewDesc(''); setNewCategory('content')
+    setNewTitle(''); setNewDesc('')
     setNewAssignee(''); setNewDueDate(''); setNewPriority(0)
     setShowAdd(false)
     load()
@@ -111,33 +123,47 @@ export default function TaskBoardPage() {
     load()
   }
 
-  const catColor = (cat: string) => CATEGORIES.find(c => c.value === cat)?.color || '#888'
-  const catLabel = (cat: string) => CATEGORIES.find(c => c.value === cat)?.label || cat
-
   return (
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Task Board</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Task Board</h1>
+          <span style={{ width: 1, height: 24, background: 'var(--border)' }} />
+          {isAdmin ? (
+            <div style={{ display: 'flex', gap: 4 }}>
+              {DEPARTMENTS.map(d => (
+                <button key={d.value} onClick={() => setActiveDept(d.value)} style={{
+                  padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 600,
+                  background: activeDept === d.value ? d.color + '20' : 'transparent',
+                  color: activeDept === d.value ? d.color : 'var(--text-muted)',
+                }}>
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span style={{ fontSize: 14, fontWeight: 600, color: deptColor }}>{dept?.label}</span>
+          )}
+        </div>
         <button onClick={() => setShowAdd(true)} style={{
           padding: '10px 20px', borderRadius: 12, border: 'none', cursor: 'pointer',
           background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 600,
+          whiteSpace: 'nowrap',
         }}>+ New Task</button>
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <select className="input" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
-          style={{ width: 'auto', minWidth: 120 }}>
-          <option value="">All Categories</option>
-          {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-        </select>
-        <select className="input" value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)}
-          style={{ width: 'auto', minWidth: 120 }}>
-          <option value="">All Assignees</option>
-          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
-      </div>
+      {/* Assignee filter */}
+      {isAdmin && (
+        <div style={{ marginBottom: 16 }}>
+          <select className="input" value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)}
+            style={{ width: 'auto', minWidth: 140 }}>
+            <option value="">All Assignees</option>
+            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {loading ? (
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Loading...</p>
@@ -160,19 +186,17 @@ export default function TaskBoardPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {colTasks.map(task => (
                       <div key={task.id} className="card" style={{ padding: '12px 14px', margin: 0 }}>
-                        {/* Priority + Category */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                          <span style={{
-                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
-                            background: catColor(task.category) + '18', color: catColor(task.category),
-                            textTransform: 'uppercase', letterSpacing: '0.04em',
-                          }}>{catLabel(task.category)}</span>
-                          {task.priority > 0 && (
-                            <span style={{ fontSize: 10, fontWeight: 700, color: PRIORITY_LABELS[task.priority]?.color }}>
-                              {PRIORITY_LABELS[task.priority]?.label}
-                            </span>
-                          )}
-                        </div>
+                        {/* Priority badge */}
+                        {task.priority > 0 && (
+                          <div style={{ marginBottom: 6 }}>
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                              background: task.priority === 2 ? '#fef2f2' : '#fffbeb',
+                              color: PRIORITY_LABELS[task.priority]?.color,
+                              textTransform: 'uppercase', letterSpacing: '0.04em',
+                            }}>{PRIORITY_LABELS[task.priority]?.label}</span>
+                          </div>
+                        )}
                         {/* Title */}
                         <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{task.title}</p>
                         {task.description && (
@@ -184,19 +208,19 @@ export default function TaskBoardPage() {
                             {task.assignee && (
                               <span style={{
                                 width: 22, height: 22, borderRadius: '50%', fontSize: 10, fontWeight: 700,
-                                background: '#e8e8e8', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                background: deptColor + '20', color: deptColor,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
                               }}>{task.assignee.name.split(' ').map(n => n[0]).join('')}</span>
                             )}
                             {task.dueDate && (
                               <span style={{
-                                fontSize: 11, color: new Date(task.dueDate) < new Date() && task.status !== 'done' ? '#ef4444' : 'var(--text-muted)',
-                                fontWeight: 600,
+                                fontSize: 11, fontWeight: 600,
+                                color: new Date(task.dueDate) < new Date() && task.status !== 'done' ? '#ef4444' : 'var(--text-muted)',
                               }}>
                                 {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                               </span>
                             )}
                           </div>
-                          {/* Status actions */}
                           <div style={{ display: 'flex', gap: 4 }}>
                             {col.key === 'todo' && (
                               <button onClick={() => updateStatus(task.id, 'in_progress')} style={{
@@ -240,7 +264,8 @@ export default function TaskBoardPage() {
       {showAdd && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>New Task</h3>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>New Task</h3>
+            <p style={{ fontSize: 13, color: deptColor, fontWeight: 600, marginBottom: 16 }}>{dept?.label} Department</p>
 
             <div style={{ marginBottom: 12 }}>
               <label className="form-label">Title</label>
@@ -255,9 +280,10 @@ export default function TaskBoardPage() {
 
             <div className="form-row" style={{ marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
-                <label className="form-label">Category</label>
-                <select className="input" value={newCategory} onChange={e => setNewCategory(e.target.value)}>
-                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                <label className="form-label">Assignee</label>
+                <select className="input" value={newAssignee} onChange={e => setNewAssignee(e.target.value)}>
+                  <option value="">Unassigned</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                 </select>
               </div>
               <div style={{ flex: 1 }}>
@@ -270,18 +296,9 @@ export default function TaskBoardPage() {
               </div>
             </div>
 
-            <div className="form-row" style={{ marginBottom: 12 }}>
-              <div style={{ flex: 1 }}>
-                <label className="form-label">Assignee</label>
-                <select className="input" value={newAssignee} onChange={e => setNewAssignee(e.target.value)}>
-                  <option value="">Unassigned</option>
-                  {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                </select>
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="form-label">Due Date</label>
-                <input className="input" type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} />
-              </div>
+            <div style={{ marginBottom: 12 }}>
+              <label className="form-label">Due Date</label>
+              <input className="input" type="date" value={newDueDate} onChange={e => setNewDueDate(e.target.value)} />
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
