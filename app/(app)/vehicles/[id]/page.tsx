@@ -183,9 +183,28 @@ export default function VehicleDetailPage() {
               </>
             )}
             {vehicle.status === 'completed' && (
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                Completed {vehicle.completedAt && new Date(vehicle.completedAt).toLocaleDateString()}
-              </p>
+              <div>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Completed {vehicle.completedAt && new Date(vehicle.completedAt).toLocaleDateString()}
+                </p>
+                {isAdmin && (
+                  <button onClick={async () => {
+                    const reason = prompt('Why is this vehicle going back through recon?')
+                    if (!reason) return
+                    await fetch(`/api/vehicles/${vehicle.id}/restart`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ reason }),
+                    })
+                    refresh()
+                  }} style={{
+                    marginTop: 8, padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                    background: '#1a1a1a', color: '#dffd6e', border: 'none', cursor: 'pointer',
+                  }}>
+                    Restart Recon
+                  </button>
+                )}
+              </div>
             )}
           </div>
           {currentStage && (
