@@ -14,6 +14,7 @@ type Stage = {
   notes: string | null
   dueDate: string | null
   scopeName: string | null
+  estimatedHours: number | null
   startedAt: string
   completedAt: string | null
 }
@@ -74,6 +75,7 @@ export default function VehicleDetailPage() {
   const [selectedScope, setSelectedScope] = useState('')
   const [advanceDueDate, setAdvanceDueDate] = useState('')
   const [advanceChecklist, setAdvanceChecklist] = useState<ChecklistItem[]>([])
+  const [advanceEstHours, setAdvanceEstHours] = useState('')
 
   const refresh = () => fetch(`/api/vehicles/${id}`).then(r => r.json()).then(d => setVehicle(d.vehicle))
 
@@ -180,6 +182,11 @@ export default function VehicleDetailPage() {
                     {new Date(currentStage.dueDate) < new Date() && currentStage.status !== 'done' && ' (OVERDUE)'}
                   </p>
                 )}
+                {currentStage.estimatedHours && (
+                  <p style={{ fontSize: '11px', fontWeight: 600, marginTop: 2, color: 'var(--text-muted)' }}>
+                    Est: {currentStage.estimatedHours}h
+                  </p>
+                )}
               </>
             )}
             {vehicle.status === 'completed' && (
@@ -248,6 +255,41 @@ export default function VehicleDetailPage() {
           marginBottom: '16px',
           boxShadow: 'var(--shadow-sm)',
         }}>
+          {/* Schedule fields (admin only) */}
+          {isAdmin && (
+            <div className="form-row" style={{ marginBottom: 16, gap: 8 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }}>Est. Hours</label>
+                <input type="number" className="input" step="0.5" min="0" placeholder="e.g. 4"
+                  defaultValue={currentStage.estimatedHours || ''}
+                  onBlur={async (e) => {
+                    const val = e.target.value
+                    await fetch(`/api/stages/${currentStage.id}`, {
+                      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ estimatedHours: val || null }),
+                    })
+                    refresh()
+                  }}
+                  style={{ fontSize: 13 }}
+                />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }}>Due Date</label>
+                <input type="date" className="input"
+                  defaultValue={currentStage.dueDate ? new Date(currentStage.dueDate).toISOString().split('T')[0] : ''}
+                  onChange={async (e) => {
+                    await fetch(`/api/stages/${currentStage.id}`, {
+                      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ dueDate: e.target.value || null }),
+                    })
+                    refresh()
+                  }}
+                  style={{ fontSize: 13 }}
+                />
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Tasks ({currentStage.checklist.filter(c => c.done).length}/{currentStage.checklist.length})
@@ -450,6 +492,7 @@ export default function VehicleDetailPage() {
                           setScopeTemplates(tmpls)
                           setSelectedScope('')
                           setAdvanceDueDate('')
+                          setAdvanceEstHours('')
                           setAdvanceChecklist([])
                           setShowAdvanceModal(true)
                         }} />
@@ -552,10 +595,17 @@ export default function VehicleDetailPage() {
               Configure the next stage before advancing.
             </p>
 
-            {/* Due Date */}
-            <div style={{ marginBottom: 16 }}>
-              <label className="form-label">Due Date</label>
-              <input type="date" className="input" value={advanceDueDate} onChange={e => setAdvanceDueDate(e.target.value)} />
+            {/* Due Date + Estimated Hours */}
+            <div className="form-row" style={{ marginBottom: 16 }}>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Due Date</label>
+                <input type="date" className="input" value={advanceDueDate} onChange={e => setAdvanceDueDate(e.target.value)} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Est. Hours</label>
+                <input type="number" className="input" step="0.5" min="0" placeholder="e.g. 4"
+                  value={advanceEstHours} onChange={e => setAdvanceEstHours(e.target.value)} />
+              </div>
             </div>
 
             {/* Scope Templates */}
@@ -615,6 +665,7 @@ export default function VehicleDetailPage() {
                     dueDate: advanceDueDate || null,
                     scopeName: selectedScope || null,
                     checklist: advanceChecklist.length > 0 ? advanceChecklist : undefined,
+                    estimatedHours: advanceEstHours ? parseFloat(advanceEstHours) : null,
                   }),
                 })
                 setShowAdvanceModal(false)

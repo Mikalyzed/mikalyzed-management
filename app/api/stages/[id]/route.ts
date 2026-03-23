@@ -81,6 +81,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     data.scopeName = body.scopeName || null
   }
 
+  // Update estimated hours
+  if (body.estimatedHours !== undefined) {
+    data.estimatedHours = body.estimatedHours ? parseFloat(body.estimatedHours) : null
+  }
+
   const updated = await prisma.vehicleStage.update({
     where: { id },
     data,

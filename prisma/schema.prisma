@@ -84,6 +84,7 @@ model VehicleStage {
   photos              String[]  @default([])
   dueDate             DateTime? @map("due_date")
   scopeName           String?   @map("scope_name")
+  estimatedHours      Float?    @map("estimated_hours")
   startedAt           DateTime  @default(now()) @map("started_at")
   completedAt         DateTime? @map("completed_at")
   blockedAt           DateTime? @map("blocked_at")

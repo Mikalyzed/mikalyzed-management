@@ -61,6 +61,7 @@ export default function AddVehiclePage() {
       notes: form.get('notes'),
       startingStage,
       mechanicChecklist,
+      estimatedHours: form.get('estimatedHours') ? parseFloat(form.get('estimatedHours') as string) : null,
     }
 
     try {
@@ -201,6 +202,13 @@ export default function AddVehiclePage() {
               )
             })}
           </div>
+        </div>
+
+        {/* Estimated Hours */}
+        <div style={{ marginBottom: 16 }}>
+          <label className="form-label">Estimated Hours</label>
+          <input type="number" name="estimatedHours" className="input" step="0.5" min="0"
+            placeholder="How long should this stage take? (e.g. 4)" />
         </div>
 
         {/* Tasks Card */}

@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist, startingStage: rawStartingStage } = body
+  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist, startingStage: rawStartingStage, estimatedHours } = body
   const validStages = ['mechanic', 'detailing', 'content', 'publish']
   const startingStage = validStages.includes(rawStartingStage) ? rawStartingStage : 'mechanic'
 
@@ -124,6 +124,7 @@ export async function POST(request: Request) {
         assigneeId: stageAssigneeId,
         checklist,
         priority: nextPriority,
+        estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
       },
     })
 

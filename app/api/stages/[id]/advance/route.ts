@@ -13,7 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params
 
   // Optional body for next stage configuration
-  let body: { dueDate?: string; scopeName?: string; checklist?: { item: string; done: boolean; note: string }[] } = {}
+  let body: { dueDate?: string; scopeName?: string; checklist?: { item: string; done: boolean; note: string }[]; estimatedHours?: number | null } = {}
   try { body = await request.json() } catch { /* no body is fine */ }
 
   const stage = await prisma.vehicleStage.findUnique({
@@ -79,6 +79,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           checklist,
           dueDate: body.dueDate ? new Date(body.dueDate) : null,
           scopeName: body.scopeName || null,
+          estimatedHours: body.estimatedHours ?? null,
         },
       })
 
