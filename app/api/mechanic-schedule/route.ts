@@ -74,6 +74,24 @@ export async function GET() {
     return a.priority - b.priority
   })
 
+  // Ensure cursor is within a valid work window
+  function normalizeCursor() {
+    // If at or past end of work day, move to next day 9 AM
+    if (etHour(cursor) >= WORK_END) {
+      cursor.setDate(cursor.getDate() + 1)
+      setEtHour(cursor, WORK_START)
+    }
+    // If before work hours, jump to 9 AM
+    if (etHour(cursor) < WORK_START) {
+      setEtHour(cursor, WORK_START)
+    }
+    // Skip weekends
+    while (etDay(cursor) === 0 || etDay(cursor) === 6) {
+      cursor.setDate(cursor.getDate() + 1)
+      setEtHour(cursor, WORK_START)
+    }
+  }
+
   const schedule = stages.map(stage => {
     const hours = stage.estimatedHours || 2 // default 2 hours if not set
     let startTime: Date
@@ -86,7 +104,8 @@ export async function GET() {
       // Move cursor past this job so pending jobs stack after it
       if (endTime > cursor) cursor = new Date(endTime)
     } else {
-      // Pending/blocked: stack after cursor
+      // Pending/blocked: normalize cursor to next work window first
+      normalizeCursor()
       startTime = new Date(cursor)
       endTime = addWorkHours(cursor, hours)
       cursor = new Date(endTime)
