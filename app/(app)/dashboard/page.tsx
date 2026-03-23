@@ -27,6 +27,14 @@ type DashboardData = {
   myBoardTasks: Array<{
     id: string; title: string; category: string; status: string; priority: number; dueDate: string | null
   }>
+  pendingApprovals: Array<{
+    id: string; taskName: string; additionalHours: number | null; status: string; createdAt: string
+    vehicleStage: {
+      id: string; stage: string
+      vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string }
+    }
+    requestedBy: { id: string; name: string }
+  }>
   upcomingEvents: Array<{
     id: string; name: string; date: string; status: string
     owner: { id: string; name: string }
@@ -327,6 +335,21 @@ export default function DashboardPage() {
     )
   }
 
+  const [approvingId, setApprovingId] = useState<string | null>(null)
+
+  async function handleApproval(id: string, status: 'approved' | 'rejected') {
+    setApprovingId(id)
+    await fetch(`/api/task-approvals/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    // Refresh
+    const fresh = await fetch('/api/dashboard').then(r => r.json())
+    setData(fresh)
+    setApprovingId(null)
+  }
+
   const isAdmin = data.user.role === 'admin'
   const hasAssignments = data.myReconTasks.length > 0 || data.myEventTasks.length > 0 || data.myCalendarItems.length > 0 || (data.myBoardTasks || []).length > 0
 
@@ -364,6 +387,64 @@ export default function DashboardPage() {
                 <p className="pipeline-chip-label">External</p>
               </div>
             </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Pending Approvals ═══ */}
+      {isAdmin && (data.pendingApprovals || []).length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700 }}>
+              Pending Approvals
+              <span style={{
+                fontSize: 12, fontWeight: 700, marginLeft: 10, padding: '3px 10px',
+                borderRadius: 6, background: '#f59e0b20', color: '#f59e0b',
+              }}>{data.pendingApprovals.length}</span>
+            </h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {data.pendingApprovals.map(a => {
+              const v = a.vehicleStage.vehicle
+              const desc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
+              return (
+                <div key={a.id} className="card" style={{ padding: '16px 20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
+                    <div>
+                      <p style={{ fontSize: 15, fontWeight: 700 }}>{a.taskName}</p>
+                      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+                        #{v.stockNumber} {desc} — {STAGE_LABELS[a.vehicleStage.stage] || a.vehicleStage.stage}
+                      </p>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                        Requested by {a.requestedBy.name}
+                        {a.additionalHours ? ` · +${a.additionalHours}h` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={() => handleApproval(a.id, 'approved')}
+                      disabled={approvingId === a.id}
+                      style={{
+                        flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+                        background: '#dffd6e', color: '#1a1a1a', fontWeight: 700, fontSize: 13,
+                        cursor: 'pointer', opacity: approvingId === a.id ? 0.5 : 1,
+                      }}
+                    >Approve</button>
+                    <button
+                      onClick={() => handleApproval(a.id, 'rejected')}
+                      disabled={approvingId === a.id}
+                      style={{
+                        flex: 1, padding: '10px 0', borderRadius: 10,
+                        border: '1px solid #ef4444', background: '#fff',
+                        color: '#ef4444', fontWeight: 700, fontSize: 13,
+                        cursor: 'pointer', opacity: approvingId === a.id ? 0.5 : 1,
+                      }}
+                    >Reject</button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}

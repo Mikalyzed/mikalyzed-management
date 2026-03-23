@@ -64,6 +64,8 @@ export default function MechanicSchedulePage() {
   const [showPausePrompt, setShowPausePrompt] = useState(false)
   const [pauseReason, setPauseReason] = useState('')
   const [startingNext, setStartingNext] = useState(false)
+  const [pendingApprovals, setPendingApprovals] = useState<Array<{ id: string; taskName: string; additionalHours: number | null; status: string }>>([])
+  const [taskSubmitMsg, setTaskSubmitMsg] = useState('')
 
   const fetchSchedule = useCallback(() => {
     fetch('/api/mechanic-schedule').then(r => r.json()).then(d => {
@@ -74,6 +76,14 @@ export default function MechanicSchedulePage() {
   }, [])
 
   useEffect(() => { fetchSchedule() }, [fetchSchedule])
+
+  // Fetch pending approvals for a stage
+  const fetchPendingApprovals = useCallback((stageId: string) => {
+    fetch(`/api/task-approvals?stageId=${stageId}`)
+      .then(r => r.json())
+      .then(d => setPendingApprovals((d.approvals || []).filter((a: { vehicleStageId: string; status: string }) => a.vehicleStageId === stageId && a.status === 'pending')))
+      .catch(() => setPendingApprovals([]))
+  }, [])
 
   // Open modal
   const openModal = (block: ScheduleBlock) => {
@@ -89,6 +99,8 @@ export default function MechanicSchedulePage() {
     setNoExtraHours(false)
     setShowPausePrompt(false)
     setPauseReason('')
+    setTaskSubmitMsg('')
+    fetchPendingApprovals(block.id)
   }
 
   const closeModal = () => {
@@ -144,28 +156,30 @@ export default function MechanicSchedulePage() {
     fetchSchedule()
   }
 
-  // Add task to checklist
+  // Add task — submit for approval instead of directly adding
   const addTask = async () => {
     if (!selectedBlock || !newTaskName.trim()) return
     setAddingTask(true)
-    const updatedChecklist = [...modalChecklist, { item: newTaskName.trim(), done: false, note: '' }]
     const extraHours = noExtraHours ? 0 : parseFloat(newTaskHours) || 0
-    const body: Record<string, unknown> = { checklist: updatedChecklist }
-    if (extraHours > 0) {
-      body.estimatedHours = (selectedBlock.estimatedHours || 2) + extraHours
-    }
-    await fetch(`/api/stages/${selectedBlock.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    setModalChecklist(updatedChecklist)
-    setNewTaskName('')
-    setNewTaskHours('')
-    setNoExtraHours(false)
-    setShowAddTask(false)
+    try {
+      await fetch('/api/task-approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicleStageId: selectedBlock.id,
+          taskName: newTaskName.trim(),
+          additionalHours: extraHours > 0 ? extraHours : null,
+        }),
+      })
+      setNewTaskName('')
+      setNewTaskHours('')
+      setNoExtraHours(false)
+      setShowAddTask(false)
+      setTaskSubmitMsg('Task submitted for approval')
+      fetchPendingApprovals(selectedBlock.id)
+      setTimeout(() => setTaskSubmitMsg(''), 3000)
+    } catch { /* ignore */ }
     setAddingTask(false)
-    fetchSchedule()
   }
 
   // Start next vehicle
@@ -498,6 +512,37 @@ export default function MechanicSchedulePage() {
                 </div>
               )}
             </div>
+
+            {/* Pending Approvals */}
+            {pendingApprovals.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                {pendingApprovals.map(pa => (
+                  <div key={pa.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                    background: '#f8f8f6', borderRadius: 10, marginBottom: 6,
+                    border: '1px solid #e5e5e5', fontStyle: 'italic', color: '#999',
+                  }}>
+                    <span style={{ fontSize: 14, flex: 1 }}>{pa.taskName}</span>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
+                      background: '#f59e0b20', color: '#f59e0b', textTransform: 'uppercase',
+                      letterSpacing: '0.03em', whiteSpace: 'nowrap',
+                    }}>Pending Approval</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Task submitted message */}
+            {taskSubmitMsg && (
+              <div style={{
+                padding: '10px 14px', borderRadius: 10, marginBottom: 12,
+                background: '#f0fdf4', border: '1px solid #bbf7d0',
+                fontSize: 13, fontWeight: 600, color: '#16a34a',
+              }}>
+                {taskSubmitMsg}
+              </div>
+            )}
 
             {/* Add Task */}
             <div style={{ marginBottom: 16 }}>

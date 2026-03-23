@@ -12,10 +12,12 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
   const assignee = searchParams.get('assignee')
+  const stockNumber = searchParams.get('stockNumber')
 
   const where: Record<string, unknown> = {}
   if (status) where.status = status
   if (assignee) where.currentAssigneeId = assignee
+  if (stockNumber) where.stockNumber = stockNumber
 
   const vehicles = await prisma.vehicle.findMany({
     where,

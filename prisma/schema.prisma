@@ -37,6 +37,7 @@ model User {
   activityActions  ActivityEvent[]   @relation("ActivityActor")
   assignedTasks    Task[]            @relation("TaskAssignee")
   createdTasks     Task[]            @relation("TaskCreator")
+  taskApprovals    TaskApproval[]
 
   @@map("users")
 }
@@ -100,6 +101,7 @@ model VehicleStage {
 
   vehicle             Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   assignee            User?     @relation("StageAssignee", fields: [assigneeId], references: [id])
+  taskApprovals       TaskApproval[]
 
   @@index([vehicleId])
   @@index([assigneeId])
@@ -202,6 +204,22 @@ model StageConfig {
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@map("stage_config")
+}
+
+model TaskApproval {
+  id              String    @id @default(uuid())
+  vehicleStageId  String    @map("vehicle_stage_id")
+  vehicleStage    VehicleStage @relation(fields: [vehicleStageId], references: [id], onDelete: Cascade)
+  taskName        String    @map("task_name")
+  additionalHours Float?    @map("additional_hours")
+  requestedById   String    @map("requested_by_id")
+  requestedBy     User      @relation(fields: [requestedById], references: [id])
+  status          String    @default("pending")
+  reviewedById    String?   @map("reviewed_by_id")
+  reviewedAt      DateTime? @map("reviewed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("task_approvals")
 }
 
 model Task {

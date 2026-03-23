@@ -107,6 +107,20 @@ export async function GET(request: Request) {
     take: 10,
   })
 
+  // Pending task approvals (for admin)
+  const pendingApprovals = user.role === 'admin' ? await prisma.taskApproval.findMany({
+    where: { status: 'pending' },
+    include: {
+      vehicleStage: {
+        include: {
+          vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+        },
+      },
+      requestedBy: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  }) : []
+
   // Upcoming events (for admin)
   const upcomingEvents = user.role === 'admin' ? await prisma.event.findMany({
     where: {
@@ -145,5 +159,6 @@ export async function GET(request: Request) {
     myCalendarItems,
     myBoardTasks,
     upcomingEvents: upcomingEventsWithProgress,
+    pendingApprovals,
   })
 }

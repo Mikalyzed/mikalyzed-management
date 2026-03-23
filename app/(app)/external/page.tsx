@@ -27,6 +27,13 @@ const STATUS_LABELS: Record<string, string> = {
   returned: 'Returned',
 }
 
+const RECON_STAGES = [
+  { value: 'mechanic', label: 'Mechanic' },
+  { value: 'detailing', label: 'Detailing' },
+  { value: 'content', label: 'Content' },
+  { value: 'publish', label: 'Publish' },
+]
+
 export default function ExternalRepairsPage() {
   const [repairs, setRepairs] = useState<ExternalRepair[]>([])
   const [loading, setLoading] = useState(true)
@@ -35,6 +42,9 @@ export default function ExternalRepairsPage() {
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('active')
   const [editId, setEditId] = useState<string | null>(null)
+  const [reconModal, setReconModal] = useState<ExternalRepair | null>(null)
+  const [reconStage, setReconStage] = useState('mechanic')
+  const [sendingToRecon, setSendingToRecon] = useState(false)
 
   function load() {
     fetch('/api/external')
@@ -458,7 +468,11 @@ export default function ExternalRepairsPage() {
                     )}
                     {r.status === 'ready' && (
                       <button
-                        onClick={() => updateStatus(r.id, 'returned')}
+                        onClick={async () => {
+                          await updateStatus(r.id, 'returned')
+                          setReconModal(r)
+                          setReconStage('mechanic')
+                        }}
                         style={{
                           flex: 1, padding: '12px 20px',
                           background: '#ffffff', border: 'none',
@@ -474,6 +488,85 @@ export default function ExternalRepairsPage() {
               </div>
             )
           })}
+        </div>
+      )}
+      {/* Return to Recon Modal */}
+      {reconModal && (
+        <div
+          onClick={() => setReconModal(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 20,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 20, width: '100%', maxWidth: 420,
+              padding: '28px 24px', boxShadow: '0 -4px 30px rgba(0,0,0,0.15)',
+            }}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
+              Send back to recon?
+            </h3>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20 }}>
+              {reconModal.year} {reconModal.make} {reconModal.model} (#{reconModal.stockNumber})
+            </p>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+              Select stage
+            </label>
+            <select
+              value={reconStage}
+              onChange={e => setReconStage(e.target.value)}
+              className="input"
+              style={{ width: '100%', marginBottom: 20, padding: '10px 12px', fontSize: 14 }}
+            >
+              {RECON_STAGES.map(s => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setReconModal(null)}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 12,
+                  border: '1px solid var(--border)', background: '#fff',
+                  fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                No, just mark returned
+              </button>
+              <button
+                onClick={async () => {
+                  setSendingToRecon(true)
+                  // Find vehicle by stock number
+                  const res = await fetch(`/api/vehicles?stockNumber=${reconModal.stockNumber}`)
+                  const data = await res.json()
+                  const vehicle = data.vehicles?.[0]
+                  if (vehicle) {
+                    await fetch(`/api/vehicles/${vehicle.id}/move-stage`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ targetStage: reconStage }),
+                    })
+                  }
+                  setSendingToRecon(false)
+                  setReconModal(null)
+                  load()
+                }}
+                disabled={sendingToRecon}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 12, border: 'none',
+                  background: '#1a1a1a', color: '#dffd6e',
+                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                  opacity: sendingToRecon ? 0.5 : 1,
+                }}
+              >
+                {sendingToRecon ? 'Sending...' : 'Send to Recon'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
