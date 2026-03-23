@@ -242,6 +242,37 @@ export default function VehicleDetailPage() {
                     value={editInfo.dueDate} onChange={e => setEditInfo({ ...editInfo, dueDate: e.target.value })}
                     style={{ fontSize: 13 }} />
                 </div>
+                <div style={{ marginBottom: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
+                  <label className="form-label">Move to Stage</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <select id="moveStageSelect" className="input" defaultValue="" style={{ fontSize: 13, flex: 1 }}>
+                      <option value="" disabled>Current: {currentStage.stage.charAt(0).toUpperCase() + currentStage.stage.slice(1)}</option>
+                      {['mechanic', 'detailing', 'content', 'publish', 'completed'].filter(s => s !== currentStage.stage).map(s => (
+                        <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ fontSize: 13, whiteSpace: 'nowrap' }}
+                      onClick={async () => {
+                        const sel = (document.getElementById('moveStageSelect') as HTMLSelectElement).value
+                        if (!sel) { alert('Select a stage'); return }
+                        if (!confirm(`Move this vehicle to ${sel.charAt(0).toUpperCase() + sel.slice(1)}?`)) return
+                        const res = await fetch(`/api/vehicles/${vehicle.id}/move-stage`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ targetStage: sel }),
+                        })
+                        if (res.ok) {
+                          window.location.reload()
+                        } else {
+                          const err = await res.json()
+                          alert(err.error || 'Failed to move stage')
+                        }
+                      }}
+                    >Move</button>
+                  </div>
+                </div>
               </div>
             )}
 
