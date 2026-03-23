@@ -549,6 +549,24 @@ export default function VehicleDetailPage() {
                   </div>
                 )}
 
+                {/* Admin status override */}
+                {isAdmin && (
+                  <div style={{ marginBottom: 10 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 4 }}>Status</label>
+                    <select className="input" value={currentStage.status} onChange={async (e) => {
+                      await fetch(`/api/stages/${currentStage.id}`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: e.target.value }),
+                      })
+                      refresh()
+                    }} style={{ width: 'auto', minWidth: 140, fontSize: 13 }}>
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="blocked">Blocked</option>
+                    </select>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: '8px' }}>
                   {currentStage.status === 'pending' && (
                     <ActionBtn label="Start Working" style="primary" onClick={async () => {
