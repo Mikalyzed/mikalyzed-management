@@ -18,6 +18,7 @@ type ScheduleBlock = {
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   pending: { bg: '#f8f8f6', border: '#e0e0e0', text: 'var(--text-secondary)' },
   in_progress: { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' },
+  in_progress_overdue: { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' },
   blocked: { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' },
 }
 
@@ -107,7 +108,9 @@ export default function MechanicSchedulePage() {
                     const hours = block.estimatedHours || 2
                     const startTime = new Date(block.startTime)
                     const endTime = new Date(block.endTime)
-                    const colors = STATUS_COLORS[block.status] || STATUS_COLORS.pending
+                    const isOverdue = block.status === 'in_progress' && new Date() > endTime
+                    const colorKey = isOverdue ? 'in_progress_overdue' : block.status
+                    const colors = STATUS_COLORS[colorKey] || STATUS_COLORS.pending
                     const doneCount = (block.checklist as { done: boolean }[]).filter(c => c.done).length
                     const totalCount = (block.checklist as { done: boolean }[]).length
                     const vehicle = block.vehicle
@@ -146,7 +149,7 @@ export default function MechanicSchedulePage() {
                                 background: colors.border + '20', color: colors.border,
                                 textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
                               }}>
-                                {STATUS_LABELS[block.status] || block.status}
+                                {isOverdue ? 'Overdue' : (STATUS_LABELS[block.status] || block.status)}
                               </span>
                             </div>
 
