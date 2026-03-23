@@ -71,7 +71,7 @@ export default function VehicleDetailPage() {
   const [newTaskText, setNewTaskText] = useState('')
   const [saving, setSaving] = useState(false)
   const [editingInfo, setEditingInfo] = useState(false)
-  const [editInfo, setEditInfo] = useState({ stockNumber: '', vin: '', year: '', make: '', model: '', color: '', trim: '', notes: '' })
+  const [editInfo, setEditInfo] = useState({ stockNumber: '', vin: '', year: '', make: '', model: '', color: '', trim: '', notes: '', stageStatus: '', estimatedHours: '', dueDate: '' })
   const [showAdvanceModal, setShowAdvanceModal] = useState(false)
   const [scopeTemplates, setScopeTemplates] = useState<ScopeTemplate[]>([])
   const [selectedScope, setSelectedScope] = useState('')
@@ -164,6 +164,9 @@ export default function VehicleDetailPage() {
                   color: vehicle.color || '',
                   trim: vehicle.trim || '',
                   notes: vehicle.notes || '',
+                  stageStatus: currentStage?.status || 'pending',
+                  estimatedHours: currentStage?.estimatedHours?.toString() || '',
+                  dueDate: currentStage?.dueDate ? new Date(currentStage.dueDate).toISOString().split('T')[0] : '',
                 })
                 setEditingInfo(true)
               }} style={{
@@ -221,7 +224,7 @@ export default function VehicleDetailPage() {
                 <div className="form-row" style={{ marginBottom: 8, gap: 8 }}>
                   <div style={{ flex: 1 }}>
                     <label className="form-label">Status</label>
-                    <select className="input" id="edit-stage-status" defaultValue={currentStage.status} style={{ fontSize: 13 }}>
+                    <select className="input" value={editInfo.stageStatus} onChange={e => setEditInfo({ ...editInfo, stageStatus: e.target.value })} style={{ fontSize: 13 }}>
                       <option value="pending">Pending</option>
                       <option value="in_progress">In Progress</option>
                       <option value="blocked">Blocked</option>
@@ -229,14 +232,14 @@ export default function VehicleDetailPage() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <label className="form-label">Est. Hours</label>
-                    <input type="number" className="input" id="edit-stage-hours" step="0.5" min="0" placeholder="e.g. 4"
-                      defaultValue={currentStage.estimatedHours || ''} style={{ fontSize: 13 }} />
+                    <input type="number" className="input" step="0.5" min="0" placeholder="e.g. 4"
+                      value={editInfo.estimatedHours} onChange={e => setEditInfo({ ...editInfo, estimatedHours: e.target.value })} style={{ fontSize: 13 }} />
                   </div>
                 </div>
                 <div style={{ marginBottom: 8 }}>
                   <label className="form-label">Due Date</label>
-                  <input type="date" className="input" id="edit-stage-due"
-                    defaultValue={currentStage.dueDate ? new Date(currentStage.dueDate).toISOString().split('T')[0] : ''}
+                  <input type="date" className="input"
+                    value={editInfo.dueDate} onChange={e => setEditInfo({ ...editInfo, dueDate: e.target.value })}
                     style={{ fontSize: 13 }} />
                 </div>
               </div>
@@ -245,7 +248,6 @@ export default function VehicleDetailPage() {
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setEditingInfo(false)} className="btn btn-secondary" style={{ fontSize: 13 }}>Cancel</button>
               <button onClick={async () => {
-                // Save vehicle info
                 await fetch(`/api/vehicles/${vehicle.id}`, {
                   method: 'PATCH',
                   headers: { 'Content-Type': 'application/json' },
@@ -260,18 +262,14 @@ export default function VehicleDetailPage() {
                     notes: editInfo.notes || null,
                   }),
                 })
-                // Save stage settings
                 if (currentStage) {
-                  const status = (document.getElementById('edit-stage-status') as HTMLSelectElement)?.value
-                  const hours = (document.getElementById('edit-stage-hours') as HTMLInputElement)?.value
-                  const due = (document.getElementById('edit-stage-due') as HTMLInputElement)?.value
                   await fetch(`/api/stages/${currentStage.id}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      status,
-                      estimatedHours: hours || null,
-                      dueDate: due || null,
+                      status: editInfo.stageStatus,
+                      estimatedHours: editInfo.estimatedHours || null,
+                      dueDate: editInfo.dueDate || null,
                     }),
                   })
                 }
@@ -394,7 +392,7 @@ export default function VehicleDetailPage() {
                 onClick={() => { setEditing(true); setEditChecklist([...currentStage.checklist]); setNewTaskText('') }}
                 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', minHeight: 'auto', padding: '4px 8px' }}
               >
-                Edit
+                Edit Tasks
               </button>
             )}
           </div>
