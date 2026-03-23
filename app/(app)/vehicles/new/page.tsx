@@ -71,6 +71,24 @@ export default function AddVehiclePage() {
       })
       const result = await res.json()
       if (!res.ok) {
+        if (result.error === 'completed' && result.vehicleId) {
+          const reason = prompt(
+            `${result.vehicle} (Stock #${data.stockNumber}) has already completed recon.\n\nTo send it back through, enter the reason:`
+          )
+          if (reason) {
+            const restartRes = await fetch(`/api/vehicles/${result.vehicleId}/restart`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reason }),
+            })
+            if (restartRes.ok) {
+              router.push(`/vehicles/${result.vehicleId}`)
+              return
+            }
+            setError('Failed to restart recon')
+          }
+          return
+        }
         setError(result.error || 'Failed to create vehicle')
         return
       }

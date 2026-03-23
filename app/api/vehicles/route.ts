@@ -59,7 +59,15 @@ export async function POST(request: Request) {
   // Check for duplicate stock number
   const existing = await prisma.vehicle.findUnique({ where: { stockNumber } })
   if (existing) {
-    return NextResponse.json({ error: 'Stock number already exists' }, { status: 409 })
+    if (existing.status === 'completed') {
+      return NextResponse.json({
+        error: 'completed',
+        message: 'This vehicle has already completed the recon process.',
+        vehicleId: existing.id,
+        vehicle: `${existing.year ?? ''} ${existing.make} ${existing.model}`.trim(),
+      }, { status: 409 })
+    }
+    return NextResponse.json({ error: 'Stock number already exists and is currently in recon.' }, { status: 409 })
   }
 
   // Determine assignee — use provided, or find default for starting stage
