@@ -263,7 +263,7 @@ export default function VehicleDetailPage() {
                   }),
                 })
                 if (currentStage) {
-                  await fetch(`/api/stages/${currentStage.id}`, {
+                  const stageRes = await fetch(`/api/stages/${currentStage.id}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -272,6 +272,11 @@ export default function VehicleDetailPage() {
                       dueDate: editInfo.dueDate || null,
                     }),
                   })
+                  if (!stageRes.ok) {
+                    const err = await stageRes.json()
+                    alert(`Stage update failed: ${err.error || 'Unknown error'}`)
+                    return
+                  }
                 }
                 setEditingInfo(false)
                 refresh()
