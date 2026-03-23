@@ -35,11 +35,26 @@ export async function GET() {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Get all mechanic stages that aren't done, ordered by priority then creation
+  // Get awaiting parts stages separately
+  const awaitingPartsStages = await prisma.vehicleStage.findMany({
+    where: {
+      stage: 'mechanic',
+      status: { not: 'done' },
+      awaitingParts: true,
+    },
+    include: {
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
+      assignee: { select: { id: true, name: true } },
+    },
+    orderBy: [{ awaitingPartsSince: 'asc' }],
+  })
+
+  // Get all mechanic stages that aren't done, excluding awaiting parts
   const stages = await prisma.vehicleStage.findMany({
     where: {
       stage: 'mechanic',
       status: { not: 'done' },
+      awaitingParts: false,
     },
     include: {
       vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
@@ -140,7 +155,16 @@ export async function GET() {
     }))
   })
 
-  return NextResponse.json({ schedule: flattened, workHours: { start: WORK_START, end: WORK_END } })
+  const awaitingParts = awaitingPartsStages.map(s => ({
+    id: s.id,
+    vehicle: s.vehicle,
+    assignee: s.assignee,
+    status: s.status,
+    awaitingPartsDate: s.awaitingPartsDate?.toISOString() || null,
+    awaitingPartsSince: s.awaitingPartsSince?.toISOString() || null,
+  }))
+
+  return NextResponse.json({ schedule: flattened, awaitingParts, workHours: { start: WORK_START, end: WORK_END } })
 }
 
 // Split a time range into per-day work segments

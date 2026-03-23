@@ -1,7 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+
+type ChecklistItem = { item: string; done: boolean; note: string }
 
 type ScheduleBlock = {
   id: string
@@ -9,7 +11,7 @@ type ScheduleBlock = {
   assignee: { id: string; name: string } | null
   status: string
   estimatedHours: number | null
-  checklist: { item: string; done: boolean; note: string }[]
+  checklist: ChecklistItem[]
   startTime: string
   endTime: string
   priority: number
@@ -17,6 +19,15 @@ type ScheduleBlock = {
   isContination?: boolean
   segmentIndex?: number
   totalSegments?: number
+}
+
+type AwaitingPart = {
+  id: string
+  vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null }
+  assignee: { id: string; name: string } | null
+  status: string
+  awaitingPartsDate: string | null
+  awaitingPartsSince: string | null
 }
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
@@ -32,15 +43,88 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function MechanicSchedulePage() {
   const [schedule, setSchedule] = useState<ScheduleBlock[]>([])
+  const [awaitingParts, setAwaitingParts] = useState<AwaitingPart[]>([])
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<'list' | 'timeline'>('list')
+  const [selectedBlock, setSelectedBlock] = useState<ScheduleBlock | null>(null)
+  const [modalChecklist, setModalChecklist] = useState<ChecklistItem[]>([])
+  const [saving, setSaving] = useState(false)
+  const [completing, setCompleting] = useState(false)
+  const [showAwaitingPrompt, setShowAwaitingPrompt] = useState(false)
+  const [expectedDate, setExpectedDate] = useState('')
 
-  useEffect(() => {
+  const fetchSchedule = useCallback(() => {
     fetch('/api/mechanic-schedule').then(r => r.json()).then(d => {
       setSchedule(d.schedule || [])
+      setAwaitingParts(d.awaitingParts || [])
       setLoading(false)
     })
   }, [])
+
+  useEffect(() => { fetchSchedule() }, [fetchSchedule])
+
+  // Open modal
+  const openModal = (block: ScheduleBlock) => {
+    setSelectedBlock(block)
+    setModalChecklist(JSON.parse(JSON.stringify(block.checklist || [])))
+    setShowAwaitingPrompt(false)
+    setExpectedDate('')
+  }
+
+  const closeModal = () => {
+    setSelectedBlock(null)
+    setModalChecklist([])
+    setShowAwaitingPrompt(false)
+  }
+
+  // Toggle checklist item
+  const toggleItem = async (index: number) => {
+    const updated = [...modalChecklist]
+    updated[index] = { ...updated[index], done: !updated[index].done }
+    setModalChecklist(updated)
+    setSaving(true)
+    await fetch(`/api/stages/${selectedBlock!.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checklist: updated }),
+    })
+    setSaving(false)
+    // Update local schedule data
+    setSchedule(prev => prev.map(b => b.id === selectedBlock!.id ? { ...b, checklist: updated } : b))
+  }
+
+  // Complete stage
+  const completeStage = async () => {
+    if (!selectedBlock) return
+    setCompleting(true)
+    await fetch(`/api/stages/${selectedBlock.id}/advance`, { method: 'POST' })
+    setCompleting(false)
+    closeModal()
+    fetchSchedule()
+  }
+
+  // Set awaiting parts
+  const submitAwaitingParts = async () => {
+    if (!selectedBlock) return
+    setSaving(true)
+    await fetch(`/api/stages/${selectedBlock.id}/awaiting-parts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ awaitingParts: true, expectedDate: expectedDate || undefined }),
+    })
+    setSaving(false)
+    closeModal()
+    fetchSchedule()
+  }
+
+  // Parts arrived
+  const partsArrived = async (stageId: string) => {
+    await fetch(`/api/stages/${stageId}/awaiting-parts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ awaitingParts: false }),
+    })
+    fetchSchedule()
+  }
 
   // Group blocks by day
   const days = new Map<string, ScheduleBlock[]>()
@@ -55,6 +139,8 @@ export default function MechanicSchedulePage() {
   const inProgress = schedule.find(b => b.status === 'in_progress')
   const queuedCount = schedule.filter(b => b.status === 'pending').length
   const blockedCount = schedule.filter(b => b.status === 'blocked').length
+
+  const allDone = modalChecklist.length > 0 && modalChecklist.every(c => c.done)
 
   return (
     <div>
@@ -86,11 +172,54 @@ export default function MechanicSchedulePage() {
           <p className="pipeline-chip-value">{totalHours}h</p>
           <p className="pipeline-chip-label">Total Est.</p>
         </div>
+        <div className="pipeline-chip" style={{ borderColor: '#f59e0b' }}>
+          <p className="pipeline-chip-value" style={{ color: '#f59e0b' }}>{awaitingParts.length}</p>
+          <p className="pipeline-chip-label">Awaiting Parts</p>
+        </div>
       </div>
+
+      {/* Awaiting Parts Section */}
+      {awaitingParts.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, marginBottom: 10, color: '#92400e' }}>Awaiting Parts</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {awaitingParts.map(ap => {
+              const v = ap.vehicle
+              const desc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
+              const expDate = ap.awaitingPartsDate ? new Date(ap.awaitingPartsDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
+              return (
+                <div key={ap.id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: 12,
+                  padding: '12px 16px',
+                }}>
+                  <div>
+                    <p style={{ fontSize: 14, fontWeight: 700 }}>#{v.stockNumber}</p>
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {desc}{v.color ? ` · ${v.color}` : ''}
+                    </p>
+                    {expDate && <p style={{ fontSize: 12, color: '#92400e' }}>Expected: {expDate}</p>}
+                  </div>
+                  <button
+                    onClick={() => partsArrived(ap.id)}
+                    style={{
+                      padding: '8px 16px', borderRadius: 8, border: '1px solid #f59e0b',
+                      background: '#fef3c7', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+                      color: '#92400e',
+                    }}
+                  >
+                    Parts Arrived
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Loading...</p>
-      ) : schedule.length === 0 ? (
+      ) : schedule.length === 0 && awaitingParts.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
           No mechanic jobs scheduled. All clear.
         </div>
@@ -108,20 +237,20 @@ export default function MechanicSchedulePage() {
                   </p>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {blocks.map((block, i) => {
+                  {blocks.map((block) => {
                     const hours = block.estimatedHours || 2
                     const startTime = new Date(block.startTime)
                     const endTime = new Date(block.endTime)
                     const isOverdue = block.status === 'in_progress' && new Date() > endTime
                     const colorKey = isOverdue ? 'in_progress_overdue' : block.status
                     const colors = STATUS_COLORS[colorKey] || STATUS_COLORS.pending
-                    const doneCount = (block.checklist as { done: boolean }[]).filter(c => c.done).length
-                    const totalCount = (block.checklist as { done: boolean }[]).length
+                    const doneCount = (block.checklist as ChecklistItem[]).filter(c => c.done).length
+                    const totalCount = (block.checklist as ChecklistItem[]).length
                     const vehicle = block.vehicle
                     const desc = `${vehicle.year ?? ''} ${vehicle.make} ${vehicle.model}`.trim()
 
                     return (
-                      <Link key={block.id} href={`/vehicles/${vehicle.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                      <div key={`${block.id}-${block.segmentIndex ?? 0}`} onClick={() => openModal(block)} style={{ cursor: 'pointer' }}>
                         <div style={{
                           display: 'flex', gap: 14, alignItems: 'stretch',
                           background: colors.bg, border: `1px solid ${colors.border}`,
@@ -187,13 +316,179 @@ export default function MechanicSchedulePage() {
                             )}
                           </div>
                         </div>
-                      </Link>
+                      </div>
                     )
                   })}
                 </div>
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Task Modal */}
+      {selectedBlock && (
+        <div
+          onClick={closeModal}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+            zIndex: 1000, padding: 0,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 500,
+              maxHeight: '85vh', overflow: 'auto', padding: '24px 20px',
+              boxShadow: '0 -4px 30px rgba(0,0,0,0.15)',
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+              <div>
+                <p style={{ fontSize: 18, fontWeight: 700 }}>#{selectedBlock.vehicle.stockNumber}</p>
+                <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                  {`${selectedBlock.vehicle.year ?? ''} ${selectedBlock.vehicle.make} ${selectedBlock.vehicle.model}`.trim()}
+                  {selectedBlock.vehicle.color ? ` · ${selectedBlock.vehicle.color}` : ''}
+                </p>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
+                    background: (STATUS_COLORS[selectedBlock.status]?.border || '#e0e0e0') + '20',
+                    color: STATUS_COLORS[selectedBlock.status]?.border || '#888',
+                    textTransform: 'uppercase', letterSpacing: '0.04em',
+                  }}>
+                    {STATUS_LABELS[selectedBlock.status] || selectedBlock.status}
+                  </span>
+                  <Link
+                    href={`/vehicles/${selectedBlock.vehicle.id}`}
+                    style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none' }}
+                  >
+                    View Details
+                  </Link>
+                </div>
+              </div>
+              <button onClick={closeModal} style={{
+                background: 'none', border: 'none', fontSize: 22, cursor: 'pointer',
+                color: 'var(--text-muted)', padding: '0 4px', lineHeight: 1,
+              }}>
+                &times;
+              </button>
+            </div>
+
+            {/* Checklist */}
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--text-secondary)' }}>
+                Tasks ({modalChecklist.filter(c => c.done).length}/{modalChecklist.length})
+                {saving && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 8, color: 'var(--text-muted)' }}>Saving...</span>}
+              </p>
+              {modalChecklist.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No checklist items</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {modalChecklist.map((item, i) => (
+                    <div
+                      key={i}
+                      onClick={() => toggleItem(i)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                        background: item.done ? '#f0fdf4' : '#f8f8f6', borderRadius: 10,
+                        cursor: 'pointer', border: '1px solid', borderColor: item.done ? '#bbf7d0' : '#e5e5e5',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <div style={{
+                        width: 22, height: 22, borderRadius: 6, border: '2px solid',
+                        borderColor: item.done ? '#22c55e' : '#d1d5db',
+                        background: item.done ? '#22c55e' : '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0, transition: 'all 0.15s',
+                      }}>
+                        {item.done && (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </div>
+                      <span style={{
+                        fontSize: 14, color: item.done ? 'var(--text-muted)' : 'var(--text-primary)',
+                        textDecoration: item.done ? 'line-through' : 'none',
+                      }}>
+                        {item.item}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Awaiting Parts Prompt */}
+            {showAwaitingPrompt ? (
+              <div style={{ marginBottom: 16, padding: 16, background: '#fffbeb', borderRadius: 12, border: '1px solid #f59e0b' }}>
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#92400e' }}>Expected delivery date (optional)</p>
+                <input
+                  type="date"
+                  value={expectedDate}
+                  onChange={e => setExpectedDate(e.target.value)}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e5e5',
+                    fontSize: 14, marginBottom: 10, boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={submitAwaitingParts}
+                    disabled={saving}
+                    style={{
+                      flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+                      background: '#f59e0b', color: '#fff', fontWeight: 700, fontSize: 14,
+                      cursor: 'pointer', opacity: saving ? 0.6 : 1,
+                    }}
+                  >
+                    {saving ? 'Saving...' : 'Confirm'}
+                  </button>
+                  <button
+                    onClick={() => setShowAwaitingPrompt(false)}
+                    style={{
+                      padding: '10px 16px', borderRadius: 10, border: '1px solid #e5e5e5',
+                      background: '#fff', fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <button
+                  onClick={() => setShowAwaitingPrompt(true)}
+                  style={{
+                    flex: 1, padding: '12px 0', borderRadius: 12, border: '1px solid #f59e0b',
+                    background: '#fffbeb', color: '#92400e', fontWeight: 700, fontSize: 14,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Awaiting Parts
+                </button>
+              </div>
+            )}
+
+            {/* Complete Button */}
+            <button
+              onClick={completeStage}
+              disabled={!allDone || completing}
+              style={{
+                width: '100%', padding: '14px 0', borderRadius: 12, border: 'none',
+                background: allDone ? '#dffd6e' : '#e5e5e5',
+                color: allDone ? '#1a1a1a' : '#999',
+                fontWeight: 700, fontSize: 15, cursor: allDone ? 'pointer' : 'not-allowed',
+                opacity: completing ? 0.6 : 1, transition: 'all 0.15s',
+              }}
+            >
+              {completing ? 'Completing...' : 'Complete Stage'}
+            </button>
+          </div>
         </div>
       )}
     </div>
