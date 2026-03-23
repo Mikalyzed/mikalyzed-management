@@ -34,7 +34,6 @@ const PRIORITY_LABELS: Record<number, { label: string; color: string }> = {
 
 const COLUMNS = [
   { key: 'todo', label: 'To Do' },
-  { key: 'in_progress', label: 'In Progress' },
   { key: 'done', label: 'Done' },
 ]
 
@@ -221,32 +220,17 @@ export default function TaskBoardPage() {
                               </span>
                             )}
                           </div>
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            {col.key === 'todo' && (
-                              <button onClick={() => updateStatus(task.id, 'in_progress')} style={{
-                                fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
-                                border: '1px solid var(--border)', background: '#fff', cursor: 'pointer', color: 'var(--text-secondary)',
-                              }}>Start</button>
-                            )}
-                            {col.key === 'in_progress' && (
-                              <button onClick={() => updateStatus(task.id, 'done')} style={{
-                                fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
-                                border: 'none', background: '#1a1a1a', color: '#dffd6e', cursor: 'pointer',
-                              }}>Done</button>
-                            )}
-                            {col.key === 'done' && (
-                              <button onClick={() => updateStatus(task.id, 'todo')} style={{
-                                fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
-                                border: '1px solid var(--border)', background: '#fff', cursor: 'pointer', color: 'var(--text-secondary)',
-                              }}>Reopen</button>
-                            )}
-                            {isAdmin && (
-                              <button onClick={() => deleteTask(task.id)} style={{
-                                fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
-                                border: '1px solid var(--border)', background: '#fff', cursor: 'pointer', color: '#ef4444',
-                              }}>X</button>
-                            )}
-                          </div>
+                          {col.key === 'todo' ? (
+                            <button onClick={() => updateStatus(task.id, 'done')} style={{
+                              fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
+                              border: 'none', background: '#1a1a1a', color: '#dffd6e', cursor: 'pointer',
+                            }}>Complete</button>
+                          ) : (
+                            <button onClick={() => updateStatus(task.id, 'todo')} style={{
+                              fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
+                              border: '1px solid var(--border)', background: '#fff', cursor: 'pointer', color: 'var(--text-secondary)',
+                            }}>Reopen</button>
+                          )}
                         </div>
                       </div>
                     ))}
