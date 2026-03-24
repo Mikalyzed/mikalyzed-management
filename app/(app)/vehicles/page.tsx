@@ -564,19 +564,22 @@ export default function VehiclesPage() {
                     )}
                   </div>
 
-                  {/* Complete Stage Button */}
-                  {canAdvance && allDone && v.status !== 'completed' && (
+                  {/* Advance Stage Button */}
+                  {canAdvance && v.status !== 'completed' && (
                     <button
                       onClick={handleAdvanceStage}
-                      disabled={advancing}
+                      disabled={!allDone || advancing}
                       style={{
                         width: '100%', padding: '14px 0', borderRadius: 12, border: 'none',
-                        background: '#dffd6e', color: '#1a1a1a', fontSize: 15, fontWeight: 700,
-                        cursor: advancing ? 'default' : 'pointer', opacity: advancing ? 0.6 : 1,
-                        transition: 'opacity 0.15s',
+                        background: allDone ? '#dffd6e' : '#e5e5e5',
+                        color: allDone ? '#1a1a1a' : '#999',
+                        fontSize: 15, fontWeight: 700,
+                        cursor: !allDone || advancing ? 'default' : 'pointer',
+                        opacity: advancing ? 0.6 : 1,
+                        transition: 'all 0.15s',
                       }}
                     >
-                      {advancing ? 'Advancing...' : 'Complete Stage'}
+                      {advancing ? 'Advancing...' : allDone ? 'Advance Stage' : 'Complete all tasks to advance'}
                     </button>
                   )}
                 </>
