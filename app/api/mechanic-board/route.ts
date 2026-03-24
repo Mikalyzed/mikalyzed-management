@@ -4,6 +4,7 @@ import { getSessionUser } from '@/lib/auth'
 
 const WORK_START = 9
 const WORK_END = 19
+const HOURS_PER_DAY = WORK_END - WORK_START
 const TZ = 'America/New_York'
 
 function etHour(d: Date): number {
@@ -124,17 +125,56 @@ export async function GET() {
     return sum + sec
   }, 0)
 
-  // Today's plan: active + queued in order (what mechanic should work through today)
-  const allToday = [...active, ...paused.filter(p => !p.awaitingParts), ...queued]
+  // Calculate remaining work hours this week
+  // Days left including today (Mon=0..Fri=4, Sat/Sun=0 days left)
+  const etDayOfWeek = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short' }).format(now)
+  const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(etDayOfWeek)
+  let remainingHoursThisWeek = 0
+  if (dayIndex >= 0 && dayIndex <= 4) {
+    // Hours left today
+    const hoursLeftToday = h < WORK_START ? HOURS_PER_DAY : h >= WORK_END ? 0 : WORK_END - h
+    // Full days remaining after today (not counting today)
+    const fullDaysLeft = 4 - dayIndex // e.g. Mon=4 days left, Fri=0
+    remainingHoursThisWeek = hoursLeftToday + (fullDaysLeft * HOURS_PER_DAY)
+  }
+
+  // Already worked/in-progress hours count against remaining capacity
+  const activeHoursRemaining = [...active, ...paused.filter(p => !p.awaitingParts)].reduce((sum, s) => {
+    const est = s.estimatedHours || 2
+    const elapsed = getElapsed(s) / 3600
+    return sum + Math.max(0, est - elapsed)
+  }, 0)
+  const availableForQueue = Math.max(0, remainingHoursThisWeek - activeHoursRemaining)
+
+  // Split queued into this week vs next week
+  let budgetLeft = availableForQueue
+  const thisWeekJobs: typeof stages = [...active, ...paused.filter(p => !p.awaitingParts)]
+  const nextWeekJobs: typeof stages = []
+
+  for (const s of queued) {
+    const est = s.estimatedHours || 2
+    if (budgetLeft >= est) {
+      thisWeekJobs.push(s)
+      budgetLeft -= est
+    } else if (budgetLeft > 0) {
+      // Partially fits — include it this week (mechanic will start it)
+      thisWeekJobs.push(s)
+      budgetLeft = 0
+    } else {
+      nextWeekJobs.push(s)
+    }
+  }
 
   return NextResponse.json({
     active: active.map(format),
     paused: paused.map(format),
     queued: queued.map(format),
     completedToday: completedToday.map(format),
-    todayPlan: allToday.map(format),
+    thisWeek: thisWeekJobs.map(format),
+    nextWeek: nextWeekJobs.map(format),
     weeklyEstimatedHours,
-    weeklyWorkedHours: Math.round(weeklyWorkedSeconds / 360) / 10, // 1 decimal
+    weeklyWorkedHours: Math.round(weeklyWorkedSeconds / 360) / 10,
+    remainingHoursThisWeek: Math.round(remainingHoursThisWeek * 10) / 10,
     workHours: { start: WORK_START, end: WORK_END },
     currentHour: h,
     isWorkHours: h >= WORK_START && h < WORK_END,

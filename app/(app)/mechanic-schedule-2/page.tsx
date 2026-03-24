@@ -28,8 +28,8 @@ type JobCard = {
 
 type BoardData = {
   active: JobCard[]; paused: JobCard[]; queued: JobCard[]; completedToday: JobCard[]
-  todayPlan: JobCard[]
-  weeklyEstimatedHours: number; weeklyWorkedHours: number
+  thisWeek: JobCard[]; nextWeek: JobCard[]
+  weeklyEstimatedHours: number; weeklyWorkedHours: number; remainingHoursThisWeek: number
   isWorkHours: boolean
 }
 
@@ -322,55 +322,39 @@ export default function MechanicBoard() {
         </div>
       </div>
 
-      {/* Today's Plan */}
-      {data.todayPlan.length > 0 && (
+      {/* This Week's Lineup */}
+      {data.thisWeek.length > 0 && (
         <div style={{ marginBottom: 28 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <div style={{ width: 4, height: 20, borderRadius: 2, background: '#1a1a1a' }} />
-            <h2 style={{ fontSize: 16, fontWeight: 700 }}>Today&apos;s Lineup</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 4, height: 20, borderRadius: 2, background: '#1a1a1a' }} />
+              <h2 style={{ fontSize: 16, fontWeight: 700 }}>This Week&apos;s Lineup</h2>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.thisWeek.length} vehicles</span>
+            </div>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{data.remainingHoursThisWeek}h remaining</span>
           </div>
           <div style={{
             display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
             WebkitOverflowScrolling: 'touch',
           }}>
-            {data.todayPlan.map((job, i) => {
-              const v = job.vehicle
-              const elapsed = getLiveElapsed(job)
-              const est = job.estimatedHours || 2
-              const isOver = elapsed > est * 3600
-              const isActive = job.timerRunning
-              const isPaused = !job.timerRunning && job.status === 'in_progress'
-              return (
-                <div key={job.id} onClick={() => openJob(job)} style={{
-                  minWidth: 180, maxWidth: 220, padding: '12px 14px',
-                  background: isActive ? '#eff6ff' : isPaused ? '#fff7ed' : '#f9fafb',
-                  border: `1px solid ${isActive ? '#3b82f6' : isPaused ? '#f59e0b' : '#e2e5ea'}`,
-                  borderRadius: 12, cursor: 'pointer', flexShrink: 0,
-                  borderTop: `3px solid ${isActive ? '#3b82f6' : isPaused ? '#f59e0b' : '#d1d5db'}`,
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>#{i + 1}</span>
-                    {isActive && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }} />}
-                    {isPaused && <Badge text="Paused" color="#f59e0b" />}
-                  </div>
-                  <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>#{v.stockNumber}</p>
-                  <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}
-                  </p>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
-                    <span style={{ fontWeight: 700, color: isOver ? '#ef4444' : 'var(--text-secondary)' }}>{formatHours(elapsed)}</span>
-                    <span>{est}h est.</span>
-                  </div>
-                  <div style={{ marginTop: 6, height: 3, background: '#e2e5ea', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%', borderRadius: 2,
-                      width: `${Math.min((elapsed / (est * 3600)) * 100, 100)}%`,
-                      background: isOver ? '#ef4444' : isActive ? '#3b82f6' : '#94a3b8',
-                    }} />
-                  </div>
-                </div>
-              )
-            })}
+            {data.thisWeek.map((job, i) => <WeekCard key={job.id} job={job} index={i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)}
+          </div>
+        </div>
+      )}
+
+      {/* Next Week overflow */}
+      {data.nextWeek.length > 0 && (
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ width: 4, height: 20, borderRadius: 2, background: '#d1d5db' }} />
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-muted)' }}>Next Week</h2>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.nextWeek.length} vehicles</span>
+          </div>
+          <div style={{
+            display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
+            WebkitOverflowScrolling: 'touch',
+          }}>
+            {data.nextWeek.map((job, i) => <WeekCard key={job.id} job={job} index={data.thisWeek.length + i} getLiveElapsed={getLiveElapsed} openJob={openJob} muted />)}
           </div>
         </div>
       )}
@@ -655,4 +639,47 @@ const pauseOptionStyle: React.CSSProperties = {
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea',
   fontSize: 14, background: '#f9fafb', outline: 'none',
+}
+
+function WeekCard({ job, index, getLiveElapsed, openJob, muted }: {
+  job: JobCard; index: number; getLiveElapsed: (j: JobCard) => number; openJob: (j: JobCard) => void; muted?: boolean
+}) {
+  const v = job.vehicle
+  const elapsed = getLiveElapsed(job)
+  const est = job.estimatedHours || 2
+  const isOver = elapsed > est * 3600
+  const isActive = job.timerRunning
+  const isPaused = !job.timerRunning && job.status === 'in_progress'
+
+  return (
+    <div onClick={() => openJob(job)} style={{
+      minWidth: 180, maxWidth: 220, padding: '12px 14px',
+      background: muted ? '#f4f4f5' : isActive ? '#eff6ff' : isPaused ? '#fff7ed' : '#f9fafb',
+      border: `1px solid ${muted ? '#e2e5ea' : isActive ? '#3b82f6' : isPaused ? '#f59e0b' : '#e2e5ea'}`,
+      borderRadius: 12, cursor: 'pointer', flexShrink: 0,
+      borderTop: `3px solid ${muted ? '#d1d5db' : isActive ? '#3b82f6' : isPaused ? '#f59e0b' : '#d1d5db'}`,
+      opacity: muted ? 0.7 : 1,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>#{index + 1}</span>
+        {isActive && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }} />}
+        {isPaused && <Badge text="Paused" color="#f59e0b" />}
+      </div>
+      <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>#{v.stockNumber}</p>
+      <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}
+      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
+        <span style={{ fontWeight: 700, color: isOver ? '#ef4444' : 'var(--text-secondary)' }}>{formatHours(elapsed)}</span>
+        <span>{est}h est.</span>
+      </div>
+      <div style={{ marginTop: 6, height: 3, background: '#e2e5ea', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', borderRadius: 2,
+          width: `${Math.min((elapsed / (est * 3600)) * 100, 100)}%`,
+          background: isOver ? '#ef4444' : isActive ? '#3b82f6' : '#94a3b8',
+        }} />
+      </div>
+    </div>
+  )
 }
