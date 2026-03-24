@@ -67,6 +67,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // Use custom assignee if provided (including explicit null for unassigned)
       const assigneeId = customAssigneeId !== undefined ? (customAssigneeId || null) : (config?.defaultAssigneeId || null)
 
+      // Put at bottom of target stage (highest priority + 1)
+      const lastInStage = await tx.vehicleStage.findFirst({
+        where: { stage: targetStage, status: { not: 'done' } },
+        orderBy: { priority: 'desc' },
+        select: { priority: true },
+      })
+      const bottomPriority = (lastInStage?.priority ?? -1) + 1
+
       const newStage = await tx.vehicleStage.create({
         data: {
           vehicleId,
@@ -74,6 +82,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           status: 'pending',
           assigneeId,
           checklist,
+          priority: bottomPriority,
         },
       })
 

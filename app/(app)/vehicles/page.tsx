@@ -747,48 +747,79 @@ export default function VehiclesPage() {
 
             {/* Tasks */}
             <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, display: 'block' }}>
-              Tasks ({moveModal.tasks.filter(t => t.selected).length}/{moveModal.tasks.length})
+              Tasks ({moveModal.tasks.filter(t => t.selected).length})
             </label>
-            {moveModal.tasks.length === 0 ? (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>No default tasks for this stage</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-                {moveModal.tasks.map((task, i) => (
-                  <div
-                    key={i}
-                    onClick={() => {
-                      setMoveModal(prev => {
-                        if (!prev) return null
-                        const tasks = [...prev.tasks]
-                        tasks[i] = { ...tasks[i], selected: !tasks[i].selected }
-                        return { ...prev, tasks }
-                      })
-                    }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                      background: task.selected ? '#f0fdf4' : '#f8f8f6', borderRadius: 10,
-                      cursor: 'pointer', border: '1px solid', borderColor: task.selected ? '#bbf7d0' : '#e5e5e5',
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    <div style={{
-                      width: 22, height: 22, borderRadius: 6, border: '2px solid',
-                      borderColor: task.selected ? '#22c55e' : '#d1d5db',
-                      background: task.selected ? '#22c55e' : '#fff',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0, transition: 'all 0.15s',
-                    }}>
-                      {task.selected && (
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      )}
-                    </div>
-                    <span style={{ fontSize: 14 }}>{task.item}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+              {moveModal.tasks.map((task, i) => (
+                <div
+                  key={i}
+                  onClick={() => {
+                    setMoveModal(prev => {
+                      if (!prev) return null
+                      const tasks = [...prev.tasks]
+                      tasks[i] = { ...tasks[i], selected: !tasks[i].selected }
+                      return { ...prev, tasks }
+                    })
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                    background: task.selected ? '#f0fdf4' : '#f8f8f6', borderRadius: 10,
+                    cursor: 'pointer', border: '1px solid', borderColor: task.selected ? '#bbf7d0' : '#e5e5e5',
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <div style={{
+                    width: 22, height: 22, borderRadius: 6, border: '2px solid',
+                    borderColor: task.selected ? '#22c55e' : '#d1d5db',
+                    background: task.selected ? '#22c55e' : '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0, transition: 'all 0.15s',
+                  }}>
+                    {task.selected && (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
                   </div>
-                ))}
-              </div>
-            )}
+                  <span style={{ fontSize: 14 }}>{task.item}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Add custom task */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                const input = (e.currentTarget.elements.namedItem('newTask') as HTMLInputElement)
+                const val = input.value.trim()
+                if (!val) return
+                setMoveModal(prev => {
+                  if (!prev) return null
+                  return { ...prev, tasks: [...prev.tasks, { item: val, selected: true }] }
+                })
+                input.value = ''
+              }}
+              style={{ display: 'flex', gap: 8, marginBottom: 20 }}
+            >
+              <input
+                name="newTask"
+                placeholder="Add custom task..."
+                style={{
+                  flex: 1, padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e5e5',
+                  fontSize: 14, background: '#f8f8f6', outline: 'none',
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  padding: '10px 16px', borderRadius: 10, border: 'none',
+                  background: '#1a1a1a', color: '#fff', fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', whiteSpace: 'nowrap',
+                }}
+              >
+                Add
+              </button>
+            </form>
 
             {/* Actions */}
             <div style={{ display: 'flex', gap: 10 }}>
