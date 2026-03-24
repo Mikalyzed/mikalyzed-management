@@ -34,8 +34,17 @@ export default function NewCalendarItem() {
     if (!title || !date) return
     setSaving(true)
 
-    const dateStr = allDay ? `${date}T00:00:00` : `${date}T${time || '09:00'}:00`
-    const endDateStr = !allDay && endTime ? `${date}T${endTime}:00` : null
+    // Append local timezone offset so the server stores the correct absolute time
+    const tzSuffix = (() => {
+      const now = new Date()
+      const offset = -now.getTimezoneOffset()
+      const sign = offset >= 0 ? '+' : '-'
+      const h = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0')
+      const m = String(Math.abs(offset) % 60).padStart(2, '0')
+      return `${sign}${h}:${m}`
+    })()
+    const dateStr = allDay ? `${date}T00:00:00` : `${date}T${time || '09:00'}:00${tzSuffix}`
+    const endDateStr = !allDay && endTime ? `${date}T${endTime}:00${tzSuffix}` : null
 
     const res = await fetch('/api/calendar', {
       method: 'POST',

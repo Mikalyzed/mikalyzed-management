@@ -54,7 +54,15 @@ export default function CalendarItemDetail() {
   }
 
   async function handleSaveEdit() {
-    const dateStr = `${editDate}T${editTime || '09:00'}:00`
+    const tzSuffix = (() => {
+      const now = new Date()
+      const offset = -now.getTimezoneOffset()
+      const sign = offset >= 0 ? '+' : '-'
+      const h = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0')
+      const m = String(Math.abs(offset) % 60).padStart(2, '0')
+      return `${sign}${h}:${m}`
+    })()
+    const dateStr = `${editDate}T${editTime || '09:00'}:00${tzSuffix}`
     const res = await fetch(`/api/calendar/${params.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
