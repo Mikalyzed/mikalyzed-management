@@ -326,7 +326,13 @@ export default function MechanicSchedulePage() {
                     const hours = block.estimatedHours || 2
                     const startTime = new Date(block.startTime)
                     const endTime = new Date(block.endTime)
-                    const isOverdue = block.status === 'in_progress' && new Date() > endTime
+                    // For multi-day jobs, only mark overdue when past the FINAL segment's end time
+                    let finalEndTime = endTime
+                    if (block.totalSegments && block.totalSegments > 1) {
+                      const lastSeg = schedule.filter(b => b.id === block.id).pop()
+                      if (lastSeg) finalEndTime = new Date(lastSeg.endTime)
+                    }
+                    const isOverdue = block.status === 'in_progress' && new Date() > finalEndTime
                     const colorKey = isOverdue ? 'in_progress_overdue' : block.status
                     const colors = STATUS_COLORS[colorKey] || STATUS_COLORS.pending
                     const doneCount = (block.checklist as ChecklistItem[]).filter(c => c.done).length
