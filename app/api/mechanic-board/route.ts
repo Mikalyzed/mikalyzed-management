@@ -164,36 +164,43 @@ export async function GET() {
     dayBuckets.push({ day: DAY_NAMES[dayIndex + d], budget: HOURS_PER_DAY, jobs: [] })
   }
 
+  // Track which bucket index to start placing from
+  let currentBucketIdx = 0
+
   for (const s of queued) {
     const est = s.estimatedHours || 2
     if (todayBudget >= est) {
       todayJobs.push(s)
       todayBudget -= est
     } else if (todayBudget > 0) {
+      // Partially fits today — include it, remaining time spills but we move on
       todayJobs.push(s)
       todayBudget = 0
     } else {
-      // Try to fit into a remaining day bucket
+      // Place into the next day bucket that has capacity
       let placed = false
-      for (const bucket of dayBuckets) {
+      while (currentBucketIdx < dayBuckets.length) {
+        const bucket = dayBuckets[currentBucketIdx]
         if (bucket.budget >= est) {
           bucket.jobs.push(s)
           bucket.budget -= est
           placed = true
           break
-        } else if (bucket.budget > 0) {
+        } else if (bucket.budget > 0 && bucket.budget >= est * 0.5) {
+          // At least half fits — put it here (mechanic will finish next day)
           bucket.jobs.push(s)
           bucket.budget = 0
           placed = true
           break
+        } else if (bucket.budget <= 0 || bucket.budget < est * 0.5) {
+          // Day is full, move to next day
+          currentBucketIdx++
+          continue
         }
       }
-      if (!placed) {
-        // Overflow — still add to last bucket or skip
-        // Just add to the end so it shows up somewhere
-        if (dayBuckets.length > 0) {
-          dayBuckets[dayBuckets.length - 1].jobs.push(s)
-        }
+      if (!placed && dayBuckets.length > 0) {
+        // Overflow beyond the week — add to last day as overflow
+        dayBuckets[dayBuckets.length - 1].jobs.push(s)
       }
     }
   }
