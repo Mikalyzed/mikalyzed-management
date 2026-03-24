@@ -198,10 +198,7 @@ export async function GET() {
           continue
         }
       }
-      if (!placed && dayBuckets.length > 0) {
-        // Overflow beyond the week — add to last day as overflow
-        dayBuckets[dayBuckets.length - 1].jobs.push(s)
-      }
+      // If not placed, it's beyond this week — don't show it
     }
   }
 
