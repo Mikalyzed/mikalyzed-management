@@ -64,6 +64,7 @@ export default function MechanicBoard() {
   const [expectedDate, setExpectedDate] = useState('')
   const [trackingNumber, setTrackingNumber] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [showAllQueued, setShowAllQueued] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -401,8 +402,21 @@ export default function MechanicBoard() {
         <div style={{ marginBottom: 28 }}>
           <SectionHeader title="Queue" count={data.queued.length} color="#9ca3af" />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
-            {data.queued.map(j => renderCard(j))}
+            {(showAllQueued ? data.queued : data.queued.slice(0, 6)).map(j => renderCard(j))}
           </div>
+          {data.queued.length > 6 && (
+            <button
+              onClick={() => setShowAllQueued(prev => !prev)}
+              style={{
+                marginTop: 12, padding: '10px 20px', borderRadius: 10,
+                border: '1px solid #d1d5db', background: '#f8f8f6',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#555',
+                width: '100%',
+              }}
+            >
+              {showAllQueued ? 'Show Less' : `Show ${data.queued.length - 6} More`}
+            </button>
+          )}
         </div>
       )}
 
