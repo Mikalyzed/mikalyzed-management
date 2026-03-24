@@ -565,7 +565,7 @@ export default function VehiclesPage() {
                   </div>
 
                   {/* Advance Stage Button */}
-                  {canAdvance && v.status !== 'completed' && (
+                  {v.status !== 'completed' && (
                     <button
                       onClick={handleAdvanceStage}
                       disabled={!allDone || advancing}
