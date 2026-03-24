@@ -52,6 +52,7 @@ const ICON_MAP: Record<string, string> = {
   '/tasks': 'tasks',
   '/task-board': 'tasks',
   '/mechanic-schedule': 'calendar',
+  '/mechanic-schedule-2': 'calendar',
 }
 
 function NavIcon({ name, size = 20 }: { name: string; size?: number }) {
@@ -77,6 +78,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
     },
     { href: '/task-board', label: 'Content Schedule', icon: 'tasks' },
     { href: '/mechanic-schedule', label: 'Mechanic Schedule', icon: 'calendar' },
+    { href: '/mechanic-schedule-2', label: 'Mechanic Schedule #2', icon: 'calendar' },
     { href: '/external', label: 'External Repairs', icon: 'external' },
     { href: '/calendar', label: 'Calendar', icon: 'calendar' },
     { href: '/events', label: 'Events', icon: 'events' },
@@ -89,6 +91,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
     { href: '/tasks', label: 'My Tasks', icon: 'tasks' },
     { href: '/vehicles', label: 'Board', icon: 'board' },
     { href: '/mechanic-schedule', label: 'My Schedule', icon: 'calendar' },
+    { href: '/mechanic-schedule-2', label: 'My Schedule #2', icon: 'calendar' },
     { href: '/transport', label: 'Transport', icon: 'transport' },
   ],
   detailer: [

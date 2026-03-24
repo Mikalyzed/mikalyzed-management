@@ -97,6 +97,10 @@ model VehicleStage {
   awaitingPartsName   String?   @map("awaiting_parts_name")
   awaitingPartsTracking String? @map("awaiting_parts_tracking")
   pauseReason         String?   @map("pause_reason")
+  activeSeconds       Int       @default(0) @map("active_seconds")
+  timerStartedAt      DateTime? @map("timer_started_at")
+  autoPaused          Boolean   @default(false) @map("auto_paused")
+  pauseDetail         String?   @map("pause_detail")
   createdAt           DateTime  @default(now()) @map("created_at")
 
   vehicle             Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
