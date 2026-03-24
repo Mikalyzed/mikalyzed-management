@@ -28,8 +28,8 @@ type JobCard = {
 
 type BoardData = {
   active: JobCard[]; paused: JobCard[]; queued: JobCard[]; completedToday: JobCard[]
-  thisWeek: JobCard[]; nextWeek: JobCard[]
-  weeklyEstimatedHours: number; weeklyWorkedHours: number; remainingHoursThisWeek: number
+  today: JobCard[]; remainingWeek: JobCard[]; nextWeek: JobCard[]
+  weeklyEstimatedHours: number; weeklyWorkedHours: number; remainingHoursThisWeek: number; hoursLeftToday: number
   isWorkHours: boolean
 }
 
@@ -59,6 +59,7 @@ export default function MechanicBoard() {
   const [trackingNumber, setTrackingNumber] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAllQueued, setShowAllQueued] = useState(false)
+  const [showRemainingWeek, setShowRemainingWeek] = useState(false)
   const [tick, setTick] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -322,29 +323,61 @@ export default function MechanicBoard() {
         </div>
       </div>
 
-      {/* This Week's Lineup */}
-      {data.thisWeek.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
+      {/* Today */}
+      {data.today.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 4, height: 20, borderRadius: 2, background: '#1a1a1a' }} />
-              <h2 style={{ fontSize: 16, fontWeight: 700 }}>This Week&apos;s Lineup</h2>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.thisWeek.length} vehicles</span>
+              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Today</h2>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.today.length} vehicles</span>
             </div>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{data.remainingHoursThisWeek}h remaining</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{data.hoursLeftToday}h left today</span>
           </div>
           <div style={{
             display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
             WebkitOverflowScrolling: 'touch',
           }}>
-            {data.thisWeek.map((job, i) => <WeekCard key={job.id} job={job} index={i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)}
+            {data.today.map((job, i) => <WeekCard key={job.id} job={job} index={i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)}
           </div>
         </div>
       )}
 
-      {/* Next Week overflow */}
+      {/* Remaining This Week — collapsed by default */}
+      {data.remainingWeek.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <button
+            onClick={() => setShowRemainingWeek(prev => !prev)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+              padding: '10px 14px', borderRadius: 12, border: '1px solid #e2e5ea',
+              background: '#f9fafb', cursor: 'pointer', marginBottom: showRemainingWeek ? 12 : 0,
+            }}
+          >
+            <div style={{ width: 4, height: 20, borderRadius: 2, background: '#94a3b8' }} />
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)' }}>Remaining This Week</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.remainingWeek.length} vehicles</span>
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
+              {showRemainingWeek ? 'Hide' : 'Show'}
+            </span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-muted)', transform: showRemainingWeek ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          {showRemainingWeek && (
+            <div style={{
+              display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
+              WebkitOverflowScrolling: 'touch',
+            }}>
+              {data.remainingWeek.map((job, i) => <WeekCard key={job.id} job={job} index={data.today.length + i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Next Week */}
       {data.nextWeek.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
+        <div style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
             <div style={{ width: 4, height: 20, borderRadius: 2, background: '#d1d5db' }} />
             <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-muted)' }}>Next Week</h2>
@@ -354,7 +387,7 @@ export default function MechanicBoard() {
             display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
             WebkitOverflowScrolling: 'touch',
           }}>
-            {data.nextWeek.map((job, i) => <WeekCard key={job.id} job={job} index={data.thisWeek.length + i} getLiveElapsed={getLiveElapsed} openJob={openJob} muted />)}
+            {data.nextWeek.map((job, i) => <WeekCard key={job.id} job={job} index={data.today.length + data.remainingWeek.length + i} getLiveElapsed={getLiveElapsed} openJob={openJob} muted />)}
           </div>
         </div>
       )}

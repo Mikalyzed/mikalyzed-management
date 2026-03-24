@@ -138,28 +138,42 @@ export async function GET() {
     remainingHoursThisWeek = hoursLeftToday + (fullDaysLeft * HOURS_PER_DAY)
   }
 
-  // Already worked/in-progress hours count against remaining capacity
+  // Hours left today
+  const hoursLeftToday = dayIndex >= 0 && dayIndex <= 4
+    ? (h < WORK_START ? HOURS_PER_DAY : h >= WORK_END ? 0 : WORK_END - h)
+    : 0
+
+  // Active/paused hours remaining count against today's budget first
   const activeHoursRemaining = [...active, ...paused.filter(p => !p.awaitingParts)].reduce((sum, s) => {
     const est = s.estimatedHours || 2
     const elapsed = getElapsed(s) / 3600
     return sum + Math.max(0, est - elapsed)
   }, 0)
-  const availableForQueue = Math.max(0, remainingHoursThisWeek - activeHoursRemaining)
 
-  // Split queued into this week vs next week
-  let budgetLeft = availableForQueue
-  const thisWeekJobs: typeof stages = [...active, ...paused.filter(p => !p.awaitingParts)]
+  // Split into today / remaining week / next week
+  const todayJobs: typeof stages = [...active, ...paused.filter(p => !p.awaitingParts)]
+  const remainingWeekJobs: typeof stages = []
   const nextWeekJobs: typeof stages = []
+
+  let todayBudget = Math.max(0, hoursLeftToday - activeHoursRemaining)
+  const fullDaysLeft = dayIndex >= 0 && dayIndex <= 4 ? 4 - dayIndex : 0
+  let weekBudget = fullDaysLeft * HOURS_PER_DAY // remaining days AFTER today
 
   for (const s of queued) {
     const est = s.estimatedHours || 2
-    if (budgetLeft >= est) {
-      thisWeekJobs.push(s)
-      budgetLeft -= est
-    } else if (budgetLeft > 0) {
-      // Partially fits — include it this week (mechanic will start it)
-      thisWeekJobs.push(s)
-      budgetLeft = 0
+    if (todayBudget >= est) {
+      todayJobs.push(s)
+      todayBudget -= est
+    } else if (todayBudget > 0) {
+      // Partially fits today — include it (mechanic will start it)
+      todayJobs.push(s)
+      todayBudget = 0
+    } else if (weekBudget >= est) {
+      remainingWeekJobs.push(s)
+      weekBudget -= est
+    } else if (weekBudget > 0) {
+      remainingWeekJobs.push(s)
+      weekBudget = 0
     } else {
       nextWeekJobs.push(s)
     }
@@ -170,11 +184,13 @@ export async function GET() {
     paused: paused.map(format),
     queued: queued.map(format),
     completedToday: completedToday.map(format),
-    thisWeek: thisWeekJobs.map(format),
+    today: todayJobs.map(format),
+    remainingWeek: remainingWeekJobs.map(format),
     nextWeek: nextWeekJobs.map(format),
     weeklyEstimatedHours,
     weeklyWorkedHours: Math.round(weeklyWorkedSeconds / 360) / 10,
     remainingHoursThisWeek: Math.round(remainingHoursThisWeek * 10) / 10,
+    hoursLeftToday: Math.round(hoursLeftToday * 10) / 10,
     workHours: { start: WORK_START, end: WORK_END },
     currentHour: h,
     isWorkHours: h >= WORK_START && h < WORK_END,
