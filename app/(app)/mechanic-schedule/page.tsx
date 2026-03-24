@@ -66,11 +66,13 @@ export default function MechanicSchedulePage() {
   const [startingNext, setStartingNext] = useState(false)
   const [pendingApprovals, setPendingApprovals] = useState<Array<{ id: string; taskName: string; additionalHours: number | null; status: string }>>([])
   const [taskSubmitMsg, setTaskSubmitMsg] = useState('')
+  const [calendarBlocks, setCalendarBlocks] = useState<Array<{ id: string; title: string; type: string; location: string | null; startTime: string; endTime: string }>>([])
 
   const fetchSchedule = useCallback(() => {
     fetch('/api/mechanic-schedule').then(r => r.json()).then(d => {
       setSchedule(d.schedule || [])
       setAwaitingParts(d.awaitingParts || [])
+      setCalendarBlocks(d.calendarBlocks || [])
       setLoading(false)
     })
   }, [])
@@ -208,12 +210,23 @@ export default function MechanicSchedulePage() {
     fetchSchedule()
   }
 
-  // Group blocks by day
-  const days = new Map<string, ScheduleBlock[]>()
+  // Group blocks by day (vehicle blocks + calendar events merged & sorted by time)
+  type DayItem = (ScheduleBlock & { isCalendarEvent?: false }) | { id: string; title: string; type: string; location: string | null; startTime: string; endTime: string; isCalendarEvent: true }
+  const days = new Map<string, DayItem[]>()
   schedule.forEach(block => {
     const day = new Date(block.startTime).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
     if (!days.has(day)) days.set(day, [])
     days.get(day)!.push(block)
+  })
+  calendarBlocks.forEach(cb => {
+    const day = new Date(cb.startTime).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+    if (!days.has(day)) days.set(day, [])
+    days.get(day)!.push({ ...cb, isCalendarEvent: true })
+  })
+  // Sort each day's items by start time
+  days.forEach((items, key) => {
+    items.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+    days.set(key, items)
   })
 
   // Stats — deduplicate continuation segments (only count unique vehicle stage IDs)
@@ -311,7 +324,12 @@ export default function MechanicSchedulePage() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
           {Array.from(days.entries()).map(([day, blocks]) => {
-            const dayHours = blocks.reduce((sum, b) => sum + (b.segmentHours || b.estimatedHours || 2), 0)
+            const dayHours = blocks.reduce((sum, b) => {
+              if ('isCalendarEvent' in b && b.isCalendarEvent) {
+                return sum + Math.round((new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / 3600000 * 10) / 10
+              }
+              return sum + ((b as ScheduleBlock).segmentHours || (b as ScheduleBlock).estimatedHours || 2)
+            }, 0)
             return (
               <div key={day}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -323,6 +341,54 @@ export default function MechanicSchedulePage() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {blocks.map((block) => {
+                    // Calendar event block
+                    if ('isCalendarEvent' in block && block.isCalendarEvent) {
+                      const evtStart = new Date(block.startTime)
+                      const evtEnd = new Date(block.endTime)
+                      const durationH = Math.round((evtEnd.getTime() - evtStart.getTime()) / 3600000 * 10) / 10
+                      const TYPE_LABELS: Record<string, string> = {
+                        mechanic_visit: 'Mechanic Visit', sales_meeting: 'Meeting', pickup: 'Pickup',
+                        dropoff: 'Dropoff', detailing: 'Detailing', content_shoot: 'Content Shoot',
+                        event_task: 'Event Task', errand: 'Errand',
+                      }
+                      return (
+                        <div key={`cal-${block.id}`}>
+                          <div style={{
+                            display: 'flex', gap: 14, alignItems: 'stretch',
+                            background: '#faf5ff', border: '1px solid #a855f7',
+                            borderLeft: '4px solid #a855f7',
+                            borderRadius: 12, padding: '14px 16px',
+                          }}>
+                            <div style={{ minWidth: 60, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                              <p style={{ fontSize: 13, fontWeight: 700, color: '#7c3aed' }}>
+                                {evtStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                              </p>
+                              <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                {evtEnd.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                              </p>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                                <div>
+                                  <p style={{ fontSize: 14, fontWeight: 700 }}>{block.title}</p>
+                                  {block.location && <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{block.location}</p>}
+                                </div>
+                                <span style={{
+                                  fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
+                                  background: '#a855f720', color: '#a855f7',
+                                  textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
+                                }}>
+                                  {TYPE_LABELS[block.type] || block.type}
+                                </span>
+                              </div>
+                              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{durationH}h blocked</p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    // Vehicle block
                     const hours = block.estimatedHours || 2
                     const startTime = new Date(block.startTime)
                     const endTime = new Date(block.endTime)
