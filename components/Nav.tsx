@@ -75,7 +75,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
         { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
       ],
     },
-    { href: '/task-board', label: 'Task Board', icon: 'tasks' },
+    { href: '/task-board', label: 'Content Schedule', icon: 'tasks' },
     { href: '/mechanic-schedule', label: 'Mechanic Schedule', icon: 'calendar' },
     { href: '/external', label: 'External Repairs', icon: 'external' },
     { href: '/calendar', label: 'Calendar', icon: 'calendar' },
@@ -100,7 +100,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { href: '/tasks', label: 'My Tasks', icon: 'tasks' },
     { href: '/vehicles', label: 'Board', icon: 'board' },
-    { href: '/task-board', label: 'Task Board', icon: 'tasks' },
+    { href: '/task-board', label: 'Content Schedule', icon: 'tasks' },
   ],
   sales: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
