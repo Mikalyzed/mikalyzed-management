@@ -97,11 +97,44 @@ export async function GET() {
     startedAt: s.startedAt?.toISOString() || null,
   })
 
+  // Weekly stats — get Monday of current week
+  const weekStart = new Date(now)
+  const dayOfWeek = weekStart.getDay() // 0=Sun
+  const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1 // days since Monday
+  weekStart.setDate(weekStart.getDate() - diff)
+  weekStart.setHours(0, 0, 0, 0)
+
+  const weekStages = await prisma.vehicleStage.findMany({
+    where: {
+      stage: 'mechanic',
+      OR: [
+        { status: { not: 'done' } }, // all active/pending/paused
+        { completedAt: { gte: weekStart } }, // completed this week
+      ],
+    },
+    select: { estimatedHours: true, activeSeconds: true, timerStartedAt: true, status: true },
+  })
+
+  const weeklyEstimatedHours = weekStages.reduce((sum, s) => sum + (s.estimatedHours || 2), 0)
+  const weeklyWorkedSeconds = weekStages.reduce((sum, s) => {
+    let sec = s.activeSeconds
+    if (s.timerStartedAt && h >= WORK_START && h < WORK_END) {
+      sec += Math.floor((now.getTime() - s.timerStartedAt.getTime()) / 1000)
+    }
+    return sum + sec
+  }, 0)
+
+  // Today's plan: active + queued in order (what mechanic should work through today)
+  const allToday = [...active, ...paused.filter(p => !p.awaitingParts), ...queued]
+
   return NextResponse.json({
     active: active.map(format),
     paused: paused.map(format),
     queued: queued.map(format),
     completedToday: completedToday.map(format),
+    todayPlan: allToday.map(format),
+    weeklyEstimatedHours,
+    weeklyWorkedHours: Math.round(weeklyWorkedSeconds / 360) / 10, // 1 decimal
     workHours: { start: WORK_START, end: WORK_END },
     currentHour: h,
     isWorkHours: h >= WORK_START && h < WORK_END,

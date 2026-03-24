@@ -26,14 +26,11 @@ type JobCard = {
   startedAt: string | null
 }
 
-const STATUS_COLORS: Record<string, { bg: string; border: string; badge: string; text: string }> = {
-  active: { bg: '#eff6ff', border: '#3b82f6', badge: '#3b82f6', text: '#1e40af' },
-  queued: { bg: '#f8f8f6', border: '#d1d5db', badge: '#9ca3af', text: '#6b7280' },
-  paused: { bg: '#fff7ed', border: '#f59e0b', badge: '#f59e0b', text: '#92400e' },
-  auto_paused: { bg: '#faf5ff', border: '#a855f7', badge: '#a855f7', text: '#6b21a8' },
-  awaiting_parts: { bg: '#fff7ed', border: '#f59e0b', badge: '#f59e0b', text: '#92400e' },
-  completed: { bg: '#f0fdf4', border: '#22c55e', badge: '#22c55e', text: '#166534' },
-  overdue: { bg: '#fef2f2', border: '#ef4444', badge: '#ef4444', text: '#991b1b' },
+type BoardData = {
+  active: JobCard[]; paused: JobCard[]; queued: JobCard[]; completedToday: JobCard[]
+  todayPlan: JobCard[]
+  weeklyEstimatedHours: number; weeklyWorkedHours: number
+  isWorkHours: boolean
 }
 
 function formatTime(seconds: number): string {
@@ -48,10 +45,7 @@ function formatHours(seconds: number): string {
 }
 
 export default function MechanicBoard() {
-  const [data, setData] = useState<{
-    active: JobCard[]; paused: JobCard[]; queued: JobCard[]; completedToday: JobCard[]
-    isWorkHours: boolean
-  } | null>(null)
+  const [data, setData] = useState<BoardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedJob, setSelectedJob] = useState<JobCard | null>(null)
   const [modalChecklist, setModalChecklist] = useState<ChecklistItem[]>([])
@@ -65,7 +59,6 @@ export default function MechanicBoard() {
   const [trackingNumber, setTrackingNumber] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAllQueued, setShowAllQueued] = useState(false)
-  const [userId, setUserId] = useState<string | null>(null)
   const [tick, setTick] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -80,17 +73,14 @@ export default function MechanicBoard() {
     fetchData()
     fetch('/api/auth/me').then(r => r.json()).then(d => {
       if (d.user?.role === 'admin') setIsAdmin(true)
-      if (d.user?.id) setUserId(d.user.id)
     }).catch(() => {})
   }, [fetchData])
 
-  // Live timer tick every second
   useEffect(() => {
     timerRef.current = setInterval(() => setTick(t => t + 1), 1000)
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [])
 
-  // Refresh data every 30s
   useEffect(() => {
     const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
@@ -137,10 +127,7 @@ export default function MechanicBoard() {
     setTrackingNumber('')
   }
 
-  const closeModal = () => {
-    setSelectedJob(null)
-    setShowPauseModal(false)
-  }
+  const closeModal = () => { setSelectedJob(null); setShowPauseModal(false) }
 
   const submitPause = () => {
     if (!selectedJob || !pauseType) return
@@ -157,7 +144,6 @@ export default function MechanicBoard() {
   }
 
   const getLiveElapsed = (job: JobCard): number => {
-    // Force re-render via tick
     void tick
     if (job.timerRunning && job.timerStartedAt) {
       const extra = Math.floor((Date.now() - new Date(job.timerStartedAt).getTime()) / 1000)
@@ -187,150 +173,115 @@ export default function MechanicBoard() {
       </div>
     )
   }
-
   if (!data) return <p style={{ textAlign: 'center', padding: 40 }}>Failed to load</p>
 
-  const allDone = modalChecklist.length > 0 && modalChecklist.every(c => c.done)
   const doneCount = modalChecklist.filter(c => c.done).length
+
+  // Efficiency
+  const effPct = data.weeklyEstimatedHours > 0 ? Math.round((data.weeklyWorkedHours / data.weeklyEstimatedHours) * 100) : 0
+  const effLabel = effPct >= 90 && effPct <= 110 ? 'On Track' : effPct > 110 ? 'Over Estimate' : 'Under Estimate'
+  const effColor = effPct >= 90 && effPct <= 110 ? '#22c55e' : effPct > 110 ? '#ef4444' : '#f59e0b'
+
+  const COLORS: Record<string, { bg: string; border: string; badge: string; text: string }> = {
+    active: { bg: '#eff6ff', border: '#3b82f6', badge: '#3b82f6', text: '#1e40af' },
+    queued: { bg: '#f9fafb', border: '#e2e5ea', badge: '#94a3b8', text: '#64748b' },
+    paused: { bg: '#fff7ed', border: '#f59e0b', badge: '#f59e0b', text: '#92400e' },
+    auto_paused: { bg: '#faf5ff', border: '#a855f7', badge: '#a855f7', text: '#6b21a8' },
+    awaiting_parts: { bg: '#fff7ed', border: '#f59e0b', badge: '#f59e0b', text: '#92400e' },
+    completed: { bg: '#f0fdf4', border: '#22c55e', badge: '#22c55e', text: '#166534' },
+    overdue: { bg: '#fef2f2', border: '#ef4444', badge: '#ef4444', text: '#991b1b' },
+  }
 
   const renderCard = (job: JobCard, showActions = true) => {
     const colorKey = getJobColorKey(job)
-    const colors = STATUS_COLORS[colorKey]
+    const colors = COLORS[colorKey]
     const v = job.vehicle
     const desc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
     const elapsed = getLiveElapsed(job)
     const estSeconds = (job.estimatedHours || 2) * 3600
     const progress = Math.min(elapsed / estSeconds, 1)
+    const isOver = elapsed > estSeconds && job.status !== 'done'
     const tasksDone = (job.checklist as ChecklistItem[]).filter(c => c.done).length
     const tasksTotal = (job.checklist as ChecklistItem[]).length
 
-    const badges: string[] = []
-    if (job.timerRunning) badges.push('Active')
-    else if (job.autoPaused) badges.push('Auto Paused')
-    else if (job.awaitingParts) badges.push('Waiting on Parts')
-    else if (job.pauseReason) badges.push('Paused')
-    else if (job.status === 'done') badges.push('Completed')
-    else if (job.status === 'pending') badges.push('Queued')
-    if (elapsed > estSeconds && job.status !== 'done') badges.push('Overdue')
-
     return (
-      <div
-        key={job.id}
-        onClick={() => openJob(job)}
-        style={{
-          background: colors.bg,
-          border: `1px solid ${colors.border}`,
-          borderLeft: `4px solid ${colors.border}`,
-          borderRadius: 14,
-          padding: '16px 18px',
-          cursor: 'pointer',
-          transition: 'box-shadow 0.15s',
-        }}
-      >
+      <div key={job.id} onClick={() => openJob(job)} style={{
+        background: colors.bg, border: `1px solid ${colors.border}`,
+        borderLeft: `4px solid ${colors.border}`, borderRadius: 14,
+        padding: '16px 18px', cursor: 'pointer', transition: 'box-shadow 0.15s',
+      }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <div>
             <p style={{ fontSize: 15, fontWeight: 700 }}>#{v.stockNumber}</p>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              {desc}{v.color ? ` · ${v.color}` : ''}
-            </p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{desc}{v.color ? ` · ${v.color}` : ''}</p>
           </div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {badges.map(b => (
-              <span key={b} style={{
-                fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
-                background: colors.badge + '18', color: colors.badge,
-                textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
-              }}>{b}</span>
-            ))}
+            {job.timerRunning && <Badge text="Active" color={colors.badge} />}
+            {job.autoPaused && <Badge text="Auto Paused" color="#a855f7" />}
+            {job.awaitingParts && <Badge text="Parts" color="#f59e0b" />}
+            {!job.timerRunning && job.pauseReason && !job.awaitingParts && !job.autoPaused && <Badge text="Paused" color="#f59e0b" />}
+            {job.status === 'pending' && <Badge text="Queued" color="#94a3b8" />}
+            {job.status === 'done' && <Badge text="Done" color="#22c55e" />}
+            {isOver && <Badge text="Overdue" color="#ef4444" />}
           </div>
         </div>
 
-        {/* Timer + Tasks */}
+        {/* Timer row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, gap: 12 }}>
-          <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
-            <span style={{ color: 'var(--text-secondary)' }}>
-              <span style={{ fontWeight: 700, color: elapsed > estSeconds ? '#ef4444' : colors.text }}>
-                {formatHours(elapsed)}
-              </span>
-              {' / '}{job.estimatedHours || 2}h
+          <div style={{ fontSize: 13 }}>
+            <span style={{ fontWeight: 700, color: isOver ? '#ef4444' : colors.text, fontVariantNumeric: 'tabular-nums' }}>
+              {formatHours(elapsed)}
             </span>
+            <span style={{ color: 'var(--text-muted)' }}> / {job.estimatedHours || 2}h est.</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {tasksTotal > 0 && (
-              <span style={{ color: 'var(--text-muted)' }}>
-                {tasksDone}/{tasksTotal} tasks
-              </span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{tasksDone}/{tasksTotal} tasks</span>
+            )}
+            {job.timerRunning && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6', fontVariantNumeric: 'tabular-nums' }}>{formatTime(elapsed)}</span>
+              </div>
             )}
           </div>
-          {job.timerRunning && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }} />
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6', fontVariantNumeric: 'tabular-nums' }}>
-                {formatTime(elapsed)}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Progress bar */}
-        <div style={{ marginTop: 8, height: 4, background: '#e0e0e0', borderRadius: 2 }}>
+        <div style={{ marginTop: 8, height: 5, background: '#e2e5ea', borderRadius: 3, overflow: 'hidden' }}>
           <div style={{
-            height: '100%', borderRadius: 2, transition: 'width 0.5s',
+            height: '100%', borderRadius: 3, transition: 'width 0.5s',
             width: `${Math.min(progress * 100, 100)}%`,
-            background: progress >= 1 ? '#ef4444' : colors.badge,
+            background: isOver ? '#ef4444' : progress >= 0.8 ? '#f59e0b' : colors.badge,
           }} />
         </div>
 
         {/* Pause info */}
-        {job.pauseReason && !job.timerRunning && (
+        {job.pauseReason && !job.timerRunning && !job.autoPaused && (
           <p style={{ fontSize: 11, fontWeight: 600, color: colors.text, marginTop: 8 }}>
             {job.pauseReason}{job.pauseDetail ? `: ${job.pauseDetail}` : ''}
             {job.awaitingPartsName && ` — ${job.awaitingPartsName}`}
           </p>
         )}
         {job.autoPaused && (
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#a855f7', marginTop: 8 }}>
-            Auto Paused — Outside Working Hours
-          </p>
+          <p style={{ fontSize: 11, fontWeight: 600, color: '#a855f7', marginTop: 8 }}>Auto Paused — Outside Working Hours</p>
         )}
 
-        {/* Quick actions (prevent modal open) */}
+        {/* Quick actions */}
         {showActions && (
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }} onClick={e => e.stopPropagation()}>
             {job.status === 'pending' && (
-              <button
-                onClick={() => doAction('start', job.id)}
-                disabled={acting || !data.isWorkHours}
-                style={actionBtnStyle('#3b82f6', !data.isWorkHours)}
-              >
-                Start
-              </button>
+              <ActionBtn label="Start" color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('start', job.id)} />
             )}
             {job.timerRunning && (
               <>
-                <button
-                  onClick={() => { openJob(job); setShowPauseModal(true) }}
-                  disabled={acting}
-                  style={actionBtnStyle('#f59e0b')}
-                >
-                  Pause
-                </button>
-                <button
-                  onClick={() => doAction('complete', job.id)}
-                  disabled={acting}
-                  style={actionBtnStyle('#22c55e')}
-                >
-                  Complete
-                </button>
+                <ActionBtn label="Pause" color="#f59e0b" disabled={acting} onClick={() => { openJob(job); setShowPauseModal(true) }} />
+                <ActionBtn label="Complete" color="#22c55e" disabled={acting} onClick={() => doAction('complete', job.id)} />
               </>
             )}
             {!job.timerRunning && job.status === 'in_progress' && (
-              <button
-                onClick={() => doAction('resume', job.id)}
-                disabled={acting || !data.isWorkHours}
-                style={actionBtnStyle('#3b82f6', !data.isWorkHours)}
-              >
-                Resume
-              </button>
+              <ActionBtn label="Resume" color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('resume', job.id)} />
             )}
           </div>
         )}
@@ -338,120 +289,161 @@ export default function MechanicBoard() {
     )
   }
 
-  const SectionHeader = ({ title, count, color }: { title: string; count: number; color: string }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-      <div style={{ width: 4, height: 20, borderRadius: 2, background: color }} />
-      <h2 style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em' }}>{title}</h2>
-      <span style={{
-        fontSize: 12, fontWeight: 700, background: color + '18', color: color,
-        padding: '2px 10px', borderRadius: 100, minWidth: 24, textAlign: 'center',
-      }}>{count}</span>
-    </div>
-  )
-
   return (
     <div>
-      <style>{`
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-      `}</style>
+      <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
 
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>
           {isAdmin ? 'Mechanic Schedule #2' : 'My Schedule #2'}
         </h1>
-        {!data.isWorkHours && (
-          <span style={{
-            fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 100,
-            background: '#a855f720', color: '#a855f7',
-          }}>Outside Working Hours</span>
-        )}
+        {!data.isWorkHours && <Badge text="Outside Working Hours" color="#a855f7" />}
       </div>
 
-      {/* Stats bar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 10, marginBottom: 24 }}>
+      {/* Stats row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 24 }}>
+        <StatBox value={data.active.length} label="Active" color="#3b82f6" />
+        <StatBox value={data.queued.length} label="Queued" color="#94a3b8" />
+        <StatBox value={data.paused.length} label="Paused" color="#f59e0b" />
+        <StatBox value={data.completedToday.length} label="Done Today" color="#22c55e" />
         <div className="pipeline-chip">
-          <p className="pipeline-chip-value" style={{ color: '#3b82f6' }}>{data.active.length}</p>
-          <p className="pipeline-chip-label">Active</p>
+          <p className="pipeline-chip-value" style={{ fontSize: 18 }}>{data.weeklyEstimatedHours}h</p>
+          <p className="pipeline-chip-label">Est. This Week</p>
         </div>
-        <div className="pipeline-chip">
-          <p className="pipeline-chip-value" style={{ color: '#9ca3af' }}>{data.queued.length}</p>
-          <p className="pipeline-chip-label">Queued</p>
-        </div>
-        <div className="pipeline-chip">
-          <p className="pipeline-chip-value" style={{ color: '#f59e0b' }}>{data.paused.length}</p>
-          <p className="pipeline-chip-label">Paused</p>
-        </div>
-        <div className="pipeline-chip">
-          <p className="pipeline-chip-value" style={{ color: '#22c55e' }}>{data.completedToday.length}</p>
-          <p className="pipeline-chip-label">Done Today</p>
+        <div className="pipeline-chip" style={{ position: 'relative' }}>
+          <p className="pipeline-chip-value" style={{ fontSize: 18 }}>{data.weeklyWorkedHours}h</p>
+          <p className="pipeline-chip-label">Worked This Week</p>
+          {data.weeklyEstimatedHours > 0 && (
+            <span style={{ fontSize: 10, fontWeight: 700, color: effColor, marginTop: 2, display: 'block' }}>
+              {effPct}% — {effLabel}
+            </span>
+          )}
         </div>
       </div>
+
+      {/* Today's Plan */}
+      {data.todayPlan.length > 0 && (
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ width: 4, height: 20, borderRadius: 2, background: '#1a1a1a' }} />
+            <h2 style={{ fontSize: 16, fontWeight: 700 }}>Today&apos;s Lineup</h2>
+          </div>
+          <div style={{
+            display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
+            WebkitOverflowScrolling: 'touch',
+          }}>
+            {data.todayPlan.map((job, i) => {
+              const v = job.vehicle
+              const elapsed = getLiveElapsed(job)
+              const est = job.estimatedHours || 2
+              const isOver = elapsed > est * 3600
+              const isActive = job.timerRunning
+              const isPaused = !job.timerRunning && job.status === 'in_progress'
+              return (
+                <div key={job.id} onClick={() => openJob(job)} style={{
+                  minWidth: 180, maxWidth: 220, padding: '12px 14px',
+                  background: isActive ? '#eff6ff' : isPaused ? '#fff7ed' : '#f9fafb',
+                  border: `1px solid ${isActive ? '#3b82f6' : isPaused ? '#f59e0b' : '#e2e5ea'}`,
+                  borderRadius: 12, cursor: 'pointer', flexShrink: 0,
+                  borderTop: `3px solid ${isActive ? '#3b82f6' : isPaused ? '#f59e0b' : '#d1d5db'}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>#{i + 1}</span>
+                    {isActive && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }} />}
+                    {isPaused && <Badge text="Paused" color="#f59e0b" />}
+                  </div>
+                  <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>#{v.stockNumber}</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}
+                  </p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
+                    <span style={{ fontWeight: 700, color: isOver ? '#ef4444' : 'var(--text-secondary)' }}>{formatHours(elapsed)}</span>
+                    <span>{est}h est.</span>
+                  </div>
+                  <div style={{ marginTop: 6, height: 3, background: '#e2e5ea', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', borderRadius: 2,
+                      width: `${Math.min((elapsed / (est * 3600)) * 100, 100)}%`,
+                      background: isOver ? '#ef4444' : isActive ? '#3b82f6' : '#94a3b8',
+                    }} />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Active Jobs */}
       {data.active.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
-          <SectionHeader title="Active Jobs" count={data.active.length} color="#3b82f6" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
-            {data.active.map(j => renderCard(j))}
-          </div>
-        </div>
+        <Section title="Active Jobs" count={data.active.length} color="#3b82f6">
+          <CardGrid>{data.active.map(j => renderCard(j))}</CardGrid>
+        </Section>
       )}
 
       {/* Queue */}
       {data.queued.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
-          <SectionHeader title="Queue" count={data.queued.length} color="#9ca3af" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
-            {(showAllQueued ? data.queued : data.queued.slice(0, 6)).map(j => renderCard(j))}
-          </div>
+        <Section title="Queue" count={data.queued.length} color="#94a3b8">
+          <CardGrid>{(showAllQueued ? data.queued : data.queued.slice(0, 6)).map(j => renderCard(j))}</CardGrid>
           {data.queued.length > 6 && (
-            <button
-              onClick={() => setShowAllQueued(prev => !prev)}
-              style={{
-                marginTop: 12, padding: '10px 20px', borderRadius: 10,
-                border: '1px solid #d1d5db', background: '#f8f8f6',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#555',
-                width: '100%',
-              }}
-            >
+            <button onClick={() => setShowAllQueued(prev => !prev)} style={{
+              marginTop: 12, padding: '10px 20px', borderRadius: 10, border: '1px solid #d1d5db',
+              background: '#f9fafb', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#64748b', width: '100%',
+            }}>
               {showAllQueued ? 'Show Less' : `Show ${data.queued.length - 6} More`}
             </button>
           )}
-        </div>
+        </Section>
       )}
 
       {/* Paused / Waiting */}
       {data.paused.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
-          <SectionHeader title="Paused / Waiting" count={data.paused.length} color="#f59e0b" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
-            {data.paused.map(j => renderCard(j))}
-          </div>
-        </div>
+        <Section title="Paused / Waiting" count={data.paused.length} color="#f59e0b">
+          <CardGrid>{data.paused.map(j => renderCard(j))}</CardGrid>
+        </Section>
       )}
 
       {/* Completed Today */}
       {data.completedToday.length > 0 && (
-        <div style={{ marginBottom: 28 }}>
-          <SectionHeader title="Completed Today" count={data.completedToday.length} color="#22c55e" />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
-            {data.completedToday.map(j => renderCard(j, false))}
-          </div>
-        </div>
+        <Section title="Completed Today" count={data.completedToday.length} color="#22c55e">
+          <CardGrid>
+            {data.completedToday.map(j => {
+              const v = j.vehicle
+              return (
+                <div key={j.id} style={{
+                  background: '#f0fdf4', border: '1px solid #bbf7d0', borderLeft: '4px solid #22c55e',
+                  borderRadius: 14, padding: '16px 18px',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <p style={{ fontSize: 15, fontWeight: 700 }}>#{v.stockNumber}</p>
+                      <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                        {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}{v.color ? ` · ${v.color}` : ''}
+                      </p>
+                    </div>
+                    <Badge text="Done" color="#22c55e" />
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 12, color: '#166534' }}>
+                    {j.completedAt && <span>Completed {new Date(j.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>}
+                    <span style={{ fontWeight: 700 }}>Total: {formatHours(j.elapsedSeconds)}</span>
+                  </div>
+                </div>
+              )
+            })}
+          </CardGrid>
+        </Section>
       )}
 
       {data.active.length === 0 && data.queued.length === 0 && data.paused.length === 0 && data.completedToday.length === 0 && (
-        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-          No mechanic jobs. All clear.
-        </div>
+        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No mechanic jobs. All clear.</div>
       )}
 
       {/* Job Detail Modal */}
       {selectedJob && (
         <div onClick={closeModal} style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000, padding: 20,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
         }}>
           <div onClick={e => e.stopPropagation()} style={{
             background: '#fff', borderRadius: 20, width: '100%', maxWidth: 480,
@@ -459,57 +451,45 @@ export default function MechanicBoard() {
             boxShadow: '0 25px 60px rgba(0,0,0,0.2)',
           }}>
             {showPauseModal ? (
-              /* Pause Reason Modal */
               <div style={{ padding: 24 }}>
                 <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Pause Reason</h3>
-
                 {!pauseType ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <button onClick={() => setPauseType('waiting_on_parts')} style={pauseOptionStyle}>
-                      Waiting on Parts
-                    </button>
-                    <button onClick={() => setPauseType('other')} style={pauseOptionStyle}>
-                      Other
-                    </button>
-                    <button onClick={() => setShowPauseModal(false)} style={{ ...pauseOptionStyle, color: '#999', borderColor: '#e5e5e5' }}>
-                      Cancel
-                    </button>
+                    <button onClick={() => setPauseType('waiting_on_parts')} style={pauseOptionStyle}>Waiting on Parts</button>
+                    <button onClick={() => setPauseType('other')} style={pauseOptionStyle}>Other</button>
+                    <button onClick={() => setShowPauseModal(false)} style={{ ...pauseOptionStyle, color: '#999', borderColor: '#e5e5e5' }}>Cancel</button>
                   </div>
                 ) : pauseType === 'waiting_on_parts' ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div>
-                      <label style={labelStyle}>What part was ordered? *</label>
+                    <Field label="What part was ordered? *">
                       <input value={partName} onChange={e => setPartName(e.target.value)} style={inputStyle} placeholder="e.g. Brake pads" />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Expected arrival date</label>
+                    </Field>
+                    <Field label="Expected arrival date">
                       <input type="date" value={expectedDate} onChange={e => setExpectedDate(e.target.value)} style={inputStyle} />
-                    </div>
-                    <div>
-                      <label style={labelStyle}>Tracking number</label>
+                    </Field>
+                    <Field label="Tracking number">
                       <input value={trackingNumber} onChange={e => setTrackingNumber(e.target.value)} style={inputStyle} placeholder="Optional" />
-                    </div>
+                    </Field>
                     <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                      <button onClick={() => setPauseType(null)} style={{ ...actionBtnStyle('#999'), flex: 1 }}>Back</button>
-                      <button onClick={submitPause} disabled={!partName.trim()} style={{ ...actionBtnStyle('#f59e0b', !partName.trim()), flex: 1 }}>Pause Job</button>
+                      <FooterBtn label="Back" color="#999" onClick={() => setPauseType(null)} />
+                      <FooterBtn label="Pause Job" color="#f59e0b" disabled={!partName.trim()} onClick={submitPause} />
                     </div>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <div>
-                      <label style={labelStyle}>Explain why *</label>
+                    <Field label="Explain why *">
                       <textarea value={pauseNote} onChange={e => setPauseNote(e.target.value)} style={{ ...inputStyle, minHeight: 80, resize: 'vertical' }} placeholder="Why are you pausing?" />
-                    </div>
+                    </Field>
                     <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-                      <button onClick={() => setPauseType(null)} style={{ ...actionBtnStyle('#999'), flex: 1 }}>Back</button>
-                      <button onClick={submitPause} disabled={!pauseNote.trim()} style={{ ...actionBtnStyle('#f59e0b', !pauseNote.trim()), flex: 1 }}>Pause Job</button>
+                      <FooterBtn label="Back" color="#999" onClick={() => setPauseType(null)} />
+                      <FooterBtn label="Pause Job" color="#f59e0b" disabled={!pauseNote.trim()} onClick={submitPause} />
                     </div>
                   </div>
                 )}
               </div>
             ) : (
-              /* Job Detail */
               <>
+                {/* Modal header */}
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e5e5' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
@@ -522,22 +502,22 @@ export default function MechanicBoard() {
                     <button onClick={closeModal} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', padding: '0 4px' }}>&times;</button>
                   </div>
 
-                  {/* Timer display */}
+                  {/* Timer block */}
                   <div style={{
-                    marginTop: 16, padding: '12px 16px', borderRadius: 12,
-                    background: selectedJob.timerRunning ? '#eff6ff' : '#f8f8f6',
-                    border: `1px solid ${selectedJob.timerRunning ? '#3b82f6' : '#e5e5e5'}`,
+                    marginTop: 16, padding: '14px 16px', borderRadius: 12,
+                    background: selectedJob.timerRunning ? '#eff6ff' : '#f9fafb',
+                    border: `1px solid ${selectedJob.timerRunning ? '#3b82f6' : '#e2e5ea'}`,
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   }}>
                     <div>
-                      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Labor Time</p>
-                      <p style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: selectedJob.timerRunning ? '#3b82f6' : 'var(--text-primary)' }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Labor Time</p>
+                      <p style={{ fontSize: 26, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: selectedJob.timerRunning ? '#3b82f6' : 'var(--text-primary)', lineHeight: 1.2 }}>
                         {formatTime(getLiveElapsed(selectedJob))}
                       </p>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Estimated</p>
-                      <p style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-muted)' }}>{selectedJob.estimatedHours || 2}h</p>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estimated</p>
+                      <p style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-muted)', lineHeight: 1.2 }}>{selectedJob.estimatedHours || 2}h</p>
                     </div>
                   </div>
                 </div>
@@ -555,8 +535,8 @@ export default function MechanicBoard() {
                       {modalChecklist.map((item, i) => (
                         <div key={i} onClick={() => toggleChecklist(i)} style={{
                           display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                          background: item.done ? '#f0fdf4' : '#f8f8f6', borderRadius: 10,
-                          cursor: 'pointer', border: '1px solid', borderColor: item.done ? '#bbf7d0' : '#e5e5e5',
+                          background: item.done ? '#f0fdf4' : '#f9fafb', borderRadius: 10,
+                          cursor: 'pointer', border: '1px solid', borderColor: item.done ? '#bbf7d0' : '#e2e5ea',
                         }}>
                           <div style={{
                             width: 22, height: 22, borderRadius: 6, border: '2px solid',
@@ -573,23 +553,19 @@ export default function MechanicBoard() {
                   )}
                 </div>
 
-                {/* Actions footer */}
+                {/* Footer actions */}
                 <div style={{ padding: '12px 24px 20px', borderTop: '1px solid #e5e5e5', display: 'flex', gap: 10 }}>
                   {selectedJob.status === 'pending' && (
-                    <button onClick={() => doAction('start', selectedJob.id)} disabled={acting || !data.isWorkHours} style={{ ...footerBtnStyle('#3b82f6', !data.isWorkHours), flex: 1 }}>
-                      {data.isWorkHours ? 'Start Job' : 'Outside Work Hours'}
-                    </button>
+                    <FooterBtn label={data.isWorkHours ? 'Start Job' : 'Outside Work Hours'} color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('start', selectedJob.id)} full />
                   )}
                   {selectedJob.timerRunning && (
                     <>
-                      <button onClick={() => setShowPauseModal(true)} disabled={acting} style={{ ...footerBtnStyle('#f59e0b'), flex: 1 }}>Pause</button>
-                      <button onClick={() => doAction('complete', selectedJob.id)} disabled={acting} style={{ ...footerBtnStyle('#22c55e'), flex: 1 }}>Complete</button>
+                      <FooterBtn label="Pause" color="#f59e0b" disabled={acting} onClick={() => setShowPauseModal(true)} />
+                      <FooterBtn label="Complete" color="#22c55e" disabled={acting} onClick={() => doAction('complete', selectedJob.id)} />
                     </>
                   )}
                   {!selectedJob.timerRunning && selectedJob.status === 'in_progress' && (
-                    <button onClick={() => doAction('resume', selectedJob.id)} disabled={acting || !data.isWorkHours} style={{ ...footerBtnStyle('#3b82f6', !data.isWorkHours), flex: 1 }}>
-                      {data.isWorkHours ? 'Resume Job' : 'Outside Work Hours'}
-                    </button>
+                    <FooterBtn label={data.isWorkHours ? 'Resume Job' : 'Outside Work Hours'} color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('resume', selectedJob.id)} full />
                   )}
                 </div>
               </>
@@ -601,33 +577,82 @@ export default function MechanicBoard() {
   )
 }
 
-const actionBtnStyle = (color: string, disabled = false): React.CSSProperties => ({
-  padding: '8px 16px', borderRadius: 10, border: 'none',
-  background: disabled ? '#e5e5e5' : color,
-  color: disabled ? '#999' : '#fff',
-  fontSize: 13, fontWeight: 700, cursor: disabled ? 'default' : 'pointer',
-  opacity: disabled ? 0.6 : 1,
-})
+// Sub-components
+function Badge({ text, color }: { text: string; color: string }) {
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
+      background: color + '15', color, textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
+    }}>{text}</span>
+  )
+}
 
-const footerBtnStyle = (color: string, disabled = false): React.CSSProperties => ({
-  padding: '14px 0', borderRadius: 12, border: 'none',
-  background: disabled ? '#e5e5e5' : color,
-  color: disabled ? '#999' : '#fff',
-  fontSize: 15, fontWeight: 700, cursor: disabled ? 'default' : 'pointer',
-  textAlign: 'center',
-})
+function StatBox({ value, label, color }: { value: number; label: string; color: string }) {
+  return (
+    <div className="pipeline-chip">
+      <p className="pipeline-chip-value" style={{ color }}>{value}</p>
+      <p className="pipeline-chip-label">{label}</p>
+    </div>
+  )
+}
+
+function Section({ title, count, color, children }: { title: string; count: number; color: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <div style={{ width: 4, height: 20, borderRadius: 2, background: color }} />
+        <h2 style={{ fontSize: 16, fontWeight: 700 }}>{title}</h2>
+        <span style={{
+          fontSize: 12, fontWeight: 700, background: color + '18', color,
+          padding: '2px 10px', borderRadius: 100, minWidth: 24, textAlign: 'center',
+        }}>{count}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function CardGrid({ children }: { children: React.ReactNode }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>{children}</div>
+}
+
+function ActionBtn({ label, color, disabled, onClick }: { label: string; color: string; disabled?: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      padding: '8px 16px', borderRadius: 10, border: 'none',
+      background: disabled ? '#e5e5e5' : color, color: disabled ? '#999' : '#fff',
+      fontSize: 13, fontWeight: 700, cursor: disabled ? 'default' : 'pointer',
+    }}>{label}</button>
+  )
+}
+
+function FooterBtn({ label, color, disabled, onClick, full }: { label: string; color: string; disabled?: boolean; onClick: () => void; full?: boolean }) {
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      flex: 1, padding: '14px 0', borderRadius: 12, border: 'none',
+      background: disabled ? '#e5e5e5' : color, color: disabled ? '#999' : '#fff',
+      fontSize: 15, fontWeight: 700, cursor: disabled ? 'default' : 'pointer', textAlign: 'center',
+      ...(full ? { width: '100%' } : {}),
+    }}>{label}</button>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>{label}</label>
+      {children}
+    </div>
+  )
+}
 
 const pauseOptionStyle: React.CSSProperties = {
   padding: '14px 20px', borderRadius: 12, border: '1px solid #d1d5db',
-  background: '#f8f8f6', fontSize: 15, fontWeight: 600, cursor: 'pointer',
+  background: '#f9fafb', fontSize: 15, fontWeight: 600, cursor: 'pointer',
   textAlign: 'left', color: '#1a1a1a',
 }
 
-const labelStyle: React.CSSProperties = {
-  fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block',
-}
-
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e5e5',
-  fontSize: 14, background: '#f8f8f6', outline: 'none',
+  width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea',
+  fontSize: 14, background: '#f9fafb', outline: 'none',
 }
