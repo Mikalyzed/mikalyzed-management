@@ -70,6 +70,8 @@ export default function VehiclesPage() {
   const [modalSaving, setModalSaving] = useState(false)
   const [modalLoading, setModalLoading] = useState(false)
   const [advancing, setAdvancing] = useState(false)
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([])
+  const [assigningUser, setAssigningUser] = useState(false)
   const [hoverColumn, setHoverColumn] = useState<string | null>(null)
   const [moveModal, setMoveModal] = useState<{
     vehicleId: string
@@ -95,6 +97,11 @@ export default function VehiclesPage() {
         if (data.user?.role === 'admin') setIsAdmin(true)
         if (data.user?.id) setUserId(data.user.id)
       })
+      .catch(() => {})
+
+    fetch('/api/users')
+      .then((r) => r.json())
+      .then((data) => setTeamMembers((data.users || []).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name }))))
       .catch(() => {})
 
     const ghost = document.createElement('div')
@@ -602,12 +609,47 @@ export default function VehiclesPage() {
 
                   {/* Info row */}
                   <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-                    {currentStage?.assignee && (
-                      <div>
-                        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Assigned to</p>
-                        <p style={{ fontSize: 13, fontWeight: 600 }}>{currentStage.assignee.name}</p>
-                      </div>
-                    )}
+                    <div>
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Assigned to</p>
+                      {isAdmin ? (
+                        <select
+                          value={currentStage?.assignee?.id || ''}
+                          disabled={assigningUser}
+                          onChange={async (e) => {
+                            const newId = e.target.value || null
+                            if (!currentStage?.id) return
+                            setAssigningUser(true)
+                            try {
+                              await fetch(`/api/stages/${currentStage.id}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ assigneeId: newId }),
+                              })
+                              // Refresh modal + board
+                              openModal(v.id)
+                              const res = await fetch('/api/vehicles')
+                              const d = await res.json()
+                              setVehicles(d.vehicles || [])
+                            } catch { /* ignore */ }
+                            setAssigningUser(false)
+                          }}
+                          style={{
+                            padding: '4px 8px', borderRadius: 8, border: '1px solid #e5e5e5',
+                            fontSize: 13, fontWeight: 600, background: '#f8f8f6', cursor: 'pointer',
+                            color: currentStage?.assignee ? 'var(--text-primary)' : '#f59e0b',
+                          }}
+                        >
+                          <option value="">Unassigned</option>
+                          {teamMembers.map(m => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p style={{ fontSize: 13, fontWeight: 600, color: currentStage?.assignee ? 'var(--text-primary)' : '#f59e0b' }}>
+                          {currentStage?.assignee?.name || 'Unassigned'}
+                        </p>
+                      )}
+                    </div>
                     {currentStage && (
                       <div>
                         <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Time in stage</p>

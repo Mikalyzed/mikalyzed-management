@@ -89,10 +89,26 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     data.estimatedHours = body.estimatedHours ? parseFloat(body.estimatedHours) : null
   }
 
+  // Update assignee (admin only)
+  if (body.assigneeId !== undefined && user.role === 'admin') {
+    data.assigneeId = body.assigneeId || null
+  }
+
   const updated = await prisma.vehicleStage.update({
     where: { id },
     data,
   })
+
+  // Sync vehicle's currentAssigneeId if this is the current stage
+  if (body.assigneeId !== undefined && user.role === 'admin') {
+    const vehicle = await prisma.vehicle.findFirst({ where: { currentStageId: id } })
+    if (vehicle) {
+      await prisma.vehicle.update({
+        where: { id: vehicle.id },
+        data: { currentAssigneeId: body.assigneeId || null },
+      })
+    }
+  }
 
   // Log activity
   await prisma.activityLog.create({
