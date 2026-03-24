@@ -322,6 +322,7 @@ function AddButton() {
 // ─── Main Dashboard ───
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
+  const [approvingId, setApprovingId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/dashboard').then(r => r.json()).then(setData).catch(console.error)
@@ -334,8 +335,6 @@ export default function DashboardPage() {
       </div>
     )
   }
-
-  const [approvingId, setApprovingId] = useState<string | null>(null)
 
   async function handleApproval(id: string, status: 'approved' | 'rejected') {
     setApprovingId(id)
