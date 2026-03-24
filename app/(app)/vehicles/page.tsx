@@ -473,13 +473,13 @@ export default function VehiclesPage() {
                             {currentStage.status !== 'done' ? ` · ${currentStage.status.replace('_', ' ')}` : ''}
                           </span>
                         )}
-                        <Link
-                          href={`/vehicles/${v.id}`}
-                          style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none' }}
-                        >
-                          View Full Details →
-                        </Link>
                       </div>
+                      <Link
+                        href={`/vehicles/${v.id}`}
+                        style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none', marginTop: 4, display: 'inline-block' }}
+                      >
+                        View Full Details →
+                      </Link>
                     </div>
                     <button onClick={closeModal} style={{
                       background: 'none', border: 'none', fontSize: 22, cursor: 'pointer',
