@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { StageBadge, StatusBadge } from './StageBadge'
 
 type VehicleCardProps = {
@@ -14,15 +13,15 @@ type VehicleCardProps = {
   stageStatus?: string
   assigneeName?: string | null
   timeInStage?: string
+  onClick?: () => void
 }
 
 export default function VehicleCard({
   id, stockNumber, year, make, model, color,
-  status, stageStatus, assigneeName, timeInStage,
+  status, stageStatus, assigneeName, timeInStage, onClick,
 }: VehicleCardProps) {
   return (
-    <Link href={`/vehicles/${id}`} className="block">
-      <div className="card">
+    <div onClick={onClick} className="card" style={{ cursor: onClick ? 'pointer' : undefined }}>
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
             <p className="text-sm font-semibold tracking-tight">
@@ -52,6 +51,5 @@ export default function VehicleCard({
           )}
         </div>
       </div>
-    </Link>
   )
 }

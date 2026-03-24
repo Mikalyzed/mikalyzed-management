@@ -6,6 +6,8 @@ import VehicleCard from '@/components/VehicleCard'
 import KanbanScrollbar from '@/components/KanbanScrollbar'
 import { STAGE_LABELS } from '@/lib/constants'
 
+type ChecklistItem = { item: string; done: boolean; note: string }
+
 type VehicleWithStage = {
   id: string
   stockNumber: string
@@ -16,12 +18,37 @@ type VehicleWithStage = {
   status: string
   currentAssignee: { id: string; name: string } | null
   stages: Array<{
+    id?: string
     status: string
     startedAt: string
     totalBlockedSeconds: number
     priority: number
     estimatedHours: number | null
+    checklist?: ChecklistItem[]
+    assignee?: { id: string; name: string } | null
   }>
+}
+
+type ModalData = {
+  vehicle: {
+    id: string
+    stockNumber: string
+    year: number | null
+    make: string
+    model: string
+    color: string | null
+    status: string
+    currentAssignee: { id: string; name: string } | null
+    stages: Array<{
+      id: string
+      stage: string
+      status: string
+      startedAt: string
+      totalBlockedSeconds: number
+      checklist: ChecklistItem[]
+      assignee: { id: string; name: string } | null
+    }>
+  }
 }
 
 const COLUMNS = ['mechanic', 'detailing', 'content', 'publish', 'completed'] as const
@@ -30,12 +57,21 @@ export default function VehiclesPage() {
   const [vehicles, setVehicles] = useState<VehicleWithStage[]>([])
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [userId, setUserId] = useState<string | null>(null)
   const [dragInfo, setDragInfo] = useState<{ vehicleId: string; column: string } | null>(null)
   const [liveOrder, setLiveOrder] = useState<Record<string, string[]>>({})
   const columnRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const dragGhostRef = useRef<HTMLDivElement | null>(null)
   const originalOrderRef = useRef<Record<string, string[]>>({})
   const kanbanRef = useRef<HTMLDivElement | null>(null)
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null)
+  const [modalData, setModalData] = useState<ModalData | null>(null)
+  const [modalChecklist, setModalChecklist] = useState<ChecklistItem[]>([])
+  const [modalSaving, setModalSaving] = useState(false)
+  const [modalLoading, setModalLoading] = useState(false)
+  const [advancing, setAdvancing] = useState(false)
+  const mouseDownPos = useRef<{ x: number; y: number } | null>(null)
+  const didDrag = useRef(false)
   useEffect(() => {
     fetch('/api/vehicles')
       .then((r) => r.json())
@@ -47,6 +83,7 @@ export default function VehiclesPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.user?.role === 'admin') setIsAdmin(true)
+        if (data.user?.id) setUserId(data.user.id)
       })
       .catch(() => {})
 
@@ -185,7 +222,82 @@ export default function VehiclesPage() {
   const handleDragEnd = useCallback(() => {
     setDragInfo(null)
     setLiveOrder({})
+    didDrag.current = true
   }, [])
+
+  const openModal = useCallback(async (vehicleId: string) => {
+    setSelectedVehicleId(vehicleId)
+    setModalLoading(true)
+    setModalData(null)
+    try {
+      const res = await fetch(`/api/vehicles/${vehicleId}`)
+      const data = await res.json()
+      setModalData(data)
+      const currentStage = data.vehicle?.stages?.find(
+        (s: { stage: string }) => s.stage === data.vehicle.status
+      )
+      setModalChecklist(currentStage?.checklist ? JSON.parse(JSON.stringify(currentStage.checklist)) : [])
+    } catch { /* ignore */ }
+    setModalLoading(false)
+  }, [])
+
+  const closeModal = useCallback(() => {
+    setSelectedVehicleId(null)
+    setModalData(null)
+    setModalChecklist([])
+  }, [])
+
+  const getCurrentStage = useCallback(() => {
+    if (!modalData) return null
+    return modalData.vehicle.stages.find(s => s.stage === modalData.vehicle.status) || null
+  }, [modalData])
+
+  const toggleChecklistItem = useCallback(async (index: number) => {
+    const stage = getCurrentStage()
+    if (!stage) return
+    const updated = [...modalChecklist]
+    updated[index] = { ...updated[index], done: !updated[index].done }
+    setModalChecklist(updated)
+    setModalSaving(true)
+    try {
+      await fetch(`/api/stages/${stage.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: updated }),
+      })
+    } catch { /* ignore */ }
+    setModalSaving(false)
+  }, [modalChecklist, getCurrentStage])
+
+  const handleAdvanceStage = useCallback(async () => {
+    const stage = getCurrentStage()
+    if (!stage) return
+    setAdvancing(true)
+    try {
+      await fetch(`/api/stages/${stage.id}/advance`, { method: 'POST' })
+      closeModal()
+      // Refresh vehicles
+      const res = await fetch('/api/vehicles')
+      const data = await res.json()
+      setVehicles(data.vehicles || [])
+    } catch { /* ignore */ }
+    setAdvancing(false)
+  }, [getCurrentStage, closeModal])
+
+  const handleCardMouseDown = useCallback((e: React.MouseEvent) => {
+    mouseDownPos.current = { x: e.clientX, y: e.clientY }
+    didDrag.current = false
+  }, [])
+
+  const handleCardClick = useCallback((e: React.MouseEvent, vehicleId: string) => {
+    if (didDrag.current) return
+    if (mouseDownPos.current) {
+      const dx = Math.abs(e.clientX - mouseDownPos.current.x)
+      const dy = Math.abs(e.clientY - mouseDownPos.current.y)
+      if (dx > 5 || dy > 5) return
+    }
+    openModal(vehicleId)
+  }, [openModal])
 
   if (loading) {
     return (
@@ -273,7 +385,12 @@ export default function VehiclesPage() {
                           ⠿
                         </div>
                       )}
-                      <div style={{ flex: 1, minWidth: 0 }} className="vehicle-card-inner">
+                      <div
+                        style={{ flex: 1, minWidth: 0 }}
+                        className="vehicle-card-inner"
+                        onMouseDown={handleCardMouseDown}
+                        onClick={(e) => handleCardClick(e, v.id)}
+                      >
                         <VehicleCard
                           id={v.id}
                           stockNumber={v.stockNumber}
@@ -301,6 +418,175 @@ export default function VehiclesPage() {
         })}
       </div>
       <KanbanScrollbar boardRef={kanbanRef} />
+
+      {/* Vehicle Detail Modal */}
+      {selectedVehicleId && (
+        <div
+          onClick={closeModal}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 20,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 20, width: '100%', maxWidth: 500,
+              maxHeight: '85vh', overflow: 'auto', padding: '24px 20px',
+              boxShadow: '0 -4px 30px rgba(0,0,0,0.15)',
+            }}
+          >
+            {modalLoading ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+                <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--border)', borderTopColor: 'transparent' }} />
+              </div>
+            ) : modalData?.vehicle ? (() => {
+              const v = modalData.vehicle
+              const currentStage = getCurrentStage()
+              const vehicleDesc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
+              const doneCount = modalChecklist.filter(c => c.done).length
+              const allDone = modalChecklist.length > 0 && modalChecklist.every(c => c.done)
+              const canAdvance = currentStage && (isAdmin || (userId && currentStage.assignee?.id === userId))
+              const elapsed = currentStage ? (Date.now() - new Date(currentStage.startedAt).getTime()) / 1000 - currentStage.totalBlockedSeconds : 0
+              const hours = Math.floor(elapsed / 3600)
+              const timeStr = hours < 1 ? `${Math.floor(elapsed / 60)}m` : hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d ${hours % 24}h`
+
+              return (
+                <>
+                  {/* Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+                    <div>
+                      <p style={{ fontSize: 18, fontWeight: 700 }}>#{v.stockNumber}</p>
+                      <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                        {vehicleDesc}{v.color ? ` · ${v.color}` : ''}
+                      </p>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {currentStage && (
+                          <span style={{
+                            fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
+                            background: '#dffd6e40', color: '#555',
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                          }}>
+                            {STAGE_LABELS[currentStage.stage as keyof typeof STAGE_LABELS] || currentStage.stage}
+                            {currentStage.status !== 'done' ? ` · ${currentStage.status.replace('_', ' ')}` : ''}
+                          </span>
+                        )}
+                        <Link
+                          href={`/vehicles/${v.id}`}
+                          style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none' }}
+                        >
+                          View Full Details →
+                        </Link>
+                      </div>
+                    </div>
+                    <button onClick={closeModal} style={{
+                      background: 'none', border: 'none', fontSize: 22, cursor: 'pointer',
+                      color: 'var(--text-muted)', padding: '0 4px', lineHeight: 1,
+                    }}>
+                      &times;
+                    </button>
+                  </div>
+
+                  {/* Info row */}
+                  <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+                    {currentStage?.assignee && (
+                      <div>
+                        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Assigned to</p>
+                        <p style={{ fontSize: 13, fontWeight: 600 }}>{currentStage.assignee.name}</p>
+                      </div>
+                    )}
+                    {currentStage && (
+                      <div>
+                        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Time in stage</p>
+                        <p style={{ fontSize: 13, fontWeight: 600 }}>{timeStr}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Progress bar */}
+                  {modalChecklist.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ height: 6, borderRadius: 3, background: '#e5e5e5', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: 3,
+                          background: allDone ? '#22c55e' : '#dffd6e',
+                          width: `${(doneCount / modalChecklist.length) * 100}%`,
+                          transition: 'width 0.2s',
+                        }} />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Checklist */}
+                  <div style={{ marginBottom: 20 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--text-secondary)' }}>
+                      Tasks ({doneCount}/{modalChecklist.length})
+                      {modalSaving && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 8, color: 'var(--text-muted)' }}>Saving...</span>}
+                    </p>
+                    {modalChecklist.length === 0 ? (
+                      <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No checklist items</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {modalChecklist.map((item, i) => (
+                          <div
+                            key={i}
+                            onClick={() => toggleChecklistItem(i)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                              background: item.done ? '#f0fdf4' : '#f8f8f6', borderRadius: 10,
+                              cursor: 'pointer', border: '1px solid', borderColor: item.done ? '#bbf7d0' : '#e5e5e5',
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            <div style={{
+                              width: 22, height: 22, borderRadius: 6, border: '2px solid',
+                              borderColor: item.done ? '#22c55e' : '#d1d5db',
+                              background: item.done ? '#22c55e' : '#fff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              flexShrink: 0, transition: 'all 0.15s',
+                            }}>
+                              {item.done && (
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              )}
+                            </div>
+                            <span style={{
+                              fontSize: 14, color: item.done ? 'var(--text-muted)' : 'var(--text-primary)',
+                              textDecoration: item.done ? 'line-through' : 'none',
+                            }}>
+                              {item.item}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Complete Stage Button */}
+                  {canAdvance && allDone && v.status !== 'completed' && (
+                    <button
+                      onClick={handleAdvanceStage}
+                      disabled={advancing}
+                      style={{
+                        width: '100%', padding: '14px 0', borderRadius: 12, border: 'none',
+                        background: '#dffd6e', color: '#1a1a1a', fontSize: 15, fontWeight: 700,
+                        cursor: advancing ? 'default' : 'pointer', opacity: advancing ? 0.6 : 1,
+                        transition: 'opacity 0.15s',
+                      }}
+                    >
+                      {advancing ? 'Advancing...' : 'Complete Stage'}
+                    </button>
+                  )}
+                </>
+              )
+            })() : (
+              <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>Vehicle not found</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
