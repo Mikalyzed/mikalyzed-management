@@ -433,12 +433,12 @@ export default function VehiclesPage() {
             onClick={e => e.stopPropagation()}
             style={{
               background: '#fff', borderRadius: 20, width: '100%', maxWidth: 500,
-              maxHeight: '85vh', overflow: 'auto', padding: '24px 20px',
+              maxHeight: '85vh', display: 'flex', flexDirection: 'column',
               boxShadow: '0 -4px 30px rgba(0,0,0,0.15)',
             }}
           >
             {modalLoading ? (
-              <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 20px' }}>
                 <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--border)', borderTopColor: 'transparent' }} />
               </div>
             ) : modalData?.vehicle ? (() => {
@@ -454,6 +454,7 @@ export default function VehiclesPage() {
 
               return (
                 <>
+                  <div style={{ flex: 1, overflow: 'auto', padding: '24px 20px 0' }}>
                   {/* Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
                     <div>
@@ -564,23 +565,25 @@ export default function VehiclesPage() {
                     )}
                   </div>
 
-                  {/* Advance Stage Button — always visible for non-completed */}
-                  <button
-                    onClick={handleAdvanceStage}
-                    disabled={!allDone || advancing}
-                    style={{
-                      width: '100%', padding: '14px 0', borderRadius: 12, border: 'none',
-                      background: allDone ? '#dffd6e' : '#e5e5e5',
-                      color: allDone ? '#1a1a1a' : '#999',
-                      fontSize: 15, fontWeight: 700,
-                      cursor: !allDone || advancing ? 'default' : 'pointer',
-                      opacity: advancing ? 0.6 : 1,
-                      transition: 'all 0.15s',
-                      marginTop: 4,
-                    }}
-                  >
-                    {advancing ? 'Advancing...' : allDone ? 'Advance Stage' : 'Complete all tasks to advance'}
-                  </button>
+                  </div>
+                  {/* Advance Stage Button — sticky footer */}
+                  <div style={{ padding: '12px 20px 20px', borderTop: '1px solid #e5e5e5', flexShrink: 0 }}>
+                    <button
+                      onClick={handleAdvanceStage}
+                      disabled={!allDone || advancing}
+                      style={{
+                        width: '100%', padding: '14px 0', borderRadius: 12, border: 'none',
+                        background: allDone ? '#dffd6e' : '#e5e5e5',
+                        color: allDone ? '#1a1a1a' : '#999',
+                        fontSize: 15, fontWeight: 700,
+                        cursor: !allDone || advancing ? 'default' : 'pointer',
+                        opacity: advancing ? 0.6 : 1,
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {advancing ? 'Advancing...' : allDone ? 'Advance Stage' : 'Complete all tasks to advance'}
+                    </button>
+                  </div>
                 </>
               )
             })() : (
