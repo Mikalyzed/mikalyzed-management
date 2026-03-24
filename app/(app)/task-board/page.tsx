@@ -129,8 +129,6 @@ export default function ContentSchedulePage() {
     setVehicles(reordered)
     dragItem.current = null
     dragOver.current = null
-
-    // Save new order
     const updates = reordered.map((v, i) => ({ id: v.id, priority: i }))
     await fetch('/api/stages/reorder', {
       method: 'POST',
@@ -146,10 +144,8 @@ export default function ContentSchedulePage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: newTitle,
-        category: 'content',
-        assigneeId: newAssignee || null,
-        dueDate: newDueDate || null,
+        title: newTitle, category: 'content',
+        assigneeId: newAssignee || null, dueDate: newDueDate || null,
       }),
     })
     setNewTitle(''); setNewAssignee(''); setNewDueDate('')
@@ -176,11 +172,10 @@ export default function ContentSchedulePage() {
 
   return (
     <div>
-      {/* Header */}
       <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 16 }}>Content Schedule</h1>
 
       {/* Stats Bar */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 28, flexWrap: 'wrap' }}>
         {[
           { label: 'Total Vehicles', value: stats.total },
           { label: 'In Progress', value: stats.inProgress },
@@ -196,15 +191,19 @@ export default function ContentSchedulePage() {
         ))}
       </div>
 
-      {/* Vehicle Queue */}
-      <div style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 12, color: '#333' }}>Vehicle Queue</h2>
+      {/* ═══ Recon Vehicles ═══ */}
+      <div style={{ marginBottom: 36 }}>
+        <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 14, color: '#1a1a1a' }}>Recon Vehicles</h2>
         {vehicles.length === 0 ? (
           <div style={{ background: '#fff', borderRadius: 12, padding: 32, textAlign: 'center', color: '#999', border: '1px solid #e8e8e6' }}>
             No vehicles in content stage
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+            gap: 12,
+          }}>
             {vehicles.map((v, i) => {
               const done = doneCount(v.checklist)
               const total = v.checklist.length
@@ -220,58 +219,47 @@ export default function ContentSchedulePage() {
                   onDragOver={e => e.preventDefault()}
                   onClick={() => openModal(v)}
                   style={{
-                    background: '#fff', borderRadius: 12, padding: '14px 16px',
+                    background: '#fff', borderRadius: 14, padding: '18px 18px 16px',
                     border: '1px solid #e8e8e6', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    transition: 'box-shadow 0.15s',
+                    display: 'flex', flexDirection: 'column', gap: 10,
+                    transition: 'box-shadow 0.15s, transform 0.15s',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)' }}
-                  onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none' }}
+                  onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.07)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                  onMouseLeave={e => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none' }}
                 >
-                  {/* Drag handle */}
-                  {isAdmin && (
-                    <div style={{ color: '#ccc', cursor: 'grab', flexShrink: 0, fontSize: 16, lineHeight: 1 }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/>
-                        <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
-                        <circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
-                      </svg>
-                    </div>
-                  )}
-
-                  {/* Vehicle info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 14, fontWeight: 700 }}>
-                        #{v.vehicle.stockNumber}
-                      </span>
-                      <span style={{ fontSize: 13, color: '#555' }}>
-                        {v.vehicle.year} {v.vehicle.make} {v.vehicle.model}
-                      </span>
-                      {v.vehicle.color && (
-                        <span style={{ fontSize: 12, color: '#999' }}>{v.vehicle.color}</span>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{
-                        fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
-                        background: sc.bg, color: sc.text, textTransform: 'uppercase', letterSpacing: '0.04em',
-                      }}>
-                        {STATUS_LABELS[v.status] || v.status}
-                      </span>
-                      {v.assignee && (
-                        <span style={{ fontSize: 12, color: '#999' }}>{v.assignee.name}</span>
-                      )}
-                    </div>
+                  {/* Stock + Status */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <p style={{ fontSize: 15, fontWeight: 700 }}>#{v.vehicle.stockNumber}</p>
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 100,
+                      background: sc.bg, color: sc.text, textTransform: 'uppercase', letterSpacing: '0.04em',
+                    }}>
+                      {STATUS_LABELS[v.status] || v.status}
+                    </span>
                   </div>
 
+                  {/* Vehicle info */}
+                  <p style={{ fontSize: 13, color: '#555', lineHeight: 1.3 }}>
+                    {v.vehicle.year} {v.vehicle.make} {v.vehicle.model}
+                    {v.vehicle.color && <span style={{ color: '#999' }}> · {v.vehicle.color}</span>}
+                  </p>
+
+                  {/* Assignee */}
+                  {v.assignee && (
+                    <p style={{ fontSize: 12, color: '#999' }}>{v.assignee.name}</p>
+                  )}
+
                   {/* Progress */}
-                  <div style={{ width: 80, flexShrink: 0, textAlign: 'right' }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 4 }}>
-                      {done}/{total}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, color: '#999' }}>{done}/{total} tasks</span>
                     </div>
                     <div style={{ height: 4, borderRadius: 2, background: '#eee', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#22c55e' : '#dffd6e', borderRadius: 2, transition: 'width 0.3s' }} />
+                      <div style={{
+                        height: '100%', borderRadius: 2, transition: 'width 0.3s',
+                        width: `${pct}%`,
+                        background: pct === 100 ? '#22c55e' : '#dffd6e',
+                      }} />
                     </div>
                   </div>
                 </div>
@@ -281,10 +269,10 @@ export default function ContentSchedulePage() {
         )}
       </div>
 
-      {/* Additional Tasks */}
+      {/* ═══ Content to Create ═══ */}
       <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#333' }}>Additional Tasks</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1a1a1a' }}>Content to Create</h2>
           {isAdmin && (
             <button onClick={() => setShowAddTask(true)} style={{
               padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
@@ -293,17 +281,10 @@ export default function ContentSchedulePage() {
           )}
         </div>
 
-        {/* Add task inline form */}
         {showAddTask && (
           <div style={{ background: '#fff', borderRadius: 12, padding: 16, border: '1px solid #e8e8e6', marginBottom: 12 }}>
             <div style={{ marginBottom: 10 }}>
-              <input
-                className="input"
-                value={newTitle}
-                onChange={e => setNewTitle(e.target.value)}
-                placeholder="Task title"
-                autoFocus
-              />
+              <input className="input" value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Task title" autoFocus />
             </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
               <select className="input" value={newAssignee} onChange={e => setNewAssignee(e.target.value)} style={{ flex: 1, minWidth: 120 }}>
@@ -323,48 +304,48 @@ export default function ContentSchedulePage() {
           </div>
         )}
 
-        {tasks.filter(t => t.status !== 'done').length === 0 && tasks.filter(t => t.status === 'done').length === 0 ? (
+        {tasks.length === 0 ? (
           <div style={{ background: '#fff', borderRadius: 12, padding: 24, textAlign: 'center', color: '#999', border: '1px solid #e8e8e6', fontSize: 13 }}>
             No additional tasks
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+            gap: 12,
+          }}>
             {tasks.filter(t => t.status !== 'done').map(task => (
               <div key={task.id} style={{
-                background: '#fff', borderRadius: 10, padding: '12px 14px',
-                border: '1px solid #e8e8e6', display: 'flex', alignItems: 'center', gap: 12,
+                background: '#fff', borderRadius: 14, padding: '16px 18px',
+                border: '1px solid #e8e8e6', display: 'flex', flexDirection: 'column', gap: 8,
               }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{task.title}</div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                    {task.assignee && <span style={{ fontSize: 12, color: '#999' }}>{task.assignee.name}</span>}
-                    {task.dueDate && (
-                      <span style={{
-                        fontSize: 12, fontWeight: 600,
-                        color: new Date(task.dueDate) < new Date() ? '#ef4444' : '#999',
-                      }}>
-                        {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
-                    )}
-                  </div>
+                <p style={{ fontSize: 14, fontWeight: 700 }}>{task.title}</p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {task.assignee && <span style={{ fontSize: 12, color: '#999' }}>{task.assignee.name}</span>}
+                  {task.dueDate && (
+                    <span style={{
+                      fontSize: 12, fontWeight: 600,
+                      color: new Date(task.dueDate) < new Date() ? '#ef4444' : '#999',
+                    }}>
+                      {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                  )}
                 </div>
                 <button onClick={() => toggleTask(task)} style={{
-                  fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
-                  border: 'none', background: '#1a1a1a', color: '#dffd6e', cursor: 'pointer',
+                  marginTop: 'auto', padding: '8px 0', borderRadius: 8, border: 'none',
+                  background: '#1a1a1a', color: '#dffd6e', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 }}>Complete</button>
               </div>
             ))}
             {tasks.filter(t => t.status === 'done').map(task => (
               <div key={task.id} style={{
-                background: '#fafaf8', borderRadius: 10, padding: '12px 14px',
-                border: '1px solid #e8e8e6', display: 'flex', alignItems: 'center', gap: 12, opacity: 0.6,
+                background: '#fafaf8', borderRadius: 14, padding: '16px 18px',
+                border: '1px solid #e8e8e6', display: 'flex', flexDirection: 'column', gap: 8, opacity: 0.5,
               }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, textDecoration: 'line-through', color: '#999' }}>{task.title}</div>
-                </div>
+                <p style={{ fontSize: 14, fontWeight: 600, textDecoration: 'line-through', color: '#999' }}>{task.title}</p>
                 <button onClick={() => toggleTask(task)} style={{
-                  fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
-                  border: '1px solid #e0e0e0', background: '#fff', cursor: 'pointer', color: '#888',
+                  marginTop: 'auto', padding: '8px 0', borderRadius: 8,
+                  border: '1px solid #e0e0e0', background: '#fff', color: '#888', fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 }}>Reopen</button>
               </div>
             ))}
@@ -379,80 +360,86 @@ export default function ContentSchedulePage() {
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
         }}>
           <div onClick={e => e.stopPropagation()} style={{
-            background: '#fff', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto',
+            background: '#fff', borderRadius: 20, maxWidth: 500, width: '100%',
+            maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.15)',
           }}>
-            {/* Header */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 18, fontWeight: 700 }}>
-                #{selectedVehicle.vehicle.stockNumber}
-              </div>
-              <div style={{ fontSize: 14, color: '#555', marginTop: 2 }}>
-                {selectedVehicle.vehicle.year} {selectedVehicle.vehicle.make} {selectedVehicle.vehicle.model}
-                {selectedVehicle.vehicle.color && ` - ${selectedVehicle.vehicle.color}`}
-              </div>
-              {selectedVehicle.assignee && (
-                <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>Assigned to {selectedVehicle.assignee.name}</div>
-              )}
-            </div>
-
-            {/* Checklist */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                Tasks ({doneCount(modalChecklist)}/{modalChecklist.length})
-              </div>
-              {modalChecklist.length === 0 ? (
-                <div style={{ fontSize: 13, color: '#999', padding: '12px 0' }}>No tasks configured</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {modalChecklist.map((item, i) => (
-                    <div key={i} onClick={() => toggleItem(i)} style={{
-                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-                      borderRadius: 8, border: '1px solid #e8e8e6', cursor: 'pointer',
-                      background: item.done ? '#f8fef0' : '#fff',
-                      transition: 'background 0.15s',
-                    }}>
-                      <div style={{
-                        width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-                        border: item.done ? 'none' : '2px solid #ddd',
-                        background: item.done ? '#22c55e' : '#fff',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {item.done && (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </div>
-                      <span style={{
-                        fontSize: 14, fontWeight: 500,
-                        textDecoration: item.done ? 'line-through' : 'none',
-                        color: item.done ? '#999' : '#333',
-                      }}>{item.item}</span>
-                    </div>
-                  ))}
+            {/* Scrollable content */}
+            <div style={{ flex: 1, overflow: 'auto', padding: '24px 20px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                <div>
+                  <p style={{ fontSize: 18, fontWeight: 700 }}>#{selectedVehicle.vehicle.stockNumber}</p>
+                  <p style={{ fontSize: 14, color: '#555', marginTop: 2 }}>
+                    {selectedVehicle.vehicle.year} {selectedVehicle.vehicle.make} {selectedVehicle.vehicle.model}
+                    {selectedVehicle.vehicle.color && ` · ${selectedVehicle.vehicle.color}`}
+                  </p>
+                  {selectedVehicle.assignee && (
+                    <p style={{ fontSize: 12, color: '#999', marginTop: 6 }}>Assigned to {selectedVehicle.assignee.name}</p>
+                  )}
                 </div>
-              )}
-              {saving && <div style={{ fontSize: 11, color: '#999', marginTop: 6 }}>Saving...</div>}
+                <button onClick={closeModal} style={{
+                  background: 'none', border: 'none', fontSize: 22, cursor: 'pointer',
+                  color: '#999', padding: '0 4px', lineHeight: 1,
+                }}>&times;</button>
+              </div>
+
+              {/* Checklist */}
+              <div>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>
+                  Tasks ({doneCount(modalChecklist)}/{modalChecklist.length})
+                  {saving && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 8 }}>Saving...</span>}
+                </p>
+                {modalChecklist.length === 0 ? (
+                  <p style={{ fontSize: 13, color: '#999', padding: '12px 0' }}>No tasks configured</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {modalChecklist.map((item, i) => (
+                      <div key={i} onClick={() => toggleItem(i)} style={{
+                        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                        borderRadius: 10, border: '1px solid', cursor: 'pointer',
+                        borderColor: item.done ? '#bbf7d0' : '#e5e5e5',
+                        background: item.done ? '#f0fdf4' : '#f8f8f6',
+                        transition: 'all 0.15s',
+                      }}>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: 6, border: '2px solid',
+                          borderColor: item.done ? '#22c55e' : '#d1d5db',
+                          background: item.done ? '#22c55e' : '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          flexShrink: 0,
+                        }}>
+                          {item.done && (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </div>
+                        <span style={{
+                          fontSize: 14, color: item.done ? '#999' : '#333',
+                          textDecoration: item.done ? 'line-through' : 'none',
+                        }}>{item.item}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={closeModal} style={{
-                flex: 1, padding: '12px', borderRadius: 10, border: '1px solid #e0e0e0',
-                background: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#666',
-              }}>Close</button>
+            {/* Sticky footer */}
+            <div style={{ padding: '12px 20px 20px', borderTop: '1px solid #e5e5e5', flexShrink: 0 }}>
               <button
                 onClick={completeStage}
                 disabled={!allDone || completing}
                 style={{
-                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
-                  background: allDone ? '#1a1a1a' : '#e0e0e0',
-                  color: allDone ? '#dffd6e' : '#999',
-                  cursor: allDone ? 'pointer' : 'not-allowed',
-                  fontSize: 14, fontWeight: 600,
+                  width: '100%', padding: '14px 0', borderRadius: 12, border: 'none',
+                  background: allDone ? '#dffd6e' : '#e5e5e5',
+                  color: allDone ? '#1a1a1a' : '#999',
+                  fontSize: 15, fontWeight: 700,
+                  cursor: !allDone || completing ? 'default' : 'pointer',
+                  opacity: completing ? 0.6 : 1,
                 }}
               >
-                {completing ? 'Advancing...' : 'Complete Stage'}
+                {completing ? 'Advancing...' : allDone ? 'Advance Stage' : 'Complete all tasks to advance'}
               </button>
             </div>
           </div>
