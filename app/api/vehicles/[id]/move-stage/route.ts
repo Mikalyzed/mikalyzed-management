@@ -11,7 +11,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id: vehicleId } = await params
-  const { targetStage } = await req.json()
+  const { targetStage, checklist: customChecklist, assigneeId: customAssigneeId } = await req.json()
 
   if (!STAGES.includes(targetStage) && targetStage !== 'completed') {
     return NextResponse.json({ error: 'Invalid stage' }, { status: 400 })
@@ -52,17 +52,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     } else {
       // Get stage config for defaults
       const config = await tx.stageConfig.findUnique({ where: { stage: targetStage } })
-      const checklistItems = (config?.defaultChecklist as string[] | undefined)?.length
-        ? config!.defaultChecklist as string[]
-        : DEFAULT_CHECKLISTS[targetStage as Stage] || []
-      const checklist = checklistItems.map((item: string) => ({ item, done: false, note: '' }))
+
+      // Use custom checklist if provided, otherwise fall back to config/defaults
+      let checklist
+      if (customChecklist && Array.isArray(customChecklist) && customChecklist.length > 0) {
+        checklist = customChecklist
+      } else {
+        const checklistItems = (config?.defaultChecklist as string[] | undefined)?.length
+          ? config!.defaultChecklist as string[]
+          : DEFAULT_CHECKLISTS[targetStage as Stage] || []
+        checklist = checklistItems.map((item: string) => ({ item, done: false, note: '' }))
+      }
+
+      // Use custom assignee if provided (including explicit null for unassigned)
+      const assigneeId = customAssigneeId !== undefined ? (customAssigneeId || null) : (config?.defaultAssigneeId || null)
 
       const newStage = await tx.vehicleStage.create({
         data: {
           vehicleId,
           stage: targetStage,
           status: 'pending',
-          assigneeId: config?.defaultAssigneeId || null,
+          assigneeId,
           checklist,
         },
       })
@@ -72,7 +82,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         data: {
           status: targetStage,
           currentStageId: newStage.id,
-          currentAssigneeId: config?.defaultAssigneeId || null,
+          currentAssigneeId: assigneeId,
         },
       })
     }

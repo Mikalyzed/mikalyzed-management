@@ -70,6 +70,16 @@ export default function VehiclesPage() {
   const [modalSaving, setModalSaving] = useState(false)
   const [modalLoading, setModalLoading] = useState(false)
   const [advancing, setAdvancing] = useState(false)
+  const [hoverColumn, setHoverColumn] = useState<string | null>(null)
+  const [moveModal, setMoveModal] = useState<{
+    vehicleId: string
+    fromStage: string
+    toStage: string
+    tasks: { item: string; selected: boolean }[]
+    assigneeId: string | null
+    teamMembers: { id: string; name: string }[]
+    saving: boolean
+  } | null>(null)
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null)
   const didDrag = useRef(false)
   useEffect(() => {
@@ -141,9 +151,17 @@ export default function VehiclesPage() {
 
   const handleDragOver = useCallback(
     (e: React.DragEvent, column: string) => {
-      if (!dragInfo || dragInfo.column !== column) return
+      if (!dragInfo) return
       e.preventDefault()
       e.dataTransfer.dropEffect = 'move'
+
+      // Cross-column hover highlight
+      if (dragInfo.column !== column) {
+        setHoverColumn(column)
+        return
+      }
+
+      setHoverColumn(null)
 
       const container = columnRefs.current[column]
       if (!container) return
@@ -183,15 +201,78 @@ export default function VehiclesPage() {
   const handleDrop = useCallback(
     async (e: React.DragEvent, column: string) => {
       e.preventDefault()
-      if (!dragInfo || dragInfo.column !== column) {
+      setHoverColumn(null)
+
+      if (!dragInfo) {
         setDragInfo(null)
         setLiveOrder({})
         return
       }
 
+      // Cross-column drop → open move modal
+      if (dragInfo.column !== column && column !== 'completed') {
+        const vehicleId = dragInfo.vehicleId
+        const fromStage = dragInfo.column
+        setDragInfo(null)
+        setLiveOrder({})
+
+        // Fetch stage config defaults + team members
+        try {
+          const [configRes, teamRes] = await Promise.all([
+            fetch('/api/settings/stages'),
+            fetch('/api/users'),
+          ])
+          const configData = await configRes.json()
+          const teamData = await teamRes.json()
+          const stageConfig = configData.stages?.find((s: { stage: string }) => s.stage === column)
+          const defaultTasks: string[] = stageConfig?.defaultChecklist || []
+          const defaultAssignee: string | null = stageConfig?.defaultAssigneeId || null
+
+          setMoveModal({
+            vehicleId,
+            fromStage,
+            toStage: column,
+            tasks: defaultTasks.map(item => ({ item, selected: true })),
+            assigneeId: defaultAssignee,
+            teamMembers: (teamData.users || []).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })),
+            saving: false,
+          })
+        } catch {
+          // Fallback — just open with empty tasks
+          setMoveModal({
+            vehicleId,
+            fromStage,
+            toStage: column,
+            tasks: [],
+            assigneeId: null,
+            teamMembers: [],
+            saving: false,
+          })
+        }
+        return
+      }
+
+      // Cross-column drop to completed
+      if (dragInfo.column !== column && column === 'completed') {
+        const vehicleId = dragInfo.vehicleId
+        setDragInfo(null)
+        setLiveOrder({})
+        try {
+          await fetch(`/api/vehicles/${vehicleId}/move-stage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetStage: 'completed' }),
+          })
+          const res = await fetch('/api/vehicles')
+          const data = await res.json()
+          setVehicles(data.vehicles || [])
+        } catch { /* ignore */ }
+        return
+      }
+
+      // Same-column reorder
       const orderedIds = liveOrder[column] || []
       
-      // Commit the order to vehicle state
       setVehicles((prev) => {
         const others = prev.filter((v) => v.status !== column)
         const colVehicles = prev.filter((v) => v.status === column)
@@ -222,6 +303,7 @@ export default function VehiclesPage() {
   const handleDragEnd = useCallback(() => {
     setDragInfo(null)
     setLiveOrder({})
+    setHoverColumn(null)
     didDrag.current = true
   }, [])
 
@@ -284,6 +366,32 @@ export default function VehiclesPage() {
     setAdvancing(false)
   }, [getCurrentStage, closeModal])
 
+  const handleMoveConfirm = useCallback(async () => {
+    if (!moveModal) return
+    setMoveModal(prev => prev ? { ...prev, saving: true } : null)
+    try {
+      // Build custom checklist from selected tasks
+      const checklist = moveModal.tasks
+        .filter(t => t.selected)
+        .map(t => ({ item: t.item, done: false, note: '' }))
+
+      await fetch(`/api/vehicles/${moveModal.vehicleId}/move-stage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetStage: moveModal.toStage,
+          checklist: checklist.length > 0 ? checklist : undefined,
+          assigneeId: moveModal.assigneeId,
+        }),
+      })
+      setMoveModal(null)
+      const res = await fetch('/api/vehicles')
+      const data = await res.json()
+      setVehicles(data.vehicles || [])
+    } catch { /* ignore */ }
+    setMoveModal(prev => prev ? { ...prev, saving: false } : null)
+  }, [moveModal])
+
   const handleCardMouseDown = useCallback((e: React.MouseEvent) => {
     mouseDownPos.current = { x: e.clientX, y: e.clientY }
     didDrag.current = false
@@ -343,11 +451,14 @@ export default function VehiclesPage() {
                 ref={(el) => { columnRefs.current[col] = el }}
                 onDragOver={(e) => handleDragOver(e, col)}
                 onDrop={(e) => handleDrop(e, col)}
-                onDragLeave={() => {}}
+                onDragLeave={() => { if (hoverColumn === col) setHoverColumn(null) }}
                 style={{
                   minHeight: '80px',
                   borderRadius: '12px',
                   padding: '2px',
+                  transition: 'background 0.2s, border-color 0.2s',
+                  background: hoverColumn === col ? 'rgba(223, 253, 110, 0.08)' : undefined,
+                  border: hoverColumn === col ? '2px dashed #dffd6e' : '2px dashed transparent',
                 }}
               >
                 {colVehicles.map((v) => {
@@ -589,6 +700,122 @@ export default function VehiclesPage() {
             })() : (
               <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>Vehicle not found</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Move Stage Modal */}
+      {moveModal && (
+        <div
+          onClick={() => !moveModal.saving && setMoveModal(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1100, padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 20, width: '100%', maxWidth: 440,
+              maxHeight: '80vh', overflow: 'auto', padding: 24,
+              boxShadow: '0 25px 60px rgba(0,0,0,0.2)',
+            }}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
+              Move to {STAGE_LABELS[moveModal.toStage as keyof typeof STAGE_LABELS]}
+            </h3>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
+              Select tasks and assignee for this stage
+            </p>
+
+            {/* Assignee */}
+            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'block' }}>Assignee</label>
+            <select
+              value={moveModal.assigneeId || ''}
+              onChange={(e) => setMoveModal(prev => prev ? { ...prev, assigneeId: e.target.value || null } : null)}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e5e5',
+                fontSize: 14, marginBottom: 20, background: '#f8f8f6',
+              }}
+            >
+              <option value="">Unassigned</option>
+              {moveModal.teamMembers.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+
+            {/* Tasks */}
+            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, display: 'block' }}>
+              Tasks ({moveModal.tasks.filter(t => t.selected).length}/{moveModal.tasks.length})
+            </label>
+            {moveModal.tasks.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>No default tasks for this stage</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+                {moveModal.tasks.map((task, i) => (
+                  <div
+                    key={i}
+                    onClick={() => {
+                      setMoveModal(prev => {
+                        if (!prev) return null
+                        const tasks = [...prev.tasks]
+                        tasks[i] = { ...tasks[i], selected: !tasks[i].selected }
+                        return { ...prev, tasks }
+                      })
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                      background: task.selected ? '#f0fdf4' : '#f8f8f6', borderRadius: 10,
+                      cursor: 'pointer', border: '1px solid', borderColor: task.selected ? '#bbf7d0' : '#e5e5e5',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <div style={{
+                      width: 22, height: 22, borderRadius: 6, border: '2px solid',
+                      borderColor: task.selected ? '#22c55e' : '#d1d5db',
+                      background: task.selected ? '#22c55e' : '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0, transition: 'all 0.15s',
+                    }}>
+                      {task.selected && (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 14 }}>{task.item}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setMoveModal(null)}
+                disabled={moveModal.saving}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 12, border: '1px solid #e5e5e5',
+                  background: '#fff', color: '#555', fontSize: 14, fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMoveConfirm}
+                disabled={moveModal.saving}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 12, border: 'none',
+                  background: '#dffd6e', color: '#1a1a1a', fontSize: 14, fontWeight: 700,
+                  cursor: moveModal.saving ? 'default' : 'pointer',
+                  opacity: moveModal.saving ? 0.6 : 1,
+                }}
+              >
+                {moveModal.saving ? 'Moving...' : 'Move Vehicle'}
+              </button>
+            </div>
           </div>
         </div>
       )}
