@@ -150,14 +150,19 @@ export async function GET() {
     return sum + Math.max(0, est - elapsed)
   }, 0)
 
-  // Split into today / remaining week / next week
+  // Split into today + remaining days of the week
   const todayJobs: typeof stages = [...active, ...paused.filter(p => !p.awaitingParts)]
-  const remainingWeekJobs: typeof stages = []
-  const nextWeekJobs: typeof stages = []
+  const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+  const remainingDays: { day: string; jobs: ReturnType<typeof format>[] }[] = []
 
   let todayBudget = Math.max(0, hoursLeftToday - activeHoursRemaining)
   const fullDaysLeft = dayIndex >= 0 && dayIndex <= 4 ? 4 - dayIndex : 0
-  let weekBudget = fullDaysLeft * HOURS_PER_DAY // remaining days AFTER today
+
+  // Build day buckets for remaining weekdays
+  const dayBuckets: { day: string; budget: number; jobs: typeof stages }[] = []
+  for (let d = 1; d <= fullDaysLeft; d++) {
+    dayBuckets.push({ day: DAY_NAMES[dayIndex + d], budget: HOURS_PER_DAY, jobs: [] })
+  }
 
   for (const s of queued) {
     const est = s.estimatedHours || 2
@@ -165,17 +170,38 @@ export async function GET() {
       todayJobs.push(s)
       todayBudget -= est
     } else if (todayBudget > 0) {
-      // Partially fits today — include it (mechanic will start it)
       todayJobs.push(s)
       todayBudget = 0
-    } else if (weekBudget >= est) {
-      remainingWeekJobs.push(s)
-      weekBudget -= est
-    } else if (weekBudget > 0) {
-      remainingWeekJobs.push(s)
-      weekBudget = 0
     } else {
-      nextWeekJobs.push(s)
+      // Try to fit into a remaining day bucket
+      let placed = false
+      for (const bucket of dayBuckets) {
+        if (bucket.budget >= est) {
+          bucket.jobs.push(s)
+          bucket.budget -= est
+          placed = true
+          break
+        } else if (bucket.budget > 0) {
+          bucket.jobs.push(s)
+          bucket.budget = 0
+          placed = true
+          break
+        }
+      }
+      if (!placed) {
+        // Overflow — still add to last bucket or skip
+        // Just add to the end so it shows up somewhere
+        if (dayBuckets.length > 0) {
+          dayBuckets[dayBuckets.length - 1].jobs.push(s)
+        }
+      }
+    }
+  }
+
+  // Format day buckets
+  for (const bucket of dayBuckets) {
+    if (bucket.jobs.length > 0) {
+      remainingDays.push({ day: bucket.day, jobs: bucket.jobs.map(format) })
     }
   }
 
@@ -185,8 +211,7 @@ export async function GET() {
     queued: queued.map(format),
     completedToday: completedToday.map(format),
     today: todayJobs.map(format),
-    remainingWeek: remainingWeekJobs.map(format),
-    nextWeek: nextWeekJobs.map(format),
+    remainingDays,
     weeklyEstimatedHours,
     weeklyWorkedHours: Math.round(weeklyWorkedSeconds / 360) / 10,
     remainingHoursThisWeek: Math.round(remainingHoursThisWeek * 10) / 10,

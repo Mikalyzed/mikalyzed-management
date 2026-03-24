@@ -26,9 +26,11 @@ type JobCard = {
   startedAt: string | null
 }
 
+type DayBucket = { day: string; jobs: JobCard[] }
+
 type BoardData = {
   active: JobCard[]; paused: JobCard[]; queued: JobCard[]; completedToday: JobCard[]
-  today: JobCard[]; remainingWeek: JobCard[]; nextWeek: JobCard[]
+  today: JobCard[]; remainingDays: DayBucket[]
   weeklyEstimatedHours: number; weeklyWorkedHours: number; remainingHoursThisWeek: number; hoursLeftToday: number
   isWorkHours: boolean
 }
@@ -343,54 +345,56 @@ export default function MechanicBoard() {
         </div>
       )}
 
-      {/* Remaining This Week — collapsed by default */}
-      {data.remainingWeek.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <button
-            onClick={() => setShowRemainingWeek(prev => !prev)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-              padding: '10px 14px', borderRadius: 12, border: '1px solid #e2e5ea',
-              background: '#f9fafb', cursor: 'pointer', marginBottom: showRemainingWeek ? 12 : 0,
-            }}
-          >
-            <div style={{ width: 4, height: 20, borderRadius: 2, background: '#94a3b8' }} />
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)' }}>Remaining This Week</span>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.remainingWeek.length} vehicles</span>
-            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
-              {showRemainingWeek ? 'Hide' : 'Show'}
-            </span>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-muted)', transform: showRemainingWeek ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-          {showRemainingWeek && (
-            <div style={{
-              display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
-              WebkitOverflowScrolling: 'touch',
-            }}>
-              {data.remainingWeek.map((job, i) => <WeekCard key={job.id} job={job} index={data.today.length + i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Next Week */}
-      {data.nextWeek.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <div style={{ width: 4, height: 20, borderRadius: 2, background: '#d1d5db' }} />
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-muted)' }}>Next Week</h2>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.nextWeek.length} vehicles</span>
+      {/* Remaining This Week — collapsed by default, broken down by day */}
+      {data.remainingDays.length > 0 && (() => {
+        const totalRemaining = data.remainingDays.reduce((sum, d) => sum + d.jobs.length, 0)
+        return (
+          <div style={{ marginBottom: 24 }}>
+            <button
+              onClick={() => setShowRemainingWeek(prev => !prev)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                padding: '10px 14px', borderRadius: 12, border: '1px solid #e2e5ea',
+                background: '#f9fafb', cursor: 'pointer', marginBottom: showRemainingWeek ? 16 : 0,
+              }}
+            >
+              <div style={{ width: 4, height: 20, borderRadius: 2, background: '#94a3b8' }} />
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)' }}>Remaining This Week</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{totalRemaining} vehicles</span>
+              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
+                {showRemainingWeek ? 'Hide' : 'Show'}
+              </span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-muted)', transform: showRemainingWeek ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {showRemainingWeek && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {data.remainingDays.map((bucket) => {
+                  const dayHours = bucket.jobs.reduce((sum, j) => sum + (j.estimatedHours || 2), 0)
+                  return (
+                    <div key={bucket.day}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)' }}>{bucket.day}</span>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{bucket.jobs.length} vehicles</span>
+                        </div>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{dayHours}h est.</span>
+                      </div>
+                      <div style={{
+                        display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4,
+                        WebkitOverflowScrolling: 'touch',
+                      }}>
+                        {bucket.jobs.map((job, i) => <WeekCard key={job.id} job={job} index={i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
-          <div style={{
-            display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
-            WebkitOverflowScrolling: 'touch',
-          }}>
-            {data.nextWeek.map((job, i) => <WeekCard key={job.id} job={job} index={data.today.length + data.remainingWeek.length + i} getLiveElapsed={getLiveElapsed} openJob={openJob} muted />)}
-          </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Active Jobs */}
       {data.active.length > 0 && (
