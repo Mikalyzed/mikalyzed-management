@@ -38,11 +38,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     await prisma.vehicleStage.update({ where: { id: approval.vehicleStageId }, data: updateData })
 
+    // Log activity on the vehicle
+    await prisma.activityLog.create({
+      data: {
+        entityType: 'vehicle',
+        entityId: approval.vehicleStage.vehicleId,
+        action: isTimeExtension
+          ? `Time extended +${approval.additionalHours}h${approval.taskName.includes('—') ? ` — ${approval.taskName.split('—').slice(1).join('—').trim()}` : ''}`
+          : `Task approved: ${approval.taskName}`,
+        actorId: user.id,
+        details: isTimeExtension
+          ? { type: 'time_extension', hours: approval.additionalHours, stage: approval.vehicleStage.stage }
+          : { type: 'task_approval', task: approval.taskName },
+      },
+    })
+
     await prisma.notification.create({
       data: {
         userId: approval.requestedById,
         type: 'task_approval_result',
-        title: `Your task '${approval.taskName}' was approved`,
+        title: isTimeExtension
+          ? `Time extension of +${approval.additionalHours}h was approved`
+          : `Your task '${approval.taskName}' was approved`,
         entityType: 'task_approval',
         entityId: approval.id,
       },
