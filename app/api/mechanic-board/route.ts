@@ -336,6 +336,14 @@ export async function POST(req: NextRequest) {
           ? config!.defaultChecklist as string[]
           : DEFAULT_CHECKLISTS[nextStage as Stage] || []
         const checklist = checklistItems.map((item: string) => ({ item, done: false, note: '' }))
+        
+        // Place at bottom of next stage
+        const maxPriority = await prisma.vehicleStage.aggregate({
+          where: { stage: nextStage, status: { not: 'done' } },
+          _max: { priority: true },
+        })
+        const bottomPriority = (maxPriority._max.priority ?? -1) + 1
+
         const newStage = await prisma.vehicleStage.create({
           data: {
             vehicleId: stage.vehicleId,
@@ -343,6 +351,7 @@ export async function POST(req: NextRequest) {
             status: 'pending',
             assigneeId: config?.defaultAssigneeId || null,
             checklist,
+            priority: bottomPriority,
           },
         })
         await prisma.vehicle.update({

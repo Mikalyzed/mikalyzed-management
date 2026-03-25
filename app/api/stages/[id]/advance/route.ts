@@ -70,6 +70,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         }))
       }
 
+      // Place at bottom of next stage (highest priority + 1)
+      const maxPriority = await tx.vehicleStage.aggregate({
+        where: { stage: nextStage, status: { not: 'done' } },
+        _max: { priority: true },
+      })
+      const bottomPriority = (maxPriority._max.priority ?? -1) + 1
+
       const newStage = await tx.vehicleStage.create({
         data: {
           vehicleId: stage.vehicleId,
@@ -80,6 +87,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           dueDate: body.dueDate ? new Date(body.dueDate) : null,
           scopeName: body.scopeName || null,
           estimatedHours: body.estimatedHours ?? null,
+          priority: bottomPriority,
         },
       })
 
