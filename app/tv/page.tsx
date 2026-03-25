@@ -92,6 +92,59 @@ function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
   )
 }
 
+function CompletedTicker({ items }: { items: CompletedItem[] }) {
+  const [currentIdx, setCurrentIdx] = useState(0)
+
+  useEffect(() => {
+    if (items.length <= 1) return
+    const i = setInterval(() => setCurrentIdx(prev => (prev + 1) % items.length), 4000)
+    return () => clearInterval(i)
+  }, [items.length])
+
+  const item = items[currentIdx]
+  if (!item) return null
+
+  return (
+    <div style={{ background: '#111', borderRadius: 12, padding: '14px 20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#888' }}>Completed Today</span>
+          <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>{items.length}</span>
+        </div>
+        {items.length > 1 && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            {items.map((_, i) => (
+              <div key={i} style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: i === currentIdx ? '#22c55e' : '#2a2a2a',
+                transition: 'background 0.3s',
+              }} />
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{
+        marginTop: 10, display: 'flex', alignItems: 'center', gap: 14,
+        padding: '10px 16px', background: '#1a1a1a', borderRadius: 10,
+        borderLeft: `3px solid ${STAGE_COLORS[item.stage] || '#666'}`,
+        transition: 'opacity 0.3s',
+      }}>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{item.vehicle}</p>
+          <p style={{ fontSize: 12, color: '#666', margin: '2px 0 0' }}>
+            #{item.stockNumber} · {STAGE_LABELS[item.stage] || item.stage}{item.assignee ? ` — ${item.assignee}` : ''}
+          </p>
+        </div>
+        {item.completedAt && (
+          <span style={{ fontSize: 13, color: '#555' }}>
+            {new Date(item.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function TVBoard() {
   const [data, setData] = useState<TVData | null>(null)
   const [clock, setClock] = useState(new Date())
@@ -206,36 +259,8 @@ export default function TVBoard() {
         })}
       </div>
 
-      {/* Completed Today — full width bottom strip */}
-      {data.completedVehicles.length > 0 && (
-        <div style={{ background: '#111', borderRadius: 12, padding: '14px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <span style={{ fontSize: 14, fontWeight: 700 }}>Completed Today</span>
-            <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>{data.completedVehicles.length}</span>
-          </div>
-          <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
-            {data.completedVehicles.map((item, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
-                background: '#1a1a1a', borderRadius: 10, flexShrink: 0,
-                borderLeft: `3px solid ${STAGE_COLORS[item.stage] || '#666'}`,
-              }}>
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{item.vehicle}</p>
-                  <p style={{ fontSize: 11, color: '#666', margin: 0 }}>
-                    #{item.stockNumber} · {STAGE_LABELS[item.stage] || item.stage}{item.assignee ? ` — ${item.assignee}` : ''}
-                  </p>
-                </div>
-                {item.completedAt && (
-                  <span style={{ fontSize: 11, color: '#444', marginLeft: 8 }}>
-                    {new Date(item.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Completed Today — auto-rotating ticker */}
+      {data.completedVehicles.length > 0 && <CompletedTicker items={data.completedVehicles} />}
 
       {/* Auto-refresh indicator */}
       <div style={{ position: 'fixed', bottom: 10, right: 16, fontSize: 10, color: '#222' }}>
