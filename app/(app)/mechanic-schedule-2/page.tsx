@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import ScheduleView from './ScheduleView'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
 
@@ -62,6 +63,7 @@ export default function MechanicBoard() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAllQueued, setShowAllQueued] = useState(false)
   const [showRemainingWeek, setShowRemainingWeek] = useState(false)
+  const [viewMode, setViewMode] = useState<'board' | 'schedule'>('board')
   const [tick, setTick] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -297,12 +299,46 @@ export default function MechanicBoard() {
       <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>
-          {isAdmin ? 'Mechanic Schedule #2' : 'My Schedule #2'}
+          {isAdmin ? 'Mechanic Schedule' : 'My Schedule'}
         </h1>
-        {!data.isWorkHours && <Badge text="Outside Working Hours" color="#a855f7" />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {!data.isWorkHours && <Badge text="Outside Working Hours" color="#a855f7" />}
+          <div style={{
+            display: 'flex', background: '#f1f3f5', borderRadius: 10, padding: 3,
+          }}>
+            <button
+              onClick={() => setViewMode('board')}
+              style={{
+                padding: '6px 14px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', transition: 'all 0.15s',
+                background: viewMode === 'board' ? '#fff' : 'transparent',
+                color: viewMode === 'board' ? '#1a1a1a' : '#94a3b8',
+                boxShadow: viewMode === 'board' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              }}
+            >
+              Board
+            </button>
+            <button
+              onClick={() => setViewMode('schedule')}
+              style={{
+                padding: '6px 14px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600,
+                cursor: 'pointer', transition: 'all 0.15s',
+                background: viewMode === 'schedule' ? '#fff' : 'transparent',
+                color: viewMode === 'schedule' ? '#1a1a1a' : '#94a3b8',
+                boxShadow: viewMode === 'schedule' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+              }}
+            >
+              Schedule
+            </button>
+          </div>
+        </div>
       </div>
+
+      {viewMode === 'schedule' ? (
+        <ScheduleView />
+      ) : (<>
 
       {/* Stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 24 }}>
@@ -459,6 +495,8 @@ export default function MechanicBoard() {
       {data.active.length === 0 && data.queued.length === 0 && data.paused.length === 0 && data.completedToday.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No mechanic jobs. All clear.</div>
       )}
+
+      </>)}
 
       {/* Job Detail Modal */}
       {selectedJob && (
