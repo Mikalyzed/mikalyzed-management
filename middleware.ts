@@ -4,8 +4,8 @@ import type { NextRequest } from 'next/server'
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Skip auth for login page and API login route
-  if (pathname === '/login' || pathname === '/api/auth/login') {
+  // Skip auth for login page, API login route, and TV board
+  if (pathname === '/login' || pathname === '/api/auth/login' || pathname === '/tv' || pathname === '/api/tv-board') {
     return NextResponse.next()
   }
 
