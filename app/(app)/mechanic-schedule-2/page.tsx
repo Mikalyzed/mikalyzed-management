@@ -65,6 +65,10 @@ export default function MechanicBoard() {
   const [showRemainingWeek, setShowRemainingWeek] = useState(false)
   const [viewMode, setViewMode] = useState<'board' | 'schedule'>('board')
   const [tick, setTick] = useState(0)
+  const [timeExtJob, setTimeExtJob] = useState<JobCard | null>(null)
+  const [timeExtHours, setTimeExtHours] = useState('')
+  const [timeExtNote, setTimeExtNote] = useState('')
+  const [timeExtSubmitting, setTimeExtSubmitting] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchData = useCallback(() => {
@@ -273,9 +277,23 @@ export default function MechanicBoard() {
           <p style={{ fontSize: 11, fontWeight: 600, color: '#a855f7', marginTop: 8 }}>Auto Paused — Outside Working Hours</p>
         )}
 
+        {/* Request More Time — when overdue */}
+        {isOver && !showActions && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setTimeExtJob(job) }}
+            style={{
+              marginTop: 10, width: '100%', padding: '8px 0', borderRadius: 8,
+              background: 'transparent', border: '1px solid #ef4444', color: '#ef4444',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            Request More Time
+          </button>
+        )}
+
         {/* Quick actions */}
         {showActions && (
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }} onClick={e => e.stopPropagation()}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
             {job.status === 'pending' && (
               <ActionBtn label="Start" color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('start', job.id)} />
             )}
@@ -287,6 +305,9 @@ export default function MechanicBoard() {
             )}
             {!job.timerRunning && job.status === 'in_progress' && (
               <ActionBtn label="Resume" color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('resume', job.id)} />
+            )}
+            {isOver && (
+              <ActionBtn label="Request More Time" color="#ef4444" disabled={acting} onClick={() => setTimeExtJob(job)} />
             )}
           </div>
         )}
@@ -629,6 +650,80 @@ export default function MechanicBoard() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Time Extension Request Modal */}
+      {timeExtJob && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }} onClick={() => { setTimeExtJob(null); setTimeExtHours(''); setTimeExtNote('') }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+          }}>
+            <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Request More Time</p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              #{timeExtJob.vehicle.stockNumber} — {`${timeExtJob.vehicle.year ?? ''} ${timeExtJob.vehicle.make} ${timeExtJob.vehicle.model}`.trim()}
+            </p>
+
+            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Additional hours needed</label>
+            <input
+              type="number" step="0.5" min="0.5"
+              value={timeExtHours} onChange={e => setTimeExtHours(e.target.value)}
+              placeholder="e.g. 2"
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea',
+                fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 12,
+              }}
+            />
+
+            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Reason (optional)</label>
+            <input
+              type="text" value={timeExtNote} onChange={e => setTimeExtNote(e.target.value)}
+              placeholder="e.g. Found additional rust underneath"
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea',
+                fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 20,
+              }}
+            />
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setTimeExtJob(null); setTimeExtHours(''); setTimeExtNote('') }}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #e2e5ea',
+                  background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
+                }}
+              >Cancel</button>
+              <button
+                disabled={!timeExtHours || timeExtSubmitting}
+                onClick={async () => {
+                  setTimeExtSubmitting(true)
+                  try {
+                    await fetch('/api/task-approvals', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        vehicleStageId: timeExtJob.id,
+                        taskName: `Time extension: +${timeExtHours}h${timeExtNote ? ` — ${timeExtNote}` : ''}`,
+                        additionalHours: parseFloat(timeExtHours),
+                      }),
+                    })
+                    setTimeExtJob(null); setTimeExtHours(''); setTimeExtNote('')
+                  } catch { /* ignore */ }
+                  setTimeExtSubmitting(false)
+                }}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+                  background: !timeExtHours ? '#e2e5ea' : '#ef4444', color: '#fff',
+                  fontSize: 14, fontWeight: 700, cursor: timeExtHours ? 'pointer' : 'default',
+                  opacity: timeExtSubmitting ? 0.6 : 1,
+                }}
+              >{timeExtSubmitting ? 'Sending...' : 'Send Request'}</button>
+            </div>
           </div>
         </div>
       )}

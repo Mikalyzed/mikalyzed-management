@@ -91,10 +91,11 @@ function getStatusInfo(job: JobCard, elapsed: number): { badges: { text: string;
   return { badges, cardBg: '#f9fafb', borderColor: '#e2e5ea' }
 }
 
-function JobRow({ job, getLiveElapsed }: { job: JobCard; getLiveElapsed: (j: JobCard) => number }) {
+function JobRow({ job, getLiveElapsed, onRequestTime }: { job: JobCard; getLiveElapsed: (j: JobCard) => number; onRequestTime: (job: JobCard) => void }) {
   const v = job.vehicle
   const elapsed = getLiveElapsed(job)
   const est = job.estimatedHours || 2
+  const isOvertime = elapsed > est * 3600 && job.status !== 'done'
   const { badges, cardBg, borderColor } = getStatusInfo(job, elapsed)
   const desc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
   const doneCount = job.checklist.filter(c => c.done).length
@@ -128,7 +129,7 @@ function JobRow({ job, getLiveElapsed }: { job: JobCard; getLiveElapsed: (j: Job
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
             {totalCount > 0 ? `${doneCount}/${totalCount} tasks` : 'No tasks'}
           </span>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: isOvertime ? '#ef4444' : 'var(--text-muted)' }}>
             {formatHours(elapsed)} / {est}h est.
           </span>
         </div>
@@ -136,10 +137,23 @@ function JobRow({ job, getLiveElapsed }: { job: JobCard; getLiveElapsed: (j: Job
           <div style={{
             height: '100%', borderRadius: 2, transition: 'width 0.3s',
             width: `${Math.min((elapsed / (est * 3600)) * 100, 100)}%`,
-            background: elapsed > est * 3600 ? '#ef4444' : doneCount === totalCount && totalCount > 0 ? '#22c55e' : borderColor,
+            background: isOvertime ? '#ef4444' : doneCount === totalCount && totalCount > 0 ? '#22c55e' : borderColor,
           }} />
         </div>
       </div>
+
+      {isOvertime && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onRequestTime(job) }}
+          style={{
+            marginTop: 10, width: '100%', padding: '8px 0', borderRadius: 8,
+            background: 'transparent', border: '1px solid #ef4444', color: '#ef4444',
+            fontSize: 12, fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          Request More Time
+        </button>
+      )}
     </div>
   )
 }
@@ -174,36 +188,61 @@ export default function ScheduleView() {
     return sec
   }, [])
 
+  // Time extension request modal
+  const [timeModal, setTimeModal] = useState<JobCard | null>(null)
+  const [requestHours, setRequestHours] = useState('')
+  const [requestNote, setRequestNote] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleRequestTime = useCallback(async () => {
+    if (!timeModal || !requestHours) return
+    setSubmitting(true)
+    try {
+      await fetch('/api/task-approvals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicleStageId: timeModal.id,
+          taskName: `Time extension: +${requestHours}h${requestNote ? ` — ${requestNote}` : ''}`,
+          additionalHours: parseFloat(requestHours),
+        }),
+      })
+      setTimeModal(null)
+      setRequestHours('')
+      setRequestNote('')
+    } catch { /* ignore */ }
+    setSubmitting(false)
+  }, [timeModal, requestHours, requestNote])
+
+  // Calculate remaining planned hours for a job (overdue = 0 remaining)
+  const getRemainingHours = useCallback((job: JobCard) => {
+    const est = job.estimatedHours || 2
+    const elapsed = getLiveElapsed(job)
+    const remaining = est - elapsed / 3600
+    return remaining > 0 ? remaining : 0
+  }, [getLiveElapsed])
+
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Loading schedule...</p>
   if (!data) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Failed to load schedule.</p>
 
-  // Build day sections from the board data
-  // "Today" = active + paused (non-awaiting) + today's queued jobs
-  // "Remaining Days" = future day buckets
-  // Also show completed today and awaiting parts separately
-
   const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
 
-  // Deduplicate: active/paused jobs are already in data.today from the API
   const todayJobs = data.today || []
   const completedToday = data.completedToday || []
   const awaitingParts = data.paused.filter(j => j.awaitingParts)
 
-  const sections: { label: string; hours: number; jobs: JobCard[]; muted?: boolean }[] = []
+  const sections: { label: string; jobs: JobCard[]; muted?: boolean }[] = []
 
   if (todayJobs.length > 0 || completedToday.length > 0) {
-    const allToday = [...todayJobs, ...completedToday]
-    const todayHours = allToday.reduce((s, j) => s + (j.estimatedHours || 2), 0)
-    sections.push({ label: `Today — ${todayName}`, hours: todayHours, jobs: allToday })
+    sections.push({ label: `Today — ${todayName}`, jobs: [...todayJobs, ...completedToday] })
   }
 
   for (const bucket of (data.remainingDays || [])) {
-    const hours = bucket.jobs.reduce((s, j) => s + (j.estimatedHours || 2), 0)
-    sections.push({ label: bucket.day, hours, jobs: bucket.jobs })
+    sections.push({ label: bucket.day, jobs: bucket.jobs })
   }
 
   if (awaitingParts.length > 0) {
-    sections.push({ label: 'Awaiting Parts', hours: 0, jobs: awaitingParts, muted: true })
+    sections.push({ label: 'Awaiting Parts', jobs: awaitingParts, muted: true })
   }
 
   if (sections.length === 0) {
@@ -215,27 +254,104 @@ export default function ScheduleView() {
   }
 
   return (
+    <>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-      {sections.map((section) => (
-        <div key={section.label}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <p style={{ fontSize: 14, fontWeight: 700, color: section.muted ? 'var(--text-muted)' : undefined }}>
-              {section.label}
-            </p>
-            {section.hours > 0 && (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
-                {section.hours}h planned
-                {section.hours > 10 && <span style={{ color: '#ef4444', marginLeft: 6 }}>Over capacity</span>}
+      {sections.map((section) => {
+        // Only count remaining hours (overdue vehicles contribute 0)
+        const plannedHours = section.muted ? 0 : Math.round(
+          section.jobs.reduce((s, j) => s + getRemainingHours(j), 0) * 10
+        ) / 10
+
+        return (
+          <div key={section.label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: section.muted ? 'var(--text-muted)' : undefined }}>
+                {section.label}
               </p>
-            )}
+              {!section.muted && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
+                  {plannedHours}h remaining
+                  {plannedHours > 10 && <span style={{ color: '#ef4444', marginLeft: 6 }}>Over capacity</span>}
+                </p>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {section.jobs.map((job) => (
+                <JobRow key={job.id} job={job} getLiveElapsed={getLiveElapsed} onRequestTime={(j) => setTimeModal(j)} />
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {section.jobs.map((job) => (
-              <JobRow key={job.id} job={job} getLiveElapsed={getLiveElapsed} />
-            ))}
+        )
+      })}
+    </div>
+
+    {/* Request More Time Modal */}
+    {timeModal && (
+      <div style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      }} onClick={() => setTimeModal(null)}>
+        <div onClick={e => e.stopPropagation()} style={{
+          background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+        }}>
+          <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Request More Time</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+            #{timeModal.vehicle.stockNumber} — {`${timeModal.vehicle.year ?? ''} ${timeModal.vehicle.make} ${timeModal.vehicle.model}`.trim()}
+          </p>
+
+          <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Additional hours needed</label>
+          <input
+            type="number"
+            step="0.5"
+            min="0.5"
+            value={requestHours}
+            onChange={e => setRequestHours(e.target.value)}
+            placeholder="e.g. 2"
+            style={{
+              width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea',
+              fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 12,
+            }}
+          />
+
+          <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Reason (optional)</label>
+          <input
+            type="text"
+            value={requestNote}
+            onChange={e => setRequestNote(e.target.value)}
+            placeholder="e.g. Found additional rust underneath"
+            style={{
+              width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea',
+              fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 20,
+            }}
+          />
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={() => setTimeModal(null)}
+              style={{
+                flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #e2e5ea',
+                background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleRequestTime}
+              disabled={!requestHours || submitting}
+              style={{
+                flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+                background: !requestHours ? '#e2e5ea' : '#ef4444', color: '#fff',
+                fontSize: 14, fontWeight: 700, cursor: requestHours ? 'pointer' : 'default',
+                opacity: submitting ? 0.6 : 1,
+              }}
+            >
+              {submitting ? 'Sending...' : 'Send Request'}
+            </button>
           </div>
         </div>
-      ))}
-    </div>
+      </div>
+    )}
+    </>
   )
 }
