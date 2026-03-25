@@ -64,19 +64,23 @@ function LiveTimer({ job, color }: { job: StageVehicle; color: string }) {
 }
 
 function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
-  const isActive = job.timerRunning
-  const isPaused = !job.timerRunning && job.status === 'in_progress'
+  const isMechanic = job.stage === 'mechanic'
+  // Mechanic uses timer system; other stages just use status field
+  const isActive = isMechanic ? job.timerRunning : job.status === 'in_progress'
+  const isPaused = isMechanic ? (!job.timerRunning && job.status === 'in_progress') : false
   const isQueued = job.status === 'pending'
 
   return (
     <div style={{
       background: '#1a1a1a', borderRadius: 10, padding: '12px 14px',
-      borderLeft: `3px solid ${isActive ? color : isPaused ? '#f59e0b' : '#333'}`,
+      borderLeft: `3px solid ${isActive ? color : isPaused ? '#f59e0b' : isQueued ? '#333' : '#333'}`,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
         <span style={{ fontSize: 14, fontWeight: 700 }}>{job.vehicle}</span>
         {isActive && (
-          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: color + '20', color }}>ACTIVE</span>
+          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: color + '20', color }}>
+            {isMechanic ? 'ACTIVE' : 'IN PROGRESS'}
+          </span>
         )}
         {isPaused && (
           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: '#f59e0b20', color: '#f59e0b' }}>PAUSED</span>
@@ -87,7 +91,7 @@ function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
       </div>
       <p style={{ fontSize: 12, color: '#666', margin: '0 0 2px' }}>#{job.stockNumber}{job.color ? ` · ${job.color}` : ''}</p>
       <p style={{ fontSize: 11, color: '#555', margin: 0 }}>{job.assignee}</p>
-      {(isActive || isPaused) && job.stage === 'mechanic' && <LiveTimer job={job} color={color} />}
+      {isMechanic && (isActive || isPaused) && <LiveTimer job={job} color={color} />}
     </div>
   )
 }
