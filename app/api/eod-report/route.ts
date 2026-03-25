@@ -31,26 +31,37 @@ export async function POST(request: NextRequest) {
 
   const dayLabel = targetDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 
-  // --- MECHANIC ---
-  // Stages completed today
-  const mechanicCompleted = await prisma.vehicleStage.findMany({
-    where: { stage: 'mechanic', status: 'done', completedAt: { gte: dayStart, lte: dayEnd } },
-    include: { vehicle: { select: { stockNumber: true, year: true, make: true, model: true, color: true } }, assignee: { select: { name: true } } },
-  })
+  // Stage order for validating forward progress
+  const STAGE_ORDER: Record<string, number> = { mechanic: 0, detailing: 1, content: 2, publish: 3, completed: 4 }
 
-  // Stages actively worked on (have timer data for today)
+  const vSelect = { stockNumber: true, year: true, make: true, model: true, color: true, status: true } as const
+  const aSelect = { select: { name: true } } as const
+
+  // Helper: filter out completions where vehicle went backwards (current stage ≤ completed stage)
+  type StageWithVehicle = { stage: string; vehicle: { status: string }; [key: string]: unknown }
+  const isRealCompletion = (s: StageWithVehicle) => {
+    const completedIdx = STAGE_ORDER[s.stage] ?? -1
+    const currentIdx = STAGE_ORDER[s.vehicle.status] ?? -1
+    return currentIdx > completedIdx
+  }
+
+  // --- MECHANIC ---
+  const mechanicCompletedRaw = await prisma.vehicleStage.findMany({
+    where: { stage: 'mechanic', status: 'done', completedAt: { gte: dayStart, lte: dayEnd } },
+    include: { vehicle: { select: vSelect }, assignee: aSelect },
+  })
+  const mechanicCompleted = mechanicCompletedRaw.filter(isRealCompletion)
+
   const mechanicActive = await prisma.vehicleStage.findMany({
     where: { stage: 'mechanic', status: 'in_progress' },
-    include: { vehicle: { select: { stockNumber: true, year: true, make: true, model: true, color: true } }, assignee: { select: { name: true } } },
+    include: { vehicle: { select: vSelect }, assignee: aSelect },
   })
 
-  // Awaiting parts
   const mechanicAwaiting = await prisma.vehicleStage.findMany({
     where: { stage: 'mechanic', awaitingParts: true },
-    include: { vehicle: { select: { stockNumber: true, year: true, make: true, model: true, color: true } } },
+    include: { vehicle: { select: vSelect } },
   })
 
-  // Time extensions approved today
   const timeExtensions = await prisma.taskApproval.findMany({
     where: {
       taskName: { startsWith: 'Time extension:' },
@@ -61,23 +72,27 @@ export async function POST(request: NextRequest) {
   })
 
   // --- DETAILING ---
-  const detailingCompleted = await prisma.vehicleStage.findMany({
+  const detailingCompletedRaw = await prisma.vehicleStage.findMany({
     where: { stage: 'detailing', status: 'done', completedAt: { gte: dayStart, lte: dayEnd } },
-    include: { vehicle: { select: { stockNumber: true, year: true, make: true, model: true, color: true } }, assignee: { select: { name: true } } },
+    include: { vehicle: { select: vSelect }, assignee: aSelect },
   })
+  const detailingCompleted = detailingCompletedRaw.filter(isRealCompletion)
+
   const detailingActive = await prisma.vehicleStage.findMany({
     where: { stage: 'detailing', status: 'in_progress' },
-    include: { vehicle: { select: { stockNumber: true, year: true, make: true, model: true, color: true } }, assignee: { select: { name: true } } },
+    include: { vehicle: { select: vSelect }, assignee: aSelect },
   })
 
   // --- CONTENT ---
-  const contentCompleted = await prisma.vehicleStage.findMany({
+  const contentCompletedRaw = await prisma.vehicleStage.findMany({
     where: { stage: 'content', status: 'done', completedAt: { gte: dayStart, lte: dayEnd } },
-    include: { vehicle: { select: { stockNumber: true, year: true, make: true, model: true, color: true } }, assignee: { select: { name: true } } },
+    include: { vehicle: { select: vSelect }, assignee: aSelect },
   })
+  const contentCompleted = contentCompletedRaw.filter(isRealCompletion)
+
   const contentActive = await prisma.vehicleStage.findMany({
     where: { stage: 'content', status: 'in_progress' },
-    include: { vehicle: { select: { stockNumber: true, year: true, make: true, model: true, color: true } }, assignee: { select: { name: true } } },
+    include: { vehicle: { select: vSelect }, assignee: aSelect },
   })
 
   // --- OVERALL STATS ---
