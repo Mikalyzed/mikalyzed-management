@@ -3,14 +3,15 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 
 type PipelineStage = { total: number; inProgress: number; pending: number; done: number }
-type ActiveJob = {
+type StageVehicle = {
   stockNumber: string; vehicle: string; color: string | null; assignee: string
-  estimatedHours: number | null; activeSeconds: number; timerRunning: boolean; timerStartedAt: string | null; stage: string
+  estimatedHours: number | null; activeSeconds: number; timerRunning: boolean
+  timerStartedAt: string | null; stage: string; status: string
 }
 type CompletedItem = { stockNumber: string; vehicle: string; stage: string; assignee: string | null; completedAt: string }
 type TVData = {
   pipeline: Record<string, PipelineStage>
-  mechanicActive: ActiveJob[]; detailingActive: ActiveJob[]; contentActive: ActiveJob[]
+  stageVehicles: Record<string, StageVehicle[]>
   awaitingParts: number; externalRepairs: number; completedToday: number
   totalInventory: number; inRecon: number; completedVehicles: CompletedItem[]
   timestamp: string
@@ -29,7 +30,7 @@ function formatClock(date: Date): string {
   return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' })
 }
 
-function LiveTimer({ job }: { job: ActiveJob }) {
+function LiveTimer({ job, color }: { job: StageVehicle; color: string }) {
   const [, setTick] = useState(0)
   useEffect(() => {
     if (!job.timerRunning) return
@@ -46,18 +47,47 @@ function LiveTimer({ job }: { job: ActiveJob }) {
   const pct = Math.min((sec / est) * 100, 100)
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-        <span style={{ fontSize: 18, fontWeight: 700, color: isOver ? '#ef4444' : '#fff' }}>{formatTime(sec)}</span>
-        <span style={{ fontSize: 14, color: '#666' }}>{job.estimatedHours || 2}h est.</span>
+    <div style={{ marginTop: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}>
+        <span style={{ fontWeight: 700, color: isOver ? '#ef4444' : '#ccc', fontVariantNumeric: 'tabular-nums' }}>{formatTime(sec)}</span>
+        <span style={{ color: '#555' }}>{job.estimatedHours || 2}h</span>
       </div>
-      <div style={{ height: 6, background: '#2a2a2a', borderRadius: 3, overflow: 'hidden' }}>
+      <div style={{ height: 4, background: '#2a2a2a', borderRadius: 2, overflow: 'hidden' }}>
         <div style={{
-          height: '100%', borderRadius: 3, transition: 'width 1s linear',
+          height: '100%', borderRadius: 2, transition: 'width 1s linear',
           width: `${pct}%`,
-          background: isOver ? '#ef4444' : pct > 80 ? '#f59e0b' : '#22c55e',
+          background: isOver ? '#ef4444' : pct > 80 ? '#f59e0b' : color,
         }} />
       </div>
+    </div>
+  )
+}
+
+function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
+  const isActive = job.timerRunning
+  const isPaused = !job.timerRunning && job.status === 'in_progress'
+  const isQueued = job.status === 'pending'
+
+  return (
+    <div style={{
+      background: '#1a1a1a', borderRadius: 10, padding: '12px 14px',
+      borderLeft: `3px solid ${isActive ? color : isPaused ? '#f59e0b' : '#333'}`,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+        <span style={{ fontSize: 15, fontWeight: 700 }}>#{job.stockNumber}</span>
+        {isActive && (
+          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: color + '20', color }}>ACTIVE</span>
+        )}
+        {isPaused && (
+          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: '#f59e0b20', color: '#f59e0b' }}>PAUSED</span>
+        )}
+        {isQueued && (
+          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: '#33333380', color: '#666' }}>QUEUED</span>
+        )}
+      </div>
+      <p style={{ fontSize: 12, color: '#777', margin: '0 0 2px' }}>{job.vehicle}{job.color ? ` · ${job.color}` : ''}</p>
+      <p style={{ fontSize: 11, color: '#555', margin: 0 }}>{job.assignee}</p>
+      {(isActive || isPaused) && job.stage === 'mechanic' && <LiveTimer job={job} color={color} />}
     </div>
   )
 }
@@ -76,12 +106,9 @@ export default function TVBoard() {
 
   useEffect(() => {
     fetchData()
-    refreshRef.current = setInterval(fetchData, 30000) // Refresh every 30s
+    refreshRef.current = setInterval(fetchData, 30000)
     const clockInterval = setInterval(() => setClock(new Date()), 1000)
-    return () => {
-      clearInterval(refreshRef.current)
-      clearInterval(clockInterval)
-    }
+    return () => { clearInterval(refreshRef.current); clearInterval(clockInterval) }
   }, [fetchData])
 
   if (!data) {
@@ -93,7 +120,7 @@ export default function TVBoard() {
   }
 
   const stageOrder = ['mechanic', 'detailing', 'content', 'publish']
-  const allActive = [...data.mechanicActive, ...data.detailingActive, ...data.contentActive]
+  const allActive = Object.values(data.stageVehicles).flat()
 
   return (
     <div style={{
@@ -103,23 +130,23 @@ export default function TVBoard() {
     }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em', margin: 0 }}>
+          <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em', margin: 0 }}>
             Mikalyzed Auto Boutique
           </h1>
-          <p style={{ fontSize: 14, color: '#666', margin: '2px 0 0', fontWeight: 600 }}>Operations Overview</p>
+          <p style={{ fontSize: 13, color: '#666', margin: '2px 0 0', fontWeight: 600 }}>Operations Overview</p>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <p style={{ fontSize: 32, fontWeight: 700, margin: 0, fontVariantNumeric: 'tabular-nums' }}>{formatClock(clock)}</p>
-          <p style={{ fontSize: 13, color: '#666', margin: 0 }}>
+          <p style={{ fontSize: 28, fontWeight: 700, margin: 0, fontVariantNumeric: 'tabular-nums' }}>{formatClock(clock)}</p>
+          <p style={{ fontSize: 12, color: '#666', margin: 0 }}>
             {clock.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'America/New_York' })}
           </p>
         </div>
       </div>
 
       {/* Top Stats Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10, marginBottom: 20 }}>
         {[
           { label: 'In Recon', value: data.inRecon, color: '#3b82f6' },
           { label: 'Completed Today', value: data.completedToday, color: '#22c55e' },
@@ -129,151 +156,87 @@ export default function TVBoard() {
           { label: 'Total Vehicles', value: data.totalInventory, color: '#8b5cf6' },
         ].map(stat => (
           <div key={stat.label} style={{
-            background: '#111', borderRadius: 14, padding: '16px 18px',
+            background: '#111', borderRadius: 12, padding: '14px 16px',
             borderLeft: `4px solid ${stat.color}`,
           }}>
-            <p style={{ fontSize: 36, fontWeight: 800, margin: 0, color: stat.color, lineHeight: 1 }}>{stat.value}</p>
-            <p style={{ fontSize: 12, color: '#888', margin: '6px 0 0', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stat.label}</p>
+            <p style={{ fontSize: 32, fontWeight: 800, margin: 0, color: stat.color, lineHeight: 1 }}>{stat.value}</p>
+            <p style={{ fontSize: 11, color: '#888', margin: '5px 0 0', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stat.label}</p>
           </div>
         ))}
       </div>
 
-      {/* Pipeline Progress */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
+      {/* Pipeline Cards + Vehicle Columns */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
         {stageOrder.map(stage => {
           const p = data.pipeline[stage] || { total: 0, inProgress: 0, pending: 0, done: 0 }
           const color = STAGE_COLORS[stage]
+          const vehicles = data.stageVehicles[stage] || []
+
           return (
-            <div key={stage} style={{ background: '#111', borderRadius: 14, padding: '16px 18px', borderTop: `3px solid ${color}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                <span style={{ fontSize: 16, fontWeight: 700 }}>{STAGE_LABELS[stage]}</span>
-                <span style={{ fontSize: 28, fontWeight: 800, color }}>{p.total}</span>
+            <div key={stage} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Pipeline summary card */}
+              <div style={{ background: '#111', borderRadius: 12, padding: '14px 16px', borderTop: `3px solid ${color}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 15, fontWeight: 700 }}>{STAGE_LABELS[stage]}</span>
+                  <span style={{ fontSize: 26, fontWeight: 800, color }}>{p.total}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 10, fontSize: 12, color: '#888' }}>
+                  <span><span style={{ color, fontWeight: 700 }}>{p.inProgress}</span> active</span>
+                  <span><span style={{ color: '#666', fontWeight: 700 }}>{p.pending}</span> queued</span>
+                  <span><span style={{ color: '#22c55e', fontWeight: 700 }}>{p.done}</span> done</span>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: 12, fontSize: 13, color: '#888' }}>
-                <span><span style={{ color: '#3b82f6', fontWeight: 700 }}>{p.inProgress}</span> active</span>
-                <span><span style={{ color: '#888', fontWeight: 700 }}>{p.pending}</span> queued</span>
-                <span><span style={{ color: '#22c55e', fontWeight: 700 }}>{p.done}</span> done today</span>
-              </div>
+
+              {/* Vehicle cards under this stage */}
+              {vehicles.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {vehicles.map(job => (
+                    <VehicleCard key={job.stockNumber} job={job} color={color} />
+                  ))}
+                </div>
+              ) : (
+                <div style={{ background: '#111', borderRadius: 10, padding: '20px 14px', textAlign: 'center' }}>
+                  <p style={{ color: '#333', fontSize: 13, fontStyle: 'italic', margin: 0 }}>No vehicles</p>
+                </div>
+              )}
             </div>
           )
         })}
       </div>
 
-      {/* Main Content: Active Work + Completed Feed */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 340px', gap: 16 }}>
-
-        {/* Mechanic Column */}
-        <div style={{ background: '#111', borderRadius: 14, padding: '18px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-            <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#3b82f6' }} />
-            <span style={{ fontSize: 16, fontWeight: 700 }}>Mechanic</span>
+      {/* Completed Today — full width bottom strip */}
+      {data.completedVehicles.length > 0 && (
+        <div style={{ background: '#111', borderRadius: 12, padding: '14px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 14, fontWeight: 700 }}>Completed Today</span>
+            <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>{data.completedVehicles.length}</span>
           </div>
-          {data.mechanicActive.length === 0 ? (
-            <p style={{ color: '#444', fontSize: 14, fontStyle: 'italic' }}>No active work</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {data.mechanicActive.map(job => (
-                <div key={job.stockNumber} style={{
-                  background: '#1a1a1a', borderRadius: 12, padding: '14px 16px',
-                  borderLeft: `3px solid ${job.timerRunning ? '#3b82f6' : '#f59e0b'}`,
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontSize: 16, fontWeight: 700 }}>#{job.stockNumber}</span>
-                    {job.timerRunning ? (
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 100, background: '#3b82f620', color: '#3b82f6' }}>ACTIVE</span>
-                    ) : (
-                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 100, background: '#f59e0b20', color: '#f59e0b' }}>PAUSED</span>
-                    )}
-                  </div>
-                  <p style={{ fontSize: 13, color: '#888', margin: '0 0 4px' }}>{job.vehicle}{job.color ? ` · ${job.color}` : ''}</p>
-                  <p style={{ fontSize: 12, color: '#555', margin: '0 0 8px' }}>{job.assignee}</p>
-                  <LiveTimer job={job} />
+          <div style={{ display: 'flex', gap: 12, overflowX: 'auto' }}>
+            {data.completedVehicles.map((item, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px',
+                background: '#1a1a1a', borderRadius: 10, flexShrink: 0,
+                borderLeft: `3px solid ${STAGE_COLORS[item.stage] || '#666'}`,
+              }}>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>#{item.stockNumber}</p>
+                  <p style={{ fontSize: 11, color: '#666', margin: 0 }}>
+                    {STAGE_LABELS[item.stage] || item.stage}{item.assignee ? ` — ${item.assignee}` : ''}
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Detailing + Content Column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Detailing */}
-          <div style={{ background: '#111', borderRadius: 14, padding: '18px 20px', flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#8b5cf6' }} />
-              <span style={{ fontSize: 16, fontWeight: 700 }}>Detailing</span>
-            </div>
-            {data.detailingActive.length === 0 ? (
-              <p style={{ color: '#444', fontSize: 14, fontStyle: 'italic' }}>No active work</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {data.detailingActive.map(job => (
-                  <div key={job.stockNumber} style={{ background: '#1a1a1a', borderRadius: 10, padding: '12px 14px', borderLeft: '3px solid #8b5cf6' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 15, fontWeight: 700 }}>#{job.stockNumber}</span>
-                      <span style={{ fontSize: 12, color: '#888' }}>{job.assignee}</span>
-                    </div>
-                    <p style={{ fontSize: 13, color: '#666', margin: '2px 0 0' }}>{job.vehicle}</p>
-                  </div>
-                ))}
+                {item.completedAt && (
+                  <span style={{ fontSize: 11, color: '#444', marginLeft: 8 }}>
+                    {new Date(item.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}
+                  </span>
+                )}
               </div>
-            )}
-          </div>
-
-          {/* Content */}
-          <div style={{ background: '#111', borderRadius: 14, padding: '18px 20px', flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} />
-              <span style={{ fontSize: 16, fontWeight: 700 }}>Content</span>
-            </div>
-            {data.contentActive.length === 0 ? (
-              <p style={{ color: '#444', fontSize: 14, fontStyle: 'italic' }}>No active work</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {data.contentActive.map(job => (
-                  <div key={job.stockNumber} style={{ background: '#1a1a1a', borderRadius: 10, padding: '12px 14px', borderLeft: '3px solid #f59e0b' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 15, fontWeight: 700 }}>#{job.stockNumber}</span>
-                      <span style={{ fontSize: 12, color: '#888' }}>{job.assignee}</span>
-                    </div>
-                    <p style={{ fontSize: 13, color: '#666', margin: '2px 0 0' }}>{job.vehicle}</p>
-                  </div>
-                ))}
-              </div>
-            )}
+            ))}
           </div>
         </div>
-
-        {/* Activity Feed */}
-        <div style={{ background: '#111', borderRadius: 14, padding: '18px 20px' }}>
-          <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 14 }}>Completed Today</p>
-          {data.completedVehicles.length === 0 ? (
-            <p style={{ color: '#444', fontSize: 14, fontStyle: 'italic' }}>Nothing completed yet today</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {data.completedVehicles.map((item, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: i < data.completedVehicles.length - 1 ? '1px solid #1a1a1a' : 'none' }}>
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                    background: STAGE_COLORS[item.stage] || '#666',
-                  }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>#{item.stockNumber}</p>
-                    <p style={{ fontSize: 12, color: '#666', margin: 0 }}>{STAGE_LABELS[item.stage] || item.stage}{item.assignee ? ` — ${item.assignee}` : ''}</p>
-                  </div>
-                  {item.completedAt && (
-                    <span style={{ fontSize: 11, color: '#555', flexShrink: 0 }}>
-                      {new Date(item.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Auto-refresh indicator */}
-      <div style={{ position: 'fixed', bottom: 12, right: 16, fontSize: 11, color: '#333' }}>
+      <div style={{ position: 'fixed', bottom: 10, right: 16, fontSize: 10, color: '#222' }}>
         Auto-refreshes every 30s
       </div>
     </div>

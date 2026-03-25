@@ -19,40 +19,30 @@ export async function GET() {
     pipeline[stage] = { total: inProgress + pending, inProgress, pending, done: doneToday }
   }
 
-  // Active mechanic work
-  const mechanicActive = await prisma.vehicleStage.findMany({
-    where: { stage: 'mechanic', status: 'in_progress', awaitingParts: false },
-    include: {
-      vehicle: { select: { stockNumber: true, year: true, make: true, model: true, color: true } },
-      assignee: { select: { name: true } },
-    },
-    orderBy: { priority: 'asc' },
-  })
+  // Get top 4 vehicles per stage (in_progress first, then pending, ordered by priority)
+  const vSelect = { stockNumber: true, year: true, make: true, model: true, color: true } as const
+  const aSelect = { select: { name: true } } as const
+
+  const getStageVehicles = async (stage: string) => {
+    return prisma.vehicleStage.findMany({
+      where: { stage, status: { in: ['in_progress', 'pending'] }, awaitingParts: false },
+      include: { vehicle: { select: vSelect }, assignee: aSelect },
+      orderBy: [{ status: 'asc' }, { priority: 'asc' }], // in_progress before pending
+      take: 4,
+    })
+  }
+
+  const [mechanicVehicles, detailingVehicles, contentVehicles, publishVehicles] = await Promise.all([
+    getStageVehicles('mechanic'),
+    getStageVehicles('detailing'),
+    getStageVehicles('content'),
+    getStageVehicles('publish'),
+  ])
 
   // Awaiting parts
   const awaitingParts = await prisma.vehicleStage.findMany({
     where: { awaitingParts: true },
-    include: {
-      vehicle: { select: { stockNumber: true, year: true, make: true, model: true } },
-    },
-  })
-
-  // Active detailing work
-  const detailingActive = await prisma.vehicleStage.findMany({
-    where: { stage: 'detailing', status: 'in_progress' },
-    include: {
-      vehicle: { select: { stockNumber: true, year: true, make: true, model: true, color: true } },
-      assignee: { select: { name: true } },
-    },
-  })
-
-  // Active content work
-  const contentActive = await prisma.vehicleStage.findMany({
-    where: { stage: 'content', status: 'in_progress' },
-    include: {
-      vehicle: { select: { stockNumber: true, year: true, make: true, model: true, color: true } },
-      assignee: { select: { name: true } },
-    },
+    include: { vehicle: { select: vSelect } },
   })
 
   // External repairs
@@ -78,8 +68,9 @@ export async function GET() {
     take: 10,
   })
 
-  // Format active jobs
-  const formatJob = (s: typeof mechanicActive[number]) => ({
+  // Format jobs
+  type StageRow = typeof mechanicVehicles[number]
+  const formatJob = (s: StageRow) => ({
     stockNumber: s.vehicle.stockNumber,
     vehicle: `${s.vehicle.year ?? ''} ${s.vehicle.make} ${s.vehicle.model}`.trim(),
     color: (s.vehicle as Record<string, unknown>).color as string | null,
@@ -89,13 +80,17 @@ export async function GET() {
     timerRunning: !!s.timerStartedAt,
     timerStartedAt: s.timerStartedAt?.toISOString() || null,
     stage: s.stage,
+    status: s.status,
   })
 
   return NextResponse.json({
     pipeline,
-    mechanicActive: mechanicActive.map(formatJob),
-    detailingActive: detailingActive.map(formatJob),
-    contentActive: contentActive.map(formatJob),
+    stageVehicles: {
+      mechanic: mechanicVehicles.map(formatJob),
+      detailing: detailingVehicles.map(formatJob),
+      content: contentVehicles.map(formatJob),
+      publish: publishVehicles.map(formatJob),
+    },
     awaitingParts: awaitingParts.length,
     externalRepairs: externalCount,
     completedToday,
