@@ -97,53 +97,65 @@ function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
 }
 
 function CompletedTicker({ items }: { items: CompletedItem[] }) {
-  const [currentIdx, setCurrentIdx] = useState(0)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
+  // Auto-scroll horizontally
   useEffect(() => {
-    if (items.length <= 1) return
-    const i = setInterval(() => setCurrentIdx(prev => (prev + 1) % items.length), 4000)
-    return () => clearInterval(i)
-  }, [items.length])
+    const el = scrollRef.current
+    if (!el || items.length <= 4) return
+    let scrollPos = 0
+    const speed = 0.5 // px per frame
+    let animId: number
 
-  const item = items[currentIdx]
-  if (!item) return null
+    const tick = () => {
+      scrollPos += speed
+      if (scrollPos >= el.scrollWidth - el.clientWidth) {
+        scrollPos = 0
+      }
+      el.scrollLeft = scrollPos
+      animId = requestAnimationFrame(tick)
+    }
+    animId = requestAnimationFrame(tick)
+
+    // Pause on hover
+    const pause = () => cancelAnimationFrame(animId)
+    const resume = () => { animId = requestAnimationFrame(tick) }
+    el.addEventListener('mouseenter', pause)
+    el.addEventListener('mouseleave', resume)
+
+    return () => {
+      cancelAnimationFrame(animId)
+      el.removeEventListener('mouseenter', pause)
+      el.removeEventListener('mouseleave', resume)
+    }
+  }, [items.length])
 
   return (
     <div style={{ background: '#111', borderRadius: 12, padding: '14px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#888' }}>Completed Today</span>
-          <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>{items.length}</span>
-        </div>
-        {items.length > 1 && (
-          <div style={{ display: 'flex', gap: 4 }}>
-            {items.map((_, i) => (
-              <div key={i} style={{
-                width: 6, height: 6, borderRadius: '50%',
-                background: i === currentIdx ? '#22c55e' : '#2a2a2a',
-                transition: 'background 0.3s',
-              }} />
-            ))}
-          </div>
-        )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#888' }}>Completed Today</span>
+        <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>{items.length}</span>
       </div>
-      <div style={{
-        marginTop: 10, display: 'flex', alignItems: 'center', gap: 14,
-        padding: '10px 16px', background: '#1a1a1a', borderRadius: 10,
-        borderLeft: `3px solid ${STAGE_COLORS[item.stage] || '#666'}`,
-        transition: 'opacity 0.3s',
-      }}>
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>{item.vehicle}</p>
-          <p style={{ fontSize: 12, color: '#666', margin: '2px 0 0' }}>
-            #{item.stockNumber} · {STAGE_LABELS[item.stage] || item.stage}{item.assignee ? ` — ${item.assignee}` : ''}
-          </p>
-        </div>
-        {item.completedAt && (
-          <span style={{ fontSize: 13, color: '#555' }}>
-            {new Date(item.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}
-          </span>
-        )}
+      <div ref={scrollRef} style={{ display: 'flex', gap: 12, overflow: 'hidden' }}>
+        {items.map((item, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
+            background: '#1a1a1a', borderRadius: 10, flexShrink: 0, minWidth: 220,
+            borderLeft: `3px solid ${STAGE_COLORS[item.stage] || '#666'}`,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.vehicle}</p>
+              <p style={{ fontSize: 11, color: '#666', margin: '2px 0 0', whiteSpace: 'nowrap' }}>
+                #{item.stockNumber} · {STAGE_LABELS[item.stage] || item.stage}{item.assignee ? ` — ${item.assignee}` : ''}
+              </p>
+            </div>
+            {item.completedAt && (
+              <span style={{ fontSize: 11, color: '#444', flexShrink: 0 }}>
+                {new Date(item.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}
+              </span>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   )
