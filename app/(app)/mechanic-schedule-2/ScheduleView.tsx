@@ -1,76 +1,212 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
 
-type ScheduleBlock = {
+type JobCard = {
   id: string
   vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null }
   assignee: { id: string; name: string } | null
   status: string
   estimatedHours: number | null
   checklist: ChecklistItem[]
-  startTime: string
-  endTime: string
   priority: number
-  segmentHours?: number
-  isContination?: boolean
-  segmentIndex?: number
-  totalSegments?: number
-  pauseReason?: string | null
-  pauseDetail?: string | null
-  timerRunning?: boolean
-  activeSeconds?: number
-  autoPaused?: boolean
+  elapsedSeconds: number
+  timerRunning: boolean
+  timerStartedAt: string | null
+  autoPaused: boolean
+  pauseReason: string | null
+  pauseDetail: string | null
+  awaitingParts: boolean
+  awaitingPartsName: string | null
+  completedAt: string | null
+  startedAt: string | null
 }
 
-type CalendarBlock = {
-  id: string; title: string; type: string; location: string | null
-  startTime: string; endTime: string; isCalendarEvent: true
+type DayBucket = { day: string; jobs: JobCard[] }
+
+type BoardData = {
+  active: JobCard[]; paused: JobCard[]; queued: JobCard[]; completedToday: JobCard[]
+  today: JobCard[]; remainingDays: DayBucket[]
+  weeklyEstimatedHours: number; weeklyWorkedHours: number; hoursLeftToday: number
+  isWorkHours: boolean
 }
 
-type DayItem = ScheduleBlock | CalendarBlock
-
-const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  pending: { bg: '#f9fafb', border: '#e2e5ea', text: 'var(--text-secondary)' },
-  in_progress: { bg: '#eff6ff', border: '#3b82f6', text: '#1e40af' },
-  in_progress_overdue: { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' },
-  paused: { bg: '#fff7ed', border: '#f59e0b', text: '#b45309' },
-  blocked: { bg: '#fef2f2', border: '#ef4444', text: '#991b1b' },
+function Badge({ text, color }: { text: string; color: string }) {
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
+      background: color + '18', color,
+      textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
+    }}>
+      {text}
+    </span>
+  )
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Queued', in_progress: 'In Progress', blocked: 'Blocked',
+function formatHours(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  mechanic_visit: 'Mechanic Visit', sales_meeting: 'Meeting', pickup: 'Pickup',
-  dropoff: 'Dropoff', detailing: 'Detailing', content_shoot: 'Content Shoot',
-  event_task: 'Event Task', errand: 'Errand',
+function getStatusInfo(job: JobCard, elapsed: number): { badges: { text: string; color: string }[]; cardBg: string; borderColor: string } {
+  const est = (job.estimatedHours || 2) * 3600
+  const isOver = elapsed > est && job.status !== 'done'
+  const isActive = job.timerRunning
+  const isPaused = !job.timerRunning && job.status === 'in_progress' && !job.awaitingParts && !job.autoPaused
+  const isAutoPaused = job.autoPaused
+  const isAwaiting = job.awaitingParts
+  const isDone = job.status === 'done'
+
+  const badges: { text: string; color: string }[] = []
+
+  if (isDone) {
+    badges.push({ text: 'Completed', color: '#22c55e' })
+    return { badges, cardBg: '#f0fdf4', borderColor: '#22c55e' }
+  }
+
+  if (isOver) badges.push({ text: 'Overdue', color: '#ef4444' })
+
+  if (isAwaiting) {
+    badges.push({ text: 'Awaiting Parts', color: '#eab308' })
+    return { badges, cardBg: isOver ? '#fef2f2' : '#fefce8', borderColor: isOver ? '#ef4444' : '#eab308' }
+  }
+  if (isAutoPaused) {
+    badges.push({ text: 'Auto Paused', color: '#f59e0b' })
+    return { badges, cardBg: isOver ? '#fef2f2' : '#fff7ed', borderColor: isOver ? '#ef4444' : '#f59e0b' }
+  }
+  if (isPaused) {
+    badges.push({ text: 'Paused', color: '#f59e0b' })
+    return { badges, cardBg: isOver ? '#fef2f2' : '#fff7ed', borderColor: isOver ? '#ef4444' : '#f59e0b' }
+  }
+  if (isActive) {
+    if (!isOver) badges.push({ text: 'Active', color: '#3b82f6' })
+    return { badges, cardBg: isOver ? '#fef2f2' : '#eff6ff', borderColor: isOver ? '#ef4444' : '#3b82f6' }
+  }
+
+  // Queued
+  badges.push({ text: 'Queued', color: '#94a3b8' })
+  return { badges, cardBg: '#f9fafb', borderColor: '#e2e5ea' }
+}
+
+function JobRow({ job, getLiveElapsed }: { job: JobCard; getLiveElapsed: (j: JobCard) => number }) {
+  const v = job.vehicle
+  const elapsed = getLiveElapsed(job)
+  const est = job.estimatedHours || 2
+  const { badges, cardBg, borderColor } = getStatusInfo(job, elapsed)
+  const desc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
+  const doneCount = job.checklist.filter(c => c.done).length
+  const totalCount = job.checklist.length
+
+  return (
+    <div style={{
+      background: cardBg,
+      border: `1px solid ${borderColor}`,
+      borderLeft: `4px solid ${borderColor}`,
+      borderRadius: 12, padding: '14px 16px',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontSize: 14, fontWeight: 700 }}>#{v.stockNumber}</p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{desc}{v.color ? ` · ${v.color}` : ''}</p>
+          {job.awaitingParts && job.awaitingPartsName && (
+            <p style={{ fontSize: 11, fontWeight: 600, color: '#eab308', marginTop: 4 }}>Parts: {job.awaitingPartsName}</p>
+          )}
+          {!job.awaitingParts && job.pauseReason && job.status === 'in_progress' && !job.timerRunning && (
+            <p style={{ fontSize: 11, fontWeight: 600, color: '#f59e0b', marginTop: 4 }}>{job.pauseDetail || 'Paused'}</p>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 4, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {badges.map((b, i) => <Badge key={i} text={b.text} color={b.color} />)}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {totalCount > 0 ? `${doneCount}/${totalCount} tasks` : 'No tasks'}
+          </span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
+            {formatHours(elapsed)} / {est}h est.
+          </span>
+        </div>
+        <div style={{ height: 4, background: '#e2e5ea', borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', borderRadius: 2, transition: 'width 0.3s',
+            width: `${Math.min((elapsed / (est * 3600)) * 100, 100)}%`,
+            background: elapsed > est * 3600 ? '#ef4444' : doneCount === totalCount && totalCount > 0 ? '#22c55e' : borderColor,
+          }} />
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function ScheduleView() {
-  const [schedule, setSchedule] = useState<ScheduleBlock[]>([])
-  const [calendarBlocks, setCalendarBlocks] = useState<CalendarBlock[]>([])
+  const [data, setData] = useState<BoardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const tickRef = useRef(0)
+  const [, setTick] = useState(0)
 
   useEffect(() => {
-    fetch('/api/mechanic-schedule')
+    fetch('/api/mechanic-board')
       .then(r => r.json())
-      .then(d => {
-        setSchedule(d.schedule || [])
-        setCalendarBlocks((d.calendarBlocks || []).map((cb: CalendarBlock) => ({ ...cb, isCalendarEvent: true as const })))
-        setLoading(false)
-      })
+      .then(d => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
 
-  if (loading) {
-    return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Loading schedule...</p>
+  // Live timer tick
+  useEffect(() => {
+    const interval = setInterval(() => {
+      tickRef.current++
+      setTick(t => t + 1)
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const getLiveElapsed = useCallback((job: JobCard) => {
+    let sec = job.elapsedSeconds || 0
+    if (job.timerRunning && job.timerStartedAt) {
+      sec += Math.max(0, Math.floor((Date.now() - new Date(job.timerStartedAt).getTime()) / 1000))
+    }
+    return sec
+  }, [])
+
+  if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Loading schedule...</p>
+  if (!data) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Failed to load schedule.</p>
+
+  // Build day sections from the board data
+  // "Today" = active + paused (non-awaiting) + today's queued jobs
+  // "Remaining Days" = future day buckets
+  // Also show completed today and awaiting parts separately
+
+  const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+
+  // Deduplicate: active/paused jobs are already in data.today from the API
+  const todayJobs = data.today || []
+  const completedToday = data.completedToday || []
+  const awaitingParts = data.paused.filter(j => j.awaitingParts)
+
+  const sections: { label: string; hours: number; jobs: JobCard[]; muted?: boolean }[] = []
+
+  if (todayJobs.length > 0 || completedToday.length > 0) {
+    const allToday = [...todayJobs, ...completedToday]
+    const todayHours = allToday.reduce((s, j) => s + (j.estimatedHours || 2), 0)
+    sections.push({ label: `Today — ${todayName}`, hours: todayHours, jobs: allToday })
   }
 
-  if (schedule.length === 0) {
+  for (const bucket of (data.remainingDays || [])) {
+    const hours = bucket.jobs.reduce((s, j) => s + (j.estimatedHours || 2), 0)
+    sections.push({ label: bucket.day, hours, jobs: bucket.jobs })
+  }
+
+  if (awaitingParts.length > 0) {
+    sections.push({ label: 'Awaiting Parts', hours: 0, jobs: awaitingParts, muted: true })
+  }
+
+  if (sections.length === 0) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
         No mechanic jobs scheduled. All clear.
@@ -78,195 +214,28 @@ export default function ScheduleView() {
     )
   }
 
-  // Group by day
-  const days = new Map<string, DayItem[]>()
-  schedule.forEach(block => {
-    const day = new Date(block.startTime).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
-    if (!days.has(day)) days.set(day, [])
-    days.get(day)!.push(block)
-  })
-  calendarBlocks.forEach(cb => {
-    const day = new Date(cb.startTime).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
-    if (!days.has(day)) days.set(day, [])
-    days.get(day)!.push(cb)
-  })
-  days.forEach((items, key) => {
-    items.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-    days.set(key, items)
-  })
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      {Array.from(days.entries()).map(([day, blocks]) => {
-        const dayHours = blocks.reduce((sum, b) => {
-          if ('isCalendarEvent' in b && b.isCalendarEvent) {
-            return sum + Math.round((new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / 3600000 * 10) / 10
-          }
-          return sum + ((b as ScheduleBlock).segmentHours || (b as ScheduleBlock).estimatedHours || 2)
-        }, 0)
-
-        return (
-          <div key={day}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <p style={{ fontSize: 14, fontWeight: 700 }}>{day}</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+      {sections.map((section) => (
+        <div key={section.label}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: section.muted ? 'var(--text-muted)' : undefined }}>
+              {section.label}
+            </p>
+            {section.hours > 0 && (
               <p style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>
-                {Math.round(dayHours * 10) / 10}h scheduled
-                {dayHours > 10 && <span style={{ color: '#ef4444', marginLeft: 6 }}>Over capacity</span>}
+                {section.hours}h planned
+                {section.hours > 10 && <span style={{ color: '#ef4444', marginLeft: 6 }}>Over capacity</span>}
               </p>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {blocks.map((block) => {
-                // Calendar event
-                if ('isCalendarEvent' in block && block.isCalendarEvent) {
-                  const evtStart = new Date(block.startTime)
-                  const evtEnd = new Date(block.endTime)
-                  const durationH = Math.round((evtEnd.getTime() - evtStart.getTime()) / 3600000 * 10) / 10
-                  return (
-                    <div key={`cal-${block.id}`} style={{
-                      display: 'flex', gap: 14, alignItems: 'stretch',
-                      background: '#faf5ff', border: '1px solid #a855f7',
-                      borderLeft: '4px solid #a855f7', borderRadius: 12, padding: '14px 16px',
-                    }}>
-                      <div style={{ minWidth: 60, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: '#7c3aed' }}>
-                          {evtStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                        </p>
-                        <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                          {evtEnd.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                        </p>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                          <div>
-                            <p style={{ fontSize: 14, fontWeight: 700 }}>{block.title}</p>
-                            {block.location && <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{block.location}</p>}
-                          </div>
-                          <span style={{
-                            fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
-                            background: '#a855f720', color: '#a855f7',
-                            textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
-                          }}>
-                            {TYPE_LABELS[block.type] || block.type}
-                          </span>
-                        </div>
-                        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>{durationH}h blocked</p>
-                      </div>
-                    </div>
-                  )
-                }
-
-                // Vehicle block
-                const b = block as ScheduleBlock
-                const hours = b.estimatedHours || 2
-                const startTime = new Date(b.startTime)
-                const endTime = new Date(b.endTime)
-                let finalEndTime = endTime
-                if (b.totalSegments && b.totalSegments > 1) {
-                  const lastSeg = schedule.filter(s => s.id === b.id).pop()
-                  if (lastSeg) finalEndTime = new Date(lastSeg.endTime)
-                }
-                // Determine real-time status for overlay
-                const isOverdue = b.status === 'in_progress' && new Date() > finalEndTime
-                const isPaused = b.status === 'in_progress' && !b.timerRunning && !b.autoPaused
-                const isAutoPaused = b.autoPaused
-                const isActive = b.status === 'in_progress' && b.timerRunning
-                const isAwaitingParts = isPaused && b.pauseReason === 'waiting_on_parts'
-                
-                // Schedule view = the plan. Colors reflect planned vs off-track.
-                // Overdue/paused/awaiting = red/amber to show deviation from plan
-                const isOffTrack = isOverdue || isPaused || isAutoPaused || isAwaitingParts
-                const planColors = isOverdue 
-                  ? STATUS_COLORS.in_progress_overdue
-                  : isOffTrack
-                    ? STATUS_COLORS.paused
-                    : isActive
-                      ? STATUS_COLORS.in_progress
-                      : STATUS_COLORS[b.status] || STATUS_COLORS.pending
-
-                // Build status badges — can show multiple (e.g. "OVERDUE" + "PAUSED")
-                const badges: { label: string; bg: string; color: string }[] = []
-                if (isOverdue) badges.push({ label: 'Overdue', bg: '#ef444420', color: '#ef4444' })
-                if (isAwaitingParts) badges.push({ label: 'Awaiting Parts', bg: '#eab30820', color: '#eab308' })
-                else if (isAutoPaused) badges.push({ label: 'Auto Paused', bg: '#f59e0b20', color: '#f59e0b' })
-                else if (isPaused) badges.push({ label: 'Paused', bg: '#f59e0b20', color: '#f59e0b' })
-                else if (isActive && !isOverdue) badges.push({ label: 'Active', bg: '#3b82f620', color: '#3b82f6' })
-                else if (b.status === 'pending') badges.push({ label: 'Queued', bg: '#94a3b820', color: '#94a3b8' })
-                
-                const doneCount = (b.checklist as ChecklistItem[]).filter(c => c.done).length
-                const totalCount = (b.checklist as ChecklistItem[]).length
-                const v = b.vehicle
-                const desc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
-
-                return (
-                  <div key={`${b.id}-${b.segmentIndex ?? 0}`} style={{
-                    display: 'flex', gap: 14, alignItems: 'stretch',
-                    background: planColors.bg, 
-                    border: `1px solid ${planColors.border}`,
-                    borderLeft: `4px solid ${planColors.border}`, 
-                    borderRadius: 12, padding: '14px 16px',
-                  }}>
-                    <div style={{ minWidth: 60, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: planColors.text }}>
-                        {startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                      </p>
-                      <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                        {endTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                      </p>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                        <div>
-                          <p style={{ fontSize: 14, fontWeight: 700 }}>
-                            #{v.stockNumber}
-                            {b.isContination && (
-                              <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginLeft: 6 }}>(continued)</span>
-                            )}
-                          </p>
-                          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{desc}{v.color ? ` · ${v.color}` : ''}</p>
-                          {isAwaitingParts && (
-                            <p style={{ fontSize: 11, fontWeight: 600, color: '#eab308', marginTop: 4 }}>Parts: {b.pauseDetail || 'Pending'}</p>
-                          )}
-                          {isPaused && !isAwaitingParts && b.pauseReason && (
-                            <p style={{ fontSize: 11, fontWeight: 600, color: '#f59e0b', marginTop: 4 }}>{b.pauseDetail || 'Paused'}</p>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: 4, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                          {badges.map((badge, bi) => (
-                            <span key={bi} style={{
-                              fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
-                              background: badge.bg, color: badge.color,
-                              textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
-                            }}>
-                              {badge.label}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      {totalCount > 0 && (
-                        <div style={{ marginTop: 8 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{doneCount}/{totalCount} tasks</span>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>
-                              {b.segmentHours ? `${b.segmentHours}h / ${hours}h total` : `${hours}h est.`}
-                            </span>
-                          </div>
-                          <div style={{ height: 4, background: '#e2e5ea', borderRadius: 2 }}>
-                            <div style={{
-                              height: '100%', borderRadius: 2, transition: 'width 0.3s',
-                              width: `${totalCount > 0 ? (doneCount / totalCount) * 100 : 0}%`,
-                              background: doneCount === totalCount ? '#22c55e' : planColors.border,
-                            }} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+            )}
           </div>
-        )
-      })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {section.jobs.map((job) => (
+              <JobRow key={job.id} job={job} getLiveElapsed={getLiveElapsed} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
