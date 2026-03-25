@@ -186,10 +186,13 @@ export async function GET() {
       checklist: stage.checklist,
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
-      // Split into day segments for display
       segments: splitIntoDays(startTime, endTime),
       priority: stage.priority,
       pauseReason: stage.pauseReason || null,
+      pauseDetail: stage.pauseDetail || null,
+      timerRunning: !!(stage as any).timerStartedAt,
+      activeSeconds: (stage as any).activeSeconds || 0,
+      autoPaused: (stage as any).autoPaused || false,
     }
   })
 
