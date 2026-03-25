@@ -126,7 +126,7 @@ export default function TVBoard() {
           { label: 'Awaiting Parts', value: data.awaitingParts, color: '#eab308' },
           { label: 'External Repairs', value: data.externalRepairs, color: '#f97316' },
           { label: 'Active Now', value: allActive.filter(j => j.timerRunning).length, color: '#06b6d4' },
-          { label: 'Total Inventory', value: data.totalInventory, color: '#8b5cf6' },
+          { label: 'Total Vehicles', value: data.totalInventory, color: '#8b5cf6' },
         ].map(stat => (
           <div key={stat.label} style={{
             background: '#111', borderRadius: 14, padding: '16px 18px',

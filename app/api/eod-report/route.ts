@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
   })
 
   // --- OVERALL STATS ---
-  const totalVehicles = await prisma.vehicle.count({ where: { status: { not: 'sold' } } })
+  const totalVehicles = await prisma.vehicle.count({ where: { status: { notIn: ['completed', 'sold'] } } })
   const inRecon = await prisma.vehicle.count({ where: { status: 'in_recon' } })
   const published = await prisma.vehicleStage.count({ where: { stage: 'publish', status: 'done', completedAt: { gte: dayStart, lte: dayEnd } } })
 

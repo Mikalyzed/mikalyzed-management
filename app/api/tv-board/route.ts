@@ -64,7 +64,7 @@ export async function GET() {
   })
 
   // Total inventory
-  const totalInventory = await prisma.vehicle.count({ where: { status: { not: 'sold' } } })
+  const totalInventory = await prisma.vehicle.count({ where: { status: { notIn: ['completed', 'sold'] } } })
   const inRecon = await prisma.vehicle.count({ where: { status: { in: ['mechanic', 'detailing', 'content', 'publish'] } } })
 
   // Today's completed vehicles (for the feed)
