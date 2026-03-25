@@ -37,24 +37,63 @@ export async function POST(request: Request) {
   })
   if (!stage) return NextResponse.json({ error: 'Stage not found' }, { status: 404 })
 
+  const isTimeExtension = taskName.startsWith('Time extension:')
+  const autoApprove = isTimeExtension && additionalHours && additionalHours <= 1
+
   const approval = await prisma.taskApproval.create({
     data: {
       vehicleStageId,
       taskName,
       additionalHours: additionalHours || null,
       requestedById: user.id,
+      status: autoApprove ? 'approved' : 'pending',
+      reviewedAt: autoApprove ? new Date() : null,
     },
   })
 
-  // Notify all admin users
-  const admins = await prisma.user.findMany({ where: { role: 'admin', isActive: true } })
   const v = stage.vehicle
   const vehicleDesc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
+
+  if (autoApprove) {
+    // Auto-approve: add hours immediately
+    await prisma.vehicleStage.update({
+      where: { id: vehicleStageId },
+      data: { estimatedHours: (stage.estimatedHours || 0) + additionalHours },
+    })
+
+    // Log activity
+    await prisma.activityLog.create({
+      data: {
+        entityType: 'vehicle',
+        entityId: stage.vehicleId,
+        action: `Time auto-approved +${additionalHours}h${taskName.includes('—') ? ` — ${taskName.split('—').slice(1).join('—').trim()}` : ''}`,
+        actorId: user.id,
+        details: { type: 'time_extension_auto', hours: additionalHours, stage: stage.stage },
+      },
+    })
+
+    // Notify admins (FYI, not action needed)
+    const admins = await prisma.user.findMany({ where: { role: 'admin', isActive: true } })
+    await prisma.notification.createMany({
+      data: admins.map(admin => ({
+        userId: admin.id,
+        type: 'task_approval_result',
+        title: `Auto-approved +${additionalHours}h for #${v.stockNumber} ${vehicleDesc}`,
+        entityType: 'task_approval',
+        entityId: approval.id,
+      })),
+    })
+
+    return NextResponse.json({ approval, autoApproved: true })
+  }
+
+  // Needs manual approval — notify admins
+  const admins = await prisma.user.findMany({ where: { role: 'admin', isActive: true } })
   await prisma.notification.createMany({
     data: admins.map(admin => ({
       userId: admin.id,
       type: 'task_approval_request',
-      title: `New task request: ${taskName} for #${v.stockNumber} ${vehicleDesc}`,
+      title: `${isTimeExtension ? 'Time extension request' : 'New task request'}: ${taskName} for #${v.stockNumber} ${vehicleDesc}`,
       entityType: 'task_approval',
       entityId: approval.id,
     })),
