@@ -25,9 +25,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   })
 
   if (status === 'approved') {
-    const currentChecklist = (approval.vehicleStage.checklist as { item: string; done: boolean; note: string }[]) || []
-    const updatedChecklist = [...currentChecklist, { item: approval.taskName, done: false, note: '' }]
-    const updateData: Record<string, unknown> = { checklist: updatedChecklist }
+    const isTimeExtension = approval.taskName.startsWith('Time extension:')
+    const updateData: Record<string, unknown> = {}
+    
+    // Time extensions only add hours, not checklist items
+    if (!isTimeExtension) {
+      const currentChecklist = (approval.vehicleStage.checklist as { item: string; done: boolean; note: string }[]) || []
+      updateData.checklist = [...currentChecklist, { item: approval.taskName, done: false, note: '' }]
+    }
     if (approval.additionalHours && approval.additionalHours > 0) {
       updateData.estimatedHours = (approval.vehicleStage.estimatedHours || 0) + approval.additionalHours
     }
