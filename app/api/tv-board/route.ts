@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 
 export async function GET() {
+  try {
   const now = new Date()
   const todayStart = new Date(now)
   todayStart.setHours(0, 0, 0, 0)
@@ -105,4 +106,8 @@ export async function GET() {
     })),
     timestamp: now.toISOString(),
   })
+  } catch (err) {
+    console.error('[tv-board] Error:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 }
