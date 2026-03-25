@@ -3,78 +3,93 @@ import { prisma } from '@/lib/db'
 
 export async function GET() {
   try {
-  const now = new Date()
-  const todayStart = new Date(now)
-  todayStart.setHours(0, 0, 0, 0)
+    const now = new Date()
+    const todayStart = new Date(now)
+    todayStart.setHours(0, 0, 0, 0)
 
-  // Pipeline counts
-  const stages = ['mechanic', 'detailing', 'content', 'publish'] as const
-  const pipeline: Record<string, { total: number; inProgress: number; pending: number; done: number }> = {}
+    const stageList = ['mechanic', 'detailing', 'content', 'publish'] as const
 
-  for (const stage of stages) {
-    const [inProgress, pending, doneToday] = await Promise.all([
-      prisma.vehicleStage.count({ where: { stage, status: 'in_progress', awaitingParts: false } }),
-      prisma.vehicleStage.count({ where: { stage, status: 'pending' } }),
-      prisma.vehicleStage.count({ where: { stage, status: 'done', completedAt: { gte: todayStart } } }),
-    ])
-    pipeline[stage] = { total: inProgress + pending, inProgress, pending, done: doneToday }
-  }
-
-  // Get top 4 vehicles per stage (in_progress first, then pending, ordered by priority)
-  const vSelect = { stockNumber: true, year: true, make: true, model: true, color: true } as const
-  const aSelect = { select: { name: true } } as const
-
-  const getStageVehicles = async (stage: string) => {
-    return prisma.vehicleStage.findMany({
-      where: { stage, status: { in: ['in_progress', 'pending'] }, awaitingParts: false },
-      include: { vehicle: { select: vSelect }, assignee: aSelect },
-      orderBy: [{ status: 'asc' }, { priority: 'asc' }], // in_progress before pending
-      take: 4,
+    // Single query: get ALL non-done stages + today's completed
+    const allStages = await prisma.vehicleStage.findMany({
+      where: {
+        OR: [
+          { status: { in: ['in_progress', 'pending'] } },
+          { status: 'done', completedAt: { gte: todayStart } },
+        ],
+      },
+      include: {
+        vehicle: { select: { stockNumber: true, year: true, make: true, model: true, color: true } },
+        assignee: { select: { name: true } },
+      },
+      orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
     })
+
+    // Build pipeline counts and vehicle lists from the single query
+    const pipeline: Record<string, { total: number; inProgress: number; pending: number; done: number }> = {}
+    const stageVehicles: Record<string, ReturnType<typeof formatJob>[]> = {}
+
+    for (const stage of stageList) {
+      const stageItems = allStages.filter(s => s.stage === stage)
+      const inProgress = stageItems.filter(s => s.status === 'in_progress' && !s.awaitingParts)
+      const pending = stageItems.filter(s => s.status === 'pending')
+      const done = stageItems.filter(s => s.status === 'done')
+
+      pipeline[stage] = {
+        total: inProgress.length + pending.length,
+        inProgress: inProgress.length,
+        pending: pending.length,
+        done: done.length,
+      }
+
+      // Top 4: in_progress first, then pending
+      const ordered = [...inProgress, ...pending].slice(0, 4)
+      stageVehicles[stage] = ordered.map(formatJob)
+    }
+
+    // Awaiting parts count
+    const awaitingPartsCount = allStages.filter(s => s.awaitingParts).length
+
+    // Completed today (across all stages)
+    const completedToday = allStages.filter(s => s.status === 'done')
+    
+    // External repairs + inventory counts (sequential to avoid pool exhaustion)
+    const externalCount = await prisma.externalRepair.count({ where: { status: 'sent' } })
+    const totalInventory = await prisma.vehicle.count({ where: { status: { notIn: ['completed', 'sold'] } } })
+    const inRecon = allStages.filter(s => s.status !== 'done' && !s.awaitingParts).length
+
+    return NextResponse.json({
+      pipeline,
+      stageVehicles,
+      awaitingParts: awaitingPartsCount,
+      externalRepairs: externalCount,
+      completedToday: completedToday.length,
+      totalInventory,
+      inRecon,
+      completedVehicles: completedToday.slice(0, 10).map(s => ({
+        stockNumber: s.vehicle.stockNumber,
+        vehicle: `${s.vehicle.year ?? ''} ${s.vehicle.make} ${s.vehicle.model}`.trim(),
+        stage: s.stage,
+        assignee: s.assignee?.name || null,
+        completedAt: s.completedAt?.toISOString(),
+      })),
+      timestamp: now.toISOString(),
+    })
+  } catch (err) {
+    console.error('[tv-board] Error:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
+}
 
-  const [mechanicVehicles, detailingVehicles, contentVehicles, publishVehicles] = await Promise.all([
-    getStageVehicles('mechanic'),
-    getStageVehicles('detailing'),
-    getStageVehicles('content'),
-    getStageVehicles('publish'),
-  ])
-
-  // Awaiting parts
-  const awaitingParts = await prisma.vehicleStage.findMany({
-    where: { awaitingParts: true },
-    include: { vehicle: { select: vSelect } },
-  })
-
-  // External repairs
-  const externalCount = await prisma.externalRepair.count({ where: { status: 'sent' } })
-
-  // Completed today across all stages
-  const completedToday = await prisma.vehicleStage.count({
-    where: { status: 'done', completedAt: { gte: todayStart } },
-  })
-
-  // Total inventory
-  const totalInventory = await prisma.vehicle.count({ where: { status: { notIn: ['completed', 'sold'] } } })
-  const inRecon = await prisma.vehicle.count({ where: { status: { in: ['mechanic', 'detailing', 'content', 'publish'] } } })
-
-  // Today's completed vehicles (for the feed)
-  const completedVehicles = await prisma.vehicleStage.findMany({
-    where: { status: 'done', completedAt: { gte: todayStart } },
-    include: {
-      vehicle: { select: { stockNumber: true, year: true, make: true, model: true } },
-      assignee: { select: { name: true } },
-    },
-    orderBy: { completedAt: 'desc' },
-    take: 10,
-  })
-
-  // Format jobs
-  type StageRow = typeof mechanicVehicles[number]
-  const formatJob = (s: StageRow) => ({
+function formatJob(s: {
+  vehicle: { stockNumber: string; year: number | null; make: string; model: string; color: string | null }
+  assignee: { name: string } | null
+  estimatedHours: number | null; activeSeconds: number; timerStartedAt: Date | null
+  stage: string; status: string
+}) {
+  return {
     stockNumber: s.vehicle.stockNumber,
     vehicle: `${s.vehicle.year ?? ''} ${s.vehicle.make} ${s.vehicle.model}`.trim(),
-    color: (s.vehicle as Record<string, unknown>).color as string | null,
+    color: s.vehicle.color,
     assignee: s.assignee?.name || 'Unassigned',
     estimatedHours: s.estimatedHours,
     activeSeconds: s.activeSeconds,
@@ -82,32 +97,5 @@ export async function GET() {
     timerStartedAt: s.timerStartedAt?.toISOString() || null,
     stage: s.stage,
     status: s.status,
-  })
-
-  return NextResponse.json({
-    pipeline,
-    stageVehicles: {
-      mechanic: mechanicVehicles.map(formatJob),
-      detailing: detailingVehicles.map(formatJob),
-      content: contentVehicles.map(formatJob),
-      publish: publishVehicles.map(formatJob),
-    },
-    awaitingParts: awaitingParts.length,
-    externalRepairs: externalCount,
-    completedToday,
-    totalInventory,
-    inRecon,
-    completedVehicles: completedVehicles.map(s => ({
-      stockNumber: s.vehicle.stockNumber,
-      vehicle: `${s.vehicle.year ?? ''} ${s.vehicle.make} ${s.vehicle.model}`.trim(),
-      stage: s.stage,
-      assignee: s.assignee?.name || null,
-      completedAt: s.completedAt?.toISOString(),
-    })),
-    timestamp: now.toISOString(),
-  })
-  } catch (err) {
-    console.error('[tv-board] Error:', err)
-    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
