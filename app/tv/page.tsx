@@ -74,7 +74,7 @@ function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
       borderLeft: `3px solid ${isActive ? color : isPaused ? '#f59e0b' : '#333'}`,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-        <span style={{ fontSize: 15, fontWeight: 700 }}>#{job.stockNumber}</span>
+        <span style={{ fontSize: 14, fontWeight: 700 }}>{job.vehicle}</span>
         {isActive && (
           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: color + '20', color }}>ACTIVE</span>
         )}
@@ -85,7 +85,7 @@ function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: '#33333380', color: '#666' }}>QUEUED</span>
         )}
       </div>
-      <p style={{ fontSize: 12, color: '#777', margin: '0 0 2px' }}>{job.vehicle}{job.color ? ` · ${job.color}` : ''}</p>
+      <p style={{ fontSize: 12, color: '#666', margin: '0 0 2px' }}>#{job.stockNumber}{job.color ? ` · ${job.color}` : ''}</p>
       <p style={{ fontSize: 11, color: '#555', margin: 0 }}>{job.assignee}</p>
       {(isActive || isPaused) && job.stage === 'mechanic' && <LiveTimer job={job} color={color} />}
     </div>
@@ -166,16 +166,20 @@ export default function TVBoard() {
       </div>
 
       {/* Pipeline Cards + Vehicle Columns */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20, alignItems: 'stretch' }}>
         {stageOrder.map(stage => {
           const p = data.pipeline[stage] || { total: 0, inProgress: 0, pending: 0, done: 0 }
           const color = STAGE_COLORS[stage]
           const vehicles = data.stageVehicles[stage] || []
 
           return (
-            <div key={stage} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div key={stage} style={{
+              display: 'flex', flexDirection: 'column', gap: 10,
+              background: '#0f0f0f', borderRadius: 14, padding: 12,
+              border: `1px solid ${color}30`, 
+            }}>
               {/* Pipeline summary card */}
-              <div style={{ background: '#111', borderRadius: 12, padding: '14px 16px', borderTop: `3px solid ${color}` }}>
+              <div style={{ background: '#111', borderRadius: 10, padding: '14px 16px', borderTop: `3px solid ${color}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <span style={{ fontSize: 15, fontWeight: 700 }}>{STAGE_LABELS[stage]}</span>
                   <span style={{ fontSize: 26, fontWeight: 800, color }}>{p.total}</span>
@@ -188,17 +192,15 @@ export default function TVBoard() {
               </div>
 
               {/* Vehicle cards under this stage */}
-              {vehicles.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {vehicles.map(job => (
-                    <VehicleCard key={job.stockNumber} job={job} color={color} />
-                  ))}
-                </div>
-              ) : (
-                <div style={{ background: '#111', borderRadius: 10, padding: '20px 14px', textAlign: 'center' }}>
-                  <p style={{ color: '#333', fontSize: 13, fontStyle: 'italic', margin: 0 }}>No vehicles</p>
-                </div>
-              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+                {vehicles.length > 0 ? vehicles.map(job => (
+                  <VehicleCard key={job.stockNumber} job={job} color={color} />
+                )) : (
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 60 }}>
+                    <p style={{ color: '#2a2a2a', fontSize: 13, fontStyle: 'italic', margin: 0 }}>No active vehicles</p>
+                  </div>
+                )}
+              </div>
             </div>
           )
         })}
@@ -219,9 +221,9 @@ export default function TVBoard() {
                 borderLeft: `3px solid ${STAGE_COLORS[item.stage] || '#666'}`,
               }}>
                 <div>
-                  <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>#{item.stockNumber}</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{item.vehicle}</p>
                   <p style={{ fontSize: 11, color: '#666', margin: 0 }}>
-                    {STAGE_LABELS[item.stage] || item.stage}{item.assignee ? ` — ${item.assignee}` : ''}
+                    #{item.stockNumber} · {STAGE_LABELS[item.stage] || item.stage}{item.assignee ? ` — ${item.assignee}` : ''}
                   </p>
                 </div>
                 {item.completedAt && (
