@@ -724,35 +724,59 @@ function WeekCard({ job, index, getLiveElapsed, openJob, muted }: {
   const est = job.estimatedHours || 2
   const isOver = elapsed > est * 3600
   const isActive = job.timerRunning
-  const isPaused = !job.timerRunning && job.status === 'in_progress'
+  const isPaused = !job.timerRunning && job.status === 'in_progress' && !job.awaitingParts
+  const isAwaiting = job.awaitingParts
+  const isDone = job.status === 'done'
+
+  // Determine card colors based on status
+  const cardBg = muted ? '#f4f4f5' : isDone ? '#f0fdf4' : isAwaiting ? '#fefce8' : isActive ? '#eff6ff' : isPaused ? '#fff7ed' : '#f9fafb'
+  const cardBorder = muted ? '#e2e5ea' : isDone ? '#22c55e' : isAwaiting ? '#eab308' : isActive ? '#3b82f6' : isPaused ? '#f59e0b' : '#e2e5ea'
+  const topBorder = muted ? '#d1d5db' : isDone ? '#22c55e' : isAwaiting ? '#eab308' : isActive ? '#3b82f6' : isPaused ? '#f59e0b' : isOver ? '#ef4444' : '#d1d5db'
 
   return (
     <div onClick={() => openJob(job)} style={{
       minWidth: 180, maxWidth: 220, padding: '12px 14px',
-      background: muted ? '#f4f4f5' : isActive ? '#eff6ff' : isPaused ? '#fff7ed' : '#f9fafb',
-      border: `1px solid ${muted ? '#e2e5ea' : isActive ? '#3b82f6' : isPaused ? '#f59e0b' : '#e2e5ea'}`,
+      background: cardBg,
+      border: `1px solid ${cardBorder}`,
       borderRadius: 12, cursor: 'pointer', flexShrink: 0,
-      borderTop: `3px solid ${muted ? '#d1d5db' : isActive ? '#3b82f6' : isPaused ? '#f59e0b' : '#d1d5db'}`,
+      borderTop: `3px solid ${topBorder}`,
       opacity: muted ? 0.7 : 1,
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>#{index + 1}</span>
-        {isActive && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }} />}
-        {isPaused && <Badge text="Paused" color="#f59e0b" />}
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          {isOver && !isDone && <Badge text="Overdue" color="#ef4444" />}
+          {isActive && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }} />}
+          {isActive && <Badge text="Active" color="#3b82f6" />}
+          {isPaused && <Badge text="Paused" color="#f59e0b" />}
+          {isAwaiting && <Badge text="Awaiting Parts" color="#eab308" />}
+          {isDone && <Badge text="Completed" color="#22c55e" />}
+          {!isActive && !isPaused && !isAwaiting && !isDone && job.status === 'pending' && <Badge text="Queued" color="#94a3b8" />}
+        </div>
       </div>
       <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>#{v.stockNumber}</p>
       <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}
       </p>
+      {isPaused && job.pauseReason && (
+        <p style={{ fontSize: 10, color: '#b45309', marginBottom: 4, fontStyle: 'italic' }}>
+          {job.pauseReason === 'waiting_on_parts' ? `Parts: ${job.awaitingPartsName || 'Pending'}` : job.pauseDetail || 'Paused'}
+        </p>
+      )}
+      {isAwaiting && job.awaitingPartsName && (
+        <p style={{ fontSize: 10, color: '#a16207', marginBottom: 4, fontStyle: 'italic' }}>
+          Parts: {job.awaitingPartsName}
+        </p>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
-        <span style={{ fontWeight: 700, color: isOver ? '#ef4444' : 'var(--text-secondary)' }}>{formatHours(elapsed)}</span>
+        <span style={{ fontWeight: 700, color: isOver && !isDone ? '#ef4444' : 'var(--text-secondary)' }}>{formatHours(elapsed)}</span>
         <span>{est}h est.</span>
       </div>
       <div style={{ marginTop: 6, height: 3, background: '#e2e5ea', borderRadius: 2, overflow: 'hidden' }}>
         <div style={{
           height: '100%', borderRadius: 2,
           width: `${Math.min((elapsed / (est * 3600)) * 100, 100)}%`,
-          background: isOver ? '#ef4444' : isActive ? '#3b82f6' : '#94a3b8',
+          background: isDone ? '#22c55e' : isOver ? '#ef4444' : isActive ? '#3b82f6' : '#94a3b8',
         }} />
       </div>
     </div>
