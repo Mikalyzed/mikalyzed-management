@@ -165,32 +165,32 @@ export default function ScheduleView() {
                   const lastSeg = schedule.filter(s => s.id === b.id).pop()
                   if (lastSeg) finalEndTime = new Date(lastSeg.endTime)
                 }
+                // Determine real-time status for overlay
                 const isOverdue = b.status === 'in_progress' && new Date() > finalEndTime
                 const isPaused = b.status === 'in_progress' && !b.timerRunning && !b.autoPaused
                 const isAutoPaused = b.autoPaused
                 const isActive = b.status === 'in_progress' && b.timerRunning
+                const isAwaitingParts = isPaused && b.pauseReason === 'waiting_on_parts'
                 
-                // Pick color based on real status
-                let colorKey = b.status
-                if (isOverdue && !isActive) colorKey = 'in_progress_overdue'
-                if (isPaused || isAutoPaused) colorKey = 'paused'
-                const colors = STATUS_COLORS[colorKey] || STATUS_COLORS.pending
-                
-                // Determine status label
-                let statusLabel = STATUS_LABELS[b.status] || b.status
-                if (isActive && isOverdue) statusLabel = 'Active · Overdue'
-                else if (isActive) statusLabel = 'Active'
-                else if (isAutoPaused) statusLabel = 'Auto Paused'
-                else if (isPaused && b.pauseReason === 'waiting_on_parts') statusLabel = 'Awaiting Parts'
-                else if (isPaused) statusLabel = 'Paused'
-                else if (isOverdue) statusLabel = 'Overdue'
-                
-                // Status badge color
-                let badgeBg = colors.border + '20'
-                let badgeColor = colors.border
-                if (isActive) { badgeBg = '#3b82f620'; badgeColor = '#3b82f6' }
-                else if (isPaused || isAutoPaused) { badgeBg = '#f59e0b20'; badgeColor = '#f59e0b' }
-                else if (isOverdue) { badgeBg = '#ef444420'; badgeColor = '#ef4444' }
+                // Schedule view = the plan. Colors reflect planned vs off-track.
+                // Overdue/paused/awaiting = red/amber to show deviation from plan
+                const isOffTrack = isOverdue || isPaused || isAutoPaused || isAwaitingParts
+                const planColors = isOverdue 
+                  ? STATUS_COLORS.in_progress_overdue
+                  : isOffTrack
+                    ? STATUS_COLORS.paused
+                    : isActive
+                      ? STATUS_COLORS.in_progress
+                      : STATUS_COLORS[b.status] || STATUS_COLORS.pending
+
+                // Build status badges — can show multiple (e.g. "OVERDUE" + "PAUSED")
+                const badges: { label: string; bg: string; color: string }[] = []
+                if (isOverdue) badges.push({ label: 'Overdue', bg: '#ef444420', color: '#ef4444' })
+                if (isAwaitingParts) badges.push({ label: 'Awaiting Parts', bg: '#eab30820', color: '#eab308' })
+                else if (isAutoPaused) badges.push({ label: 'Auto Paused', bg: '#f59e0b20', color: '#f59e0b' })
+                else if (isPaused) badges.push({ label: 'Paused', bg: '#f59e0b20', color: '#f59e0b' })
+                else if (isActive && !isOverdue) badges.push({ label: 'Active', bg: '#3b82f620', color: '#3b82f6' })
+                else if (b.status === 'pending') badges.push({ label: 'Queued', bg: '#94a3b820', color: '#94a3b8' })
                 
                 const doneCount = (b.checklist as ChecklistItem[]).filter(c => c.done).length
                 const totalCount = (b.checklist as ChecklistItem[]).length
@@ -200,13 +200,13 @@ export default function ScheduleView() {
                 return (
                   <div key={`${b.id}-${b.segmentIndex ?? 0}`} style={{
                     display: 'flex', gap: 14, alignItems: 'stretch',
-                    background: isActive ? '#eff6ff' : (isPaused || isAutoPaused) ? '#fff7ed' : colors.bg, 
-                    border: `1px solid ${isActive ? '#3b82f6' : (isPaused || isAutoPaused) ? '#f59e0b' : colors.border}`,
-                    borderLeft: `4px solid ${isActive ? '#3b82f6' : (isPaused || isAutoPaused) ? '#f59e0b' : colors.border}`, 
+                    background: planColors.bg, 
+                    border: `1px solid ${planColors.border}`,
+                    borderLeft: `4px solid ${planColors.border}`, 
                     borderRadius: 12, padding: '14px 16px',
                   }}>
                     <div style={{ minWidth: 60, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: isActive ? '#1e40af' : (isPaused || isAutoPaused) ? '#b45309' : colors.text }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: planColors.text }}>
                         {startTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                       </p>
                       <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
@@ -223,20 +223,24 @@ export default function ScheduleView() {
                             )}
                           </p>
                           <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{desc}{v.color ? ` · ${v.color}` : ''}</p>
-                          {isPaused && b.pauseReason && b.pauseReason !== 'waiting_on_parts' && (
-                            <p style={{ fontSize: 11, fontWeight: 600, color: '#f59e0b', marginTop: 4 }}>{b.pauseDetail || 'Paused'}</p>
-                          )}
-                          {isPaused && b.pauseReason === 'waiting_on_parts' && (
+                          {isAwaitingParts && (
                             <p style={{ fontSize: 11, fontWeight: 600, color: '#eab308', marginTop: 4 }}>Parts: {b.pauseDetail || 'Pending'}</p>
                           )}
+                          {isPaused && !isAwaitingParts && b.pauseReason && (
+                            <p style={{ fontSize: 11, fontWeight: 600, color: '#f59e0b', marginTop: 4 }}>{b.pauseDetail || 'Paused'}</p>
+                          )}
                         </div>
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
-                          background: badgeBg, color: badgeColor,
-                          textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
-                        }}>
-                          {statusLabel}
-                        </span>
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          {badges.map((badge, bi) => (
+                            <span key={bi} style={{
+                              fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
+                              background: badge.bg, color: badge.color,
+                              textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap',
+                            }}>
+                              {badge.label}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                       {totalCount > 0 && (
                         <div style={{ marginTop: 8 }}>
@@ -250,7 +254,7 @@ export default function ScheduleView() {
                             <div style={{
                               height: '100%', borderRadius: 2, transition: 'width 0.3s',
                               width: `${totalCount > 0 ? (doneCount / totalCount) * 100 : 0}%`,
-                              background: doneCount === totalCount ? '#22c55e' : colors.border,
+                              background: doneCount === totalCount ? '#22c55e' : planColors.border,
                             }} />
                           </div>
                         </div>
