@@ -27,8 +27,29 @@ function timeAgo(dateStr: string): string {
   if (mins < 60) return `${mins}m ago`
   const hours = Math.floor(mins / 60)
   if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
+  return ''
+}
+
+function formatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString('en-US', {
+    hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York',
+  })
+}
+
+function getDayLabel(dateStr: string): string {
+  const d = new Date(dateStr)
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const notifDay = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diffDays = Math.floor((today.getTime() - notifDay.getTime()) / 86400000)
+
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'America/New_York' })
+}
+
+function getDayKey(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 }
 
 export default function NotificationBell() {
@@ -41,19 +62,24 @@ export default function NotificationBell() {
     fetch('/api/notifications')
       .then(r => r.json())
       .then(d => {
-        setNotifications(d.notifications || [])
-        setUnreadCount(d.unreadCount || 0)
+        const all: Notification[] = d.notifications || []
+        // Filter to last 3 days
+        const threeDaysAgo = new Date()
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+        threeDaysAgo.setHours(0, 0, 0, 0)
+        const filtered = all.filter(n => new Date(n.createdAt) >= threeDaysAgo)
+        setNotifications(filtered)
+        setUnreadCount(filtered.filter(n => !n.isRead).length)
       })
       .catch(() => {})
   }, [])
 
   useEffect(() => {
     fetchNotifications()
-    const interval = setInterval(fetchNotifications, 30000) // Poll every 30s
+    const interval = setInterval(fetchNotifications, 30000)
     return () => clearInterval(interval)
   }, [fetchNotifications])
 
-  // Close on click outside
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
@@ -76,9 +102,20 @@ export default function NotificationBell() {
     setUnreadCount(0)
   }
 
+  // Group by day
+  const grouped: { label: string; items: Notification[] }[] = []
+  const dayMap = new Map<string, Notification[]>()
+  for (const n of notifications) {
+    const key = getDayKey(n.createdAt)
+    if (!dayMap.has(key)) dayMap.set(key, [])
+    dayMap.get(key)!.push(n)
+  }
+  for (const [key, items] of dayMap) {
+    grouped.push({ label: getDayLabel(items[0].createdAt), items })
+  }
+
   return (
     <div ref={ref} style={{ position: 'relative', overflow: 'visible', zIndex: 999 }}>
-      {/* Bell Button */}
       <button
         onClick={() => setOpen(!open)}
         style={{
@@ -103,11 +140,10 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {/* Dropdown */}
       {open && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, marginTop: 8,
-          width: 340, maxWidth: 'calc(100vw - 32px)', maxHeight: 420, overflowY: 'auto',
+          width: 360, maxWidth: 'calc(100vw - 32px)', maxHeight: 460, overflowY: 'auto',
           background: '#fff', borderRadius: 14, padding: 0,
           boxShadow: '0 10px 40px rgba(0,0,0,0.15), 0 2px 10px rgba(0,0,0,0.08)',
           border: '1px solid #e8e8e8', zIndex: 999,
@@ -116,61 +152,71 @@ export default function NotificationBell() {
           <div style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             padding: '14px 16px', borderBottom: '1px solid #f0f0f0',
+            position: 'sticky', top: 0, background: '#fff', zIndex: 1, borderRadius: '14px 14px 0 0',
           }}>
             <span style={{ fontSize: 15, fontWeight: 700 }}>Notifications</span>
             {unreadCount > 0 && (
-              <button
-                onClick={markAllRead}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: 12, fontWeight: 600, color: '#3b82f6',
-                }}
-              >
-                Mark all read
-              </button>
+              <button onClick={markAllRead} style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 12, fontWeight: 600, color: '#3b82f6',
+              }}>Mark all read</button>
             )}
           </div>
 
-          {/* List */}
           {notifications.length === 0 ? (
             <div style={{ padding: '30px 16px', textAlign: 'center', color: '#999', fontSize: 13 }}>
-              No notifications
+              No notifications in the last 3 days
             </div>
           ) : (
             <div>
-              {notifications.slice(0, 20).map(n => {
-                const dotColor = TYPE_COLORS[n.type] || '#94a3b8'
-                return (
-                  <div
-                    key={n.id}
-                    onClick={() => !n.isRead && markRead(n.id)}
-                    style={{
-                      display: 'flex', gap: 10, padding: '12px 16px',
-                      borderBottom: '1px solid #f5f5f5',
-                      background: n.isRead ? '#fff' : '#f8faff',
-                      cursor: n.isRead ? 'default' : 'pointer',
-                      transition: 'background 0.15s',
-                    }}
-                  >
-                    <div style={{
-                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                      background: n.isRead ? '#e2e5ea' : dotColor, marginTop: 5,
-                    }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{
-                        fontSize: 13, margin: 0, lineHeight: 1.4,
-                        fontWeight: n.isRead ? 400 : 600,
-                        color: n.isRead ? '#888' : '#1a1a1a',
-                      }}>
-                        {n.title}
-                      </p>
-                      <p style={{ fontSize: 11, color: '#aaa', margin: '3px 0 0' }}>
-                        {timeAgo(n.createdAt)}
-                      </p>
-                    </div>
+              {grouped.map(group => (
+                <div key={group.label}>
+                  {/* Day header */}
+                  <div style={{
+                    padding: '10px 16px 6px', fontSize: 11, fontWeight: 700,
+                    color: '#999', textTransform: 'uppercase', letterSpacing: '0.05em',
+                    background: '#fafafa', borderBottom: '1px solid #f0f0f0',
+                    position: 'sticky', top: 48, zIndex: 1,
+                  }}>
+                    {group.label}
                   </div>
-                )
-              })}
+                  {group.items.map(n => {
+                    const dotColor = TYPE_COLORS[n.type] || '#94a3b8'
+                    const ago = timeAgo(n.createdAt)
+                    const time = formatTime(n.createdAt)
+                    return (
+                      <div
+                        key={n.id}
+                        onClick={() => !n.isRead && markRead(n.id)}
+                        style={{
+                          display: 'flex', gap: 10, padding: '10px 16px',
+                          borderBottom: '1px solid #f8f8f8',
+                          background: n.isRead ? '#fff' : '#f8faff',
+                          cursor: n.isRead ? 'default' : 'pointer',
+                          transition: 'background 0.15s',
+                        }}
+                      >
+                        <div style={{
+                          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                          background: n.isRead ? '#e2e5ea' : dotColor, marginTop: 5,
+                        }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{
+                            fontSize: 13, margin: 0, lineHeight: 1.4,
+                            fontWeight: n.isRead ? 400 : 600,
+                            color: n.isRead ? '#888' : '#1a1a1a',
+                          }}>
+                            {n.title}
+                          </p>
+                          <p style={{ fontSize: 11, color: '#bbb', margin: '2px 0 0' }}>
+                            {ago || time}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
           )}
         </div>
