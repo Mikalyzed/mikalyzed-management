@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import NotificationBell from './NotificationBell'
 
 type NavItem = { href: string; label: string; icon: string }
 type NavGroup = { label: string; icon: string; children: NavItem[] }
@@ -206,15 +207,18 @@ export default function Nav({ role, userName }: { role: string; userName: string
         display: 'none',
       }}>
         <div style={{ padding: '28px 24px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: 10, background: '#dffd6e', color: '#1a1a1a',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800,
-            }}>M</div>
-            <div>
-              <p style={{ fontSize: 14, fontWeight: 700, color: '#fff', letterSpacing: '0.04em', lineHeight: 1.2 }}>MIKALYZED</p>
-              <p style={{ fontSize: 11, color: '#555', fontWeight: 500, letterSpacing: '0.02em' }}>Auto Boutique</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10, background: '#dffd6e', color: '#1a1a1a',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800,
+              }}>M</div>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, color: '#fff', letterSpacing: '0.04em', lineHeight: 1.2 }}>MIKALYZED</p>
+                <p style={{ fontSize: 11, color: '#555', fontWeight: 500, letterSpacing: '0.02em' }}>Auto Boutique</p>
+              </div>
             </div>
+            <NotificationBell />
           </div>
         </div>
         <nav style={{ flex: 1, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
@@ -254,13 +258,16 @@ export default function Nav({ role, userName }: { role: string; userName: string
             }}>M</div>
             <p style={{ fontSize: 13, fontWeight: 700, color: '#fff', letterSpacing: '0.04em' }}>MIKALYZED</p>
           </div>
-          <button onClick={() => setMobileOpen(true)} style={{
-            background: 'none', border: 'none', cursor: 'pointer', padding: 6, color: '#fff',
-          }}>
-            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-            </svg>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <NotificationBell />
+            <button onClick={() => setMobileOpen(true)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: 6, color: '#fff',
+            }}>
+              <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+            </button>
+          </div>
         </div>
       )}
 
