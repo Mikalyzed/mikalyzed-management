@@ -48,17 +48,21 @@ export async function GET() {
     orderBy: { updatedAt: 'desc' },
   })
 
-  // Today = in_progress OR scheduledDate is today
   const isScheduledToday = (d: Date | null) => {
     if (!d) return false
-    const s = d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
-    return s === today
+    return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) === today
   }
 
-  const todayVehicles = stages.filter(s => s.status === 'in_progress' || isScheduledToday(s.scheduledDate))
-  const queuedVehicles = stages.filter(s => s.status !== 'in_progress' && !isScheduledToday(s.scheduledDate))
+  // Active = in_progress
+  const activeVehicles = stages.filter(s => s.status === 'in_progress')
+  const activeTasks = contentTasks.filter(t => t.status === 'in_progress')
 
-  const todayTasks = contentTasks.filter(t => t.status === 'in_progress' || isScheduledToday(t.scheduledDate))
+  // Today = scheduled for today but NOT in_progress
+  const todayVehicles = stages.filter(s => s.status !== 'in_progress' && isScheduledToday(s.scheduledDate))
+  const todayTasks = contentTasks.filter(t => t.status !== 'in_progress' && isScheduledToday(t.scheduledDate))
+
+  // Queue = not in_progress and not scheduled today
+  const queuedVehicles = stages.filter(s => s.status !== 'in_progress' && !isScheduledToday(s.scheduledDate))
   const queuedTasks = contentTasks.filter(t => t.status !== 'in_progress' && !isScheduledToday(t.scheduledDate))
 
   const formatStage = (s: typeof stages[number]) => ({
@@ -75,6 +79,8 @@ export async function GET() {
   })
 
   return NextResponse.json({
+    active: activeVehicles.map(formatStage),
+    activeTasks: activeTasks.map(formatTask),
     today: todayVehicles.map(formatStage),
     todayTasks: todayTasks.map(formatTask),
     queuedVehicles: queuedVehicles.map(formatStage),
@@ -83,6 +89,7 @@ export async function GET() {
     completedTasks: completedTasks.map(formatTask),
     stats: {
       total: stages.length + contentTasks.length,
+      activeCount: activeVehicles.length + activeTasks.length,
       todayCount: todayVehicles.length + todayTasks.length,
       completedToday: completedToday.length + completedTasks.length,
     },

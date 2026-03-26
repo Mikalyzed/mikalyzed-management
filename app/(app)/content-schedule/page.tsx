@@ -16,10 +16,11 @@ type ContentTask = {
   status: string; scheduledDate: string | null; type: 'task'
 }
 type BoardData = {
+  active: VehicleJob[]; activeTasks: ContentTask[]
   today: VehicleJob[]; todayTasks: ContentTask[]
   queuedVehicles: VehicleJob[]; queuedTasks: ContentTask[]
   completedToday: VehicleJob[]; completedTasks: ContentTask[]
-  stats: { total: number; todayCount: number; completedToday: number }
+  stats: { total: number; activeCount: number; todayCount: number; completedToday: number }
 }
 
 function StatBox({ label, value, color }: { label: string; value: number; color?: string }) {
@@ -51,9 +52,11 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
   const totalCount = job.checklist.length
   const allDone = totalCount > 0 && doneCount === totalCount
   const progress = totalCount > 0 ? doneCount / totalCount : 0
+  const isActive = job.status === 'in_progress'
+  const borderColor = isActive ? '#f59e0b' : '#3b82f6'
 
   return (
-    <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: '2px solid #3b82f6', flex: '1 1 340px', maxWidth: 420 }}>
+    <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `2px solid ${borderColor}`, flex: '1 1 340px', maxWidth: 420 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
         <div>
           <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>#{v.stockNumber}</p>
@@ -61,8 +64,8 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
             {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}{v.color ? ` · ${v.color}` : ''}
           </p>
         </div>
-        <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: job.status === 'in_progress' ? '#3b82f618' : '#f59e0b18', color: job.status === 'in_progress' ? '#3b82f6' : '#f59e0b', textTransform: 'uppercase' }}>
-          {job.status === 'in_progress' ? 'Active' : 'Scheduled'}
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: borderColor + '18', color: borderColor, textTransform: 'uppercase' }}>
+          {isActive ? 'Active' : 'Scheduled'}
         </span>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -70,7 +73,7 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
         {job.assignee && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{job.assignee.name}</span>}
       </div>
       <div style={{ height: 5, background: '#e2e5ea', borderRadius: 3, overflow: 'hidden', marginBottom: 14 }}>
-        <div style={{ height: '100%', borderRadius: 3, transition: 'width 0.3s', width: `${progress * 100}%`, background: allDone ? '#22c55e' : '#3b82f6' }} />
+        <div style={{ height: '100%', borderRadius: 3, transition: 'width 0.3s', width: `${progress * 100}%`, background: allDone ? '#22c55e' : borderColor }} />
       </div>
       {totalCount > 0 && job.status === 'in_progress' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}>
@@ -108,15 +111,17 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
 
 /* ── Active Task Card ── */
 function ActiveTaskCard({ task, onComplete, adminAction }: { task: ContentTask; onComplete: (id: string) => void; adminAction?: () => void }) {
+  const isActive = task.status === 'in_progress'
+  const borderColor = isActive ? '#f59e0b' : '#3b82f6'
   return (
-    <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: '2px solid #8b5cf6', flex: '1 1 340px', maxWidth: 420 }}>
+    <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `2px solid ${borderColor}`, flex: '1 1 340px', maxWidth: 420 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div>
           <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>{task.title}</p>
           {task.description && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{task.description}</p>}
         </div>
-        <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: task.status === 'in_progress' ? '#8b5cf618' : '#f59e0b18', color: task.status === 'in_progress' ? '#8b5cf6' : '#f59e0b', textTransform: 'uppercase' }}>
-          {task.status === 'in_progress' ? 'Active' : 'Scheduled'}
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: borderColor + '18', color: borderColor, textTransform: 'uppercase' }}>
+          {isActive ? 'Active' : 'Scheduled'}
         </span>
       </div>
       {task.assignee && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 6px' }}>{task.assignee.name}</p>}
@@ -484,26 +489,46 @@ export default function ContentBoard() {
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 28, flexWrap: 'wrap' }}>
         <StatBox label="Total" value={data.stats.total} />
+        <StatBox label="Active" value={data.stats.activeCount} color="#f59e0b" />
         <StatBox label="Today" value={data.stats.todayCount} color="#3b82f6" />
         <StatBox label="Done Today" value={data.stats.completedToday} color="#22c55e" />
       </div>
 
+      {/* Active */}
+      <div style={{ marginBottom: 28 }}>
+        <SectionHeader label="Active" count={data.active.length + data.activeTasks.length} color="#f59e0b" />
+        {data.active.length === 0 && data.activeTasks.length === 0 ? (
+          <div style={{ background: '#f9fafb', borderRadius: 12, padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
+            Nothing in progress right now
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+            {data.active.map(job => (
+              <ActiveVehicleCard key={job.id} job={job} onToggleTask={toggleTask} onComplete={completeVehicle} />
+            ))}
+            {data.activeTasks.map(task => (
+              <ActiveTaskCard key={task.id} task={task} onComplete={completeTask} />
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Today */}
-      <div style={{ marginBottom: 32 }}>
+      <div style={{ marginBottom: 28 }}>
         <SectionHeader label="Today" count={data.today.length + data.todayTasks.length} color="#3b82f6" />
         {data.today.length === 0 && data.todayTasks.length === 0 ? (
-          <div style={{ background: '#f9fafb', borderRadius: 12, padding: 30, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
-            Nothing scheduled for today{isAdmin ? '. Use the Schedule button on queue items to plan the day.' : '.'}
+          <div style={{ background: '#f9fafb', borderRadius: 12, padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
+            Nothing scheduled for today{isAdmin ? '. Use the Schedule button on queue items.' : '.'}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
             {data.today.map(job => (
               <ActiveVehicleCard key={job.id} job={job} onToggleTask={toggleTask} onComplete={completeVehicle}
-                adminAction={isAdmin && job.status !== 'in_progress' ? () => unschedule(job.id, 'vehicle') : undefined} />
+                adminAction={isAdmin ? () => unschedule(job.id, 'vehicle') : undefined} />
             ))}
             {data.todayTasks.map(task => (
               <ActiveTaskCard key={task.id} task={task} onComplete={completeTask}
-                adminAction={isAdmin && task.status !== 'in_progress' ? () => unschedule(task.id, 'task') : undefined} />
+                adminAction={isAdmin ? () => unschedule(task.id, 'task') : undefined} />
             ))}
           </div>
         )}
