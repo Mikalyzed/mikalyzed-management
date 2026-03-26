@@ -119,7 +119,18 @@ function ActiveTaskCard({ task, onComplete, adminAction }: { task: ContentTask; 
           {task.status === 'in_progress' ? 'Active' : 'Scheduled'}
         </span>
       </div>
-      {task.assignee && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>{task.assignee.name}</p>}
+      {task.assignee && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 6px' }}>{task.assignee.name}</p>}
+
+      {/* Default task */}
+      <div style={{
+        padding: '8px 10px', borderRadius: 8, background: task.status === 'in_progress' ? '#f9fafb' : '#faf5ff',
+        border: '1px solid #f0f0f0', marginBottom: 12, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)',
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round"><path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" /></svg>
+        Reel for social media
+      </div>
+
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         {task.status === 'in_progress' && (
           <button onClick={() => onComplete(task.id)} style={{
@@ -200,6 +211,14 @@ function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete }: {
         </div>
         {task.description && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{task.description}</p>}
         <span style={{ fontSize: 12, color: task.assignee ? 'var(--text-muted)' : '#f59e0b', fontWeight: task.assignee ? 400 : 600, display: 'block', marginTop: 8 }}>{task.assignee?.name || 'Unassigned'}</span>
+        <div style={{
+          padding: '6px 10px', borderRadius: 8, background: '#faf5ff',
+          border: '1px solid #f0f0f0', marginTop: 8, fontSize: 12, color: 'var(--text-muted)',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round"><path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" /></svg>
+          Reel for social media
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
         <button onClick={() => onStart(task.id)} style={{
