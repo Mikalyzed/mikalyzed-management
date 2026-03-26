@@ -42,8 +42,9 @@ function SectionHeader({ label, count, color }: { label: string; count: number; 
 }
 
 /* ── Active Vehicle Card (with checklist) ── */
-function ActiveVehicleCard({ job, onToggleTask, onComplete }: {
+function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
   job: VehicleJob; onToggleTask: (id: string, idx: number) => void; onComplete: (id: string) => void
+  adminAction?: () => void
 }) {
   const v = job.vehicle
   const doneCount = job.checklist.filter(c => c.done).length
@@ -86,19 +87,27 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete }: {
           ))}
         </div>
       )}
-      {job.status === 'in_progress' && (
-        <button onClick={() => onComplete(job.id)} disabled={!allDone} style={{
-          padding: '9px 22px', borderRadius: 8, border: 'none',
-          background: allDone ? '#22c55e' : '#e2e5ea', color: allDone ? '#fff' : '#999',
-          fontSize: 13, fontWeight: 700, cursor: allDone ? 'pointer' : 'default',
-        }}>Complete</button>
-      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {job.status === 'in_progress' && (
+          <button onClick={() => onComplete(job.id)} disabled={!allDone} style={{
+            padding: '9px 22px', borderRadius: 8, border: 'none',
+            background: allDone ? '#22c55e' : '#e2e5ea', color: allDone ? '#fff' : '#999',
+            fontSize: 13, fontWeight: 700, cursor: allDone ? 'pointer' : 'default',
+          }}>Complete</button>
+        )}
+        {adminAction && (
+          <button onClick={adminAction} style={{
+            padding: '9px 16px', borderRadius: 8, border: '1px solid #fecaca',
+            background: '#fff', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}>Remove from Today</button>
+        )}
+      </div>
     </div>
   )
 }
 
 /* ── Active Task Card ── */
-function ActiveTaskCard({ task, onComplete }: { task: ContentTask; onComplete: (id: string) => void }) {
+function ActiveTaskCard({ task, onComplete, adminAction }: { task: ContentTask; onComplete: (id: string) => void; adminAction?: () => void }) {
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: '2px solid #8b5cf6', flex: '1 1 340px', maxWidth: 420 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
@@ -111,12 +120,20 @@ function ActiveTaskCard({ task, onComplete }: { task: ContentTask; onComplete: (
         </span>
       </div>
       {task.assignee && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>{task.assignee.name}</p>}
-      {task.status === 'in_progress' && (
-        <button onClick={() => onComplete(task.id)} style={{
-          padding: '9px 22px', borderRadius: 8, border: 'none',
-          background: '#22c55e', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-        }}>Complete</button>
-      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        {task.status === 'in_progress' && (
+          <button onClick={() => onComplete(task.id)} style={{
+            padding: '9px 22px', borderRadius: 8, border: 'none',
+            background: '#22c55e', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+          }}>Complete</button>
+        )}
+        {adminAction && (
+          <button onClick={adminAction} style={{
+            padding: '9px 16px', borderRadius: 8, border: '1px solid #fecaca',
+            background: '#fff', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}>Remove from Today</button>
+        )}
+      </div>
     </div>
   )
 }
@@ -350,28 +367,14 @@ export default function ContentBoard() {
             Nothing scheduled for today{isAdmin ? '. Use the Schedule button on queue items to plan the day.' : '.'}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
             {data.today.map(job => (
-              <div key={job.id} style={{ position: 'relative', flex: '1 1 340px', maxWidth: 420 }}>
-                <ActiveVehicleCard job={job} onToggleTask={toggleTask} onComplete={completeVehicle} />
-                {isAdmin && job.status !== 'in_progress' && (
-                  <button onClick={() => unschedule(job.id, 'vehicle')} style={{
-                    position: 'absolute', top: 8, right: 50, fontSize: 11, color: '#ef4444',
-                    background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600,
-                  }}>Remove</button>
-                )}
-              </div>
+              <ActiveVehicleCard key={job.id} job={job} onToggleTask={toggleTask} onComplete={completeVehicle}
+                adminAction={isAdmin && job.status !== 'in_progress' ? () => unschedule(job.id, 'vehicle') : undefined} />
             ))}
             {data.todayTasks.map(task => (
-              <div key={task.id} style={{ position: 'relative', flex: '1 1 340px', maxWidth: 420 }}>
-                <ActiveTaskCard task={task} onComplete={completeTask} />
-                {isAdmin && task.status !== 'in_progress' && (
-                  <button onClick={() => unschedule(task.id, 'task')} style={{
-                    position: 'absolute', top: 8, right: 50, fontSize: 11, color: '#ef4444',
-                    background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600,
-                  }}>Remove</button>
-                )}
-              </div>
+              <ActiveTaskCard key={task.id} task={task} onComplete={completeTask}
+                adminAction={isAdmin && task.status !== 'in_progress' ? () => unschedule(task.id, 'task') : undefined} />
             ))}
           </div>
         )}
@@ -384,7 +387,7 @@ export default function ContentBoard() {
           <div style={{ background: '#f9fafb', borderRadius: 12, padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No recon vehicles waiting</div>
         ) : (
           <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
               {visibleVehicles.map(job => <QueueVehicleCard key={job.id} job={job} onStart={startVehicle} isAdmin={isAdmin} onSchedule={openSchedule} />)}
             </div>
             {!showAllVehicles && hiddenVehicles > 0 && (
@@ -405,7 +408,7 @@ export default function ContentBoard() {
           <div style={{ background: '#f9fafb', borderRadius: 12, padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No content tasks queued</div>
         ) : (
           <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
               {visibleTasks.map(task => <QueueTaskCard key={task.id} task={task} onStart={startTask} isAdmin={isAdmin} onSchedule={openSchedule} />)}
             </div>
             {!showAllTasks && hiddenTasks > 0 && (
@@ -423,7 +426,7 @@ export default function ContentBoard() {
       {(data.completedToday.length > 0 || data.completedTasks.length > 0) && (
         <div>
           <SectionHeader label="Completed Today" count={data.completedToday.length + data.completedTasks.length} color="#22c55e" />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
             {data.completedToday.map(job => {
               const v = job.vehicle
               return (
