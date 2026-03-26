@@ -92,7 +92,10 @@ function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
       {job.stockNumber ? (
         <p style={{ fontSize: 12, color: '#666', margin: '0 0 2px' }}>#{job.stockNumber}{job.color ? ` · ${job.color}` : ''}</p>
       ) : (
-        <p style={{ fontSize: 11, color: '#8b5cf6', margin: '0 0 2px', fontWeight: 600 }}>Content Task</p>
+        <p style={{ fontSize: 11, color: '#8b5cf6', margin: '0 0 2px', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#8b5cf6', flexShrink: 0 }} />
+          <span style={{ fontWeight: 600 }}>Reel</span>
+        </p>
       )}
       <p style={{ fontSize: 11, color: '#555', margin: 0 }}>{job.assignee}</p>
       {isMechanic && (isActive || isPaused) && <LiveTimer job={job} color={color} />}
