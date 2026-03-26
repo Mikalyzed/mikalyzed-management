@@ -7,7 +7,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
-  const { status } = await request.json()
+  const { status, adjustedHours } = await request.json()
   if (!['approved', 'rejected'].includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
   }
@@ -29,6 +29,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const tasks = (approval.tasks as Array<{ name: string; hours: number; note: string | null }>) || []
     const hasMultiTasks = tasks.length > 0
     const updateData: Record<string, unknown> = {}
+    // Use admin-adjusted hours if provided, otherwise use original request
+    const finalHours = (typeof adjustedHours === 'number' && adjustedHours > 0) ? adjustedHours : approval.additionalHours
     
     // Add tasks to checklist
     if (!isTimeExtension) {
@@ -40,13 +42,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         updateData.checklist = [...currentChecklist, { item: approval.taskName, done: false, note: '' }]
       }
     }
-    if (approval.additionalHours && approval.additionalHours > 0) {
-      updateData.estimatedHours = (approval.vehicleStage.estimatedHours || 0) + approval.additionalHours
+    if (finalHours && finalHours > 0) {
+      updateData.estimatedHours = (approval.vehicleStage.estimatedHours || 0) + finalHours
     }
     await prisma.vehicleStage.update({ where: { id: approval.vehicleStageId }, data: updateData })
 
+    const hoursChanged = finalHours !== approval.additionalHours
     const actionDesc = isTimeExtension
-      ? `Time extended +${approval.additionalHours}h${approval.taskName.includes('—') ? ` — ${approval.taskName.split('—').slice(1).join('—').trim()}` : ''}`
+      ? `Time extended +${finalHours}h${hoursChanged ? ` (adjusted from ${approval.additionalHours}h)` : ''}${approval.taskName.includes('—') ? ` — ${approval.taskName.split('—').slice(1).join('—').trim()}` : ''}`
       : hasMultiTasks
         ? `${tasks.length} tasks approved: ${tasks.map(t => t.name).join(', ')}`
         : `Task approved: ${approval.taskName}`
@@ -58,7 +61,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         action: actionDesc,
         actorId: user.id,
         details: isTimeExtension
-          ? { type: 'time_extension', hours: approval.additionalHours, stage: approval.vehicleStage.stage }
+          ? { type: 'time_extension', hours: finalHours, requestedHours: approval.additionalHours, stage: approval.vehicleStage.stage }
           : { type: 'task_approval', tasks: hasMultiTasks ? tasks : [{ name: approval.taskName }] },
       },
     })
@@ -68,7 +71,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         userId: approval.requestedById,
         type: 'task_approval_result',
         title: isTimeExtension
-          ? `Time extension of +${approval.additionalHours}h was approved`
+          ? `Time extension of +${finalHours}h was approved${hoursChanged ? ` (adjusted from ${approval.additionalHours}h)` : ''}`
           : `Your task '${approval.taskName}' was approved`,
         entityType: 'task_approval',
         entityId: approval.id,

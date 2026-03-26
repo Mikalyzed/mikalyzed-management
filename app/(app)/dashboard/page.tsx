@@ -325,6 +325,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [expandedApproval, setExpandedApproval] = useState<string | null>(null)
+  const [adjustedHours, setAdjustedHours] = useState<Record<string, number>>({})
 
   useEffect(() => {
     fetch('/api/dashboard').then(r => r.json()).then(setData).catch(console.error)
@@ -340,10 +341,14 @@ export default function DashboardPage() {
 
   async function handleApproval(id: string, status: 'approved' | 'rejected') {
     setApprovingId(id)
+    const body: Record<string, unknown> = { status }
+    if (status === 'approved' && adjustedHours[id] !== undefined) {
+      body.adjustedHours = adjustedHours[id]
+    }
     await fetch(`/api/task-approvals/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(body),
     })
     // Refresh
     const fresh = await fetch('/api/dashboard').then(r => r.json())
@@ -410,69 +415,151 @@ export default function DashboardPage() {
               const desc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
               const hasTasks = a.tasks && Array.isArray(a.tasks) && a.tasks.length > 0
               const isExpanded = expandedApproval === a.id
+              const isTimeExt = a.taskName.startsWith('Time extension:')
+              const requestedHrs = a.additionalHours || 0
+              const currentHrs = adjustedHours[a.id] ?? requestedHrs
+              const timeSince = (() => {
+                const mins = Math.floor((Date.now() - new Date(a.createdAt).getTime()) / 60000)
+                if (mins < 60) return `${mins}m ago`
+                const hrs = Math.floor(mins / 60)
+                if (hrs < 24) return `${hrs}h ago`
+                return `${Math.floor(hrs / 24)}d ago`
+              })()
               return (
-                <div key={a.id} className="card" style={{ padding: '16px 20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
-                    <div>
-                      <p style={{ fontSize: 15, fontWeight: 700 }}>{a.taskName}</p>
-                      <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-                        #{v.stockNumber} {desc} — {STAGE_LABELS[a.vehicleStage.stage] || a.vehicleStage.stage}
-                      </p>
-                      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                        Requested by {a.requestedBy.name}
-                        {a.additionalHours ? ` · +${a.additionalHours}h` : ''}
+                <div key={a.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  {/* Collapsed summary — click to expand */}
+                  <div
+                    onClick={() => {
+                      const next = isExpanded ? null : a.id
+                      setExpandedApproval(next)
+                      if (next && adjustedHours[a.id] === undefined) {
+                        setAdjustedHours(prev => ({ ...prev, [a.id]: requestedHrs }))
+                      }
+                    }}
+                    style={{
+                      padding: '14px 20px', cursor: 'pointer',
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {isTimeExt ? 'Time Extension Request' : a.taskName}
+                        </span>
+                        {requestedHrs > 0 && (
+                          <span style={{
+                            fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                            background: '#8b5cf620', color: '#8b5cf6', whiteSpace: 'nowrap',
+                          }}>+{requestedHrs}h</span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>
+                        #{v.stockNumber} {desc} — {a.requestedBy.name} — {timeSince}
                       </p>
                     </div>
-                    {hasTasks && (
-                      <button onClick={() => setExpandedApproval(isExpanded ? null : a.id)} style={{
-                        background: 'none', border: '1px solid #e8e8e8', borderRadius: 8,
-                        padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        color: 'var(--text-secondary)',
-                      }}>{isExpanded ? 'Hide' : 'View'}</button>
-                    )}
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{
+                      flexShrink: 0, transition: 'transform 0.2s',
+                      transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                    }}>
+                      <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                   </div>
 
-                  {/* Expanded task details */}
-                  {isExpanded && hasTasks && (
-                    <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {(a.tasks as Array<{ name: string; hours: number; note: string | null }>).map((t, i) => (
-                        <div key={i} style={{
-                          background: '#f9fafb', borderRadius: 10, padding: '10px 14px',
-                          border: '1px solid #f0f0f0',
-                        }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: 13, fontWeight: 600 }}>{t.name}</span>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: '#8b5cf6' }}>+{t.hours}h</span>
-                          </div>
-                          {t.note && (
-                            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', fontStyle: 'italic' }}>{t.note}</p>
-                          )}
+                  {/* Expanded details */}
+                  {isExpanded && (
+                    <div style={{ padding: '0 20px 16px', borderTop: '1px solid #f0f0f0' }}>
+                      {/* Request details */}
+                      <div style={{ padding: '12px 0 8px' }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)' }}>Request Details</p>
+                        <div style={{ background: '#f9fafb', borderRadius: 10, padding: '12px 14px', border: '1px solid #f0f0f0' }}>
+                          <p style={{ fontSize: 13, fontWeight: 600 }}>{a.taskName}</p>
+                          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                            Stage: {STAGE_LABELS[a.vehicleStage.stage] || a.vehicleStage.stage}
+                          </p>
                         </div>
-                      ))}
+                      </div>
+
+                      {/* Task breakdown if multi-task */}
+                      {hasTasks && (
+                        <div style={{ marginBottom: 8 }}>
+                          <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)' }}>Tasks</p>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {(a.tasks as Array<{ name: string; hours: number; note: string | null }>).map((t, i) => (
+                              <div key={i} style={{
+                                background: '#f9fafb', borderRadius: 10, padding: '10px 14px',
+                                border: '1px solid #f0f0f0',
+                              }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: 13, fontWeight: 600 }}>{t.name}</span>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: '#8b5cf6' }}>+{t.hours}h</span>
+                                </div>
+                                {t.note && (
+                                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', fontStyle: 'italic' }}>{t.note}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Editable hours */}
+                      {requestedHrs > 0 && (
+                        <div style={{ marginBottom: 12, marginTop: 4 }}>
+                          <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)' }}>Hours to Add</p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setAdjustedHours(prev => ({ ...prev, [a.id]: Math.max(0.5, (prev[a.id] ?? requestedHrs) - 0.5) })) }}
+                              style={{
+                                width: 36, height: 36, borderRadius: 10, border: '1px solid #e0e0e0',
+                                background: '#fff', fontSize: 18, fontWeight: 700, cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}
+                            >-</button>
+                            <span style={{
+                              fontSize: 20, fontWeight: 700, minWidth: 50, textAlign: 'center',
+                              color: currentHrs !== requestedHrs ? '#8b5cf6' : 'var(--text-primary)',
+                            }}>{currentHrs}h</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setAdjustedHours(prev => ({ ...prev, [a.id]: (prev[a.id] ?? requestedHrs) + 0.5 })) }}
+                              style={{
+                                width: 36, height: 36, borderRadius: 10, border: '1px solid #e0e0e0',
+                                background: '#fff', fontSize: 18, fontWeight: 700, cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}
+                            >+</button>
+                            {currentHrs !== requestedHrs && (
+                              <span style={{ fontSize: 11, color: '#8b5cf6', fontWeight: 600 }}>
+                                (requested {requestedHrs}h)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                        <button
+                          onClick={() => handleApproval(a.id, 'approved')}
+                          disabled={approvingId === a.id}
+                          style={{
+                            flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+                            background: '#dffd6e', color: '#1a1a1a', fontWeight: 700, fontSize: 14,
+                            cursor: 'pointer', opacity: approvingId === a.id ? 0.5 : 1,
+                          }}
+                        >Approve{currentHrs !== requestedHrs ? ` (${currentHrs}h)` : ''}</button>
+                        <button
+                          onClick={() => handleApproval(a.id, 'rejected')}
+                          disabled={approvingId === a.id}
+                          style={{
+                            flex: 1, padding: '12px 0', borderRadius: 10,
+                            border: '1px solid #ef4444', background: '#fff',
+                            color: '#ef4444', fontWeight: 700, fontSize: 14,
+                            cursor: 'pointer', opacity: approvingId === a.id ? 0.5 : 1,
+                          }}
+                        >Reject</button>
+                      </div>
                     </div>
                   )}
-
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      onClick={() => handleApproval(a.id, 'approved')}
-                      disabled={approvingId === a.id}
-                      style={{
-                        flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
-                        background: '#dffd6e', color: '#1a1a1a', fontWeight: 700, fontSize: 13,
-                        cursor: 'pointer', opacity: approvingId === a.id ? 0.5 : 1,
-                      }}
-                    >Approve</button>
-                    <button
-                      onClick={() => handleApproval(a.id, 'rejected')}
-                      disabled={approvingId === a.id}
-                      style={{
-                        flex: 1, padding: '10px 0', borderRadius: 10,
-                        border: '1px solid #ef4444', background: '#fff',
-                        color: '#ef4444', fontWeight: 700, fontSize: 13,
-                        cursor: 'pointer', opacity: approvingId === a.id ? 0.5 : 1,
-                      }}
-                    >Reject</button>
-                  </div>
                 </div>
               )
             })}
