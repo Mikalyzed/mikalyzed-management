@@ -77,7 +77,7 @@ export default function NotificationBell() {
   }
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} style={{ position: 'relative', overflow: 'visible', zIndex: 999 }}>
       {/* Bell Button */}
       <button
         onClick={() => setOpen(!open)}
@@ -106,7 +106,7 @@ export default function NotificationBell() {
       {/* Dropdown */}
       {open && (
         <div style={{
-          position: 'fixed', top: 60, right: 16,
+          position: 'absolute', top: '100%', left: 0, marginTop: 8,
           width: 340, maxWidth: 'calc(100vw - 32px)', maxHeight: 420, overflowY: 'auto',
           background: '#fff', borderRadius: 14, padding: 0,
           boxShadow: '0 10px 40px rgba(0,0,0,0.15), 0 2px 10px rgba(0,0,0,0.08)',
