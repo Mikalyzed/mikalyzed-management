@@ -265,6 +265,67 @@ function ScheduleModal({ onConfirm, onCancel }: {
   )
 }
 
+/* ── Add Task Modal ── */
+function AddTaskModal({ users, onConfirm, onCancel }: {
+  users: { id: string; name: string }[]
+  onConfirm: (title: string, assigneeId: string | null) => void
+  onCancel: () => void
+}) {
+  const [title, setTitle] = useState('')
+  const [assigneeId, setAssigneeId] = useState('')
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={onCancel}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 }}
+        onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>Add Content Task</h3>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Title</label>
+          <input
+            value={title} onChange={e => setTitle(e.target.value)}
+            placeholder="e.g. Plymouth Roadrunner Reel"
+            autoFocus
+            style={{
+              width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e5ea',
+              fontSize: 14, outline: 'none', boxSizing: 'border-box',
+            }}
+          />
+        </div>
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Assign to</label>
+          <select
+            value={assigneeId} onChange={e => setAssigneeId(e.target.value)}
+            style={{
+              width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e5ea',
+              fontSize: 14, outline: 'none', background: '#fff', boxSizing: 'border-box',
+            }}
+          >
+            <option value="">Unassigned</option>
+            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => title.trim() && onConfirm(title.trim(), assigneeId || null)}
+            disabled={!title.trim()}
+            style={{
+              flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+              background: title.trim() ? '#8b5cf6' : '#e2e5ea',
+              color: title.trim() ? '#fff' : '#999',
+              fontSize: 13, fontWeight: 700, cursor: title.trim() ? 'pointer' : 'default',
+            }}
+          >Add Task</button>
+          <button onClick={onCancel} style={{
+            padding: '10px 20px', borderRadius: 10, border: '1px solid #e8e8e8',
+            background: '#fff', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ContentBoard() {
   const [data, setData] = useState<BoardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -272,6 +333,8 @@ export default function ContentBoard() {
   const [showAllTasks, setShowAllTasks] = useState(false)
   const [userRole, setUserRole] = useState('')
   const [scheduling, setScheduling] = useState<{ id: string; type: 'vehicle' | 'task' } | null>(null)
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([])
 
   const isAdmin = userRole === 'admin'
 
@@ -282,6 +345,7 @@ export default function ContentBoard() {
   useEffect(() => {
     fetchData()
     fetch('/api/auth/me').then(r => r.json()).then(d => { if (d.user) setUserRole(d.user.role) }).catch(() => {})
+    fetch('/api/users').then(r => r.json()).then(d => { if (Array.isArray(d.users || d)) setUsers(d.users || d) }).catch(() => {})
   }, [fetchData])
 
   const toggleTask = async (jobId: string, taskIdx: number) => {
@@ -337,6 +401,15 @@ export default function ContentBoard() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items: [{ id, type, date: null }] }),
     })
+    fetchData()
+  }
+
+  const createTask = async (title: string, assigneeId: string | null) => {
+    await fetch('/api/board-tasks', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, category: 'content', assigneeId }),
+    })
+    setShowAddTask(false)
     fetchData()
   }
 
@@ -403,7 +476,23 @@ export default function ContentBoard() {
 
       {/* Queue: Content to Create */}
       <div style={{ marginBottom: 28 }}>
-        <SectionHeader label="Content to Create" count={data.queuedTasks.length} color="#8b5cf6" />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 4, height: 20, borderRadius: 2, background: '#8b5cf6' }} />
+            <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Content to Create</h2>
+            <span style={{ fontSize: 12, fontWeight: 700, background: '#8b5cf618', color: '#8b5cf6', padding: '2px 10px', borderRadius: 100 }}>{data.queuedTasks.length}</span>
+          </div>
+          {isAdmin && (
+            <button onClick={() => setShowAddTask(true)} style={{
+              padding: '7px 16px', borderRadius: 8, border: 'none',
+              background: '#8b5cf6', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              Add Task
+            </button>
+          )}
+        </div>
         {data.queuedTasks.length === 0 ? (
           <div style={{ background: '#f9fafb', borderRadius: 12, padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No content tasks queued</div>
         ) : (
@@ -455,6 +544,9 @@ export default function ContentBoard() {
           </div>
         </div>
       )}
+
+      {/* Add Task Modal */}
+      {showAddTask && <AddTaskModal users={users} onConfirm={createTask} onCancel={() => setShowAddTask(false)} />}
 
       {/* Schedule Modal */}
       {scheduling && <ScheduleModal onConfirm={confirmSchedule} onCancel={() => setScheduling(null)} />}
