@@ -41,9 +41,34 @@ export async function GET() {
         done: done.length,
       }
 
-      // Top 4: in_progress first, then pending
-      const ordered = [...inProgress, ...pending].slice(0, 4)
+      // Top 5: in_progress first, then pending
+      const ordered = [...inProgress, ...pending].slice(0, 5)
       stageVehicles[stage] = ordered.map(formatJob)
+    }
+
+    // Content-to-create tasks: fill remaining content slots up to 5
+    const contentVehicleCount = stageVehicles['content']?.length || 0
+    if (contentVehicleCount < 5) {
+      const contentTasks = await prisma.task.findMany({
+        where: { category: 'content', status: { not: 'done' } },
+        include: { assignee: { select: { name: true } } },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+        take: 5 - contentVehicleCount,
+      })
+      const taskCards = contentTasks.map(t => ({
+        stockNumber: '',
+        vehicle: t.title,
+        color: null as string | null,
+        assignee: t.assignee?.name || 'Unassigned',
+        estimatedHours: null as number | null,
+        activeSeconds: 0,
+        timerRunning: false,
+        timerStartedAt: null as string | null,
+        stage: 'content',
+        status: t.status === 'in_progress' ? 'in_progress' : 'pending',
+        isTask: true,
+      }))
+      stageVehicles['content'] = [...(stageVehicles['content'] || []), ...taskCards]
     }
 
     // Awaiting parts count

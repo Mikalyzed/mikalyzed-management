@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
 type Vehicle = { id: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null }
@@ -150,42 +150,40 @@ function ActiveTaskCard({ task, onComplete, adminAction }: { task: ContentTask; 
 }
 
 /* ── Queue Vehicle Card ── */
-function QueueVehicleCard({ job, onStart, isAdmin, onSchedule }: {
+function QueueVehicleCard({ job, onStart, isAdmin, onSchedule, index }: {
   job: VehicleJob; onStart: (id: string) => void; isAdmin: boolean
-  onSchedule?: (id: string, type: 'vehicle') => void
+  onSchedule?: (id: string, type: 'vehicle') => void; index?: number
 }) {
   const v = job.vehicle
   const doneCount = job.checklist.filter(c => c.done).length
   return (
     <div style={{
-      background: '#fff', borderRadius: 14, padding: '18px 20px',
-      border: '1px solid #e8e8e8', flex: '1 1 280px', maxWidth: 420,
-      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+      background: '#fff', borderRadius: 12, padding: '14px 18px',
+      border: '1px solid #e8e8e8', display: 'flex', alignItems: 'center', gap: 12,
     }}>
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-          <div>
-            <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>#{v.stockNumber}</p>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-              {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}{v.color ? ` · ${v.color}` : ''}
-            </p>
-          </div>
-          <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: '#94a3b818', color: '#94a3b8', textTransform: 'uppercase' }}>Queued</span>
+      {isAdmin && (
+        <div style={{ cursor: 'grab', color: '#ccc', flexShrink: 0 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-          <span style={{ fontSize: 12, color: job.assignee ? 'var(--text-muted)' : '#f59e0b', fontWeight: job.assignee ? 400 : 600 }}>{job.assignee?.name || 'Unassigned'}</span>
-          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{doneCount}/{job.checklist.length} tasks</span>
-        </div>
+      )}
+      {index !== undefined && (
+        <span style={{ fontSize: 14, fontWeight: 800, color: '#d1d5db', minWidth: 20, textAlign: 'center', flexShrink: 0 }}>{index + 1}</span>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>#{v.stockNumber} — {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}</p>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+          {job.assignee?.name || 'Unassigned'} · {doneCount}/{job.checklist.length} tasks
+        </p>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
         <button onClick={() => onStart(job.id)} style={{
-          padding: '9px 22px', borderRadius: 8, border: 'none',
-          background: '#3b82f6', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+          padding: '7px 16px', borderRadius: 8, border: 'none',
+          background: '#3b82f6', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
         }}>Start</button>
         {isAdmin && onSchedule && (
           <button onClick={() => onSchedule(job.id, 'vehicle')} style={{
-            padding: '9px 22px', borderRadius: 8, border: '1px solid #e8e8e8',
-            background: '#fff', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            padding: '7px 12px', borderRadius: 8, border: '1px solid #e8e8e8',
+            background: '#fff', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
           }}>Schedule</button>
         )}
       </div>
@@ -194,48 +192,47 @@ function QueueVehicleCard({ job, onStart, isAdmin, onSchedule }: {
 }
 
 /* ── Queue Task Card ── */
-function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete }: {
+function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete, index }: {
   task: ContentTask; onStart: (id: string) => void; isAdmin: boolean
-  onSchedule?: (id: string, type: 'task') => void; onDelete?: (id: string) => void
+  onSchedule?: (id: string, type: 'task') => void; onDelete?: (id: string) => void; index?: number
 }) {
   return (
     <div style={{
-      background: '#fff', borderRadius: 14, padding: '18px 20px',
-      border: '1px solid #e8e8e8', flex: '1 1 280px', maxWidth: 420,
-      display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+      background: '#fff', borderRadius: 12, padding: '14px 18px',
+      border: '1px solid #e8e8e8', display: 'flex', alignItems: 'center', gap: 12,
     }}>
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-          <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>{task.title}</p>
-          <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: '#94a3b818', color: '#94a3b8', textTransform: 'uppercase' }}>Queued</span>
+      {isAdmin && (
+        <div style={{ cursor: 'grab', color: '#ccc', flexShrink: 0 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
         </div>
-        {task.description && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{task.description}</p>}
-        <span style={{ fontSize: 12, color: task.assignee ? 'var(--text-muted)' : '#f59e0b', fontWeight: task.assignee ? 400 : 600, display: 'block', marginTop: 8 }}>{task.assignee?.name || 'Unassigned'}</span>
-        <div style={{
-          padding: '6px 10px', borderRadius: 8, background: '#faf5ff',
-          border: '1px solid #f0f0f0', marginTop: 8, fontSize: 12, color: 'var(--text-muted)',
-          display: 'flex', alignItems: 'center', gap: 6,
-        }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round"><path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" /></svg>
-          Reel for social media
+      )}
+      {index !== undefined && (
+        <span style={{ fontSize: 14, fontWeight: 800, color: '#d1d5db', minWidth: 20, textAlign: 'center', flexShrink: 0 }}>{index + 1}</span>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{task.title}</p>
+          <span style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 600, background: '#faf5ff', padding: '2px 8px', borderRadius: 6 }}>Reel</span>
         </div>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+          {task.assignee?.name || 'Unassigned'}
+        </p>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
         <button onClick={() => onStart(task.id)} style={{
-          padding: '9px 22px', borderRadius: 8, border: 'none',
-          background: '#8b5cf6', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+          padding: '7px 16px', borderRadius: 8, border: 'none',
+          background: '#8b5cf6', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
         }}>Start</button>
         {isAdmin && onSchedule && (
           <button onClick={() => onSchedule(task.id, 'task')} style={{
-            padding: '9px 22px', borderRadius: 8, border: '1px solid #e8e8e8',
-            background: '#fff', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            padding: '7px 12px', borderRadius: 8, border: '1px solid #e8e8e8',
+            background: '#fff', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
           }}>Schedule</button>
         )}
         {isAdmin && onDelete && (
           <button onClick={() => { if (confirm('Remove this task?')) onDelete(task.id) }} style={{
-            padding: '9px 16px', borderRadius: 8, border: '1px solid #fecaca',
+            padding: '7px 10px', borderRadius: 8, border: '1px solid #fecaca',
             background: '#fff', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            marginLeft: 'auto',
           }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
@@ -363,6 +360,8 @@ export default function ContentBoard() {
   const [scheduling, setScheduling] = useState<{ id: string; type: 'vehicle' | 'task' } | null>(null)
   const [showAddTask, setShowAddTask] = useState(false)
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
+  const dragItem = useRef<number | null>(null)
+  const dragOver = useRef<number | null>(null)
 
   const isAdmin = userRole === 'admin'
 
@@ -432,6 +431,30 @@ export default function ContentBoard() {
     fetchData()
   }
 
+  const reorderVehicles = async (fromIdx: number, toIdx: number) => {
+    if (!data) return
+    const reordered = [...data.queuedVehicles]
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    setData({ ...data, queuedVehicles: reordered })
+    await fetch('/api/stages/reorder', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage: 'content', orderedIds: reordered.map(v => v.vehicleId) }),
+    })
+  }
+
+  const reorderTasks = async (fromIdx: number, toIdx: number) => {
+    if (!data) return
+    const reordered = [...data.queuedTasks]
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    setData({ ...data, queuedTasks: reordered })
+    await fetch('/api/board-tasks/reorder', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderedIds: reordered.map(t => t.id) }),
+    })
+  }
+
   const deleteTask = async (id: string) => {
     await fetch(`/api/board-tasks/${id}`, { method: 'DELETE' })
     fetchData()
@@ -493,8 +516,19 @@ export default function ContentBoard() {
           <div style={{ background: '#f9fafb', borderRadius: 12, padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No recon vehicles waiting</div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-              {visibleVehicles.map(job => <QueueVehicleCard key={job.id} job={job} onStart={startVehicle} isAdmin={isAdmin} onSchedule={openSchedule} />)}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {visibleVehicles.map((job, idx) => (
+                <div key={job.id}
+                  draggable={isAdmin}
+                  onDragStart={() => { dragItem.current = idx }}
+                  onDragEnter={() => { dragOver.current = idx }}
+                  onDragEnd={() => { if (dragItem.current !== null && dragOver.current !== null && dragItem.current !== dragOver.current) reorderVehicles(dragItem.current, dragOver.current); dragItem.current = null; dragOver.current = null }}
+                  onDragOver={e => e.preventDefault()}
+                  style={{ cursor: isAdmin ? 'grab' : 'default' }}
+                >
+                  <QueueVehicleCard job={job} onStart={startVehicle} isAdmin={isAdmin} onSchedule={openSchedule} index={idx} />
+                </div>
+              ))}
             </div>
             {!showAllVehicles && hiddenVehicles > 0 && (
               <button onClick={() => setShowAllVehicles(true)} style={{
@@ -530,8 +564,19 @@ export default function ContentBoard() {
           <div style={{ background: '#f9fafb', borderRadius: 12, padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No content tasks queued</div>
         ) : (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-              {visibleTasks.map(task => <QueueTaskCard key={task.id} task={task} onStart={startTask} isAdmin={isAdmin} onSchedule={openSchedule} onDelete={deleteTask} />)}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {visibleTasks.map((task, idx) => (
+                <div key={task.id}
+                  draggable={isAdmin}
+                  onDragStart={() => { dragItem.current = idx }}
+                  onDragEnter={() => { dragOver.current = idx }}
+                  onDragEnd={() => { if (dragItem.current !== null && dragOver.current !== null && dragItem.current !== dragOver.current) reorderTasks(dragItem.current, dragOver.current); dragItem.current = null; dragOver.current = null }}
+                  onDragOver={e => e.preventDefault()}
+                  style={{ cursor: isAdmin ? 'grab' : 'default' }}
+                >
+                  <QueueTaskCard task={task} onStart={startTask} isAdmin={isAdmin} onSchedule={openSchedule} onDelete={deleteTask} index={idx} />
+                </div>
+              ))}
             </div>
             {!showAllTasks && hiddenTasks > 0 && (
               <button onClick={() => setShowAllTasks(true)} style={{

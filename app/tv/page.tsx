@@ -6,7 +6,7 @@ type PipelineStage = { total: number; inProgress: number; pending: number; done:
 type StageVehicle = {
   stockNumber: string; vehicle: string; color: string | null; assignee: string
   estimatedHours: number | null; activeSeconds: number; timerRunning: boolean
-  timerStartedAt: string | null; stage: string; status: string
+  timerStartedAt: string | null; stage: string; status: string; isTask?: boolean
 }
 type CompletedItem = { stockNumber: string; vehicle: string; stage: string; assignee: string | null; completedAt: string }
 type TVData = {
@@ -89,7 +89,11 @@ function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
           <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100, background: '#33333380', color: '#666' }}>QUEUED</span>
         )}
       </div>
-      <p style={{ fontSize: 12, color: '#666', margin: '0 0 2px' }}>#{job.stockNumber}{job.color ? ` · ${job.color}` : ''}</p>
+      {job.stockNumber ? (
+        <p style={{ fontSize: 12, color: '#666', margin: '0 0 2px' }}>#{job.stockNumber}{job.color ? ` · ${job.color}` : ''}</p>
+      ) : (
+        <p style={{ fontSize: 11, color: '#8b5cf6', margin: '0 0 2px', fontWeight: 600 }}>Content Task</p>
+      )}
       <p style={{ fontSize: 11, color: '#555', margin: 0 }}>{job.assignee}</p>
       {isMechanic && (isActive || isPaused) && <LiveTimer job={job} color={color} />}
     </div>
@@ -262,8 +266,8 @@ export default function TVBoard() {
 
               {/* Vehicle cards under this stage */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-                {vehicles.length > 0 ? vehicles.map(job => (
-                  <VehicleCard key={job.stockNumber} job={job} color={color} />
+                {vehicles.length > 0 ? vehicles.map((job, idx) => (
+                  <VehicleCard key={job.stockNumber || `task-${idx}`} job={job} color={color} />
                 )) : (
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 60 }}>
                     <p style={{ color: '#2a2a2a', fontSize: 13, fontStyle: 'italic', margin: 0 }}>No active vehicles</p>
