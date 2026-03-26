@@ -29,6 +29,7 @@ type DashboardData = {
   }>
   pendingApprovals: Array<{
     id: string; taskName: string; additionalHours: number | null; status: string; createdAt: string
+    tasks: Array<{ name: string; hours: number; note: string | null }> | null
     vehicleStage: {
       id: string; stage: string
       vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string }
@@ -323,6 +324,7 @@ function AddButton() {
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [approvingId, setApprovingId] = useState<string | null>(null)
+  const [expandedApproval, setExpandedApproval] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/dashboard').then(r => r.json()).then(setData).catch(console.error)
@@ -406,6 +408,8 @@ export default function DashboardPage() {
             {data.pendingApprovals.map(a => {
               const v = a.vehicleStage.vehicle
               const desc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
+              const hasTasks = a.tasks && Array.isArray(a.tasks) && a.tasks.length > 0
+              const isExpanded = expandedApproval === a.id
               return (
                 <div key={a.id} className="card" style={{ padding: '16px 20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
@@ -419,7 +423,35 @@ export default function DashboardPage() {
                         {a.additionalHours ? ` · +${a.additionalHours}h` : ''}
                       </p>
                     </div>
+                    {hasTasks && (
+                      <button onClick={() => setExpandedApproval(isExpanded ? null : a.id)} style={{
+                        background: 'none', border: '1px solid #e8e8e8', borderRadius: 8,
+                        padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        color: 'var(--text-secondary)',
+                      }}>{isExpanded ? 'Hide' : 'View'}</button>
+                    )}
                   </div>
+
+                  {/* Expanded task details */}
+                  {isExpanded && hasTasks && (
+                    <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {(a.tasks as Array<{ name: string; hours: number; note: string | null }>).map((t, i) => (
+                        <div key={i} style={{
+                          background: '#f9fafb', borderRadius: 10, padding: '10px 14px',
+                          border: '1px solid #f0f0f0',
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: 13, fontWeight: 600 }}>{t.name}</span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: '#8b5cf6' }}>+{t.hours}h</span>
+                          </div>
+                          {t.note && (
+                            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0', fontStyle: 'italic' }}>{t.note}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
                       onClick={() => handleApproval(a.id, 'approved')}

@@ -217,11 +217,13 @@ model TaskApproval {
   vehicleStage    VehicleStage @relation(fields: [vehicleStageId], references: [id], onDelete: Cascade)
   taskName        String    @map("task_name")
   additionalHours Float?    @map("additional_hours")
+  tasks           Json?     @default("[]")
   requestedById   String    @map("requested_by_id")
   requestedBy     User      @relation(fields: [requestedById], references: [id])
   status          String    @default("pending")
   reviewedById    String?   @map("reviewed_by_id")
   reviewedAt      DateTime? @map("reviewed_at")
+  adminNote       String?   @map("admin_note")
   createdAt       DateTime  @default(now()) @map("created_at")
 
   @@map("task_approvals")

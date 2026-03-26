@@ -70,8 +70,7 @@ export default function MechanicBoard() {
   const [timeExtNote, setTimeExtNote] = useState('')
   const [timeExtSubmitting, setTimeExtSubmitting] = useState(false)
   const [addTaskJob, setAddTaskJob] = useState<JobCard | null>(null)
-  const [addTaskName, setAddTaskName] = useState('')
-  const [addTaskHours, setAddTaskHours] = useState('')
+  const [addTaskItems, setAddTaskItems] = useState<{ name: string; hours: string; note: string }[]>([{ name: '', hours: '', note: '' }])
   const [addTaskSubmitting, setAddTaskSubmitting] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -736,80 +735,154 @@ export default function MechanicBoard() {
       )}
 
       {/* Add Task Modal */}
-      {addTaskJob && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-        }} onClick={() => { setAddTaskJob(null); setAddTaskName(''); setAddTaskHours('') }}>
-          <div onClick={e => e.stopPropagation()} style={{
-            background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-          }}>
-            <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Add Task</p>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-              #{addTaskJob.vehicle.stockNumber} — {`${addTaskJob.vehicle.year ?? ''} ${addTaskJob.vehicle.make} ${addTaskJob.vehicle.model}`.trim()}
-            </p>
+      {addTaskJob && (() => {
+        const validTasks = addTaskItems.filter(t => t.name.trim() && t.hours)
+        const totalHours = validTasks.reduce((sum, t) => sum + parseFloat(t.hours || '0'), 0)
+        const updateItem = (idx: number, field: string, val: string) => {
+          const updated = [...addTaskItems]
+          updated[idx] = { ...updated[idx], [field]: val }
+          setAddTaskItems(updated)
+        }
+        const removeItem = (idx: number) => {
+          if (addTaskItems.length <= 1) return
+          setAddTaskItems(addTaskItems.filter((_, i) => i !== idx))
+        }
+        const resetModal = () => { setAddTaskJob(null); setAddTaskItems([{ name: '', hours: '', note: '' }]) }
 
-            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Task description</label>
-            <input
-              type="text" value={addTaskName} onChange={e => setAddTaskName(e.target.value)}
-              placeholder="e.g. Replace brake pads"
-              autoFocus
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea',
-                fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 12, boxSizing: 'border-box',
-              }}
-            />
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }} onClick={resetModal}>
+            <div onClick={e => e.stopPropagation()} style={{
+              background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '85vh', overflowY: 'auto',
+            }}>
+              <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Add Tasks</p>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+                #{addTaskJob.vehicle.stockNumber} — {`${addTaskJob.vehicle.year ?? ''} ${addTaskJob.vehicle.make} ${addTaskJob.vehicle.model}`.trim()}
+              </p>
 
-            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Estimated hours needed</label>
-            <input
-              type="number" step="0.5" min="0.5"
-              value={addTaskHours} onChange={e => setAddTaskHours(e.target.value)}
-              placeholder="e.g. 1.5"
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea',
-                fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 20, boxSizing: 'border-box',
-              }}
-            />
+              {addTaskItems.map((item, idx) => (
+                <div key={idx} style={{
+                  background: '#f9fafb', borderRadius: 12, padding: '14px 14px 10px', marginBottom: 10,
+                  border: '1px solid #e8e8e8', position: 'relative',
+                }}>
+                  {addTaskItems.length > 1 && (
+                    <button onClick={() => removeItem(idx)} style={{
+                      position: 'absolute', top: 8, right: 8, background: 'none', border: 'none',
+                      cursor: 'pointer', color: '#ccc', padding: 4,
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                    </button>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>Task</label>
+                      <input
+                        type="text" value={item.name} onChange={e => updateItem(idx, 'name', e.target.value)}
+                        placeholder="e.g. Replace brake pads"
+                        autoFocus={idx === 0}
+                        style={{
+                          width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e5ea',
+                          fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                    <div style={{ width: 80, flexShrink: 0 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>Hours</label>
+                      <input
+                        type="number" step="0.5" min="0.5" value={item.hours}
+                        onChange={e => updateItem(idx, 'hours', e.target.value)}
+                        placeholder="1.5"
+                        style={{
+                          width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e5ea',
+                          fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>Note (optional)</label>
+                    <input
+                      type="text" value={item.note} onChange={e => updateItem(idx, 'note', e.target.value)}
+                      placeholder="Additional details..."
+                      style={{
+                        width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #e2e5ea',
+                        fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
 
-            <div style={{ display: 'flex', gap: 10 }}>
+              {/* Add another task */}
               <button
-                onClick={() => { setAddTaskJob(null); setAddTaskName(''); setAddTaskHours('') }}
+                onClick={() => setAddTaskItems([...addTaskItems, { name: '', hours: '', note: '' }])}
                 style={{
+                  width: '100%', padding: '10px 0', borderRadius: 10, border: '1px dashed #d1d5db',
+                  background: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  color: '#8b5cf6', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                Add another task
+              </button>
+
+              {/* Summary */}
+              {validTasks.length > 0 && (
+                <div style={{
+                  background: '#faf5ff', borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+                  border: '1px solid #e9d5ff', display: 'flex', justifyContent: 'space-between',
+                  fontSize: 13, fontWeight: 600,
+                }}>
+                  <span>{validTasks.length} task{validTasks.length !== 1 ? 's' : ''}</span>
+                  <span style={{ color: '#8b5cf6' }}>+{totalHours}h total</span>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={resetModal} style={{
                   flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #e2e5ea',
                   background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
-                }}
-              >Cancel</button>
-              <button
-                disabled={!addTaskName.trim() || !addTaskHours || addTaskSubmitting}
-                onClick={async () => {
-                  setAddTaskSubmitting(true)
-                  try {
-                    await fetch('/api/task-approvals', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        vehicleStageId: addTaskJob.id,
-                        taskName: addTaskName.trim(),
-                        additionalHours: parseFloat(addTaskHours),
-                      }),
-                    })
-                    setAddTaskJob(null); setAddTaskName(''); setAddTaskHours('')
-                    fetchData()
-                  } catch { /* ignore */ }
-                  setAddTaskSubmitting(false)
-                }}
-                style={{
-                  flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
-                  background: (!addTaskName.trim() || !addTaskHours) ? '#e2e5ea' : '#8b5cf6', color: '#fff',
-                  fontSize: 14, fontWeight: 700, cursor: (addTaskName.trim() && addTaskHours) ? 'pointer' : 'default',
-                  opacity: addTaskSubmitting ? 0.6 : 1,
-                }}
-              >{addTaskSubmitting ? 'Sending...' : 'Submit for Approval'}</button>
+                }}>Cancel</button>
+                <button
+                  disabled={validTasks.length === 0 || addTaskSubmitting}
+                  onClick={async () => {
+                    setAddTaskSubmitting(true)
+                    try {
+                      const taskList = validTasks.map(t => ({
+                        name: t.name.trim(),
+                        hours: parseFloat(t.hours),
+                        note: t.note.trim() || null,
+                      }))
+                      await fetch('/api/task-approvals', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          vehicleStageId: addTaskJob.id,
+                          taskName: taskList.length === 1 ? taskList[0].name : `${taskList.length} new tasks`,
+                          additionalHours: totalHours,
+                          tasks: taskList,
+                        }),
+                      })
+                      resetModal()
+                      fetchData()
+                    } catch { /* ignore */ }
+                    setAddTaskSubmitting(false)
+                  }}
+                  style={{
+                    flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+                    background: validTasks.length === 0 ? '#e2e5ea' : '#8b5cf6', color: '#fff',
+                    fontSize: 14, fontWeight: 700, cursor: validTasks.length > 0 ? 'pointer' : 'default',
+                    opacity: addTaskSubmitting ? 0.6 : 1,
+                  }}
+                >{addTaskSubmitting ? 'Sending...' : 'Submit for Approval'}</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

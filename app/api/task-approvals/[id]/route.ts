@@ -26,30 +26,40 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (status === 'approved') {
     const isTimeExtension = approval.taskName.startsWith('Time extension:')
+    const tasks = (approval.tasks as Array<{ name: string; hours: number; note: string | null }>) || []
+    const hasMultiTasks = tasks.length > 0
     const updateData: Record<string, unknown> = {}
     
-    // Time extensions only add hours, not checklist items
+    // Add tasks to checklist
     if (!isTimeExtension) {
       const currentChecklist = (approval.vehicleStage.checklist as { item: string; done: boolean; note: string }[]) || []
-      updateData.checklist = [...currentChecklist, { item: approval.taskName, done: false, note: '' }]
+      if (hasMultiTasks) {
+        const newItems = tasks.map(t => ({ item: t.name, done: false, note: t.note || '' }))
+        updateData.checklist = [...currentChecklist, ...newItems]
+      } else {
+        updateData.checklist = [...currentChecklist, { item: approval.taskName, done: false, note: '' }]
+      }
     }
     if (approval.additionalHours && approval.additionalHours > 0) {
       updateData.estimatedHours = (approval.vehicleStage.estimatedHours || 0) + approval.additionalHours
     }
     await prisma.vehicleStage.update({ where: { id: approval.vehicleStageId }, data: updateData })
 
-    // Log activity on the vehicle
+    const actionDesc = isTimeExtension
+      ? `Time extended +${approval.additionalHours}h${approval.taskName.includes('—') ? ` — ${approval.taskName.split('—').slice(1).join('—').trim()}` : ''}`
+      : hasMultiTasks
+        ? `${tasks.length} tasks approved: ${tasks.map(t => t.name).join(', ')}`
+        : `Task approved: ${approval.taskName}`
+
     await prisma.activityLog.create({
       data: {
         entityType: 'vehicle',
         entityId: approval.vehicleStage.vehicleId,
-        action: isTimeExtension
-          ? `Time extended +${approval.additionalHours}h${approval.taskName.includes('—') ? ` — ${approval.taskName.split('—').slice(1).join('—').trim()}` : ''}`
-          : `Task approved: ${approval.taskName}`,
+        action: actionDesc,
         actorId: user.id,
         details: isTimeExtension
           ? { type: 'time_extension', hours: approval.additionalHours, stage: approval.vehicleStage.stage }
-          : { type: 'task_approval', task: approval.taskName },
+          : { type: 'task_approval', tasks: hasMultiTasks ? tasks : [{ name: approval.taskName }] },
       },
     })
 

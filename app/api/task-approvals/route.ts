@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { vehicleStageId, taskName, additionalHours } = await request.json()
+  const { vehicleStageId, taskName, additionalHours, tasks } = await request.json()
   if (!vehicleStageId || !taskName) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
@@ -45,6 +45,7 @@ export async function POST(request: Request) {
       vehicleStageId,
       taskName,
       additionalHours: additionalHours || null,
+      tasks: tasks && tasks.length > 0 ? tasks : undefined,
       requestedById: user.id,
       status: autoApprove ? 'approved' : 'pending',
       reviewedAt: autoApprove ? new Date() : null,
