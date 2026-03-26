@@ -2,8 +2,6 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 
-const MAX_TODAY = 3 // Default vehicles for today's batch
-
 export async function GET() {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -22,7 +20,7 @@ export async function GET() {
     orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
   })
 
-  // Completed today
+  // Completed today (vehicles)
   const completedToday = await prisma.vehicleStage.findMany({
     where: { stage: 'content', status: 'done', completedAt: { gte: todayStart } },
     include: {
@@ -32,16 +30,30 @@ export async function GET() {
     orderBy: { completedAt: 'desc' },
   })
 
-  // Split: in_progress first, then pending
-  const inProgress = stages.filter(s => s.status === 'in_progress')
-  const pending = stages.filter(s => s.status === 'pending')
+  // Standalone content tasks (not done)
+  const contentTasks = await prisma.task.findMany({
+    where: { category: 'content', status: { not: 'done' } },
+    include: {
+      assignee: { select: { id: true, name: true } },
+    },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+  })
 
-  // Today = all in_progress + top pending to fill up to MAX_TODAY
-  const todaySlots = Math.max(0, MAX_TODAY - inProgress.length)
-  const todayPending = pending.slice(0, todaySlots)
-  const queue = pending.slice(todaySlots)
+  // Completed content tasks today
+  const completedTasks = await prisma.task.findMany({
+    where: { category: 'content', status: 'done', updatedAt: { gte: todayStart } },
+    include: {
+      assignee: { select: { id: true, name: true } },
+    },
+    orderBy: { updatedAt: 'desc' },
+  })
 
-  const format = (s: typeof stages[number]) => ({
+  const active = stages.filter(s => s.status === 'in_progress')
+  const activeTasks = contentTasks.filter(t => t.status === 'in_progress')
+  const queuedVehicles = stages.filter(s => s.status === 'pending')
+  const queuedTasks = contentTasks.filter(t => t.status === 'todo')
+
+  const formatStage = (s: typeof stages[number]) => ({
     id: s.id,
     vehicleId: s.vehicle.id,
     vehicle: s.vehicle,
@@ -49,16 +61,29 @@ export async function GET() {
     status: s.status,
     checklist: s.checklist as { item: string; done: boolean; note: string }[],
     priority: s.priority,
+    type: 'vehicle' as const,
+  })
+
+  const formatTask = (t: typeof contentTasks[number]) => ({
+    id: t.id,
+    title: t.title,
+    description: t.description,
+    assignee: t.assignee,
+    status: t.status,
+    type: 'task' as const,
   })
 
   return NextResponse.json({
-    today: [...inProgress, ...todayPending].map(format),
-    queue: queue.map(format),
-    completedToday: completedToday.map(format),
+    active: active.map(formatStage),
+    activeTasks: activeTasks.map(formatTask),
+    queuedVehicles: queuedVehicles.map(formatStage),
+    queuedTasks: queuedTasks.map(formatTask),
+    completedToday: completedToday.map(formatStage),
+    completedTasks: completedTasks.map(formatTask),
     stats: {
-      total: stages.length,
-      inProgress: inProgress.length,
-      completedToday: completedToday.length,
+      total: stages.length + contentTasks.length,
+      inProgress: active.length + activeTasks.length,
+      completedToday: completedToday.length + completedTasks.length,
     },
   })
 }
