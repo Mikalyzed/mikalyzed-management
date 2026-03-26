@@ -51,8 +51,7 @@ const ICON_MAP: Record<string, string> = {
   '/team': 'team',
   '/settings': 'settings',
   '/tasks': 'tasks',
-  '/task-board': 'tasks',
-  '/content-schedule-2': 'tasks',
+  '/content-schedule': 'tasks',
   '/mechanic-schedule': 'calendar',
 }
 
@@ -77,8 +76,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
         { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
       ],
     },
-    { href: '/task-board', label: 'Content Schedule', icon: 'tasks' },
-    { href: '/content-schedule-2', label: 'Content Board', icon: 'tasks' },
+    { href: '/content-schedule', label: 'Content Board', icon: 'tasks' },
     { href: '/mechanic-schedule', label: 'Mechanic Schedule', icon: 'calendar' },
     { href: '/external', label: 'External Repairs', icon: 'external' },
     { href: '/calendar', label: 'Calendar', icon: 'calendar' },
@@ -103,8 +101,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { href: '/tasks', label: 'My Tasks', icon: 'tasks' },
     { href: '/vehicles', label: 'Board', icon: 'board' },
-    { href: '/task-board', label: 'Content Schedule', icon: 'tasks' },
-    { href: '/content-schedule-2', label: 'Content Board', icon: 'tasks' },
+    { href: '/content-schedule', label: 'Content Board', icon: 'tasks' },
   ],
   sales: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },

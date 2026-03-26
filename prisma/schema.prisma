@@ -101,6 +101,7 @@ model VehicleStage {
   timerStartedAt      DateTime? @map("timer_started_at")
   autoPaused          Boolean   @default(false) @map("auto_paused")
   pauseDetail         String?   @map("pause_detail")
+  scheduledDate       DateTime? @map("scheduled_date")
   createdAt           DateTime  @default(now()) @map("created_at")
 
   vehicle             Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
@@ -235,11 +236,12 @@ model Task {
   priority    Int       @default(0) // 0=normal, 1=high, 2=urgent
   assigneeId  String?   @map("assignee_id")
   createdById String    @map("created_by_id")
-  dueDate     DateTime? @map("due_date")
-  completedAt DateTime? @map("completed_at")
-  sortOrder   Int       @default(0) @map("sort_order")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  dueDate       DateTime? @map("due_date")
+  scheduledDate DateTime? @map("scheduled_date")
+  completedAt   DateTime? @map("completed_at")
+  sortOrder     Int       @default(0) @map("sort_order")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   assignee    User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
   createdBy   User      @relation("TaskCreator", fields: [createdById], references: [id])

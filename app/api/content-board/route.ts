@@ -2,13 +2,17 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 
+function todayET(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+}
+
 export async function GET() {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const now = new Date()
-  const todayStart = new Date(now)
-  todayStart.setHours(0, 0, 0, 0)
+  const today = todayET()
+  const todayStart = new Date(today + 'T00:00:00-04:00')
+  const todayEnd = new Date(today + 'T23:59:59-04:00')
 
   // All content stages not done
   const stages = await prisma.vehicleStage.findMany({
@@ -33,56 +37,53 @@ export async function GET() {
   // Standalone content tasks (not done)
   const contentTasks = await prisma.task.findMany({
     where: { category: 'content', status: { not: 'done' } },
-    include: {
-      assignee: { select: { id: true, name: true } },
-    },
+    include: { assignee: { select: { id: true, name: true } } },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
   })
 
   // Completed content tasks today
   const completedTasks = await prisma.task.findMany({
     where: { category: 'content', status: 'done', updatedAt: { gte: todayStart } },
-    include: {
-      assignee: { select: { id: true, name: true } },
-    },
+    include: { assignee: { select: { id: true, name: true } } },
     orderBy: { updatedAt: 'desc' },
   })
 
-  const active = stages.filter(s => s.status === 'in_progress')
-  const activeTasks = contentTasks.filter(t => t.status === 'in_progress')
-  const queuedVehicles = stages.filter(s => s.status === 'pending')
-  const queuedTasks = contentTasks.filter(t => t.status === 'todo')
+  // Today = in_progress OR scheduledDate is today
+  const isScheduledToday = (d: Date | null) => {
+    if (!d) return false
+    const s = d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+    return s === today
+  }
+
+  const todayVehicles = stages.filter(s => s.status === 'in_progress' || isScheduledToday(s.scheduledDate))
+  const queuedVehicles = stages.filter(s => s.status !== 'in_progress' && !isScheduledToday(s.scheduledDate))
+
+  const todayTasks = contentTasks.filter(t => t.status === 'in_progress' || isScheduledToday(t.scheduledDate))
+  const queuedTasks = contentTasks.filter(t => t.status !== 'in_progress' && !isScheduledToday(t.scheduledDate))
 
   const formatStage = (s: typeof stages[number]) => ({
-    id: s.id,
-    vehicleId: s.vehicle.id,
-    vehicle: s.vehicle,
-    assignee: s.assignee,
-    status: s.status,
+    id: s.id, vehicleId: s.vehicle.id, vehicle: s.vehicle,
+    assignee: s.assignee, status: s.status,
     checklist: s.checklist as { item: string; done: boolean; note: string }[],
-    priority: s.priority,
-    type: 'vehicle' as const,
+    priority: s.priority, scheduledDate: s.scheduledDate, type: 'vehicle' as const,
   })
 
   const formatTask = (t: typeof contentTasks[number]) => ({
-    id: t.id,
-    title: t.title,
-    description: t.description,
-    assignee: t.assignee,
-    status: t.status,
-    type: 'task' as const,
+    id: t.id, title: t.title, description: t.description,
+    assignee: t.assignee, status: t.status,
+    scheduledDate: t.scheduledDate, type: 'task' as const,
   })
 
   return NextResponse.json({
-    active: active.map(formatStage),
-    activeTasks: activeTasks.map(formatTask),
+    today: todayVehicles.map(formatStage),
+    todayTasks: todayTasks.map(formatTask),
     queuedVehicles: queuedVehicles.map(formatStage),
     queuedTasks: queuedTasks.map(formatTask),
     completedToday: completedToday.map(formatStage),
     completedTasks: completedTasks.map(formatTask),
     stats: {
       total: stages.length + contentTasks.length,
-      inProgress: active.length + activeTasks.length,
+      todayCount: todayVehicles.length + todayTasks.length,
       completedToday: completedToday.length + completedTasks.length,
     },
   })
