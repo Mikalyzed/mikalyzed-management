@@ -183,9 +183,9 @@ function QueueVehicleCard({ job, onStart, isAdmin, onSchedule }: {
 }
 
 /* ── Queue Task Card ── */
-function QueueTaskCard({ task, onStart, isAdmin, onSchedule }: {
+function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete }: {
   task: ContentTask; onStart: (id: string) => void; isAdmin: boolean
-  onSchedule?: (id: string, type: 'task') => void
+  onSchedule?: (id: string, type: 'task') => void; onDelete?: (id: string) => void
 }) {
   return (
     <div style={{
@@ -211,6 +211,15 @@ function QueueTaskCard({ task, onStart, isAdmin, onSchedule }: {
             padding: '9px 22px', borderRadius: 8, border: '1px solid #e8e8e8',
             background: '#fff', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
           }}>Schedule</button>
+        )}
+        {isAdmin && onDelete && (
+          <button onClick={() => { if (confirm('Remove this task?')) onDelete(task.id) }} style={{
+            padding: '9px 16px', borderRadius: 8, border: '1px solid #fecaca',
+            background: '#fff', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            marginLeft: 'auto',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
         )}
       </div>
     </div>
@@ -404,6 +413,11 @@ export default function ContentBoard() {
     fetchData()
   }
 
+  const deleteTask = async (id: string) => {
+    await fetch(`/api/board-tasks/${id}`, { method: 'DELETE' })
+    fetchData()
+  }
+
   const createTask = async (title: string, assigneeId: string | null) => {
     await fetch('/api/board-tasks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -498,7 +512,7 @@ export default function ContentBoard() {
         ) : (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-              {visibleTasks.map(task => <QueueTaskCard key={task.id} task={task} onStart={startTask} isAdmin={isAdmin} onSchedule={openSchedule} />)}
+              {visibleTasks.map(task => <QueueTaskCard key={task.id} task={task} onStart={startTask} isAdmin={isAdmin} onSchedule={openSchedule} onDelete={deleteTask} />)}
             </div>
             {!showAllTasks && hiddenTasks > 0 && (
               <button onClick={() => setShowAllTasks(true)} style={{
