@@ -69,6 +69,10 @@ export default function MechanicBoard() {
   const [timeExtHours, setTimeExtHours] = useState('')
   const [timeExtNote, setTimeExtNote] = useState('')
   const [timeExtSubmitting, setTimeExtSubmitting] = useState(false)
+  const [addTaskJob, setAddTaskJob] = useState<JobCard | null>(null)
+  const [addTaskName, setAddTaskName] = useState('')
+  const [addTaskHours, setAddTaskHours] = useState('')
+  const [addTaskSubmitting, setAddTaskSubmitting] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchData = useCallback(() => {
@@ -308,6 +312,9 @@ export default function MechanicBoard() {
             )}
             {isOver && (
               <ActionBtn label="Request More Time" color="#ef4444" disabled={acting} onClick={() => setTimeExtJob(job)} />
+            )}
+            {job.status === 'in_progress' && (
+              <ActionBtn label="Add Task" color="#8b5cf6" disabled={acting} onClick={() => setAddTaskJob(job)} />
             )}
           </div>
         )}
@@ -723,6 +730,82 @@ export default function MechanicBoard() {
                   opacity: timeExtSubmitting ? 0.6 : 1,
                 }}
               >{timeExtSubmitting ? 'Sending...' : 'Send Request'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Task Modal */}
+      {addTaskJob && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }} onClick={() => { setAddTaskJob(null); setAddTaskName(''); setAddTaskHours('') }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+          }}>
+            <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Add Task</p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              #{addTaskJob.vehicle.stockNumber} — {`${addTaskJob.vehicle.year ?? ''} ${addTaskJob.vehicle.make} ${addTaskJob.vehicle.model}`.trim()}
+            </p>
+
+            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Task description</label>
+            <input
+              type="text" value={addTaskName} onChange={e => setAddTaskName(e.target.value)}
+              placeholder="e.g. Replace brake pads"
+              autoFocus
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea',
+                fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 12, boxSizing: 'border-box',
+              }}
+            />
+
+            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Estimated hours needed</label>
+            <input
+              type="number" step="0.5" min="0.5"
+              value={addTaskHours} onChange={e => setAddTaskHours(e.target.value)}
+              placeholder="e.g. 1.5"
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea',
+                fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 20, boxSizing: 'border-box',
+              }}
+            />
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setAddTaskJob(null); setAddTaskName(''); setAddTaskHours('') }}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #e2e5ea',
+                  background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
+                }}
+              >Cancel</button>
+              <button
+                disabled={!addTaskName.trim() || !addTaskHours || addTaskSubmitting}
+                onClick={async () => {
+                  setAddTaskSubmitting(true)
+                  try {
+                    await fetch('/api/task-approvals', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        vehicleStageId: addTaskJob.id,
+                        taskName: addTaskName.trim(),
+                        additionalHours: parseFloat(addTaskHours),
+                      }),
+                    })
+                    setAddTaskJob(null); setAddTaskName(''); setAddTaskHours('')
+                    fetchData()
+                  } catch { /* ignore */ }
+                  setAddTaskSubmitting(false)
+                }}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+                  background: (!addTaskName.trim() || !addTaskHours) ? '#e2e5ea' : '#8b5cf6', color: '#fff',
+                  fontSize: 14, fontWeight: 700, cursor: (addTaskName.trim() && addTaskHours) ? 'pointer' : 'default',
+                  opacity: addTaskSubmitting ? 0.6 : 1,
+                }}
+              >{addTaskSubmitting ? 'Sending...' : 'Submit for Approval'}</button>
             </div>
           </div>
         </div>
