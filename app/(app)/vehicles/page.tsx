@@ -82,6 +82,10 @@ export default function VehiclesPage() {
     teamMembers: { id: string; name: string }[]
     saving: boolean
   } | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; stockNumber: string; desc: string } | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [externalModal, setExternalModal] = useState<{ vehicleId: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null; stageId: string | null } | null>(null)
+  const [externalSubmitting, setExternalSubmitting] = useState(false)
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null)
   const didDrag = useRef(false)
   useEffect(() => {
@@ -736,12 +740,206 @@ export default function VehiclesPage() {
                     >
                       {advancing ? 'Advancing...' : allDone ? 'Advance Stage' : 'Complete all tasks to advance'}
                     </button>
+
+                    {/* Admin actions */}
+                    {isAdmin && (
+                      <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                        <button
+                          onClick={() => {
+                            setExternalModal({
+                              vehicleId: v.id,
+                              stockNumber: v.stockNumber,
+                              year: v.year,
+                              make: v.make,
+                              model: v.model,
+                              color: v.color,
+                              stageId: currentStage?.id || null,
+                            })
+                            closeModal()
+                          }}
+                          style={{
+                            flex: 1, padding: '10px 0', borderRadius: 10,
+                            border: '1px solid #f59e0b', background: '#fffbeb',
+                            fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#b45309',
+                          }}
+                        >
+                          Send to External Repair
+                        </button>
+                        <button
+                          onClick={() => {
+                            setDeleteConfirm({
+                              id: v.id,
+                              stockNumber: v.stockNumber,
+                              desc: vehicleDesc,
+                            })
+                            closeModal()
+                          }}
+                          style={{
+                            flex: 1, padding: '10px 0', borderRadius: 10,
+                            border: '1px solid #fca5a5', background: '#fef2f2',
+                            fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#dc2626',
+                          }}
+                        >
+                          Delete Vehicle
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </>
               )
             })() : (
               <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 20 }}>Vehicle not found</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }} onClick={() => setDeleteConfirm(null)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+          }}>
+            <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: '#dc2626' }}>Delete Vehicle</p>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>
+              Are you sure you want to delete <strong>#{deleteConfirm.stockNumber}</strong> — {deleteConfirm.desc}?
+            </p>
+            <p style={{ fontSize: 13, color: '#dc2626', marginBottom: 20, padding: '10px 14px', background: '#fef2f2', borderRadius: 10, border: '1px solid #fecaca' }}>
+              This will permanently remove the vehicle and all its stage history. This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid #e2e5ea',
+                  background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
+                }}
+              >Cancel</button>
+              <button
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true)
+                  try {
+                    await fetch(`/api/vehicles/${deleteConfirm.id}`, { method: 'DELETE' })
+                    setDeleteConfirm(null)
+                    const res = await fetch('/api/vehicles')
+                    const data = await res.json()
+                    setVehicles(data.vehicles || [])
+                  } catch { /* ignore */ }
+                  setDeleting(false)
+                }}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+                  background: deleting ? '#e5e5e5' : '#dc2626', color: '#fff',
+                  fontSize: 14, fontWeight: 700, cursor: deleting ? 'default' : 'pointer',
+                  opacity: deleting ? 0.6 : 1,
+                }}
+              >{deleting ? 'Deleting...' : 'Delete Vehicle'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send to External Repair Modal */}
+      {externalModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }} onClick={() => setExternalModal(null)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 480,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto',
+          }}>
+            <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Send to External Repair</p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              #{externalModal.stockNumber} — {`${externalModal.year ?? ''} ${externalModal.make} ${externalModal.model}`.trim()}
+              {externalModal.color ? ` · ${externalModal.color}` : ''}
+            </p>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              setExternalSubmitting(true)
+              const form = new FormData(e.currentTarget)
+              try {
+                const res = await fetch('/api/external', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    stockNumber: externalModal.stockNumber,
+                    year: externalModal.year,
+                    make: externalModal.make,
+                    model: externalModal.model,
+                    color: externalModal.color || null,
+                    shopName: form.get('shopName'),
+                    shopPhone: form.get('shopPhone') || null,
+                    repairDescription: form.get('repairDescription'),
+                    estimatedDays: form.get('estimatedDays') ? Number(form.get('estimatedDays')) : null,
+                    sentDate: form.get('sentDate'),
+                    notes: form.get('notes') || null,
+                  }),
+                })
+                if (res.ok) {
+                  // Mark current stage as done
+                  if (externalModal.stageId) {
+                    await fetch(`/api/stages/${externalModal.stageId}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: 'done' }),
+                    })
+                  }
+                  setExternalModal(null)
+                  const vRes = await fetch('/api/vehicles')
+                  const vData = await vRes.json()
+                  setVehicles(vData.vehicles || [])
+                }
+              } catch { /* ignore */ }
+              setExternalSubmitting(false)
+            }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Shop Name *</label>
+                  <input name="shopName" required style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }} placeholder="Joe's Auto Body" />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Shop Phone</label>
+                  <input name="shopPhone" type="tel" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }} placeholder="(305) 555-1234" />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>What&apos;s Being Done *</label>
+                <textarea name="repairDescription" required style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', minHeight: 70, resize: 'vertical' }} placeholder="Paint front bumper, fix dent on driver door..." />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Date Sent *</label>
+                  <input name="sentDate" type="date" required style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }} defaultValue={new Date().toISOString().split('T')[0]} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Estimated Days</label>
+                  <input name="estimatedDays" type="number" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }} placeholder="e.g. 5" />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Notes</label>
+                <textarea name="notes" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', minHeight: 60, resize: 'vertical' }} placeholder="Any additional notes..." />
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button type="button" onClick={() => setExternalModal(null)} style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid #e2e5ea',
+                  background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
+                }}>Cancel</button>
+                <button type="submit" disabled={externalSubmitting} style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+                  background: externalSubmitting ? '#e5e5e5' : '#f59e0b', color: '#fff',
+                  fontSize: 14, fontWeight: 700, cursor: externalSubmitting ? 'default' : 'pointer',
+                  opacity: externalSubmitting ? 0.6 : 1,
+                }}>{externalSubmitting ? 'Sending...' : 'Send to External'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
