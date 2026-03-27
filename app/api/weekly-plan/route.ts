@@ -147,7 +147,7 @@ async function generateSnapshot(now: Date, weekStart: Date): Promise<boolean> {
   await prisma.weeklyPlanSnapshot.create({
     data: {
       weekStart,
-      entries: entries as unknown as Record<string, unknown>[],
+      entries: JSON.parse(JSON.stringify(entries)),
     },
   })
 
