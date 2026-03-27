@@ -73,6 +73,10 @@ export default function MechanicBoard() {
   const [addTaskJob, setAddTaskJob] = useState<JobCard | null>(null)
   const [addTaskItems, setAddTaskItems] = useState<{ name: string; hours: string; note: string }[]>([{ name: '', hours: '', note: '' }])
   const [addTaskSubmitting, setAddTaskSubmitting] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<JobCard | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [externalModal, setExternalModal] = useState<JobCard | null>(null)
+  const [externalSubmitting, setExternalSubmitting] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchData = useCallback(() => {
@@ -671,6 +675,32 @@ export default function MechanicBoard() {
                     <FooterBtn label={data.isWorkHours ? 'Resume Job' : 'Outside Work Hours'} color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('resume', selectedJob.id)} full />
                   )}
                 </div>
+
+                {/* Admin actions */}
+                {isAdmin && (
+                  <div style={{ padding: '0 24px 16px', display: 'flex', gap: 10 }}>
+                    <button
+                      onClick={() => { setExternalModal(selectedJob); closeModal() }}
+                      style={{
+                        flex: 1, padding: '10px 0', borderRadius: 10,
+                        border: '1px solid #f59e0b', background: '#fffbeb',
+                        fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#b45309',
+                      }}
+                    >
+                      Send to External Repair
+                    </button>
+                    <button
+                      onClick={() => { setDeleteConfirm(selectedJob); closeModal() }}
+                      style={{
+                        flex: 1, padding: '10px 0', borderRadius: 10,
+                        border: '1px solid #fca5a5', background: '#fef2f2',
+                        fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#dc2626',
+                      }}
+                    >
+                      Delete Vehicle
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -900,6 +930,151 @@ export default function MechanicBoard() {
           </div>
         )
       })()}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }} onClick={() => setDeleteConfirm(null)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+          }}>
+            <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 4, color: '#dc2626' }}>Delete Vehicle</p>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 8 }}>
+              Are you sure you want to delete <strong>#{deleteConfirm.vehicle.stockNumber}</strong> — {`${deleteConfirm.vehicle.year ?? ''} ${deleteConfirm.vehicle.make} ${deleteConfirm.vehicle.model}`.trim()}?
+            </p>
+            <p style={{ fontSize: 13, color: '#dc2626', marginBottom: 20, padding: '10px 14px', background: '#fef2f2', borderRadius: 10, border: '1px solid #fecaca' }}>
+              This will permanently remove the vehicle and all its stage history. This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid #e2e5ea',
+                  background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
+                }}
+              >Cancel</button>
+              <button
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true)
+                  try {
+                    await fetch(`/api/vehicles/${deleteConfirm.vehicle.id}`, { method: 'DELETE' })
+                    setDeleteConfirm(null)
+                    fetchData()
+                  } catch { /* ignore */ }
+                  setDeleting(false)
+                }}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+                  background: deleting ? '#e5e5e5' : '#dc2626', color: '#fff',
+                  fontSize: 14, fontWeight: 700, cursor: deleting ? 'default' : 'pointer',
+                  opacity: deleting ? 0.6 : 1,
+                }}
+              >{deleting ? 'Deleting...' : 'Delete Vehicle'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send to External Repair Modal */}
+      {externalModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+        }} onClick={() => setExternalModal(null)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 480,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto',
+          }}>
+            <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Send to External Repair</p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              #{externalModal.vehicle.stockNumber} — {`${externalModal.vehicle.year ?? ''} ${externalModal.vehicle.make} ${externalModal.vehicle.model}`.trim()}
+              {externalModal.vehicle.color ? ` · ${externalModal.vehicle.color}` : ''}
+            </p>
+
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              setExternalSubmitting(true)
+              const form = new FormData(e.currentTarget)
+              try {
+                // 1. Create external repair record
+                const res = await fetch('/api/external', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    stockNumber: externalModal.vehicle.stockNumber,
+                    year: externalModal.vehicle.year,
+                    make: externalModal.vehicle.make,
+                    model: externalModal.vehicle.model,
+                    color: externalModal.vehicle.color || null,
+                    shopName: form.get('shopName'),
+                    shopPhone: form.get('shopPhone') || null,
+                    repairDescription: form.get('repairDescription'),
+                    estimatedDays: form.get('estimatedDays') ? Number(form.get('estimatedDays')) : null,
+                    sentDate: form.get('sentDate'),
+                    notes: form.get('notes') || null,
+                  }),
+                })
+                if (res.ok) {
+                  // 2. Mark mechanic stage as done (without advancing to next recon stage)
+                  await fetch(`/api/stages/${externalModal.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'done' }),
+                  })
+                  setExternalModal(null)
+                  fetchData()
+                }
+              } catch { /* ignore */ }
+              setExternalSubmitting(false)
+            }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Shop Name *</label>
+                  <input name="shopName" required style={inputStyle} placeholder="Joe's Auto Body" />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Shop Phone</label>
+                  <input name="shopPhone" type="tel" style={inputStyle} placeholder="(305) 555-1234" />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>What&apos;s Being Done *</label>
+                <textarea name="repairDescription" required style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} placeholder="Paint front bumper, fix dent on driver door..." />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Date Sent *</label>
+                  <input name="sentDate" type="date" required style={inputStyle} defaultValue={new Date().toISOString().split('T')[0]} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Estimated Days</label>
+                  <input name="estimatedDays" type="number" style={inputStyle} placeholder="e.g. 5" />
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Notes</label>
+                <textarea name="notes" style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} placeholder="Any additional notes..." />
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+                <button type="button" onClick={() => setExternalModal(null)} style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid #e2e5ea',
+                  background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
+                }}>Cancel</button>
+                <button type="submit" disabled={externalSubmitting} style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+                  background: externalSubmitting ? '#e5e5e5' : '#f59e0b', color: '#fff',
+                  fontSize: 14, fontWeight: 700, cursor: externalSubmitting ? 'default' : 'pointer',
+                  opacity: externalSubmitting ? 0.6 : 1,
+                }}>{externalSubmitting ? 'Sending...' : 'Send to External'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
