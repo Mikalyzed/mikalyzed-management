@@ -547,3 +547,13 @@ model EventTask {
   @@index([status])
   @@map("event_tasks")
 }
+
+model WeeklyPlanSnapshot {
+  id              String   @id @default(uuid())
+  weekStart       DateTime @map("week_start")
+  createdAt       DateTime @default(now()) @map("created_at")
+  entries         Json     @default("[]") // Array of { vehicleStageId, vehicleId, stockNumber, year, make, model, color, day, estimatedHours, assigneeName }
+
+  @@unique([weekStart])
+  @@map("weekly_plan_snapshots")
+}

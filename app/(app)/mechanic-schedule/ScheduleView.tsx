@@ -214,7 +214,6 @@ export default function ScheduleView() {
     setSubmitting(false)
   }, [timeModal, requestHours, requestNote])
 
-  // Calculate remaining planned hours for a job (overdue = 0 remaining)
   const getRemainingHours = useCallback((job: JobCard) => {
     const est = job.estimatedHours || 2
     const elapsed = getLiveElapsed(job)
@@ -257,7 +256,6 @@ export default function ScheduleView() {
     <>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
       {sections.map((section) => {
-        // Only count remaining hours (overdue vehicles contribute 0)
         const plannedHours = section.muted ? 0 : Math.round(
           section.jobs.reduce((s, j) => s + getRemainingHours(j), 0) * 10
         ) / 10

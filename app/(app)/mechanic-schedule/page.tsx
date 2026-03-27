@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import ScheduleView from './ScheduleView'
+import PlanView from './PlanView'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
 
@@ -63,7 +64,7 @@ export default function MechanicBoard() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAllQueued, setShowAllQueued] = useState(false)
   const [showRemainingWeek, setShowRemainingWeek] = useState(false)
-  const [viewMode, setViewMode] = useState<'board' | 'schedule'>('board')
+  const [viewMode, setViewMode] = useState<'board' | 'schedule' | 'plan'>('board')
   const [tick, setTick] = useState(0)
   const [timeExtJob, setTimeExtJob] = useState<JobCard | null>(null)
   const [timeExtHours, setTimeExtHours] = useState('')
@@ -359,11 +360,27 @@ export default function MechanicBoard() {
             >
               Schedule
             </button>
+            {isAdmin && (
+              <button
+                onClick={() => setViewMode('plan')}
+                style={{
+                  padding: '6px 14px', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                  background: viewMode === 'plan' ? '#fff' : 'transparent',
+                  color: viewMode === 'plan' ? '#4f46e5' : '#94a3b8',
+                  boxShadow: viewMode === 'plan' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                }}
+              >
+                Plan
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {viewMode === 'schedule' ? (
+      {viewMode === 'plan' ? (
+        <PlanView />
+      ) : viewMode === 'schedule' ? (
         <ScheduleView />
       ) : (<>
 

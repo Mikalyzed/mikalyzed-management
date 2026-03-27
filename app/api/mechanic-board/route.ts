@@ -49,7 +49,6 @@ export async function GET() {
   if (h < WORK_START || h >= WORK_END) {
     for (const s of stages) {
       if (s.timerStartedAt && s.status === 'in_progress') {
-        // Accumulate time up to WORK_END, then pause
         const elapsed = Math.floor((now.getTime() - s.timerStartedAt.getTime()) / 1000)
         await prisma.vehicleStage.update({
           where: { id: s.id },
@@ -57,7 +56,7 @@ export async function GET() {
             activeSeconds: s.activeSeconds + Math.max(0, elapsed),
             timerStartedAt: null,
             autoPaused: true,
-            status: 'in_progress', // keep status, just stop timer
+            status: 'in_progress',
           },
         })
         s.activeSeconds += Math.max(0, elapsed)
@@ -98,10 +97,10 @@ export async function GET() {
     startedAt: s.startedAt?.toISOString() || null,
   })
 
-  // Weekly stats — get Monday of current week
+  // Weekly stats
   const weekStart = new Date(now)
-  const dayOfWeek = weekStart.getDay() // 0=Sun
-  const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1 // days since Monday
+  const dayOfWeek = weekStart.getDay()
+  const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1
   weekStart.setDate(weekStart.getDate() - diff)
   weekStart.setHours(0, 0, 0, 0)
 
@@ -109,8 +108,8 @@ export async function GET() {
     where: {
       stage: 'mechanic',
       OR: [
-        { status: { not: 'done' } }, // all active/pending/paused
-        { completedAt: { gte: weekStart } }, // completed this week
+        { status: { not: 'done' } },
+        { completedAt: { gte: weekStart } },
       ],
     },
     select: { estimatedHours: true, activeSeconds: true, timerStartedAt: true, status: true },
@@ -125,32 +124,25 @@ export async function GET() {
     return sum + sec
   }, 0)
 
-  // Calculate remaining work hours this week
-  // Days left including today (Mon=0..Fri=4, Sat/Sun=0 days left)
   const etDayOfWeek = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short' }).format(now)
   const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(etDayOfWeek)
   let remainingHoursThisWeek = 0
   if (dayIndex >= 0 && dayIndex <= 4) {
-    // Hours left today
     const hoursLeftToday = h < WORK_START ? HOURS_PER_DAY : h >= WORK_END ? 0 : WORK_END - h
-    // Full days remaining after today (not counting today)
-    const fullDaysLeft = 4 - dayIndex // e.g. Mon=4 days left, Fri=0
+    const fullDaysLeft = 4 - dayIndex
     remainingHoursThisWeek = hoursLeftToday + (fullDaysLeft * HOURS_PER_DAY)
   }
 
-  // Hours left today
   const hoursLeftToday = dayIndex >= 0 && dayIndex <= 4
     ? (h < WORK_START ? HOURS_PER_DAY : h >= WORK_END ? 0 : WORK_END - h)
     : 0
 
-  // Active/paused hours remaining count against today's budget first
   const activeHoursRemaining = [...active, ...paused.filter(p => !p.awaitingParts)].reduce((sum, s) => {
     const est = s.estimatedHours || 2
     const elapsed = getElapsed(s) / 3600
     return sum + Math.max(0, est - elapsed)
   }, 0)
 
-  // Split into today + remaining days of the week
   const todayJobs: typeof stages = [...active, ...paused.filter(p => !p.awaitingParts)]
   const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
   const remainingDays: { day: string; jobs: ReturnType<typeof format>[] }[] = []
@@ -158,13 +150,11 @@ export async function GET() {
   let todayBudget = Math.max(0, hoursLeftToday - activeHoursRemaining)
   const fullDaysLeft = dayIndex >= 0 && dayIndex <= 4 ? 4 - dayIndex : 0
 
-  // Build day buckets for remaining weekdays
   const dayBuckets: { day: string; budget: number; jobs: typeof stages }[] = []
   for (let d = 1; d <= fullDaysLeft; d++) {
     dayBuckets.push({ day: DAY_NAMES[dayIndex + d], budget: HOURS_PER_DAY, jobs: [] })
   }
 
-  // Track which bucket index to start placing from
   let currentBucketIdx = 0
 
   for (const s of queued) {
@@ -173,11 +163,9 @@ export async function GET() {
       todayJobs.push(s)
       todayBudget -= est
     } else if (todayBudget > 0) {
-      // Partially fits today — include it, remaining time spills but we move on
       todayJobs.push(s)
       todayBudget = 0
     } else {
-      // Place into the next day bucket that has capacity
       let placed = false
       while (currentBucketIdx < dayBuckets.length) {
         const bucket = dayBuckets[currentBucketIdx]
@@ -187,22 +175,18 @@ export async function GET() {
           placed = true
           break
         } else if (bucket.budget > 0 && bucket.budget >= est * 0.5) {
-          // At least half fits — put it here (mechanic will finish next day)
           bucket.jobs.push(s)
           bucket.budget = 0
           placed = true
           break
         } else if (bucket.budget <= 0 || bucket.budget < est * 0.5) {
-          // Day is full, move to next day
           currentBucketIdx++
           continue
         }
       }
-      // If not placed, it's beyond this week — don't show it
     }
   }
 
-  // Format day buckets
   for (const bucket of dayBuckets) {
     if (bucket.jobs.length > 0) {
       remainingDays.push({ day: bucket.day, jobs: bucket.jobs.map(format) })
@@ -260,7 +244,6 @@ export async function POST(req: NextRequest) {
     }
 
     case 'pause': {
-      // Accumulate elapsed time
       let addSeconds = 0
       if (stage.timerStartedAt) {
         addSeconds = Math.floor((now.getTime() - stage.timerStartedAt.getTime()) / 1000)
@@ -298,7 +281,6 @@ export async function POST(req: NextRequest) {
           pauseReason: null,
           pauseDetail: null,
           status: 'in_progress',
-          // If resuming from awaiting parts, clear that
           awaitingParts: false,
           awaitingPartsName: null,
           awaitingPartsDate: null,
@@ -325,7 +307,6 @@ export async function POST(req: NextRequest) {
           pauseReason: null,
         },
       })
-      // Advance to next stage
       const { STAGES, DEFAULT_CHECKLISTS } = await import('@/lib/constants')
       type Stage = (typeof STAGES)[number]
       const currentIdx = STAGES.indexOf(stage.stage as Stage)
@@ -336,8 +317,7 @@ export async function POST(req: NextRequest) {
           ? config!.defaultChecklist as string[]
           : DEFAULT_CHECKLISTS[nextStage as Stage] || []
         const checklist = checklistItems.map((item: string) => ({ item, done: false, note: '' }))
-        
-        // Place at bottom of next stage
+
         const maxPriority = await prisma.vehicleStage.aggregate({
           where: { stage: nextStage, status: { not: 'done' } },
           _max: { priority: true },
@@ -368,8 +348,6 @@ export async function POST(req: NextRequest) {
     }
 
     case 'toggle_task': {
-      const { taskIndex } = await req.json().catch(() => ({ taskIndex: undefined }))
-      // handled via existing PATCH /api/stages/[id]
       return NextResponse.json({ error: 'Use PATCH /api/stages/[id] for checklist updates' }, { status: 400 })
     }
 
