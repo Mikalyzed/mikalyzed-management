@@ -101,8 +101,8 @@ export default function VehicleDetailPage() {
   }
   if (!vehicle) return <p style={{ color: 'var(--danger)', textAlign: 'center', marginTop: '40px' }}>Vehicle not found</p>
 
-  const currentStage = vehicle.stages.find((s) => s.status !== 'done')
-  const completedStages = vehicle.stages.filter((s) => s.status === 'done')
+  const currentStage = vehicle.stages.find((s) => s.status !== 'done' && s.status !== 'skipped')
+  const completedStages = vehicle.stages.filter((s) => s.status === 'done' || s.status === 'skipped')
   const stageIcon = STAGE_ICONS[vehicle.status] || '📋'
   const stageLabel = STAGE_LABELS[vehicle.status] || vehicle.status
 
@@ -700,9 +700,17 @@ export default function VehicleDetailPage() {
                       </p>
                     </div>
                   </div>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {s.completedAt && new Date(s.completedAt).toLocaleDateString()}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {s.status === 'skipped' && (
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                        background: '#f1f5f9', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em',
+                      }}>Skipped</span>
+                    )}
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {s.completedAt && new Date(s.completedAt).toLocaleDateString()}
+                    </span>
+                  </div>
                 </div>
               )
             })}

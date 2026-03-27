@@ -29,7 +29,7 @@ export async function GET() {
     where: { status: { not: 'completed' } },
     include: {
       stages: {
-        where: { status: { not: 'done' } },
+        where: { status: { notIn: ['done', 'skipped'] } },
         orderBy: { createdAt: 'desc' },
         take: 1,
       },

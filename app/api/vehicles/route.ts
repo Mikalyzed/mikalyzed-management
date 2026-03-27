@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     include: {
       currentAssignee: { select: { id: true, name: true } },
       stages: {
-        where: { status: { not: 'done' } },
+        where: { status: { notIn: ['done', 'skipped'] } },
         orderBy: { createdAt: 'desc' },
         take: 1,
       },
@@ -113,7 +113,7 @@ export async function POST(request: Request) {
 
     // Set priority to max + 1 so new vehicles go to bottom
     const maxPriority = await tx.vehicleStage.aggregate({
-      where: { stage: startingStage, status: { not: 'done' } },
+      where: { stage: startingStage, status: { notIn: ['done', 'skipped'] } },
       _max: { priority: true },
     })
     const nextPriority = (maxPriority._max.priority ?? -1) + 1

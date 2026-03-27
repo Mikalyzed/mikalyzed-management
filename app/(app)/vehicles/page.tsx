@@ -86,6 +86,7 @@ export default function VehiclesPage() {
   const [deleting, setDeleting] = useState(false)
   const [externalModal, setExternalModal] = useState<{ vehicleId: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null; stageId: string | null } | null>(null)
   const [externalSubmitting, setExternalSubmitting] = useState(false)
+  const [skipping, setSkipping] = useState(false)
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null)
   const didDrag = useRef(false)
   useEffect(() => {
@@ -742,48 +743,108 @@ export default function VehiclesPage() {
                     </button>
 
                     {/* Admin actions */}
-                    {isAdmin && (
-                      <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-                        <button
-                          onClick={() => {
-                            setExternalModal({
-                              vehicleId: v.id,
-                              stockNumber: v.stockNumber,
-                              year: v.year,
-                              make: v.make,
-                              model: v.model,
-                              color: v.color,
-                              stageId: currentStage?.id || null,
-                            })
-                            closeModal()
-                          }}
-                          style={{
-                            flex: 1, padding: '10px 0', borderRadius: 10,
-                            border: '1px solid #f59e0b', background: '#fffbeb',
-                            fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#b45309',
-                          }}
-                        >
-                          Send to External Repair
-                        </button>
-                        <button
-                          onClick={() => {
-                            setDeleteConfirm({
-                              id: v.id,
-                              stockNumber: v.stockNumber,
-                              desc: vehicleDesc,
-                            })
-                            closeModal()
-                          }}
-                          style={{
-                            flex: 1, padding: '10px 0', borderRadius: 10,
-                            border: '1px solid #fca5a5', background: '#fef2f2',
-                            fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#dc2626',
-                          }}
-                        >
-                          Delete Vehicle
-                        </button>
-                      </div>
-                    )}
+                    {isAdmin && currentStage && (() => {
+                      const SKIP_STAGES = ['mechanic', 'detailing', 'content', 'publish', 'completed'] as const
+                      const currentIdx = SKIP_STAGES.indexOf(currentStage.stage as typeof SKIP_STAGES[number])
+                      const laterStages = SKIP_STAGES.slice(currentIdx + 1)
+                      // Only show skip if there's a stage to skip to beyond the next one
+                      const hasSkipTargets = laterStages.length > 1
+
+                      return (
+                        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {hasSkipTargets && (
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                              <select
+                                id="skip-stage-select"
+                                defaultValue=""
+                                disabled={skipping}
+                                style={{
+                                  flex: 1, padding: '10px 12px', borderRadius: 10, border: '1px solid #c084fc',
+                                  fontSize: 13, fontWeight: 600, background: '#faf5ff', color: '#7c3aed',
+                                  cursor: 'pointer', outline: 'none',
+                                }}
+                              >
+                                <option value="" disabled>Skip to stage...</option>
+                                {laterStages.map(s => (
+                                  <option key={s} value={s}>
+                                    {STAGE_LABELS[s as keyof typeof STAGE_LABELS]}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                disabled={skipping}
+                                onClick={async () => {
+                                  const sel = document.getElementById('skip-stage-select') as HTMLSelectElement
+                                  const target = sel.value
+                                  if (!target) return
+                                  setSkipping(true)
+                                  try {
+                                    await fetch(`/api/vehicles/${v.id}/move-stage`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ targetStage: target, skipCurrent: true }),
+                                    })
+                                    closeModal()
+                                    const res = await fetch('/api/vehicles')
+                                    const d = await res.json()
+                                    setVehicles(d.vehicles || [])
+                                  } catch { /* ignore */ }
+                                  setSkipping(false)
+                                }}
+                                style={{
+                                  padding: '10px 18px', borderRadius: 10, border: 'none',
+                                  background: skipping ? '#e5e5e5' : '#7c3aed', color: '#fff',
+                                  fontSize: 13, fontWeight: 700, cursor: skipping ? 'default' : 'pointer',
+                                  whiteSpace: 'nowrap', opacity: skipping ? 0.6 : 1,
+                                }}
+                              >
+                                {skipping ? 'Skipping...' : 'Skip'}
+                              </button>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: 10 }}>
+                            <button
+                              onClick={() => {
+                                setExternalModal({
+                                  vehicleId: v.id,
+                                  stockNumber: v.stockNumber,
+                                  year: v.year,
+                                  make: v.make,
+                                  model: v.model,
+                                  color: v.color,
+                                  stageId: currentStage?.id || null,
+                                })
+                                closeModal()
+                              }}
+                              style={{
+                                flex: 1, padding: '10px 0', borderRadius: 10,
+                                border: '1px solid #f59e0b', background: '#fffbeb',
+                                fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#b45309',
+                              }}
+                            >
+                              Send to External Repair
+                            </button>
+                            <button
+                              onClick={() => {
+                                setDeleteConfirm({
+                                  id: v.id,
+                                  stockNumber: v.stockNumber,
+                                  desc: vehicleDesc,
+                                })
+                                closeModal()
+                              }}
+                              style={{
+                                flex: 1, padding: '10px 0', borderRadius: 10,
+                                border: '1px solid #fca5a5', background: '#fef2f2',
+                                fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#dc2626',
+                              }}
+                            >
+                              Delete Vehicle
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
                 </>
               )

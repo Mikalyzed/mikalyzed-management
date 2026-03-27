@@ -30,7 +30,7 @@ export async function GET(request: Request) {
         where: {
           assigneeId: user.id,
           stage: myStage,
-          status: { not: 'done' },
+          status: { notIn: ['done', 'skipped'] },
         },
       })
     : 0
@@ -56,7 +56,7 @@ export async function GET(request: Request) {
   const myReconTasks = await prisma.vehicleStage.findMany({
     where: {
       assigneeId: user.id,
-      status: { not: 'done' },
+      status: { notIn: ['done', 'skipped'] },
     },
     include: {
       vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
@@ -101,7 +101,7 @@ export async function GET(request: Request) {
   const myBoardTasks = await prisma.task.findMany({
     where: {
       assigneeId: user.id,
-      status: { not: 'done' },
+      status: { notIn: ['done', 'skipped'] },
     },
     orderBy: [{ priority: 'desc' }, { dueDate: 'asc' }, { createdAt: 'desc' }],
     take: 10,

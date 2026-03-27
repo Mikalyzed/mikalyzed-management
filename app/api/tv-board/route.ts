@@ -50,7 +50,7 @@ export async function GET() {
     const contentVehicleCount = stageVehicles['content']?.length || 0
     if (contentVehicleCount < 5) {
       const contentTasks = await prisma.task.findMany({
-        where: { category: 'content', status: { not: 'done' } },
+        where: { category: 'content', status: { notIn: ['done', 'skipped'] } },
         include: { assignee: { select: { name: true } } },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
         take: 5 - contentVehicleCount,
@@ -80,7 +80,7 @@ export async function GET() {
     // External repairs + inventory counts (sequential to avoid pool exhaustion)
     const externalCount = await prisma.externalRepair.count({ where: { status: 'sent' } })
     const totalInventory = await prisma.vehicle.count({ where: { status: { notIn: ['completed', 'sold'] } } })
-    const inRecon = allStages.filter(s => s.status !== 'done' && !s.awaitingParts).length
+    const inRecon = allStages.filter(s => s.status !== 'done' && s.status !== 'skipped' && !s.awaitingParts).length
 
     return NextResponse.json({
       pipeline,

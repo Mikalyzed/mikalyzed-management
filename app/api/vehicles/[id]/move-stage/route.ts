@@ -11,7 +11,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id: vehicleId } = await params
-  const { targetStage, checklist: customChecklist, assigneeId: customAssigneeId } = await req.json()
+  const { targetStage, checklist: customChecklist, assigneeId: customAssigneeId, skipCurrent } = await req.json()
 
   if (!STAGES.includes(targetStage) && targetStage !== 'completed') {
     return NextResponse.json({ error: 'Invalid stage' }, { status: 400 })
@@ -31,11 +31,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   await prisma.$transaction(async (tx) => {
-    // Mark current stage as done
+    // Mark current stage as done or skipped
     if (currentStage) {
       await tx.vehicleStage.update({
         where: { id: currentStage.id },
-        data: { status: 'done', completedAt: new Date() },
+        data: {
+          status: skipCurrent ? 'skipped' : 'done',
+          completedAt: new Date(),
+          timerStartedAt: null,
+        },
       })
     }
 
@@ -69,7 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       // Put at bottom of target stage (highest priority + 1)
       const lastInStage = await tx.vehicleStage.findFirst({
-        where: { stage: targetStage, status: { not: 'done' } },
+        where: { stage: targetStage, status: { notIn: ['done', 'skipped'] } },
         orderBy: { priority: 'desc' },
         select: { priority: true },
       })
@@ -103,7 +107,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         entityId: vehicleId,
         action: 'stage_moved',
         actorId: user.id,
-        details: { from: currentStage?.stage || 'unknown', to: targetStage },
+        details: { from: currentStage?.stage || 'unknown', to: targetStage, skipped: !!skipCurrent },
       },
     })
   })

@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const tasks = await prisma.vehicleStage.findMany({
     where: {
       assigneeId: user.id,
-      status: { not: 'done' },
+      status: { notIn: ['done', 'skipped'] },
     },
     include: {
       vehicle: {

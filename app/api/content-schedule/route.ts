@@ -8,7 +8,7 @@ export async function GET() {
 
   // Content stage vehicles
   const stages = await prisma.vehicleStage.findMany({
-    where: { stage: 'content', status: { not: 'done' } },
+    where: { stage: 'content', status: { notIn: ['done', 'skipped'] } },
     include: {
       vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
       assignee: { select: { id: true, name: true } },

@@ -51,7 +51,7 @@ type SnapshotEntry = {
 // Shared: generate the weekly plan snapshot
 async function generateSnapshot(now: Date, weekStart: Date): Promise<boolean> {
   const stages = await prisma.vehicleStage.findMany({
-    where: { stage: 'mechanic', status: { not: 'done' } },
+    where: { stage: 'mechanic', status: { notIn: ['done', 'skipped'] } },
     include: {
       vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
       assignee: { select: { id: true, name: true } },

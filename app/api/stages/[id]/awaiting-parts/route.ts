@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await tx.vehicleStage.updateMany({
         where: {
           stage: stage.stage,
-          status: { not: 'done' },
+          status: { notIn: ['done', 'skipped'] },
           id: { not: id },
         },
         data: { priority: { increment: 1 } },

@@ -72,7 +72,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       // Place at bottom of next stage (highest priority + 1)
       const maxPriority = await tx.vehicleStage.aggregate({
-        where: { stage: nextStage, status: { not: 'done' } },
+        where: { stage: nextStage, status: { notIn: ['done', 'skipped'] } },
         _max: { priority: true },
       })
       const bottomPriority = (maxPriority._max.priority ?? -1) + 1

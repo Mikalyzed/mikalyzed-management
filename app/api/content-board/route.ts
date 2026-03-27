@@ -16,7 +16,7 @@ export async function GET() {
 
   // All content stages not done
   const stages = await prisma.vehicleStage.findMany({
-    where: { stage: 'content', status: { not: 'done' } },
+    where: { stage: 'content', status: { notIn: ['done', 'skipped'] } },
     include: {
       vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
       assignee: { select: { id: true, name: true } },
@@ -36,7 +36,7 @@ export async function GET() {
 
   // Standalone content tasks (not done)
   const contentTasks = await prisma.task.findMany({
-    where: { category: 'content', status: { not: 'done' } },
+    where: { category: 'content', status: { notIn: ['done', 'skipped'] } },
     include: { assignee: { select: { id: true, name: true } } },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
   })

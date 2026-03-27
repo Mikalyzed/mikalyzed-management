@@ -108,7 +108,7 @@ export async function GET() {
     where: {
       stage: 'mechanic',
       OR: [
-        { status: { not: 'done' } },
+        { status: { notIn: ['done', 'skipped'] } },
         { completedAt: { gte: weekStart } },
       ],
     },
@@ -319,7 +319,7 @@ export async function POST(req: NextRequest) {
         const checklist = checklistItems.map((item: string) => ({ item, done: false, note: '' }))
 
         const maxPriority = await prisma.vehicleStage.aggregate({
-          where: { stage: nextStage, status: { not: 'done' } },
+          where: { stage: nextStage, status: { notIn: ['done', 'skipped'] } },
           _max: { priority: true },
         })
         const bottomPriority = (maxPriority._max.priority ?? -1) + 1

@@ -20,7 +20,7 @@ export async function POST(request: Request) {
         where: {
           vehicleId,
           stage,
-          status: { not: 'done' },
+          status: { notIn: ['done', 'skipped'] },
         },
         data: { priority: index },
       })
