@@ -1025,6 +1025,12 @@ export default function MechanicBoard() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: 'done' }),
                   })
+                  // 3. Set vehicle status to 'external' so it's removed from boards
+                  await fetch(`/api/vehicles/${externalModal.vehicle.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'external' }),
+                  })
                   setExternalModal(null)
                   fetchData()
                 }

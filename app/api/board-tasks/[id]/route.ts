@@ -22,6 +22,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.dueDate !== undefined) data.dueDate = body.dueDate ? new Date(body.dueDate) : null
   if (body.priority !== undefined) data.priority = body.priority
   if (body.sortOrder !== undefined) data.sortOrder = body.sortOrder
+  if (body.subtasks !== undefined) data.subtasks = body.subtasks
 
   const task = await prisma.task.update({
     where: { id },

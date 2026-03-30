@@ -10,10 +10,12 @@ type VehicleJob = {
   status: string; checklist: ChecklistItem[]; priority: number
   scheduledDate: string | null; type: 'vehicle'
 }
+type SubtaskItem = { item: string; done: boolean }
 type ContentTask = {
   id: string; title: string; description: string | null
   assignee: { id: string; name: string } | null
   status: string; scheduledDate: string | null; type: 'task'
+  subtasks?: SubtaskItem[]
 }
 type BoardData = {
   active: VehicleJob[]; activeTasks: ContentTask[]
@@ -110,9 +112,18 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
 }
 
 /* ── Active Task Card ── */
-function ActiveTaskCard({ task, onComplete, adminAction }: { task: ContentTask; onComplete: (id: string) => void; adminAction?: () => void }) {
+function ActiveTaskCard({ task, onComplete, onToggleSubtask, adminAction }: {
+  task: ContentTask; onComplete: (id: string) => void
+  onToggleSubtask?: (taskId: string, idx: number) => void
+  adminAction?: () => void
+}) {
   const isActive = task.status === 'in_progress'
   const borderColor = isActive ? '#f59e0b' : '#3b82f6'
+  const subtasks = task.subtasks || []
+  const doneCount = subtasks.filter(s => s.done).length
+  const allDone = subtasks.length > 0 && doneCount === subtasks.length
+  const progress = subtasks.length > 0 ? doneCount / subtasks.length : 0
+
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `2px solid ${borderColor}`, flex: '1 1 340px', maxWidth: 420 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
@@ -126,21 +137,53 @@ function ActiveTaskCard({ task, onComplete, adminAction }: { task: ContentTask; 
       </div>
       {task.assignee && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 6px' }}>{task.assignee.name}</p>}
 
-      {/* Default task */}
-      <div style={{
-        padding: '8px 10px', borderRadius: 8, background: task.status === 'in_progress' ? '#f9fafb' : '#faf5ff',
-        border: '1px solid #f0f0f0', marginBottom: 12, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)',
-        display: 'flex', alignItems: 'center', gap: 8,
-      }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round"><path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" /></svg>
-        Reel for social media
-      </div>
+      {/* Subtasks progress */}
+      {subtasks.length > 0 && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{doneCount}/{subtasks.length} subtasks</span>
+          </div>
+          <div style={{ height: 5, background: '#e2e5ea', borderRadius: 3, overflow: 'hidden', marginBottom: 14 }}>
+            <div style={{ height: '100%', borderRadius: 3, transition: 'width 0.3s', width: `${progress * 100}%`, background: allDone ? '#22c55e' : borderColor }} />
+          </div>
+          {isActive && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}>
+              {subtasks.map((sub, i) => (
+                <label key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
+                  padding: '6px 8px', borderRadius: 8, background: sub.done ? '#f0fdf4' : '#f9fafb',
+                  border: `1px solid ${sub.done ? '#22c55e20' : '#f0f0f0'}`,
+                }}>
+                  <input type="checkbox" checked={sub.done}
+                    onChange={() => onToggleSubtask?.(task.id, i)}
+                    style={{ width: 16, height: 16, accentColor: '#22c55e', cursor: 'pointer', flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, flex: 1, color: sub.done ? '#22c55e' : 'var(--text-primary)', textDecoration: sub.done ? 'line-through' : 'none', fontWeight: sub.done ? 400 : 500 }}>{sub.item}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* No subtasks — show default reel indicator */}
+      {subtasks.length === 0 && (
+        <div style={{
+          padding: '8px 10px', borderRadius: 8, background: task.status === 'in_progress' ? '#f9fafb' : '#faf5ff',
+          border: '1px solid #f0f0f0', marginBottom: 12, fontSize: 13, fontWeight: 500, color: 'var(--text-secondary)',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round"><path d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" /></svg>
+          Reel for social media
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         {task.status === 'in_progress' && (
-          <button onClick={() => onComplete(task.id)} style={{
+          <button onClick={() => onComplete(task.id)} disabled={subtasks.length > 0 && !allDone} style={{
             padding: '9px 22px', borderRadius: 8, border: 'none',
-            background: '#22c55e', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            background: (subtasks.length === 0 || allDone) ? '#22c55e' : '#e2e5ea',
+            color: (subtasks.length === 0 || allDone) ? '#fff' : '#999',
+            fontSize: 13, fontWeight: 700, cursor: (subtasks.length === 0 || allDone) ? 'pointer' : 'default',
           }}>Complete</button>
         )}
         {adminAction && (
@@ -217,7 +260,13 @@ function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete, index }: 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{task.title}</p>
-          <span style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 600, background: '#faf5ff', padding: '2px 8px', borderRadius: 6 }}>Reel</span>
+          {(task.subtasks?.length || 0) > 0 ? (
+            <span style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 600, background: '#faf5ff', padding: '2px 8px', borderRadius: 6 }}>
+              {task.subtasks!.filter(s => s.done).length}/{task.subtasks!.length} subtasks
+            </span>
+          ) : (
+            <span style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 600, background: '#faf5ff', padding: '2px 8px', borderRadius: 6 }}>Reel</span>
+          )}
         </div>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
           {task.assignee?.name || 'Unassigned'}
@@ -298,23 +347,38 @@ function ScheduleModal({ onConfirm, onCancel }: {
 /* ── Add Task Modal ── */
 function AddTaskModal({ users, onConfirm, onCancel }: {
   users: { id: string; name: string }[]
-  onConfirm: (title: string, assigneeId: string | null) => void
+  onConfirm: (title: string, assigneeId: string | null, subtasks: { item: string; done: boolean }[]) => void
   onCancel: () => void
 }) {
   const [title, setTitle] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
+  const [subtasks, setSubtasks] = useState<string[]>([''])
+  const [newSubtask, setNewSubtask] = useState('')
+
+  const addSubtask = () => {
+    const val = newSubtask.trim()
+    if (!val) return
+    setSubtasks([...subtasks.filter(s => s.trim()), val])
+    setNewSubtask('')
+  }
+
+  const removeSubtask = (idx: number) => {
+    setSubtasks(subtasks.filter((_, i) => i !== idx))
+  }
+
+  const validSubtasks = subtasks.filter(s => s.trim())
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={onCancel}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 }}
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>Add Content Task</h3>
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Title</label>
           <input
             value={title} onChange={e => setTitle(e.target.value)}
-            placeholder="e.g. Plymouth Roadrunner Reel"
+            placeholder="e.g. Ad with Camaros and Chevelles"
             autoFocus
             style={{
               width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e5ea',
@@ -322,7 +386,7 @@ function AddTaskModal({ users, onConfirm, onCancel }: {
             }}
           />
         </div>
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Assign to</label>
           <select
             value={assigneeId} onChange={e => setAssigneeId(e.target.value)}
@@ -335,9 +399,56 @@ function AddTaskModal({ users, onConfirm, onCancel }: {
             {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
         </div>
+
+        {/* Subtasks */}
+        <div style={{ marginBottom: 20 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
+            Subtasks {validSubtasks.length > 0 && <span style={{ color: '#8b5cf6' }}>({validSubtasks.length})</span>}
+          </label>
+          {validSubtasks.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+              {validSubtasks.map((sub, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+                  background: '#faf5ff', borderRadius: 8, border: '1px solid #e9d5ff',
+                }}>
+                  <span style={{ fontSize: 13, flex: 1 }}>{sub}</span>
+                  <button onClick={() => removeSubtask(i)} style={{
+                    background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 2,
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={newSubtask}
+              onChange={e => setNewSubtask(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSubtask() } }}
+              placeholder="e.g. Film Camaro walkthrough video"
+              style={{
+                flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e5ea',
+                fontSize: 13, outline: 'none', boxSizing: 'border-box',
+              }}
+            />
+            <button onClick={addSubtask} disabled={!newSubtask.trim()} style={{
+              padding: '10px 14px', borderRadius: 8, border: 'none',
+              background: newSubtask.trim() ? '#8b5cf6' : '#e2e5ea',
+              color: newSubtask.trim() ? '#fff' : '#999',
+              fontSize: 13, fontWeight: 700, cursor: newSubtask.trim() ? 'pointer' : 'default',
+            }}>Add</button>
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: 8 }}>
           <button
-            onClick={() => title.trim() && onConfirm(title.trim(), assigneeId || null)}
+            onClick={() => title.trim() && onConfirm(
+              title.trim(),
+              assigneeId || null,
+              validSubtasks.map(s => ({ item: s, done: false }))
+            )}
             disabled={!title.trim()}
             style={{
               flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
@@ -465,13 +576,38 @@ export default function ContentBoard() {
     fetchData()
   }
 
-  const createTask = async (title: string, assigneeId: string | null) => {
+  const createTask = async (title: string, assigneeId: string | null, subtasks: { item: string; done: boolean }[]) => {
     await fetch('/api/board-tasks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, category: 'content', assigneeId }),
+      body: JSON.stringify({ title, category: 'content', assigneeId, subtasks }),
     })
     setShowAddTask(false)
     fetchData()
+  }
+
+  const toggleSubtask = async (taskId: string, subIdx: number) => {
+    if (!data) return
+    // Optimistic update
+    const updateTasks = (tasks: ContentTask[]) => tasks.map(t => {
+      if (t.id !== taskId || !t.subtasks) return t
+      const updated = [...t.subtasks]
+      updated[subIdx] = { ...updated[subIdx], done: !updated[subIdx].done }
+      return { ...t, subtasks: updated }
+    })
+    setData({
+      ...data,
+      activeTasks: updateTasks(data.activeTasks),
+      todayTasks: updateTasks(data.todayTasks),
+    })
+    // Find the task to get current subtasks
+    const task = [...data.activeTasks, ...data.todayTasks].find(t => t.id === taskId)
+    if (!task?.subtasks) return
+    const updated = [...task.subtasks]
+    updated[subIdx] = { ...updated[subIdx], done: !updated[subIdx].done }
+    await fetch(`/api/board-tasks/${taskId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subtasks: updated }),
+    })
   }
 
   if (loading) return <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Loading...</p>
@@ -507,7 +643,7 @@ export default function ContentBoard() {
               <ActiveVehicleCard key={job.id} job={job} onToggleTask={toggleTask} onComplete={completeVehicle} />
             ))}
             {data.activeTasks.map(task => (
-              <ActiveTaskCard key={task.id} task={task} onComplete={completeTask} />
+              <ActiveTaskCard key={task.id} task={task} onComplete={completeTask} onToggleSubtask={toggleSubtask} />
             ))}
           </div>
         )}
@@ -527,7 +663,7 @@ export default function ContentBoard() {
                 adminAction={isAdmin ? () => unschedule(job.id, 'vehicle') : undefined} />
             ))}
             {data.todayTasks.map(task => (
-              <ActiveTaskCard key={task.id} task={task} onComplete={completeTask}
+              <ActiveTaskCard key={task.id} task={task} onComplete={completeTask} onToggleSubtask={toggleSubtask}
                 adminAction={isAdmin ? () => unschedule(task.id, 'task') : undefined} />
             ))}
           </div>

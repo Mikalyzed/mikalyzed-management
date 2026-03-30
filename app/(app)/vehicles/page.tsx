@@ -944,7 +944,7 @@ export default function VehiclesPage() {
                   }),
                 })
                 if (res.ok) {
-                  // Mark current stage as done
+                  // Mark current stage as done and move vehicle off the board
                   if (externalModal.stageId) {
                     await fetch(`/api/stages/${externalModal.stageId}`, {
                       method: 'PATCH',
@@ -952,6 +952,12 @@ export default function VehiclesPage() {
                       body: JSON.stringify({ status: 'done' }),
                     })
                   }
+                  // Set vehicle status to 'external' so it's removed from recon board
+                  await fetch(`/api/vehicles/${externalModal.vehicleId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'external' }),
+                  })
                   setExternalModal(null)
                   const vRes = await fetch('/api/vehicles')
                   const vData = await vRes.json()

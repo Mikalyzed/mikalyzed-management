@@ -42,7 +42,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await request.json()
 
-  const allowed = ['stockNumber', 'vin', 'year', 'make', 'model', 'color', 'trim', 'notes']
+  const allowed = ['stockNumber', 'vin', 'year', 'make', 'model', 'color', 'trim', 'notes', 'status']
   const data: Record<string, unknown> = {}
   for (const key of allowed) {
     if (body[key] !== undefined) data[key] = body[key]

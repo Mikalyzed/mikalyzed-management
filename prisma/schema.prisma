@@ -242,6 +242,7 @@ model Task {
   scheduledDate DateTime? @map("scheduled_date")
   completedAt   DateTime? @map("completed_at")
   sortOrder     Int       @default(0) @map("sort_order")
+  subtasks      Json      @default("[]") // Array of { item: string, done: boolean }
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
