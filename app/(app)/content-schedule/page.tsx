@@ -112,9 +112,10 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
 }
 
 /* ── Active Task Card ── */
-function ActiveTaskCard({ task, onComplete, onToggleSubtask, adminAction }: {
+function ActiveTaskCard({ task, onComplete, onToggleSubtask, onEdit, adminAction }: {
   task: ContentTask; onComplete: (id: string) => void
   onToggleSubtask?: (taskId: string, idx: number) => void
+  onEdit?: (task: ContentTask) => void
   adminAction?: () => void
 }) {
   const isActive = task.status === 'in_progress'
@@ -127,11 +128,20 @@ function ActiveTaskCard({ task, onComplete, onToggleSubtask, adminAction }: {
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `2px solid ${borderColor}`, flex: '1 1 340px', maxWidth: 420 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-        <div>
-          <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>{task.title}</p>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>{task.title}</p>
+            {onEdit && (
+              <button onClick={() => onEdit(task)} style={{
+                background: 'none', border: 'none', cursor: 'pointer', color: '#8b5cf6', padding: 2, flexShrink: 0,
+              }} title="Edit subtasks">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+              </button>
+            )}
+          </div>
           {task.description && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{task.description}</p>}
         </div>
-        <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: borderColor + '18', color: borderColor, textTransform: 'uppercase' }}>
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: borderColor + '18', color: borderColor, textTransform: 'uppercase', flexShrink: 0 }}>
           {isActive ? 'Active' : 'Scheduled'}
         </span>
       </div>
@@ -240,14 +250,16 @@ function QueueVehicleCard({ job, onStart, isAdmin, onSchedule, index }: {
 }
 
 /* ── Queue Task Card ── */
-function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete, index }: {
+function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete, onEdit, index }: {
   task: ContentTask; onStart: (id: string) => void; isAdmin: boolean
-  onSchedule?: (id: string, type: 'task') => void; onDelete?: (id: string) => void; index?: number
+  onSchedule?: (id: string, type: 'task') => void; onDelete?: (id: string) => void
+  onEdit?: (task: ContentTask) => void; index?: number
 }) {
   return (
-    <div style={{
+    <div onClick={() => onEdit?.(task)} style={{
       background: '#fff', borderRadius: 12, padding: '14px 18px',
       border: '1px solid #e8e8e8', display: 'flex', alignItems: 'center', gap: 12,
+      cursor: 'pointer',
     }}>
       {isAdmin && (
         <div style={{ cursor: 'grab', color: '#ccc', flexShrink: 0 }}>
@@ -272,7 +284,7 @@ function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete, index }: 
           {task.assignee?.name || 'Unassigned'}
         </p>
       </div>
-      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
         <button onClick={() => onStart(task.id)} style={{
           padding: '7px 16px', borderRadius: 8, border: 'none',
           background: '#8b5cf6', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
@@ -467,6 +479,106 @@ function AddTaskModal({ users, onConfirm, onCancel }: {
   )
 }
 
+/* ── Edit Task Modal (add/remove subtasks) ── */
+function EditTaskModal({ task, onSave, onCancel }: {
+  task: ContentTask
+  onSave: (id: string, subtasks: SubtaskItem[]) => void
+  onCancel: () => void
+}) {
+  const [subtasks, setSubtasks] = useState<SubtaskItem[]>(task.subtasks || [])
+  const [newSubtask, setNewSubtask] = useState('')
+
+  const addSubtask = () => {
+    const val = newSubtask.trim()
+    if (!val) return
+    setSubtasks([...subtasks, { item: val, done: false }])
+    setNewSubtask('')
+  }
+
+  const removeSubtask = (idx: number) => {
+    setSubtasks(subtasks.filter((_, i) => i !== idx))
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={onCancel}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}
+        onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>{task.title}</h3>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 16px' }}>
+          {task.assignee?.name || 'Unassigned'}
+        </p>
+
+        <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
+          Subtasks {subtasks.length > 0 && <span style={{ color: '#8b5cf6' }}>({subtasks.filter(s => s.done).length}/{subtasks.length})</span>}
+        </label>
+
+        {subtasks.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+            {subtasks.map((sub, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+                background: sub.done ? '#f0fdf4' : '#faf5ff', borderRadius: 8,
+                border: `1px solid ${sub.done ? '#bbf7d0' : '#e9d5ff'}`,
+              }}>
+                <div style={{
+                  width: 18, height: 18, borderRadius: 5, border: '2px solid',
+                  borderColor: sub.done ? '#22c55e' : '#d1d5db',
+                  background: sub.done ? '#22c55e' : '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                }}>
+                  {sub.done && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                </div>
+                <span style={{ fontSize: 13, flex: 1, color: sub.done ? '#22c55e' : 'var(--text-primary)', textDecoration: sub.done ? 'line-through' : 'none' }}>{sub.item}</span>
+                <button onClick={() => removeSubtask(i)} style={{
+                  background: 'none', border: 'none', cursor: 'pointer', color: '#ccc', padding: 2,
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+          <input
+            value={newSubtask}
+            onChange={e => setNewSubtask(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSubtask() } }}
+            placeholder="Add a subtask..."
+            autoFocus
+            style={{
+              flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid #e2e5ea',
+              fontSize: 13, outline: 'none', boxSizing: 'border-box',
+            }}
+          />
+          <button onClick={addSubtask} disabled={!newSubtask.trim()} style={{
+            padding: '10px 14px', borderRadius: 8, border: 'none',
+            background: newSubtask.trim() ? '#8b5cf6' : '#e2e5ea',
+            color: newSubtask.trim() ? '#fff' : '#999',
+            fontSize: 13, fontWeight: 700, cursor: newSubtask.trim() ? 'pointer' : 'default',
+          }}>Add</button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => onSave(task.id, subtasks)}
+            style={{
+              flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+              background: '#8b5cf6', color: '#fff',
+              fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            }}
+          >Save</button>
+          <button onClick={onCancel} style={{
+            padding: '10px 20px', borderRadius: 10, border: '1px solid #e8e8e8',
+            background: '#fff', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ContentBoard() {
   const [data, setData] = useState<BoardData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -475,6 +587,7 @@ export default function ContentBoard() {
   const [userRole, setUserRole] = useState('')
   const [scheduling, setScheduling] = useState<{ id: string; type: 'vehicle' | 'task' } | null>(null)
   const [showAddTask, setShowAddTask] = useState(false)
+  const [editTask, setEditTask] = useState<ContentTask | null>(null)
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
   const dragItem = useRef<number | null>(null)
   const dragOver = useRef<number | null>(null)
@@ -643,7 +756,7 @@ export default function ContentBoard() {
               <ActiveVehicleCard key={job.id} job={job} onToggleTask={toggleTask} onComplete={completeVehicle} />
             ))}
             {data.activeTasks.map(task => (
-              <ActiveTaskCard key={task.id} task={task} onComplete={completeTask} onToggleSubtask={toggleSubtask} />
+              <ActiveTaskCard key={task.id} task={task} onComplete={completeTask} onToggleSubtask={toggleSubtask} onEdit={setEditTask} />
             ))}
           </div>
         )}
@@ -663,7 +776,7 @@ export default function ContentBoard() {
                 adminAction={isAdmin ? () => unschedule(job.id, 'vehicle') : undefined} />
             ))}
             {data.todayTasks.map(task => (
-              <ActiveTaskCard key={task.id} task={task} onComplete={completeTask} onToggleSubtask={toggleSubtask}
+              <ActiveTaskCard key={task.id} task={task} onComplete={completeTask} onToggleSubtask={toggleSubtask} onEdit={setEditTask}
                 adminAction={isAdmin ? () => unschedule(task.id, 'task') : undefined} />
             ))}
           </div>
@@ -735,7 +848,7 @@ export default function ContentBoard() {
                   onDragOver={e => e.preventDefault()}
                   style={{ cursor: isAdmin ? 'grab' : 'default' }}
                 >
-                  <QueueTaskCard task={task} onStart={startTask} isAdmin={isAdmin} onSchedule={openSchedule} onDelete={deleteTask} index={idx} />
+                  <QueueTaskCard task={task} onStart={startTask} isAdmin={isAdmin} onSchedule={openSchedule} onDelete={deleteTask} onEdit={setEditTask} index={idx} />
                 </div>
               ))}
             </div>
@@ -786,6 +899,16 @@ export default function ContentBoard() {
 
       {/* Add Task Modal */}
       {showAddTask && <AddTaskModal users={users} onConfirm={createTask} onCancel={() => setShowAddTask(false)} />}
+
+      {/* Edit Task Modal */}
+      {editTask && <EditTaskModal task={editTask} onSave={async (id, subtasks) => {
+        await fetch(`/api/board-tasks/${id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subtasks }),
+        })
+        setEditTask(null)
+        fetchData()
+      }} onCancel={() => setEditTask(null)} />}
 
       {/* Schedule Modal */}
       {scheduling && <ScheduleModal onConfirm={confirmSchedule} onCancel={() => setScheduling(null)} />}
