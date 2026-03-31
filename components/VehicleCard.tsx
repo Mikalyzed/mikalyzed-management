@@ -11,6 +11,7 @@ type VehicleCardProps = {
   color?: string | null
   status: string
   stageStatus?: string
+  stageDetail?: string
   assigneeName?: string | null
   timeInStage?: string
   onClick?: () => void
@@ -18,7 +19,7 @@ type VehicleCardProps = {
 
 export default function VehicleCard({
   id, stockNumber, year, make, model, color,
-  status, stageStatus, assigneeName, timeInStage, onClick,
+  status, stageStatus, stageDetail, assigneeName, timeInStage, onClick,
 }: VehicleCardProps) {
   return (
     <div onClick={onClick} className="card" style={{ cursor: onClick ? 'pointer' : undefined }}>
@@ -37,7 +38,7 @@ export default function VehicleCard({
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {stageStatus && <StatusBadge status={stageStatus} />}
+            {stageStatus && <StatusBadge status={stageStatus} detail={stageDetail} />}
             {assigneeName && (
               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
                 {assigneeName}

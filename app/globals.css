@@ -144,6 +144,9 @@ input, select, textarea { font-size: 16px; font-family: inherit; }
 .badge-pending { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
 .badge-in-progress { background: var(--success-bg); color: #16a34a; border: 1px solid var(--success-border); }
 .badge-blocked { background: var(--danger-bg); color: var(--danger); border: 1px solid var(--danger-border); }
+.badge-paused { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; }
+.badge-awaiting-parts { background: #fefce8; color: #ca8a04; border: 1px solid #fef08a; }
+.badge-auto-paused { background: #faf5ff; color: #9333ea; border: 1px solid #e9d5ff; }
 .badge-done { background: var(--success-bg); color: #16a34a; border: 1px solid var(--success-border); }
 .badge-mechanic { background: #faf5ff; color: #9333ea; border: 1px solid #e9d5ff; }
 .badge-detailing { background: var(--info-bg); color: #2563eb; border: 1px solid var(--info-border); }

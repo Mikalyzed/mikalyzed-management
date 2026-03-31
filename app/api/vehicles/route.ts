@@ -27,6 +27,13 @@ export async function GET(request: Request) {
         where: { status: { notIn: ['done', 'skipped'] } },
         orderBy: { createdAt: 'desc' },
         take: 1,
+        select: {
+          id: true, status: true, startedAt: true, totalBlockedSeconds: true,
+          priority: true, estimatedHours: true, checklist: true,
+          awaitingParts: true, awaitingPartsName: true, pauseReason: true,
+          timerStartedAt: true, autoPaused: true,
+          assignee: { select: { id: true, name: true } },
+        },
       },
     },
     orderBy: { createdAt: 'desc' },

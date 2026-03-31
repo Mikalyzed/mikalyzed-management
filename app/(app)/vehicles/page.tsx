@@ -26,6 +26,11 @@ type VehicleWithStage = {
     estimatedHours: number | null
     checklist?: ChecklistItem[]
     assignee?: { id: string; name: string } | null
+    awaitingParts?: boolean
+    awaitingPartsName?: string | null
+    pauseReason?: string | null
+    timerStartedAt?: string | null
+    autoPaused?: boolean
   }>
 }
 
@@ -523,6 +528,12 @@ export default function VehiclesPage() {
                           color={v.color}
                           status={v.status}
                           stageStatus={v.stages[0]?.status}
+                          stageDetail={
+                            v.stages[0]?.awaitingParts ? 'awaiting_parts'
+                            : v.stages[0]?.autoPaused ? 'auto_paused'
+                            : (v.stages[0]?.status === 'in_progress' && !v.stages[0]?.timerStartedAt && v.stages[0]?.pauseReason) ? 'paused'
+                            : undefined
+                          }
                           assigneeName={v.currentAssignee?.name}
                           timeInStage={getTimeInStage(v)}
                         />
