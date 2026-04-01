@@ -34,6 +34,17 @@ const RECON_STAGES = [
   { value: 'publish', label: 'Publish' },
 ]
 
+const DEFAULT_INSPECTION = [
+  'Oil & fluids check',
+  'Brake inspection',
+  'Tire condition',
+  'Engine check',
+  'AC system',
+  'Electrical systems',
+  'Test drive',
+  'Body assessment',
+]
+
 export default function ExternalRepairsPage() {
   const [repairs, setRepairs] = useState<ExternalRepair[]>([])
   const [loading, setLoading] = useState(true)
@@ -45,6 +56,12 @@ export default function ExternalRepairsPage() {
   const [reconModal, setReconModal] = useState<ExternalRepair | null>(null)
   const [reconStage, setReconStage] = useState('mechanic')
   const [sendingToRecon, setSendingToRecon] = useState(false)
+  const [reconFullInspection, setReconFullInspection] = useState(false)
+  const [reconCustomTasks, setReconCustomTasks] = useState<string[]>([])
+  const [reconNewTask, setReconNewTask] = useState('')
+  const [reconNotes, setReconNotes] = useState('')
+  const [reconEstHours, setReconEstHours] = useState('')
+  const [reconError, setReconError] = useState('')
 
   function load() {
     fetch('/api/external')
@@ -490,10 +507,10 @@ export default function ExternalRepairsPage() {
           })}
         </div>
       )}
-      {/* Return to Recon Modal */}
+      {/* Return to Recon Modal — Full Form */}
       {reconModal && (
         <div
-          onClick={() => setReconModal(null)}
+          onClick={() => { setReconModal(null); setReconError('') }}
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -503,57 +520,224 @@ export default function ExternalRepairsPage() {
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              background: '#fff', borderRadius: 20, width: '100%', maxWidth: 420,
-              padding: '28px 24px', boxShadow: '0 -4px 30px rgba(0,0,0,0.15)',
+              background: '#fff', borderRadius: 20, width: '100%', maxWidth: 480,
+              maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+              boxShadow: '0 -4px 30px rgba(0,0,0,0.15)',
             }}
           >
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>
-              Send back to recon?
-            </h3>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20 }}>
-              {reconModal.year} {reconModal.make} {reconModal.model} (#{reconModal.stockNumber})
-            </p>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              Select stage
-            </label>
-            <select
-              value={reconStage}
-              onChange={e => setReconStage(e.target.value)}
-              className="input"
-              style={{ width: '100%', marginBottom: 20, padding: '10px 12px', fontSize: 14 }}
-            >
-              {RECON_STAGES.map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ padding: '24px 24px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Send to Recon Board</h3>
+                  <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                    {reconModal.year} {reconModal.make} {reconModal.model} · #{reconModal.stockNumber}
+                  </p>
+                </div>
+                <button onClick={() => { setReconModal(null); setReconError('') }} style={{
+                  background: 'none', border: 'none', fontSize: 22, cursor: 'pointer',
+                  color: 'var(--text-muted)', padding: '0 4px', lineHeight: 1,
+                }}>&times;</button>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
+              {/* Starting Stage */}
+              <div style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                  Starting Stage
+                </p>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {RECON_STAGES.map(s => {
+                    const active = reconStage === s.value
+                    return (
+                      <button
+                        key={s.value}
+                        type="button"
+                        onClick={() => setReconStage(s.value)}
+                        style={{
+                          padding: '10px 18px', borderRadius: 10,
+                          border: active ? '2px solid #1a1a1a' : '1px solid var(--border)',
+                          background: active ? '#fafaf8' : '#fff',
+                          fontSize: 14, fontWeight: active ? 600 : 500,
+                          color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          cursor: 'pointer', minHeight: 'auto', transition: 'all 0.15s',
+                        }}
+                      >{s.label}</button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Estimated Hours */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Estimated Hours
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  className="input"
+                  placeholder="e.g. 4"
+                  value={reconEstHours}
+                  onChange={e => setReconEstHours(e.target.value)}
+                  style={{ maxWidth: 160 }}
+                />
+              </div>
+
+              {/* Tasks / Checklist */}
+              <div style={{ marginBottom: 20 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                  Tasks / Checklist
+                </p>
+                {reconStage === 'mechanic' && (
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
+                    cursor: 'pointer', fontSize: 14,
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={reconFullInspection}
+                      onChange={e => setReconFullInspection(e.target.checked)}
+                      style={{ width: 18, height: 18, cursor: 'pointer' }}
+                    />
+                    Full inspection checklist ({DEFAULT_INSPECTION.length} items)
+                  </label>
+                )}
+
+                {/* Custom tasks */}
+                {reconCustomTasks.map((task, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
+                    padding: '8px 12px', background: 'var(--bg-primary)', borderRadius: 10,
+                    fontSize: 14,
+                  }}>
+                    <span style={{ flex: 1 }}>{task}</span>
+                    <button
+                      type="button"
+                      onClick={() => setReconCustomTasks(reconCustomTasks.filter((_, j) => j !== i))}
+                      style={{
+                        background: 'none', border: 'none', fontSize: 16,
+                        cursor: 'pointer', color: 'var(--text-muted)', padding: '0 4px',
+                        lineHeight: 1, minHeight: 'auto',
+                      }}
+                    >&times;</button>
+                  </div>
+                ))}
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    className="input"
+                    placeholder="Add a task..."
+                    value={reconNewTask}
+                    onChange={e => setReconNewTask(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const t = reconNewTask.trim()
+                        if (t) { setReconCustomTasks([...reconCustomTasks, t]); setReconNewTask('') }
+                      }
+                    }}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const t = reconNewTask.trim()
+                      if (t) { setReconCustomTasks([...reconCustomTasks, t]); setReconNewTask('') }
+                    }}
+                    style={{
+                      padding: '8px 16px', borderRadius: 10, border: '1px solid var(--border)',
+                      background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', minHeight: 'auto',
+                    }}
+                  >Add</button>
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div style={{ marginBottom: 8 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Notes
+                </label>
+                <textarea
+                  className="input"
+                  rows={2}
+                  placeholder="Any notes for the recon team..."
+                  value={reconNotes}
+                  onChange={e => setReconNotes(e.target.value)}
+                  style={{ resize: 'vertical', minHeight: 60 }}
+                />
+              </div>
+
+              {reconError && (
+                <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 13, background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-border)', marginTop: 12 }}>
+                  {reconError}
+                </div>
+              )}
+            </div>
+
+            {/* Footer buttons */}
+            <div style={{ padding: '16px 24px 24px', display: 'flex', gap: 10 }}>
               <button
-                onClick={() => setReconModal(null)}
+                onClick={() => { setReconModal(null); setReconError('') }}
                 style={{
                   flex: 1, padding: '12px 0', borderRadius: 12,
                   border: '1px solid var(--border)', background: '#fff',
                   fontSize: 14, fontWeight: 600, cursor: 'pointer',
                 }}
               >
-                No, just mark returned
+                Skip (just returned)
               </button>
               <button
                 onClick={async () => {
                   setSendingToRecon(true)
-                  // Find vehicle by stock number
-                  const res = await fetch(`/api/vehicles?stockNumber=${reconModal.stockNumber}`)
-                  const data = await res.json()
-                  const vehicle = data.vehicles?.[0]
-                  if (vehicle) {
-                    await fetch(`/api/vehicles/${vehicle.id}/move-stage`, {
+                  setReconError('')
+
+                  // Build checklist
+                  let mechanicChecklist: string[] = []
+                  if (reconFullInspection) {
+                    mechanicChecklist = [...DEFAULT_INSPECTION, ...reconCustomTasks]
+                  } else if (reconCustomTasks.length > 0) {
+                    mechanicChecklist = reconCustomTasks
+                  }
+
+                  const payload = {
+                    stockNumber: reconModal.stockNumber,
+                    year: reconModal.year,
+                    make: reconModal.make,
+                    model: reconModal.model,
+                    color: reconModal.color,
+                    startingStage: reconStage,
+                    mechanicChecklist: mechanicChecklist.length > 0 ? mechanicChecklist : undefined,
+                    estimatedHours: reconEstHours ? parseFloat(reconEstHours) : null,
+                    notes: reconNotes || undefined,
+                  }
+
+                  try {
+                    const res = await fetch('/api/vehicles', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ targetStage: reconStage }),
+                      body: JSON.stringify(payload),
                     })
+                    if (!res.ok) {
+                      const d = await res.json()
+                      setReconError(d.error || 'Failed to send to recon')
+                      setSendingToRecon(false)
+                      return
+                    }
+                    // Reset form state
+                    setReconModal(null)
+                    setReconStage('mechanic')
+                    setReconFullInspection(false)
+                    setReconCustomTasks([])
+                    setReconNewTask('')
+                    setReconNotes('')
+                    setReconEstHours('')
+                    setReconError('')
+                    load()
+                  } catch {
+                    setReconError('Network error')
                   }
                   setSendingToRecon(false)
-                  setReconModal(null)
-                  load()
                 }}
                 disabled={sendingToRecon}
                 style={{

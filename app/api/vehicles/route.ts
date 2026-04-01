@@ -68,6 +68,80 @@ export async function POST(request: Request) {
   // Check for duplicate stock number
   const existing = await prisma.vehicle.findUnique({ where: { stockNumber } })
   if (existing) {
+    if (existing.status === 'external') {
+      // Vehicle returning from external repair — re-enter recon
+      let stageAssignee = assigneeId
+      if (!stageAssignee) {
+        const config = await prisma.stageConfig.findUnique({ where: { stage: startingStage } })
+        stageAssignee = config?.defaultAssigneeId || null
+      }
+
+      const stageConfig = await prisma.stageConfig.findUnique({ where: { stage: startingStage } })
+      const configChecklist = (stageConfig?.defaultChecklist as string[] | undefined)?.length
+        ? stageConfig!.defaultChecklist as string[]
+        : null
+      const checklistItems = mechanicChecklist && mechanicChecklist.length > 0
+        ? mechanicChecklist
+        : configChecklist || DEFAULT_CHECKLISTS[startingStage as keyof typeof DEFAULT_CHECKLISTS] || ['Inspect & clear']
+      const checklist = checklistItems.map((item: string) => ({ item, done: false, note: '' }))
+
+      const maxPriority = await prisma.vehicleStage.aggregate({
+        where: { stage: startingStage, status: { notIn: ['done', 'skipped'] } },
+        _max: { priority: true },
+      })
+      const nextPriority = (maxPriority._max.priority ?? -1) + 1
+
+      const vehicle = await prisma.$transaction(async (tx) => {
+        // Update vehicle info
+        await tx.vehicle.update({
+          where: { id: existing.id },
+          data: {
+            year: year ? parseInt(year) : existing.year,
+            make: make || existing.make,
+            model: model || existing.model,
+            color: color || existing.color,
+            trim: trim || existing.trim,
+            notes: notes || existing.notes,
+            vin: vin || existing.vin,
+          },
+        })
+
+        const stage = await tx.vehicleStage.create({
+          data: {
+            vehicleId: existing.id,
+            stage: startingStage,
+            status: 'pending',
+            assigneeId: stageAssignee,
+            checklist,
+            priority: nextPriority,
+            estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
+          },
+        })
+
+        const updated = await tx.vehicle.update({
+          where: { id: existing.id },
+          data: {
+            status: startingStage,
+            currentStageId: stage.id,
+            currentAssigneeId: stageAssignee,
+          },
+        })
+
+        await tx.activityLog.create({
+          data: {
+            entityType: 'vehicle',
+            entityId: existing.id,
+            action: 'returned_from_external',
+            actorId: user.id,
+            details: { stockNumber, stage: startingStage },
+          },
+        })
+
+        return updated
+      })
+
+      return NextResponse.json({ vehicle }, { status: 201 })
+    }
     if (existing.status === 'completed') {
       return NextResponse.json({
         error: 'completed',
