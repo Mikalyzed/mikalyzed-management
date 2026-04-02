@@ -1304,6 +1304,9 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
                         Mark Received
                       </button>
                     )}
+                    {isAdmin && (
+                      <button onClick={async () => { if (!confirm('Delete this part?')) return; setSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'DELETE' }); setSaving(false); onPartsChange() }} disabled={saving} style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fef2f2', color: '#ef4444', fontSize: '12px', cursor: 'pointer', lineHeight: 1 }} title="Delete part">🗑</button>
+                    )}
                   </div>
                 </div>
 

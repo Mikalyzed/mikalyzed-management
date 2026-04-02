@@ -1346,6 +1346,9 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
                 {part.status === 'ordered' && isAdmin && (
                   <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Received</button>
                 )}
+                {isAdmin && (
+                  <button onClick={async () => { if (!confirm('Delete this part?')) return; setSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'DELETE' }); setSaving(false); onPartsChange() }} disabled={saving} style={{ padding: '4px 6px', borderRadius: 5, border: '1px solid #fca5a5', background: '#fef2f2', color: '#ef4444', fontSize: 11, cursor: 'pointer', lineHeight: 1 }} title="Delete part">🗑</button>
+                )}
               </div>
             </div>
             {addingUrlId === part.id && (

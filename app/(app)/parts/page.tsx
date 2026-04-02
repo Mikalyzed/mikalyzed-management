@@ -195,6 +195,7 @@ export default function PartsOverviewPage() {
                   {part.status === 'ordered' && (
                     <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mark Received</button>
                   )}
+                  <button onClick={async () => { if (!confirm('Delete this part?')) return; setSaving(part.id); await fetch(`/api/parts/${part.id}`, { method: 'DELETE' }); setSaving(null); load() }} disabled={saving === part.id} style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fef2f2', color: '#ef4444', fontSize: '12px', cursor: 'pointer', lineHeight: 1 }} title="Delete part">🗑</button>
                 </div>
                 {/* Inline URL input */}
                 {addingUrlId === part.id && (

@@ -725,6 +725,9 @@ export default function MechanicBoard() {
                             {part.status === 'ordered' && isAdmin && (
                               <button onClick={async () => { setMechPartsSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'received' }) }); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) }} style={{ padding: '3px 6px', borderRadius: 4, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>Received</button>
                             )}
+                            {isAdmin && (
+                              <button onClick={async () => { if (!confirm('Delete this part?')) return; setMechPartsSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'DELETE' }); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) }} style={{ padding: '3px 5px', borderRadius: 4, border: '1px solid #fca5a5', background: '#fef2f2', color: '#ef4444', fontSize: 10, cursor: 'pointer', lineHeight: 1 }} title="Delete">🗑</button>
+                            )}
                           </div>
                         </div>
                         {mechPartsUrlId === part.id && (
