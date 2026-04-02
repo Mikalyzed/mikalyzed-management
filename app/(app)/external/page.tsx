@@ -62,6 +62,13 @@ export default function ExternalRepairsPage() {
   const [reconNotes, setReconNotes] = useState('')
   const [reconEstHours, setReconEstHours] = useState('')
   const [reconError, setReconError] = useState('')
+  const [showAnotherShopForm, setShowAnotherShopForm] = useState(false)
+  const [anotherShopName, setAnotherShopName] = useState('')
+  const [anotherShopPhone, setAnotherShopPhone] = useState('')
+  const [anotherRepairDesc, setAnotherRepairDesc] = useState('')
+  const [anotherEstDays, setAnotherEstDays] = useState('')
+  const [anotherNotes, setAnotherNotes] = useState('')
+  const [sendingToShop, setSendingToShop] = useState(false)
   
   // Follow-up state
   const [followUpModal, setFollowUpModal] = useState<{ 
@@ -855,47 +862,13 @@ export default function ExternalRepairsPage() {
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  // Set status to returned and create new external repair entry
-                  try {
-                    await fetch(`/api/external/${(reconModal as any).id}`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ status: 'returned' })
-                    })
-                    
-                    // Open form for new external repair
-                    const shopName = prompt('Shop name:')
-                    const shopPhone = prompt('Shop phone (optional):') || ''
-                    const repairDescription = prompt('What\'s being done:')
-                    const estimatedDaysStr = prompt('Estimated days:')
-                    const notes = prompt('Notes (optional):') || ''
-                    
-                    if (shopName && repairDescription && estimatedDaysStr) {
-                      await fetch('/api/external', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          stockNumber: reconModal.stockNumber,
-                          year: reconModal.year,
-                          make: reconModal.make,
-                          model: reconModal.model,
-                          color: reconModal.color || null,
-                          shopName,
-                          shopPhone: shopPhone || null,
-                          repairDescription,
-                          estimatedDays: Number(estimatedDaysStr),
-                          sentDate: new Date().toISOString().split('T')[0],
-                          notes: notes || null
-                        })
-                      })
-                    }
-                    
-                    setReconModal(null)
-                    load()
-                  } catch (error) {
-                    console.error('Error sending to another shop:', error)
-                  }
+                onClick={() => {
+                  setShowAnotherShopForm(true)
+                  setAnotherShopName('')
+                  setAnotherShopPhone('')
+                  setAnotherRepairDesc('')
+                  setAnotherEstDays('')
+                  setAnotherNotes('')
                 }}
                 style={{
                   flex: 1, padding: '12px 0', borderRadius: 12, border: '1px solid #f59e0b',
@@ -904,6 +877,169 @@ export default function ExternalRepairsPage() {
                 }}
               >
                 Send to Another Shop
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Send to Another Shop Modal */}
+      {showAnotherShopForm && reconModal && (
+        <div
+          onClick={() => !sendingToShop && setShowAnotherShopForm(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1100, padding: 20,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 20, width: '100%', maxWidth: 480,
+              maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+            }}
+          >
+            <div style={{ padding: '24px 24px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Send to Another Shop</h3>
+                  <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+                    {reconModal.year} {reconModal.make} {reconModal.model} · #{reconModal.stockNumber}
+                  </p>
+                </div>
+                <button onClick={() => setShowAnotherShopForm(false)} style={{
+                  background: 'none', border: 'none', fontSize: 22, cursor: 'pointer',
+                  color: 'var(--text-muted)', padding: '0 4px', lineHeight: 1,
+                }}>&times;</button>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Shop Name *
+                </label>
+                <input
+                  className="input"
+                  placeholder="e.g. Mike's Auto Body"
+                  value={anotherShopName}
+                  onChange={e => setAnotherShopName(e.target.value)}
+                />
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Shop Phone
+                </label>
+                <input
+                  className="input"
+                  placeholder="Optional"
+                  value={anotherShopPhone}
+                  onChange={e => setAnotherShopPhone(e.target.value)}
+                />
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  What&apos;s Being Done *
+                </label>
+                <textarea
+                  className="input"
+                  rows={3}
+                  placeholder="Describe the repair..."
+                  value={anotherRepairDesc}
+                  onChange={e => setAnotherRepairDesc(e.target.value)}
+                  style={{ resize: 'vertical', minHeight: 60 }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Estimated Days *
+                </label>
+                <input
+                  className="input"
+                  type="number"
+                  placeholder="e.g. 5"
+                  value={anotherEstDays}
+                  onChange={e => setAnotherEstDays(e.target.value)}
+                  style={{ maxWidth: 160 }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 8 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Notes
+                </label>
+                <textarea
+                  className="input"
+                  rows={2}
+                  placeholder="Optional notes..."
+                  value={anotherNotes}
+                  onChange={e => setAnotherNotes(e.target.value)}
+                  style={{ resize: 'vertical', minHeight: 50 }}
+                />
+              </div>
+            </div>
+
+            <div style={{ padding: '16px 24px 24px', display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setShowAnotherShopForm(false)}
+                disabled={sendingToShop}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 12,
+                  border: '1px solid var(--border)', background: '#fff',
+                  fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!anotherShopName.trim() || !anotherRepairDesc.trim() || !anotherEstDays.trim()) return
+                  setSendingToShop(true)
+                  try {
+                    await fetch(`/api/external/${(reconModal as any).id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: 'returned' })
+                    })
+                    await fetch('/api/external', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        stockNumber: reconModal.stockNumber,
+                        year: reconModal.year,
+                        make: reconModal.make,
+                        model: reconModal.model,
+                        color: reconModal.color || null,
+                        shopName: anotherShopName.trim(),
+                        shopPhone: anotherShopPhone.trim() || null,
+                        repairDescription: anotherRepairDesc.trim(),
+                        estimatedDays: Number(anotherEstDays),
+                        sentDate: new Date().toISOString().split('T')[0],
+                        notes: anotherNotes.trim() || null,
+                      })
+                    })
+                    setShowAnotherShopForm(false)
+                    setReconModal(null)
+                    load()
+                  } catch (error) {
+                    console.error('Error sending to another shop:', error)
+                  }
+                  setSendingToShop(false)
+                }}
+                disabled={sendingToShop || !anotherShopName.trim() || !anotherRepairDesc.trim() || !anotherEstDays.trim()}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 12, border: 'none',
+                  background: '#f59e0b', color: '#fff',
+                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                  opacity: (sendingToShop || !anotherShopName.trim() || !anotherRepairDesc.trim() || !anotherEstDays.trim()) ? 0.5 : 1,
+                }}
+              >
+                {sendingToShop ? 'Sending...' : 'Send to Shop'}
               </button>
             </div>
           </div>
