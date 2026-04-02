@@ -14,13 +14,23 @@ type VehicleCardProps = {
   stageDetail?: string
   assigneeName?: string | null
   timeInStage?: string
+  partsLabel?: string | null
   onClick?: () => void
+}
+
+const PARTS_COLORS: Record<string, { bg: string; color: string }> = {
+  'Parts need to be found': { bg: '#fef2f2', color: '#ef4444' },
+  'Parts pending approval': { bg: '#fef9c3', color: '#a16207' },
+  'Parts need to be ordered': { bg: '#eff6ff', color: '#2563eb' },
+  'Parts ordered': { bg: '#fefce8', color: '#eab308' },
 }
 
 export default function VehicleCard({
   id, stockNumber, year, make, model, color,
-  status, stageStatus, stageDetail, assigneeName, timeInStage, onClick,
+  status, stageStatus, stageDetail, assigneeName, timeInStage, partsLabel, onClick,
 }: VehicleCardProps) {
+  const partsStyle = partsLabel ? PARTS_COLORS[partsLabel] || { bg: '#f3f4f6', color: '#6b7280' } : null
+
   return (
     <div onClick={onClick} className="card" style={{ cursor: onClick ? 'pointer' : undefined }}>
         <div className="flex items-start justify-between gap-3 mb-3">
@@ -51,6 +61,21 @@ export default function VehicleCard({
             </span>
           )}
         </div>
+
+        {partsLabel && partsStyle && (
+          <div style={{
+            marginTop: '8px',
+            padding: '4px 8px',
+            borderRadius: '6px',
+            background: partsStyle.bg,
+            color: partsStyle.color,
+            fontSize: '11px',
+            fontWeight: 600,
+            textAlign: 'center',
+          }}>
+            🔧 {partsLabel}
+          </div>
+        )}
       </div>
   )
 }

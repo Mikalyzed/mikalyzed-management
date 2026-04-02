@@ -547,6 +547,7 @@ export default function VehiclesPage() {
                           }
                           assigneeName={v.currentAssignee?.name}
                           timeInStage={getTimeInStage(v)}
+                          partsLabel={(v as any).partsLabel}
                         />
                       </div>
                     </div>

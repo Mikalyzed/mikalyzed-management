@@ -8,21 +8,23 @@ export async function GET() {
     return NextResponse.json({ error: 'Admin only' }, { status: 403 })
   }
 
-  const [requested, sourced, ordered, received] = await Promise.all([
+  const [requested, sourced, ready_to_order, ordered, received] = await Promise.all([
     prisma.part.count({ where: { status: 'requested' } }),
     prisma.part.count({ where: { status: 'sourced' } }),
+    prisma.part.count({ where: { status: 'ready_to_order' } }),
     prisma.part.count({ where: { status: 'ordered' } }),
     prisma.part.count({ where: { status: 'received' } })
   ])
 
-  const pending = requested + ordered // requested + ordered = pending
+  const pending = requested + sourced + ready_to_order + ordered
 
   return NextResponse.json({
     requested,
     sourced,
+    ready_to_order,
     ordered,
     received,
     pending,
-    total: requested + sourced + ordered + received
+    total: requested + sourced + ready_to_order + ordered + received
   })
 }

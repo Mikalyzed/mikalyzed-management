@@ -163,7 +163,7 @@ async function updateVehiclePartsStatus(vehicleId: string) {
     select: { status: true }
   })
 
-  const hasRequestedOrOrdered = parts.some(p => p.status === 'requested' || p.status === 'ordered')
+  const hasRequestedOrOrdered = parts.some(p => ['requested', 'sourced', 'ready_to_order', 'ordered'].includes(p.status))
 
   // Update current vehicle stage if it exists
   const vehicle = await prisma.vehicle.findUnique({

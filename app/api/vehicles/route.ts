@@ -35,6 +35,10 @@ export async function GET(request: Request) {
           assignee: { select: { id: true, name: true } },
         },
       },
+      parts: {
+        where: { status: { not: 'received' } },
+        select: { status: true },
+      },
     },
     orderBy: { createdAt: 'desc' },
   })
@@ -46,7 +50,18 @@ export async function GET(request: Request) {
     return aPriority - bPriority
   })
 
-  return NextResponse.json({ vehicles })
+  // Compute parts status summary for each vehicle
+  const vehiclesWithParts = vehicles.map(v => {
+    const partStatuses = v.parts.map(p => p.status)
+    let partsLabel = null
+    if (partStatuses.includes('requested')) partsLabel = 'Parts need to be found'
+    else if (partStatuses.includes('sourced')) partsLabel = 'Parts pending approval'
+    else if (partStatuses.includes('ready_to_order')) partsLabel = 'Parts need to be ordered'
+    else if (partStatuses.includes('ordered')) partsLabel = 'Parts ordered'
+    return { ...v, partsLabel, partsCount: partStatuses.length }
+  })
+
+  return NextResponse.json({ vehicles: vehiclesWithParts })
 }
 
 export async function POST(request: Request) {

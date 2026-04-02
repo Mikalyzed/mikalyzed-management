@@ -26,6 +26,7 @@ type JobCard = {
   awaitingPartsTracking: string | null
   completedAt: string | null
   startedAt: string | null
+  partsLabel: string | null
 }
 
 type DayBucket = { day: string; jobs: JobCard[] }
@@ -243,6 +244,17 @@ export default function MechanicBoard() {
             {isOver && <Badge text="Overdue" color="#ef4444" />}
           </div>
         </div>
+
+        {/* Parts status */}
+        {job.partsLabel && (
+          <div style={{
+            marginTop: 8, padding: '4px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, textAlign: 'center',
+            background: job.partsLabel.includes('found') ? '#fef2f2' : job.partsLabel.includes('approval') ? '#fef9c3' : job.partsLabel.includes('ordered') ? '#fefce8' : '#eff6ff',
+            color: job.partsLabel.includes('found') ? '#ef4444' : job.partsLabel.includes('approval') ? '#a16207' : job.partsLabel.includes('ordered') ? '#eab308' : '#2563eb',
+          }}>
+            🔧 {job.partsLabel}
+          </div>
+        )}
 
         {/* Timer row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, gap: 12 }}>

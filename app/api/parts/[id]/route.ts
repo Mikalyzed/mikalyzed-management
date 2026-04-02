@@ -50,19 +50,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Handle URL updates
   if ('url' in updates) {
     data.url = updates.url
-    // If URL is being added and status was 'requested', auto-update to 'sourced'
+    // If URL is being added and status was 'requested', auto-update to 'sourced' (pending approval)
     if (updates.url && part.status === 'requested') {
       data.status = 'sourced'
-      shouldSendEmail = true
     }
+    // If URL is cleared (decline), keep status as-is (caller sets status to 'requested')
   }
 
   // Handle status updates
   if ('status' in updates && updates.status !== part.status) {
     data.status = updates.status
     
-    // Log status changes for ordered/received
-    if (updates.status === 'ordered' || updates.status === 'received') {
+    // Send email to parts@ when approved (ready_to_order)
+    if (updates.status === 'ready_to_order' && part.url) {
+      shouldSendEmail = true
+    }
+
+    // Log status changes
+    if (['ready_to_order', 'ordered', 'received'].includes(updates.status)) {
       await prisma.activityLog.create({
         data: {
           entityType: 'part',
@@ -112,8 +117,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   })
 
-  // Send email if URL was added and status changed to sourced
-  if (shouldSendEmail && data.url) {
+  // Send email when part is approved (ready_to_order)
+  if (shouldSendEmail && part.url) {
     const vehicleDesc = `${part.vehicle.year} ${part.vehicle.make} ${part.vehicle.model} (Stock #${part.vehicle.stockNumber})`
     const { subject, html } = partsRequestEmail({
       vehicleDesc,
@@ -160,7 +165,7 @@ async function updateVehiclePartsStatus(vehicleId: string) {
     select: { status: true }
   })
 
-  const hasRequestedOrOrdered = parts.some(p => p.status === 'requested' || p.status === 'ordered')
+  const hasRequestedOrOrdered = parts.some(p => ['requested', 'sourced', 'ready_to_order', 'ordered'].includes(p.status))
 
   // Update current vehicle stage if it exists
   const vehicle = await prisma.vehicle.findUnique({

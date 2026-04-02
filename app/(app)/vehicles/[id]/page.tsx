@@ -1138,21 +1138,23 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
   isAdmin: boolean
 }) {
   const [showAddForm, setShowAddForm] = useState(false)
-  const [newPart, setNewPart] = useState({ name: '', url: '', notes: '', assignedToId: '' })
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editData, setEditData] = useState<any>({})
+  const [newPart, setNewPart] = useState({ name: '', notes: '' })
+  const [addingUrl, setAddingUrl] = useState<string | null>(null)
+  const [urlInput, setUrlInput] = useState('')
   const [saving, setSaving] = useState(false)
 
   const statusLabels: Record<string, string> = {
     requested: 'Requested',
-    sourced: 'Sourced', 
+    sourced: 'Pending Approval',
+    ready_to_order: 'Ready to Order',
     ordered: 'Ordered',
     received: 'Received'
   }
 
   const statusColors: Record<string, { bg: string; color: string; border: string }> = {
     requested: { bg: '#fef2f2', color: '#ef4444', border: '#fecaca' },
-    sourced: { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
+    sourced: { bg: '#fef9c3', color: '#a16207', border: '#fde047' },
+    ready_to_order: { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
     ordered: { bg: '#fefce8', color: '#eab308', border: '#fde047' },
     received: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' }
   }
@@ -1164,26 +1166,32 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
       const response = await fetch('/api/parts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vehicleId,
-          name: newPart.name,
-          url: newPart.url || null,
-          notes: newPart.notes || null,
-          assignedToId: newPart.assignedToId || null
-        })
+        body: JSON.stringify({ vehicleId, name: newPart.name, notes: newPart.notes || null })
       })
       if (response.ok) {
-        setNewPart({ name: '', url: '', notes: '', assignedToId: '' })
+        setNewPart({ name: '', notes: '' })
         setShowAddForm(false)
         onPartsChange()
       }
-    } catch (error) {
-      console.error('Error adding part:', error)
-    }
+    } catch (error) { console.error('Error adding part:', error) }
     setSaving(false)
   }
 
-  async function updatePart(partId: string, updates: any) {
+  async function submitUrl(partId: string) {
+    if (!urlInput.trim()) return
+    setSaving(true)
+    try {
+      const response = await fetch(`/api/parts/${partId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: urlInput })
+      })
+      if (response.ok) { setAddingUrl(null); setUrlInput(''); onPartsChange() }
+    } catch (error) { console.error('Error:', error) }
+    setSaving(false)
+  }
+
+  async function updatePart(partId: string, updates: Record<string, unknown>) {
     setSaving(true)
     try {
       const response = await fetch(`/api/parts/${partId}`, {
@@ -1191,142 +1199,37 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updates)
       })
-      if (response.ok) {
-        setEditingId(null)
-        onPartsChange()
-      }
-    } catch (error) {
-      console.error('Error updating part:', error)
-    }
+      if (response.ok) onPartsChange()
+    } catch (error) { console.error('Error:', error) }
     setSaving(false)
   }
 
   return (
-    <div style={{
-      background: '#ffffff',
-      border: '1px solid var(--border)',
-      borderRadius: '16px',
-      overflow: 'hidden'
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: '20px 24px',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
+    <div style={{ background: '#ffffff', border: '1px solid var(--border)', borderRadius: '16px', overflow: 'hidden' }}>
+      <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Parts</h3>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-            Track vehicle parts requests and sourcing
-          </p>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>Track vehicle parts requests and sourcing</p>
         </div>
-        <button
-          onClick={() => setShowAddForm(true)}
-          style={{
-            padding: '8px 16px',
-            borderRadius: '8px',
-            border: '1px solid #1a1a1a',
-            background: '#1a1a1a',
-            color: '#dffd6e',
-            fontSize: '13px',
-            fontWeight: 600,
-            cursor: 'pointer'
-          }}
-        >
+        <button onClick={() => setShowAddForm(true)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #1a1a1a', background: '#1a1a1a', color: '#dffd6e', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
           Add Part
         </button>
       </div>
 
-      {/* Add form */}
       {showAddForm && (
         <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', background: '#f8f9fa' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div>
-              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-                Part Name *
-              </label>
-              <input
-                type="text"
-                value={newPart.name}
-                onChange={e => setNewPart({ ...newPart, name: e.target.value })}
-                placeholder="e.g. Front brake pads"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  fontSize: '14px'
-                }}
-              />
+              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Part Name *</label>
+              <input type="text" value={newPart.name} onChange={e => setNewPart({ ...newPart, name: e.target.value })} placeholder="e.g. Front brake pads" style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px' }} />
             </div>
             <div>
-              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-                URL (optional)
-              </label>
-              <input
-                type="url"
-                value={newPart.url}
-                onChange={e => setNewPart({ ...newPart, url: e.target.value })}
-                placeholder="https://..."
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  fontSize: '14px'
-                }}
-              />
-            </div>
-            <div>
-              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-                Notes (optional)
-              </label>
-              <textarea
-                value={newPart.notes}
-                onChange={e => setNewPart({ ...newPart, notes: e.target.value })}
-                rows={2}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  resize: 'vertical'
-                }}
-              />
+              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Notes (optional)</label>
+              <textarea value={newPart.notes} onChange={e => setNewPart({ ...newPart, notes: e.target.value })} rows={2} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px', resize: 'vertical' }} />
             </div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setShowAddForm(false)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border)',
-                  background: '#fff',
-                  color: 'var(--text-secondary)',
-                  fontSize: '13px',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={addPart}
-                disabled={saving || !newPart.name.trim()}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '6px',
-                  border: '1px solid #1a1a1a',
-                  background: '#1a1a1a',
-                  color: '#dffd6e',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: saving ? 'not-allowed' : 'pointer',
-                  opacity: saving || !newPart.name.trim() ? 0.5 : 1
-                }}
-              >
+              <button onClick={() => setShowAddForm(false)} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid var(--border)', background: '#fff', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={addPart} disabled={saving || !newPart.name.trim()} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #1a1a1a', background: '#1a1a1a', color: '#dffd6e', fontSize: '13px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving || !newPart.name.trim() ? 0.5 : 1 }}>
                 {saving ? 'Adding...' : 'Add Part'}
               </button>
             </div>
@@ -1334,7 +1237,6 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
         </div>
       )}
 
-      {/* Parts list */}
       {parts.length === 0 ? (
         <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--text-muted)' }}>
           <p style={{ fontSize: '14px', marginBottom: '8px' }}>No parts requested yet</p>
@@ -1344,86 +1246,83 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
         <div>
           {parts.map((part, index) => {
             const statusStyle = statusColors[part.status] || statusColors.requested
-            const isEditing = editingId === part.id
 
             return (
-              <div
-                key={part.id}
-                style={{
-                  padding: '16px 24px',
-                  borderBottom: index < parts.length - 1 ? '1px solid var(--border)' : 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px'
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-                    <h4 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>{part.name}</h4>
-                    <div style={{
-                      ...statusStyle,
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      border: `1px solid ${statusStyle.border}`
-                    }}>
-                      {statusLabels[part.status]}
+              <div key={part.id} style={{ padding: '16px 24px', borderBottom: index < parts.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                      <h4 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>{part.name}</h4>
+                      <div style={{ background: statusStyle.bg, color: statusStyle.color, padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, border: `1px solid ${statusStyle.border}` }}>
+                        {statusLabels[part.status]}
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                    Requested by {part.requestedBy.name}
-                    {part.assignedTo && ` • Assigned to ${part.assignedTo.name}`}
-                    {part.price && ` • ${part.price}`}
-                  </div>
-                  {part.url && (
-                    <a
-                      href={part.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        fontSize: '13px',
-                        color: '#2563eb',
-                        textDecoration: 'none',
-                        display: 'block',
-                        marginTop: '4px'
-                      }}
-                    >
-                      View Link →
-                    </a>
-                  )}
-                  {part.notes && (
-                    <p style={{
-                      fontSize: '13px',
-                      color: 'var(--text-secondary)',
-                      margin: '4px 0 0 0',
-                      fontStyle: 'italic'
-                    }}>
-                      {part.notes}
-                    </p>
-                  )}
-                </div>
-                {(isAdmin || part.assignedTo) && (
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {isAdmin && (
-                      <select
-                        value={part.status}
-                        onChange={(e) => updatePart(part.id, { status: e.target.value })}
-                        disabled={saving}
-                        style={{
-                          padding: '4px 8px',
-                          border: '1px solid var(--border)',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <option value="requested">Requested</option>
-                        <option value="sourced">Sourced</option>
-                        <option value="ordered">Ordered</option>
-                        <option value="received">Received</option>
-                      </select>
+                    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                      Requested by {part.requestedBy.name}
+                      {part.assignedTo && ` • Assigned to ${part.assignedTo.name}`}
+                      {part.price && ` • ${part.price}`}
+                      {part.tracking && ` • Tracking: ${part.tracking}`}
+                    </div>
+                    {part.url && (
+                      <a href={part.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '13px', color: '#2563eb', textDecoration: 'none', display: 'block', marginTop: '4px', wordBreak: 'break-all' }}>
+                        {part.url.length > 60 ? part.url.slice(0, 60) + '...' : part.url} →
+                      </a>
                     )}
+                    {part.notes && (
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0 0', fontStyle: 'italic' }}>{part.notes}</p>
+                    )}
+                  </div>
+
+                  {/* Action buttons based on status */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
+                    {/* Requested: show "Add Link" button */}
+                    {part.status === 'requested' && !part.url && (
+                      <button onClick={() => { setAddingUrl(part.id); setUrlInput('') }} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Add Link
+                      </button>
+                    )}
+                    {/* Sourced: admin approve/decline */}
+                    {part.status === 'sourced' && isAdmin && (
+                      <>
+                        <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          ✓ Approve
+                        </button>
+                        <button onClick={() => updatePart(part.id, { status: 'requested', url: null })} disabled={saving} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                          ✗ Decline
+                        </button>
+                      </>
+                    )}
+                    {/* Ready to order: admin mark ordered */}
+                    {part.status === 'ready_to_order' && isAdmin && (
+                      <button onClick={() => updatePart(part.id, { status: 'ordered' })} disabled={saving} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Mark Ordered
+                      </button>
+                    )}
+                    {/* Ordered: admin mark received */}
+                    {part.status === 'ordered' && isAdmin && (
+                      <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        Mark Received
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* URL input form (inline, shows when "Add Link" is clicked) */}
+                {addingUrl === part.id && (
+                  <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="url"
+                      value={urlInput}
+                      onChange={e => setUrlInput(e.target.value)}
+                      placeholder="Paste part link here..."
+                      autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitUrl(part.id) } }}
+                      style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px' }}
+                    />
+                    <button onClick={() => setAddingUrl(null)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: '#fff', fontSize: '13px', cursor: 'pointer' }}>Cancel</button>
+                    <button onClick={() => submitUrl(part.id)} disabled={saving || !urlInput.trim()} style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: '13px', fontWeight: 600, cursor: 'pointer', opacity: saving || !urlInput.trim() ? 0.5 : 1 }}>
+                      Submit
+                    </button>
                   </div>
                 )}
               </div>

@@ -66,6 +66,21 @@ export async function GET() {
     }
   }
 
+  // Fetch parts for all vehicles in mechanic stage
+  const vehicleIds = [...new Set(stages.map(s => s.vehicleId))]
+  const allParts = vehicleIds.length > 0 ? await prisma.part.findMany({
+    where: { vehicleId: { in: vehicleIds }, status: { not: 'received' } },
+    select: { vehicleId: true, status: true },
+  }) : []
+  const partsMap: Record<string, string> = {}
+  for (const vid of vehicleIds) {
+    const vParts = allParts.filter(p => p.vehicleId === vid).map(p => p.status)
+    if (vParts.includes('requested')) partsMap[vid] = 'Parts need to be found'
+    else if (vParts.includes('sourced')) partsMap[vid] = 'Parts pending approval'
+    else if (vParts.includes('ready_to_order')) partsMap[vid] = 'Parts need to be ordered'
+    else if (vParts.includes('ordered')) partsMap[vid] = 'Parts ordered'
+  }
+
   const active = stages.filter(s => s.status === 'in_progress' && !s.awaitingParts && s.timerStartedAt)
   const paused = stages.filter(s =>
     (s.status === 'in_progress' && !s.timerStartedAt && !s.awaitingParts) ||
@@ -95,6 +110,7 @@ export async function GET() {
     awaitingPartsTracking: s.awaitingPartsTracking,
     completedAt: s.completedAt?.toISOString() || null,
     startedAt: s.startedAt?.toISOString() || null,
+    partsLabel: partsMap[s.vehicleId] || null,
   })
 
   // Weekly stats
