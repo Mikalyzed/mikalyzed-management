@@ -596,8 +596,7 @@ export default function ExternalRepairsPage() {
                     )}
                     {r.status === 'ready' && (
                       <button
-                        onClick={async () => {
-                          await updateStatus(r.id, 'returned')
+                        onClick={() => {
                           setReconModal(r)
                           setReconStage('mechanic')
                         }}
@@ -789,7 +788,16 @@ export default function ExternalRepairsPage() {
             {/* Footer buttons */}
             <div style={{ padding: '16px 24px 24px', display: 'flex', gap: 10 }}>
               <button
-                onClick={() => { setReconModal(null); setReconError('') }}
+                onClick={async () => {
+                  await fetch(`/api/external/${(reconModal as any).id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'returned' })
+                  })
+                  setReconModal(null)
+                  setReconError('')
+                  load()
+                }}
                 style={{
                   flex: 1, padding: '12px 0', borderRadius: 12,
                   border: '1px solid var(--border)', background: '#fff',
@@ -824,6 +832,12 @@ export default function ExternalRepairsPage() {
                   }
 
                   try {
+                    // Mark as returned first
+                    await fetch(`/api/external/${(reconModal as any).id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: 'returned' })
+                    })
                     const res = await fetch('/api/vehicles', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
