@@ -22,6 +22,8 @@ export default function AddVehiclePage() {
   const [startingStage, setStartingStage] = useState('mechanic')
   const [customTasks, setCustomTasks] = useState<string[]>([])
   const [newTask, setNewTask] = useState('')
+  const [parts, setParts] = useState<string[]>([])
+  const [newPart, setNewPart] = useState('')
 
   function addTask() {
     const task = newTask.trim()
@@ -92,6 +94,16 @@ export default function AddVehiclePage() {
         }
         setError(result.error || 'Failed to create vehicle')
         return
+      }
+      // Create parts if any were added
+      if (parts.length > 0) {
+        await Promise.all(parts.map(name =>
+          fetch('/api/parts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ vehicleId: result.vehicle.id, name }),
+          })
+        ))
       }
       router.push(`/vehicles/${result.vehicle.id}`)
     } catch {
@@ -357,6 +369,78 @@ export default function AddVehiclePage() {
             Notes
           </p>
           <textarea name="notes" rows={3} className="input" style={{ resize: 'vertical', minHeight: '80px' }} placeholder="Any notes about this vehicle..." />
+        </div>
+
+        {/* Parts Card */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid var(--border)',
+          borderRadius: '16px',
+          padding: '24px',
+          marginBottom: '24px',
+          boxShadow: 'var(--shadow-sm)',
+        }}>
+          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '20px' }}>
+            Parts Needed
+          </p>
+
+          <div style={{ display: 'flex', gap: '8px', marginBottom: parts.length > 0 ? '16px' : '0' }}>
+            <input
+              value={newPart}
+              onChange={(e) => setNewPart(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const p = newPart.trim(); if (p) { setParts([...parts, p]); setNewPart('') } } }}
+              className="input"
+              placeholder="Add a part needed..."
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              onClick={() => { const p = newPart.trim(); if (p) { setParts([...parts, p]); setNewPart('') } }}
+              style={{
+                padding: '12px 20px', borderRadius: '12px', border: '1px solid var(--border)',
+                background: '#ffffff', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                color: 'var(--text-primary)', minHeight: '44px', boxShadow: 'var(--shadow-sm)',
+              }}
+            >
+              Add
+            </button>
+          </div>
+
+          {parts.length > 0 && (
+            <div style={{ borderRadius: '12px', border: '1px solid var(--border)', overflow: 'hidden' }}>
+              {parts.map((part, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '14px 16px',
+                  borderBottom: i < parts.length - 1 ? '1px solid var(--border-light)' : 'none',
+                  background: '#ffffff',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca' }}>Requested</span>
+                    <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>{part}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setParts(parts.filter((_, j) => j !== i))}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
+                      fontSize: '18px', lineHeight: 1, minHeight: 'auto', padding: '4px 8px', borderRadius: '6px',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.background = 'var(--danger-bg)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {parts.length === 0 && (
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+              No parts added — you can always add parts later
+            </p>
+          )}
         </div>
 
         {error && (
