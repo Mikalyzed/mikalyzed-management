@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import ScheduleView from './ScheduleView'
 import PlanView from './PlanView'
+import OrderPartModal from '@/components/OrderPartModal'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
 
@@ -83,6 +84,7 @@ export default function MechanicBoard() {
   const [mechPartsUrlId, setMechPartsUrlId] = useState<string | null>(null)
   const [mechPartsUrlInput, setMechPartsUrlInput] = useState('')
   const [mechPartsSaving, setMechPartsSaving] = useState(false)
+  const [mechOrderModal, setMechOrderModal] = useState<{ id: string; name: string } | null>(null)
   const [externalSubmitting, setExternalSubmitting] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -720,7 +722,7 @@ export default function MechanicBoard() {
                               </>
                             )}
                             {part.status === 'ready_to_order' && isAdmin && (
-                              <button onClick={async () => { setMechPartsSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'ordered' }) }); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) }} style={{ padding: '3px 6px', borderRadius: 4, border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>Order</button>
+                              <button onClick={() => setMechOrderModal({ id: part.id, name: part.name })} style={{ padding: '3px 6px', borderRadius: 4, border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>Order</button>
                             )}
                             {part.status === 'ordered' && isAdmin && (
                               <button onClick={async () => { setMechPartsSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'received' }) }); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) }} style={{ padding: '3px 6px', borderRadius: 4, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>Received</button>
@@ -1168,6 +1170,11 @@ export default function MechanicBoard() {
             </form>
           </div>
         </div>
+      )}
+      {mechOrderModal && selectedJob && (
+        <OrderPartModal partId={mechOrderModal.id} partName={mechOrderModal.name} onClose={() => setMechOrderModal(null)} onComplete={() => {
+          fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || []))
+        }} />
       )}
     </div>
   )

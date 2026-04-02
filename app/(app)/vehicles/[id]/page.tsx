@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import OrderPartModal from '@/components/OrderPartModal'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
 
@@ -1142,6 +1143,7 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
   const [addingUrl, setAddingUrl] = useState<string | null>(null)
   const [urlInput, setUrlInput] = useState('')
   const [saving, setSaving] = useState(false)
+  const [orderModalPart, setOrderModalPart] = useState<{ id: string; name: string } | null>(null)
 
   const statusLabels: Record<string, string> = {
     requested: 'Requested',
@@ -1294,7 +1296,7 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
                     )}
                     {/* Ready to order: admin mark ordered */}
                     {part.status === 'ready_to_order' && isAdmin && (
-                      <button onClick={() => updatePart(part.id, { status: 'ordered' })} disabled={saving} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                         Mark Ordered
                       </button>
                     )}
@@ -1332,6 +1334,9 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
             )
           })}
         </div>
+      )}
+      {orderModalPart && (
+        <OrderPartModal partId={orderModalPart.id} partName={orderModalPart.name} onClose={() => setOrderModalPart(null)} onComplete={onPartsChange} />
       )}
     </div>
   )

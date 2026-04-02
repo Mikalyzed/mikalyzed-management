@@ -5,6 +5,7 @@ import Link from 'next/link'
 import VehicleCard from '@/components/VehicleCard'
 import KanbanScrollbar from '@/components/KanbanScrollbar'
 import { STAGE_LABELS } from '@/lib/constants'
+import OrderPartModal from '@/components/OrderPartModal'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
 
@@ -1237,6 +1238,7 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
   const [addingUrlId, setAddingUrlId] = useState<string | null>(null)
   const [urlInput, setUrlInput] = useState('')
   const [saving, setSaving] = useState(false)
+  const [orderModalPart, setOrderModalPart] = useState<{ id: string; name: string } | null>(null)
 
   const statusLabels: Record<string, string> = {
     requested: 'Requested', sourced: 'Pending Approval', ready_to_order: 'Ready to Order',
@@ -1341,7 +1343,7 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
                   </>
                 )}
                 {part.status === 'ready_to_order' && isAdmin && (
-                  <button onClick={() => updatePart(part.id, { status: 'ordered' })} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Order</button>
+                  <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Order</button>
                 )}
                 {part.status === 'ordered' && isAdmin && (
                   <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Received</button>
@@ -1363,6 +1365,9 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
           </div>
         )
       })}
+      {orderModalPart && (
+        <OrderPartModal partId={orderModalPart.id} partName={orderModalPart.name} onClose={() => setOrderModalPart(null)} onComplete={onPartsChange} />
+      )}
     </div>
   )
 }

@@ -63,6 +63,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if ('price' in updates) data.price = updates.price
   if ('tracking' in updates) data.tracking = updates.tracking
+  if ('orderImage' in updates) data.orderImage = updates.orderImage
+  if ('expectedDelivery' in updates) data.expectedDelivery = updates.expectedDelivery ? new Date(updates.expectedDelivery) : null
   if ('notes' in updates) data.notes = updates.notes
   if ('assignedToId' in updates && user.role === 'admin') data.assignedToId = updates.assignedToId
 

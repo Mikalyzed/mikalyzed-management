@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import OrderPartModal from '@/components/OrderPartModal'
 
 type Part = {
   id: string
@@ -47,6 +48,7 @@ export default function PartsOverviewPage() {
   const [saving, setSaving] = useState<string | null>(null)
   const [addingUrlId, setAddingUrlId] = useState<string | null>(null)
   const [urlInput, setUrlInput] = useState('')
+  const [orderModalPart, setOrderModalPart] = useState<{ id: string; name: string } | null>(null)
 
   function load() {
     const params = new URLSearchParams()
@@ -190,7 +192,7 @@ export default function PartsOverviewPage() {
                     </>
                   )}
                   {part.status === 'ready_to_order' && (
-                    <button onClick={() => updatePart(part.id, { status: 'ordered' })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mark Ordered</button>
+                    <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mark Ordered</button>
                   )}
                   {part.status === 'ordered' && (
                     <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mark Received</button>
@@ -212,6 +214,9 @@ export default function PartsOverviewPage() {
             )
           })}
         </div>
+      )}
+      {orderModalPart && (
+        <OrderPartModal partId={orderModalPart.id} partName={orderModalPart.name} onClose={() => setOrderModalPart(null)} onComplete={load} />
       )}
     </div>
   )
