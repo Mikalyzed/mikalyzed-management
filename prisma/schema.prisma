@@ -38,6 +38,8 @@ model User {
   assignedTasks    Task[]            @relation("TaskAssignee")
   createdTasks     Task[]            @relation("TaskCreator")
   taskApprovals    TaskApproval[]
+  requestedParts   Part[]            @relation("PartRequestedBy")
+  assignedParts    Part[]            @relation("PartAssignedTo")
 
   @@map("users")
 }
@@ -57,6 +59,7 @@ model Vehicle {
   notes            String?
   photos           String[]  @default([])
   createdById      String?   @map("created_by")
+  returnQueue      Json      @default("[]") @map("return_queue")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
   completedAt      DateTime? @map("completed_at")
@@ -68,10 +71,36 @@ model Vehicle {
   calendarItems    CalendarItem[]
   opportunities    Opportunity[]    @relation("OpportunityVehicle")
   vehicleInterests VehicleInterest[] @relation("VehicleInterestVehicle")
+  parts            Part[]
 
   @@index([status])
   @@index([currentAssigneeId])
   @@map("vehicles")
+}
+
+model Part {
+  id              String    @id @default(uuid())
+  vehicleId       String    @map("vehicle_id")
+  name            String
+  url             String?
+  status          String    @default("requested") // requested, sourced, ordered, received
+  requestedById   String    @map("requested_by_id")
+  assignedToId    String?   @map("assigned_to_id")
+  price           String?
+  tracking        String?
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  vehicle         Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  requestedBy     User      @relation("PartRequestedBy", fields: [requestedById], references: [id])
+  assignedTo      User?     @relation("PartAssignedTo", fields: [assignedToId], references: [id])
+
+  @@index([vehicleId])
+  @@index([status])
+  @@index([requestedById])
+  @@index([assignedToId])
+  @@map("parts")
 }
 
 model VehicleStage {
@@ -193,6 +222,7 @@ model ExternalRepair {
   expectedReturn    DateTime? @map("expected_return")
   status            String    @default("sent") // sent, in_progress, ready, returned
   notes             String?
+  followUps         Json      @default("[]") @map("follow_ups")
   createdById       String?   @map("created_by")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")

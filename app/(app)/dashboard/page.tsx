@@ -6,7 +6,7 @@ import { CALENDAR_TYPE_LABELS, CALENDAR_TYPE_COLORS } from '@/lib/calendar'
 
 type DashboardData = {
   user: { name: string; role: string; id: string }
-  pipeline: { mechanic: number; detailing: number; content: number; publish: number; completed: number; externalRepairs: number }
+  pipeline: { mechanic: number; detailing: number; content: number; publish: number; completed: number; externalRepairs: number; partsPending: number }
   myTasks: number
   recentVehicles: Array<{
     id: string; stockNumber: string; year: number | null; make: string; model: string; status: string; color: string | null
@@ -391,6 +391,14 @@ export default function DashboardPage() {
                   {data.pipeline.externalRepairs}
                 </p>
                 <p className="pipeline-chip-label">External</p>
+              </div>
+            </Link>
+            <Link href="/parts" style={{ flex: '1 1 100px', textDecoration: 'none', color: 'inherit' }}>
+              <div className="pipeline-chip">
+                <p className="pipeline-chip-value" style={{ color: data.pipeline.partsPending > 0 ? '#dc2626' : 'var(--text-muted)' }}>
+                  {data.pipeline.partsPending}
+                </p>
+                <p className="pipeline-chip-label">Parts Pending</p>
               </div>
             </Link>
           </div>

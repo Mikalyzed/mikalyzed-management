@@ -100,3 +100,30 @@ ${ctaButton(`${BASE_URL}/vehicles/${vehicleId}`, 'View Vehicle')}
 `)
   return { subject, html }
 }
+
+export function partsRequestEmail({
+  vehicleDesc,
+  partName,
+  url,
+  requestedBy,
+  vehicleId,
+}: {
+  vehicleDesc: string
+  partName: string
+  url: string | null
+  requestedBy: string
+  vehicleId: string
+}) {
+  const subject = `Parts request: ${vehicleDesc} — ${partName}`
+  const html = layout(`
+<h1 style="margin:0 0 8px;font-size:22px;color:#1d1d1f">New Parts Request</h1>
+<p style="margin:0 0 16px;font-size:15px;color:#86868b">Requested by ${requestedBy}</p>
+${vehicleBox(vehicleDesc)}
+<div style="background:#f5f5f7;border-radius:8px;padding:16px;margin:16px 0">
+<p style="margin:0 0 8px;font-size:15px;color:#1d1d1f;font-weight:600">${partName}</p>
+${url ? `<p style="margin:0;font-size:13px;color:#86868b">Link: <a href="${url}" style="color:#1d1d1f">${url}</a></p>` : '<p style="margin:0;font-size:13px;color:#86868b;font-style:italic">No URL provided — needs sourcing</p>'}
+</div>
+${ctaButton(`${BASE_URL}/vehicles/${vehicleId}`, 'View Vehicle')}
+`)
+  return { subject, html }
+}

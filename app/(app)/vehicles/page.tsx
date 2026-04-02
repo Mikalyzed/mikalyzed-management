@@ -74,6 +74,7 @@ export default function VehiclesPage() {
   const [modalChecklist, setModalChecklist] = useState<ChecklistItem[]>([])
   const [modalSaving, setModalSaving] = useState(false)
   const [modalLoading, setModalLoading] = useState(false)
+  const [modalParts, setModalParts] = useState<any[]>([])
   const [advancing, setAdvancing] = useState(false)
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([])
   const [assigningUser, setAssigningUser] = useState(false)
@@ -85,6 +86,7 @@ export default function VehiclesPage() {
     tasks: { item: string; selected: boolean }[]
     assigneeId: string | null
     teamMembers: { id: string; name: string }[]
+    returnAfterComplete: boolean
     saving: boolean
   } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; stockNumber: string; desc: string } | null>(null)
@@ -252,6 +254,7 @@ export default function VehiclesPage() {
             tasks: defaultTasks.map(item => ({ item, selected: true })),
             assigneeId: defaultAssignee,
             teamMembers: (teamData.users || []).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })),
+            returnAfterComplete: true, // Default to true when skipping
             saving: false,
           })
         } catch {
@@ -263,6 +266,7 @@ export default function VehiclesPage() {
             tasks: [],
             assigneeId: null,
             teamMembers: [],
+            returnAfterComplete: true, // Default to true when skipping
             saving: false,
           })
         }
@@ -328,10 +332,16 @@ export default function VehiclesPage() {
     setSelectedVehicleId(vehicleId)
     setModalLoading(true)
     setModalData(null)
+    setModalParts([])
     try {
-      const res = await fetch(`/api/vehicles/${vehicleId}`)
-      const data = await res.json()
+      const [vehicleRes, partsRes] = await Promise.all([
+        fetch(`/api/vehicles/${vehicleId}`),
+        fetch(`/api/parts?vehicleId=${vehicleId}`)
+      ])
+      const data = await vehicleRes.json()
+      const partsData = await partsRes.json()
       setModalData(data)
+      setModalParts(partsData.parts || [])
       const currentStage = data.vehicle?.stages?.find(
         (s: { stage: string }) => s.stage === data.vehicle.status
       )
@@ -344,6 +354,7 @@ export default function VehiclesPage() {
     setSelectedVehicleId(null)
     setModalData(null)
     setModalChecklist([])
+    setModalParts([])
   }, [])
 
   const getCurrentStage = useCallback(() => {
@@ -733,6 +744,55 @@ export default function VehiclesPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Parts Section */}
+                  {modalParts.length > 0 && (
+                    <div style={{ marginTop: 20, padding: '16px 20px', background: '#f8f9fa', borderRadius: 12, border: '1px solid #e5e7eb' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <h4 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>Parts ({modalParts.length})</h4>
+                        <Link
+                          href={`/vehicles/${v.id}?tab=parts`}
+                          style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none' }}
+                        >
+                          Manage →
+                        </Link>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {['requested', 'sourced', 'ordered', 'received'].map(status => {
+                          const count = modalParts.filter(p => p.status === status).length
+                          if (count === 0) return null
+                          const colors: Record<string, string> = {
+                            requested: '#ef4444',
+                            sourced: '#2563eb', 
+                            ordered: '#eab308',
+                            received: '#16a34a'
+                          }
+                          const labels: Record<string, string> = {
+                            requested: 'Requested',
+                            sourced: 'Sourced',
+                            ordered: 'Ordered', 
+                            received: 'Received'
+                          }
+                          return (
+                            <span
+                              key={status}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                padding: '4px 8px',
+                                borderRadius: 4,
+                                background: `${colors[status]}15`,
+                                color: colors[status],
+                                border: `1px solid ${colors[status]}30`
+                              }}
+                            >
+                              {count} {labels[status]}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   </div>
                   {/* Advance Stage Button — sticky footer */}
@@ -1138,6 +1198,43 @@ export default function VehiclesPage() {
                 Add
               </button>
             </form>
+
+            {/* Return after complete option (for skipping) */}
+            {moveModal.fromStage !== moveModal.toStage && (
+              <div style={{ 
+                marginBottom: 20, 
+                padding: '16px', 
+                background: '#f8f9fa', 
+                borderRadius: 12, 
+                border: '1px solid #e5e7eb' 
+              }}>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 12,
+                  cursor: 'pointer',
+                  fontSize: 14
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={moveModal.returnAfterComplete}
+                    onChange={(e) => setMoveModal(prev => prev ? { ...prev, returnAfterComplete: e.target.checked } : null)}
+                    style={{ width: 18, height: 18, marginTop: 2, cursor: 'pointer' }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                      Return to {STAGE_LABELS[moveModal.fromStage as keyof typeof STAGE_LABELS]} after {STAGE_LABELS[moveModal.toStage as keyof typeof STAGE_LABELS]} completes?
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                      {moveModal.tasks.filter(t => t.selected).length > 0 
+                        ? `${moveModal.tasks.filter(t => t.selected).length} selected tasks will carry over`
+                        : 'No tasks to carry over'
+                      }
+                    </div>
+                  </div>
+                </label>
+              </div>
+            )}
 
             {/* Actions */}
             <div style={{ display: 'flex', gap: 10 }}>

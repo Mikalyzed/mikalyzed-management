@@ -110,6 +110,71 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
+  // Handle return queue when stage is completed
+  if (body.status === 'done') {
+    const vehicle = await prisma.vehicle.findFirst({ 
+      where: { currentStageId: id },
+      include: { stages: { orderBy: { createdAt: 'desc' } } }
+    })
+    
+    if (vehicle && vehicle.returnQueue) {
+      const returnQueue = vehicle.returnQueue as any[]
+      if (returnQueue.length > 0) {
+        // Pop the first entry from return queue
+        const nextReturn = returnQueue[0]
+        const remainingQueue = returnQueue.slice(1)
+
+        // Get the highest priority for the target stage to put at bottom
+        const lastInStage = await prisma.vehicleStage.findFirst({
+          where: { stage: nextReturn.stage, status: { notIn: ['done', 'skipped'] } },
+          orderBy: { priority: 'desc' },
+          select: { priority: true },
+        })
+        const bottomPriority = (lastInStage?.priority ?? -1) + 1
+
+        // Create new stage with uncompleted tasks
+        const newStage = await prisma.vehicleStage.create({
+          data: {
+            vehicleId: vehicle.id,
+            stage: nextReturn.stage,
+            status: 'pending',
+            assigneeId: null, // Admin can assign
+            checklist: nextReturn.uncompletedTasks || [],
+            priority: bottomPriority,
+            notes: `Returned from ${nextReturn.fromStage}: ${nextReturn.reason}`,
+          },
+        })
+
+        // Update vehicle to point to returned stage
+        await prisma.vehicle.update({
+          where: { id: vehicle.id },
+          data: {
+            status: nextReturn.stage,
+            currentStageId: newStage.id,
+            currentAssigneeId: null,
+            returnQueue: remainingQueue,
+          },
+        })
+
+        // Send notification to admin
+        await prisma.activityLog.create({
+          data: {
+            entityType: 'vehicle',
+            entityId: vehicle.id,
+            action: 'returned_to_stage',
+            actorId: user.id,
+            details: {
+              returnedStage: nextReturn.stage,
+              fromStage: nextReturn.fromStage,
+              tasksRemaining: nextReturn.uncompletedTasks?.length || 0,
+              stockNumber: vehicle.stockNumber
+            },
+          },
+        })
+      }
+    }
+  }
+
   // Log activity
   await prisma.activityLog.create({
     data: {

@@ -257,9 +257,9 @@ export default function AddVehiclePage() {
               style={{ display: 'none' }}
             />
             <div>
-              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>General Inspection</p>
+              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>New Inventory Vehicle</p>
               <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                Full checklist: oil, brakes, tires, engine, AC, electrical, test drive, body
+                Add full general inspection: oil, brakes, tires, engine, AC, electrical, test drive, body
               </p>
             </div>
           </label>

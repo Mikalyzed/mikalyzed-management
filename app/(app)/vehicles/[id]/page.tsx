@@ -26,6 +26,19 @@ type ScopeTemplate = {
   checklist: { item: string; done: boolean; note: string }[]
 }
 
+type Part = {
+  id: string
+  name: string
+  url: string | null
+  status: string
+  price: string | null
+  tracking: string | null
+  notes: string | null
+  createdAt: string
+  requestedBy: { id: string; name: string }
+  assignedTo: { id: string; name: string } | null
+}
+
 type Vehicle = {
   id: string
   stockNumber: string
@@ -66,6 +79,20 @@ export default function VehicleDetailPage() {
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
+  
+  // Parts state
+  const [parts, setParts] = useState<Part[]>([])
+  const [partsLoading, setPartsLoading] = useState(false)
+  const [showAddPart, setShowAddPart] = useState(false)
+  const [partForm, setPartForm] = useState({ name: '', url: '', notes: '', assignedToId: '' })
+  const [editingPartId, setEditingPartId] = useState<string | null>(null)
+  
+  // History state
+  const [history, setHistory] = useState<any[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+
+  // Original state
   const [editing, setEditing] = useState(false)
   const [editChecklist, setEditChecklist] = useState<ChecklistItem[]>([])
   const [newTaskText, setNewTaskText] = useState('')
@@ -80,9 +107,29 @@ export default function VehicleDetailPage() {
   const [advanceEstHours, setAdvanceEstHours] = useState('')
 
   const refresh = () => fetch(`/api/vehicles/${id}`).then(r => r.json()).then(d => setVehicle(d.vehicle))
+  
+  const loadParts = () => {
+    setPartsLoading(true)
+    fetch(`/api/parts?vehicleId=${id}`)
+      .then(r => r.json())
+      .then(d => setParts(d.parts || []))
+      .catch(console.error)
+      .finally(() => setPartsLoading(false))
+  }
+
+  const loadHistory = () => {
+    if (history.length > 0) return // Already loaded
+    setHistoryLoading(true)
+    fetch(`/api/vehicles/${id}/history`)
+      .then(r => r.json())
+      .then(d => setHistory(d.events || []))
+      .catch(console.error)
+      .finally(() => setHistoryLoading(false))
+  }
 
   useEffect(() => {
     refresh().finally(() => setLoading(false))
+    loadParts()
     // Check if admin
     const cookies = document.cookie.split(';').reduce((acc, c) => {
       const [k, v] = c.trim().split('=')
@@ -409,8 +456,56 @@ export default function VehicleDetailPage() {
         </div>
       )}
 
-      {/* Checklist & Actions */}
-      {currentStage && (
+      {/* Tabs */}
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border)', marginBottom: '24px' }}>
+          {[
+            { key: 'overview', label: 'Overview', count: null },
+            { key: 'parts', label: 'Parts', count: parts.length },
+            { key: 'history', label: 'History', count: completedStages.length }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => {
+                setActiveTab(tab.key)
+                if (tab.key === 'history') loadHistory()
+              }}
+              style={{
+                padding: '12px 16px',
+                borderRadius: '8px 8px 0 0',
+                border: 'none',
+                background: activeTab === tab.key ? '#ffffff' : 'transparent',
+                color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-muted)',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                borderBottom: activeTab === tab.key ? '2px solid #1a1a1a' : '2px solid transparent',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              {tab.label}
+              {tab.count !== null && (
+                <span style={{
+                  background: activeTab === tab.key ? '#1a1a1a' : 'var(--border)',
+                  color: activeTab === tab.key ? '#dffd6e' : 'var(--text-muted)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  minWidth: '18px',
+                  textAlign: 'center'
+                }}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content */}
+        {activeTab === 'overview' && currentStage && (
         <div style={{
           background: '#ffffff',
           border: '1px solid var(--border)',
@@ -661,62 +756,24 @@ export default function VehicleDetailPage() {
             )
           })()}
         </div>
-      )}
+        )}
 
-      {/* Stage History */}
-      {completedStages.length > 0 && (
-        <div style={{
-          background: '#ffffff',
-          border: '1px solid var(--border)',
-          borderRadius: '16px',
-          padding: '20px',
-          marginBottom: '16px',
-          boxShadow: 'var(--shadow-sm)',
-        }}>
-          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
-            Completed Stages
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {completedStages.map((s) => {
-              const dur = s.completedAt && s.startedAt
-                ? Math.round((new Date(s.completedAt).getTime() - new Date(s.startedAt).getTime()) / 3600000)
-                : null
-              return (
-                <div key={s.id} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  borderRadius: '10px',
-                  background: 'var(--bg-primary)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    {STAGE_ICONS[s.stage] && <span style={{ fontSize: '16px' }}>{STAGE_ICONS[s.stage]}</span>}
-                    <div>
-                      <p style={{ fontSize: '13px', fontWeight: 600 }}>{STAGE_LABELS[s.stage] || s.stage}</p>
-                      <p style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {s.assignee?.name || 'Unassigned'}
-                        {dur !== null && ` · ${dur < 24 ? `${dur}h` : `${Math.floor(dur / 24)}d`}`}
-                      </p>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {s.status === 'skipped' && (
-                      <span style={{
-                        fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
-                        background: '#f1f5f9', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em',
-                      }}>Skipped</span>
-                    )}
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      {s.completedAt && new Date(s.completedAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+        {activeTab === 'parts' && (
+          <PartsSection 
+            vehicleId={vehicle.id}
+            parts={parts}
+            onPartsChange={loadParts}
+            isAdmin={isAdmin}
+          />
+        )}
+
+        {activeTab === 'history' && (
+          <VehicleHistorySection 
+            history={history}
+            loading={historyLoading}
+          />
+        )}
+      </div>
 
       {/* Meta */}
       <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0 24px' }}>
@@ -812,6 +869,566 @@ export default function VehicleDetailPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function VehicleHistorySection({ history, loading }: {
+  history: any[]
+  loading: boolean
+}) {
+  const getEventIcon = (type: string, status?: string) => {
+    switch (type) {
+      case 'stage':
+        if (status === 'skipped') return '⚠️'
+        return status === 'done' ? '✅' : '🔄'
+      case 'part':
+        return status === 'received' ? '📦' : '🔧'
+      case 'external':
+        return status === 'returned' ? '🏠' : '🏪'
+      case 'activity':
+        return '📋'
+      default:
+        return '•'
+    }
+  }
+
+  const getEventColor = (type: string, status?: string) => {
+    switch (type) {
+      case 'stage':
+        if (status === 'skipped') return '#f59e0b'
+        return status === 'done' ? '#16a34a' : '#6366f1'
+      case 'part':
+        return status === 'received' ? '#16a34a' : '#2563eb'
+      case 'external':
+        return status === 'returned' ? '#16a34a' : '#f59e0b'
+      case 'activity':
+        return '#6b7280'
+      default:
+        return '#6b7280'
+    }
+  }
+
+  if (loading) {
+    return (
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid var(--border)',
+        borderRadius: '16px',
+        padding: '40px',
+        textAlign: 'center'
+      }}>
+        <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: '#e8e8e4', borderTopColor: 'transparent' }} />
+        <p style={{ marginTop: '16px', fontSize: '14px', color: 'var(--text-muted)' }}>Loading history...</p>
+      </div>
+    )
+  }
+
+  if (history.length === 0) {
+    return (
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid var(--border)',
+        borderRadius: '16px',
+        padding: '40px',
+        textAlign: 'center'
+      }}>
+        <p style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>No history available</p>
+        <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Vehicle history will appear here as events occur</p>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{
+      background: '#ffffff',
+      border: '1px solid var(--border)',
+      borderRadius: '16px',
+      overflow: 'hidden'
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '20px 24px',
+        borderBottom: '1px solid var(--border)',
+        background: '#f8f9fa'
+      }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Vehicle History Timeline</h3>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+          Complete chronological history of all events
+        </p>
+      </div>
+
+      {/* Timeline */}
+      <div style={{ padding: '20px 24px' }}>
+        <div style={{ position: 'relative' }}>
+          {/* Timeline line */}
+          <div style={{
+            position: 'absolute',
+            left: '20px',
+            top: '0',
+            bottom: '0',
+            width: '2px',
+            background: 'linear-gradient(to bottom, #e5e7eb, #f3f4f6)'
+          }} />
+
+          {/* Timeline events */}
+          {history.map((event, index) => {
+            const eventColor = getEventColor(event.type, event.status)
+            const isLast = index === history.length - 1
+
+            return (
+              <div key={index} style={{ 
+                position: 'relative', 
+                paddingLeft: '52px',
+                paddingBottom: isLast ? '0' : '24px'
+              }}>
+                {/* Timeline dot */}
+                <div style={{
+                  position: 'absolute',
+                  left: '11px',
+                  top: '4px',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
+                  background: '#ffffff',
+                  border: `3px solid ${eventColor}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '10px',
+                  zIndex: 1
+                }}>
+                  {getEventIcon(event.type, event.status)}
+                </div>
+
+                {/* Event content */}
+                <div style={{
+                  background: event.details?.skipped ? '#fef3c7' : '#f8f9fa',
+                  border: `1px solid ${event.details?.skipped ? '#fbbf24' : '#e5e7eb'}`,
+                  borderRadius: '12px',
+                  padding: '16px 20px'
+                }}>
+                  {/* Event header */}
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'flex-start',
+                    marginBottom: '8px'
+                  }}>
+                    <h4 style={{ 
+                      fontSize: '15px', 
+                      fontWeight: 600, 
+                      margin: 0,
+                      color: event.details?.skipped ? '#92400e' : 'var(--text-primary)'
+                    }}>
+                      {event.title}
+                      {event.details?.skipped && (
+                        <span style={{
+                          marginLeft: '8px',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background: '#fbbf24',
+                          color: '#92400e',
+                          textTransform: 'uppercase'
+                        }}>
+                          SKIPPED
+                        </span>
+                      )}
+                    </h4>
+                    <span style={{ 
+                      fontSize: '12px', 
+                      color: 'var(--text-muted)',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {new Date(event.date).toLocaleDateString()} {new Date(event.date).toLocaleTimeString()}
+                    </span>
+                  </div>
+
+                  {/* Event details */}
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    {event.type === 'stage' && (
+                      <div>
+                        <p style={{ margin: '0 0 4px 0' }}>
+                          Assigned to: {event.details.assignee}
+                          {event.details.duration && (
+                            <span style={{ marginLeft: '12px' }}>
+                              Duration: {event.details.duration < 24 ? `${event.details.duration}h` : `${Math.floor(event.details.duration / 24)}d`}
+                            </span>
+                          )}
+                        </p>
+                        {event.details.totalTasks > 0 && (
+                          <p style={{ margin: '4px 0 0 0' }}>
+                            Tasks completed: {event.details.completedTasks}/{event.details.totalTasks}
+                            {event.details.skipped && event.details.completedTasks < event.details.totalTasks && (
+                              <span style={{ color: '#f59e0b', fontWeight: 600, marginLeft: '8px' }}>
+                                ({event.details.totalTasks - event.details.completedTasks} tasks remaining)
+                              </span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {event.type === 'part' && (
+                      <div>
+                        <p style={{ margin: '0 0 4px 0' }}>
+                          Part: {event.details.partName}
+                          {event.details.requestedBy && (
+                            <span style={{ marginLeft: '12px' }}>
+                              Requested by: {event.details.requestedBy}
+                            </span>
+                          )}
+                        </p>
+                        {event.details.url && (
+                          <p style={{ margin: '4px 0 0 0' }}>
+                            <a href={event.details.url} target="_blank" rel="noopener noreferrer" 
+                               style={{ color: '#2563eb', textDecoration: 'none' }}>
+                              View Link →
+                            </a>
+                          </p>
+                        )}
+                        {event.details.currentStatus && (
+                          <p style={{ margin: '4px 0 0 0', fontWeight: 600 }}>
+                            Current status: {event.details.currentStatus}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {event.type === 'external' && (
+                      <div>
+                        <p style={{ margin: '0 0 4px 0' }}>
+                          Shop: {event.details.shopName}
+                        </p>
+                        <p style={{ margin: '4px 0 0 0' }}>
+                          Work: {event.details.repairDescription}
+                        </p>
+                        {event.details.estimatedDays && (
+                          <p style={{ margin: '4px 0 0 0' }}>
+                            Estimated: {event.details.estimatedDays} days
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {event.type === 'activity' && (
+                      <p style={{ margin: 0 }}>
+                        {event.details.actor && `by ${event.details.actor}`}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
+  vehicleId: string
+  parts: Part[]
+  onPartsChange: () => void
+  isAdmin: boolean
+}) {
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newPart, setNewPart] = useState({ name: '', url: '', notes: '', assignedToId: '' })
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editData, setEditData] = useState<any>({})
+  const [saving, setSaving] = useState(false)
+
+  const statusLabels: Record<string, string> = {
+    requested: 'Requested',
+    sourced: 'Sourced', 
+    ordered: 'Ordered',
+    received: 'Received'
+  }
+
+  const statusColors: Record<string, { bg: string; color: string; border: string }> = {
+    requested: { bg: '#fef2f2', color: '#ef4444', border: '#fecaca' },
+    sourced: { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
+    ordered: { bg: '#fefce8', color: '#eab308', border: '#fde047' },
+    received: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' }
+  }
+
+  async function addPart() {
+    if (!newPart.name.trim()) return
+    setSaving(true)
+    try {
+      const response = await fetch('/api/parts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicleId,
+          name: newPart.name,
+          url: newPart.url || null,
+          notes: newPart.notes || null,
+          assignedToId: newPart.assignedToId || null
+        })
+      })
+      if (response.ok) {
+        setNewPart({ name: '', url: '', notes: '', assignedToId: '' })
+        setShowAddForm(false)
+        onPartsChange()
+      }
+    } catch (error) {
+      console.error('Error adding part:', error)
+    }
+    setSaving(false)
+  }
+
+  async function updatePart(partId: string, updates: any) {
+    setSaving(true)
+    try {
+      const response = await fetch(`/api/parts/${partId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      })
+      if (response.ok) {
+        setEditingId(null)
+        onPartsChange()
+      }
+    } catch (error) {
+      console.error('Error updating part:', error)
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div style={{
+      background: '#ffffff',
+      border: '1px solid var(--border)',
+      borderRadius: '16px',
+      overflow: 'hidden'
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '20px 24px',
+        borderBottom: '1px solid var(--border)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <div>
+          <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Parts</h3>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+            Track vehicle parts requests and sourcing
+          </p>
+        </div>
+        <button
+          onClick={() => setShowAddForm(true)}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '8px',
+            border: '1px solid #1a1a1a',
+            background: '#1a1a1a',
+            color: '#dffd6e',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer'
+          }}
+        >
+          Add Part
+        </button>
+      </div>
+
+      {/* Add form */}
+      {showAddForm && (
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', background: '#f8f9fa' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                Part Name *
+              </label>
+              <input
+                type="text"
+                value={newPart.name}
+                onChange={e => setNewPart({ ...newPart, name: e.target.value })}
+                placeholder="e.g. Front brake pads"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                URL (optional)
+              </label>
+              <input
+                type="url"
+                value={newPart.url}
+                onChange={e => setNewPart({ ...newPart, url: e.target.value })}
+                placeholder="https://..."
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                Notes (optional)
+              </label>
+              <textarea
+                value={newPart.notes}
+                onChange={e => setNewPart({ ...newPart, notes: e.target.value })}
+                rows={2}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowAddForm(false)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  background: '#fff',
+                  color: 'var(--text-secondary)',
+                  fontSize: '13px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addPart}
+                disabled={saving || !newPart.name.trim()}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: '1px solid #1a1a1a',
+                  background: '#1a1a1a',
+                  color: '#dffd6e',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  opacity: saving || !newPart.name.trim() ? 0.5 : 1
+                }}
+              >
+                {saving ? 'Adding...' : 'Add Part'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Parts list */}
+      {parts.length === 0 ? (
+        <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          <p style={{ fontSize: '14px', marginBottom: '8px' }}>No parts requested yet</p>
+          <p style={{ fontSize: '13px' }}>Add parts needed for this vehicle</p>
+        </div>
+      ) : (
+        <div>
+          {parts.map((part, index) => {
+            const statusStyle = statusColors[part.status] || statusColors.requested
+            const isEditing = editingId === part.id
+
+            return (
+              <div
+                key={part.id}
+                style={{
+                  padding: '16px 24px',
+                  borderBottom: index < parts.length - 1 ? '1px solid var(--border)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px'
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                    <h4 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>{part.name}</h4>
+                    <div style={{
+                      ...statusStyle,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      border: `1px solid ${statusStyle.border}`
+                    }}>
+                      {statusLabels[part.status]}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                    Requested by {part.requestedBy.name}
+                    {part.assignedTo && ` • Assigned to ${part.assignedTo.name}`}
+                    {part.price && ` • ${part.price}`}
+                  </div>
+                  {part.url && (
+                    <a
+                      href={part.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: '13px',
+                        color: '#2563eb',
+                        textDecoration: 'none',
+                        display: 'block',
+                        marginTop: '4px'
+                      }}
+                    >
+                      View Link →
+                    </a>
+                  )}
+                  {part.notes && (
+                    <p style={{
+                      fontSize: '13px',
+                      color: 'var(--text-secondary)',
+                      margin: '4px 0 0 0',
+                      fontStyle: 'italic'
+                    }}>
+                      {part.notes}
+                    </p>
+                  )}
+                </div>
+                {(isAdmin || part.assignedTo) && (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {isAdmin && (
+                      <select
+                        value={part.status}
+                        onChange={(e) => updatePart(part.id, { status: e.target.value })}
+                        disabled={saving}
+                        style={{
+                          padding: '4px 8px',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <option value="requested">Requested</option>
+                        <option value="sourced">Sourced</option>
+                        <option value="ordered">Ordered</option>
+                        <option value="received">Received</option>
+                      </select>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

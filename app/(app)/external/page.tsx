@@ -62,6 +62,17 @@ export default function ExternalRepairsPage() {
   const [reconNotes, setReconNotes] = useState('')
   const [reconEstHours, setReconEstHours] = useState('')
   const [reconError, setReconError] = useState('')
+  
+  // Follow-up state
+  const [followUpModal, setFollowUpModal] = useState<{ 
+    repairId: string; 
+    stockNumber: string; 
+    vehicleDesc: string 
+  } | null>(null)
+  const [followUpNote, setFollowUpNote] = useState('')
+  const [followUpNewEta, setFollowUpNewEta] = useState('')
+  const [followUpSaving, setFollowUpSaving] = useState(false)
+  const [expandedFollowUps, setExpandedFollowUps] = useState<string | null>(null)
 
   function load() {
     fetch('/api/external')
@@ -131,6 +142,40 @@ export default function ExternalRepairsPage() {
 
   function getDaysOut(sentDate: string) {
     return Math.floor((Date.now() - new Date(sentDate).getTime()) / 86400000)
+  }
+
+  async function handleFollowUp() {
+    if (!followUpModal || !followUpNote.trim()) return
+    setFollowUpSaving(true)
+    try {
+      const response = await fetch(`/api/external/${followUpModal.repairId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          addFollowUp: {
+            note: followUpNote,
+            newEta: followUpNewEta ? Number(followUpNewEta) : null
+          }
+        })
+      })
+      if (response.ok) {
+        setFollowUpModal(null)
+        setFollowUpNote('')
+        setFollowUpNewEta('')
+        load()
+      }
+    } catch (error) {
+      console.error('Error adding follow-up:', error)
+    }
+    setFollowUpSaving(false)
+  }
+
+  const getDaysOverdue = (sentDate: string, estimatedDays: number | null) => {
+    if (!estimatedDays) return 0
+    const sent = new Date(sentDate)
+    const expected = new Date(sent.getTime() + estimatedDays * 86400000)
+    const now = new Date()
+    return Math.max(0, Math.floor((now.getTime() - expected.getTime()) / 86400000))
   }
 
   if (loading) {
@@ -294,8 +339,8 @@ export default function ExternalRepairsPage() {
                 <input name="sentDate" type="date" required className="input" defaultValue={new Date().toISOString().split('T')[0]} />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Estimated Days</label>
-                <input name="estimatedDays" type="number" className="input" placeholder="e.g. 5" />
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Estimated Days *</label>
+                <input name="estimatedDays" type="number" required className="input" placeholder="e.g. 5" />
               </div>
             </div>
             <div>
@@ -432,6 +477,43 @@ export default function ExternalRepairsPage() {
                   </div>
                 ) : null}
 
+                {/* Follow-up History */}
+                {(r as any).followUps && Array.isArray((r as any).followUps) && (r as any).followUps.length > 0 && (
+                  <div className="ext-notes-area" style={{ padding: '12px 14px' }}>
+                    <button
+                      onClick={() => setExpandedFollowUps(expandedFollowUps === r.id ? null : r.id)}
+                      style={{
+                        background: 'none', border: 'none', fontSize: '13px', fontWeight: 600,
+                        color: 'var(--text-primary)', cursor: 'pointer', padding: 0, marginBottom: '8px'
+                      }}
+                    >
+                      Follow-ups ({(r as any).followUps.length}) {expandedFollowUps === r.id ? '▲' : '▼'}
+                    </button>
+                    {expandedFollowUps === r.id && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {((r as any).followUps as any[]).map((followUp, i) => (
+                          <div key={i} style={{
+                            padding: '8px 12px', background: '#f8f9fa', borderRadius: '8px',
+                            borderLeft: '3px solid #6b7280'
+                          }}>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                              {new Date(followUp.date).toLocaleDateString()} - {new Date(followUp.date).toLocaleTimeString()}
+                              {followUp.newEta && (
+                                <span style={{ fontWeight: 600, color: '#f59e0b', marginLeft: '8px' }}>
+                                  New ETA: {followUp.newEta} days
+                                </span>
+                              )}
+                            </div>
+                            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
+                              {followUp.note}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Actions */}
                 {r.status !== 'returned' && (
                   <div className="ext-actions" style={{
@@ -457,6 +539,28 @@ export default function ExternalRepairsPage() {
                     >
                       {r.notes ? 'Edit Notes' : 'Add Notes'}
                     </button>
+                    {overdue && (
+                      <button
+                        onClick={() => setFollowUpModal({ 
+                          repairId: r.id, 
+                          stockNumber: r.stockNumber, 
+                          vehicleDesc: `${r.year} ${r.make} ${r.model}` 
+                        })}
+                        style={{
+                          padding: '12px 20px',
+                          background: '#fef2f2',
+                          border: 'none',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          color: '#ef4444',
+                          minHeight: '44px',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        Log Follow-up
+                      </button>
+                    )}
                     {r.status === 'sent' && (
                       <button
                         onClick={() => updateStatus(r.id, 'in_progress')}
@@ -748,6 +852,146 @@ export default function ExternalRepairsPage() {
                 }}
               >
                 {sendingToRecon ? 'Sending...' : 'Send to Recon'}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  // Set status to returned and create new external repair entry
+                  try {
+                    await fetch(`/api/external/${(reconModal as any).id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: 'returned' })
+                    })
+                    
+                    // Open form for new external repair
+                    const shopName = prompt('Shop name:')
+                    const shopPhone = prompt('Shop phone (optional):') || ''
+                    const repairDescription = prompt('What\'s being done:')
+                    const estimatedDaysStr = prompt('Estimated days:')
+                    const notes = prompt('Notes (optional):') || ''
+                    
+                    if (shopName && repairDescription && estimatedDaysStr) {
+                      await fetch('/api/external', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          stockNumber: reconModal.stockNumber,
+                          year: reconModal.year,
+                          make: reconModal.make,
+                          model: reconModal.model,
+                          color: reconModal.color || null,
+                          shopName,
+                          shopPhone: shopPhone || null,
+                          repairDescription,
+                          estimatedDays: Number(estimatedDaysStr),
+                          sentDate: new Date().toISOString().split('T')[0],
+                          notes: notes || null
+                        })
+                      })
+                    }
+                    
+                    setReconModal(null)
+                    load()
+                  } catch (error) {
+                    console.error('Error sending to another shop:', error)
+                  }
+                }}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 12, border: '1px solid #f59e0b',
+                  background: '#fff', color: '#f59e0b',
+                  fontSize: 14, fontWeight: 700, cursor: 'pointer'
+                }}
+              >
+                Send to Another Shop
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Follow-up Modal */}
+      {followUpModal && (
+        <div
+          onClick={() => !followUpSaving && setFollowUpModal(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 20
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480,
+              padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.15)'
+            }}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Log Follow-up</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+              #{followUpModal.stockNumber} - {followUpModal.vehicleDesc}
+            </p>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                Follow-up Note *
+              </label>
+              <textarea
+                value={followUpNote}
+                onChange={e => setFollowUpNote(e.target.value)}
+                rows={3}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 10,
+                  border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb',
+                  outline: 'none', resize: 'vertical', minHeight: 80
+                }}
+                placeholder="Called shop, spoke with John. Car is in queue, should be ready by..."
+              />
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                New ETA (days, optional)
+              </label>
+              <input
+                type="number"
+                value={followUpNewEta}
+                onChange={e => setFollowUpNewEta(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 10,
+                  border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb',
+                  outline: 'none'
+                }}
+                placeholder="e.g. 7"
+              />
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                If provided, this will reset the estimated completion date
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setFollowUpModal(null)}
+                disabled={followUpSaving}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid #e2e5ea',
+                  background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                  color: 'var(--text-secondary)', opacity: followUpSaving ? 0.5 : 1
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFollowUp}
+                disabled={!followUpNote.trim() || followUpSaving}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+                  background: !followUpNote.trim() || followUpSaving ? '#e5e5e5' : '#ef4444',
+                  color: '#fff', fontSize: 14, fontWeight: 700,
+                  cursor: !followUpNote.trim() || followUpSaving ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {followUpSaving ? 'Saving...' : 'Log Follow-up'}
               </button>
             </div>
           </div>

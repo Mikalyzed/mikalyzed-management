@@ -16,6 +16,33 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
+  // Handle follow-ups
+  if (body.followUps !== undefined) {
+    data.followUps = body.followUps
+  }
+
+  // If adding a new follow-up
+  if (body.addFollowUp) {
+    const repair = await prisma.externalRepair.findUnique({ where: { id } })
+    if (repair) {
+      const currentFollowUps = (repair.followUps as any[]) || []
+      const newFollowUp = {
+        date: new Date().toISOString(),
+        note: body.addFollowUp.note,
+        newEta: body.addFollowUp.newEta || null
+      }
+      
+      const updatedFollowUps = [...currentFollowUps, newFollowUp]
+      data.followUps = updatedFollowUps
+      
+      // If new ETA provided, update estimatedDays
+      if (body.addFollowUp.newEta) {
+        data.estimatedDays = body.addFollowUp.newEta
+        data.expectedReturn = new Date(repair.sentDate.getTime() + body.addFollowUp.newEta * 86400000)
+      }
+    }
+  }
+
   const updated = await prisma.externalRepair.update({ where: { id }, data })
   return NextResponse.json({ repair: updated })
 }

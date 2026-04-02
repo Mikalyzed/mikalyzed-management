@@ -11,7 +11,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id: vehicleId } = await params
-  const { targetStage, checklist: customChecklist, assigneeId: customAssigneeId, skipCurrent } = await req.json()
+  const { targetStage, checklist: customChecklist, assigneeId: customAssigneeId, skipCurrent, returnAfterComplete = true } = await req.json()
 
   if (!STAGES.includes(targetStage) && targetStage !== 'completed') {
     return NextResponse.json({ error: 'Invalid stage' }, { status: 400 })
@@ -31,8 +31,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   await prisma.$transaction(async (tx) => {
+    // Handle return queue logic when skipping
+    let uncompletedTasks: any[] = []
+    
     // Mark current stage as done or skipped
     if (currentStage) {
+      // If skipping and has uncompleted checklist items, prepare for return queue
+      if (skipCurrent && returnAfterComplete && currentStage.checklist) {
+        const checklist = Array.isArray(currentStage.checklist) ? currentStage.checklist : []
+        uncompletedTasks = checklist.filter((item: any) => !item.done)
+      }
+
       await tx.vehicleStage.update({
         where: { id: currentStage.id },
         data: {
@@ -90,13 +99,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         },
       })
 
+      // Update vehicle status and handle return queue
+      const vehicleUpdates: any = {
+        status: targetStage,
+        currentStageId: newStage.id,
+        currentAssigneeId: assigneeId,
+      }
+
+      // If skipping with uncompleted tasks, add to return queue
+      if (skipCurrent && uncompletedTasks.length > 0 && returnAfterComplete && currentStage) {
+        const currentReturnQueue = vehicle.returnQueue as any[] || []
+        const newReturnEntry = {
+          stage: currentStage.stage,
+          fromStage: targetStage,
+          reason: `Skipped with ${uncompletedTasks.length} remaining tasks`,
+          uncompletedTasks: uncompletedTasks
+        }
+        vehicleUpdates.returnQueue = [...currentReturnQueue, newReturnEntry]
+      }
+
       await tx.vehicle.update({
         where: { id: vehicleId },
-        data: {
-          status: targetStage,
-          currentStageId: newStage.id,
-          currentAssigneeId: assigneeId,
-        },
+        data: vehicleUpdates,
       })
     }
 

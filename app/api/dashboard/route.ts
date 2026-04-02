@@ -14,6 +14,7 @@ export async function GET(request: Request) {
     publish: await prisma.vehicle.count({ where: { status: 'publish' } }),
     completed: await prisma.vehicle.count({ where: { status: 'completed' } }),
     externalRepairs: await prisma.externalRepair.count({ where: { status: 'sent' } }),
+    partsPending: await prisma.part.count({ where: { status: { in: ['requested', 'ordered'] } } }),
   }
 
   const now = new Date()
