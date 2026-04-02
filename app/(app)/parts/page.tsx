@@ -45,6 +45,8 @@ export default function PartsOverviewPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [saving, setSaving] = useState<string | null>(null)
+  const [addingUrlId, setAddingUrlId] = useState<string | null>(null)
+  const [urlInput, setUrlInput] = useState('')
 
   function load() {
     const params = new URLSearchParams()
@@ -178,6 +180,9 @@ export default function PartsOverviewPage() {
 
                 {/* Actions */}
                 <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  {part.status === 'requested' && !part.url && (
+                    <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Add Link</button>
+                  )}
                   {part.status === 'sourced' && (
                     <>
                       <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>✓ Approve</button>
@@ -191,6 +196,17 @@ export default function PartsOverviewPage() {
                     <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mark Received</button>
                   )}
                 </div>
+                {/* Inline URL input */}
+                {addingUrlId === part.id && (
+                  <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px' }}>
+                    <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="Paste part link here..." autoFocus
+                      onKeyDown={async e => { if (e.key === 'Enter' && urlInput.trim()) { e.preventDefault(); await updatePart(part.id, { url: urlInput }); setAddingUrlId(null); setUrlInput('') } }}
+                      style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px' }} />
+                    <button onClick={() => { setAddingUrlId(null); setUrlInput('') }} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: '#fff', fontSize: '12px', cursor: 'pointer' }}>Cancel</button>
+                    <button onClick={async () => { if (!urlInput.trim()) return; await updatePart(part.id, { url: urlInput }); setAddingUrlId(null); setUrlInput('') }}
+                      disabled={!urlInput.trim()} style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: '12px', fontWeight: 600, cursor: 'pointer', opacity: !urlInput.trim() ? 0.5 : 1 }}>Submit</button>
+                  </div>
+                )}
               </div>
             )
           })}

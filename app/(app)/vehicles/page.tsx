@@ -746,54 +746,12 @@ export default function VehiclesPage() {
                     )}
                   </div>
 
-                  {/* Parts Section */}
-                  {modalParts.length > 0 && (
-                    <div style={{ marginTop: 20, padding: '16px 20px', background: '#f8f9fa', borderRadius: 12, border: '1px solid #e5e7eb' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                        <h4 style={{ fontSize: 14, fontWeight: 600, margin: 0, color: 'var(--text-primary)' }}>Parts ({modalParts.length})</h4>
-                        <Link
-                          href={`/vehicles/${v.id}?tab=parts`}
-                          style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none' }}
-                        >
-                          Manage →
-                        </Link>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {['requested', 'sourced', 'ordered', 'received'].map(status => {
-                          const count = modalParts.filter(p => p.status === status).length
-                          if (count === 0) return null
-                          const colors: Record<string, string> = {
-                            requested: '#ef4444',
-                            sourced: '#2563eb', 
-                            ordered: '#eab308',
-                            received: '#16a34a'
-                          }
-                          const labels: Record<string, string> = {
-                            requested: 'Requested',
-                            sourced: 'Sourced',
-                            ordered: 'Ordered', 
-                            received: 'Received'
-                          }
-                          return (
-                            <span
-                              key={status}
-                              style={{
-                                fontSize: 11,
-                                fontWeight: 600,
-                                padding: '4px 8px',
-                                borderRadius: 4,
-                                background: `${colors[status]}15`,
-                                color: colors[status],
-                                border: `1px solid ${colors[status]}30`
-                              }}
-                            >
-                              {count} {labels[status]}
-                            </span>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  {/* Parts Section — Full Interactive */}
+                  <ModalPartsSection vehicleId={v.id} parts={modalParts} isAdmin={isAdmin} onPartsChange={() => {
+                    fetch(`/api/parts?vehicleId=${v.id}`).then(r => r.json()).then(d => setModalParts(d.parts || [])).catch(() => {})
+                    // Refresh vehicles list too for card labels
+                    fetch('/api/vehicles').then(r => r.json()).then(d => setVehicles(d.vehicles || [])).catch(() => {})
+                  }} />
 
                   </div>
                   {/* Advance Stage Button — sticky footer */}
@@ -1266,6 +1224,142 @@ export default function VehiclesPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// Inline parts management for modals (recon board + mechanic schedule)
+function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
+  vehicleId: string; parts: any[]; isAdmin: boolean; onPartsChange: () => void
+}) {
+  const [showAdd, setShowAdd] = useState(false)
+  const [newPartName, setNewPartName] = useState('')
+  const [addingUrlId, setAddingUrlId] = useState<string | null>(null)
+  const [urlInput, setUrlInput] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const statusLabels: Record<string, string> = {
+    requested: 'Requested', sourced: 'Pending Approval', ready_to_order: 'Ready to Order',
+    ordered: 'Ordered', received: 'Received'
+  }
+  const statusColors: Record<string, { bg: string; color: string; border: string }> = {
+    requested: { bg: '#fef2f2', color: '#ef4444', border: '#fecaca' },
+    sourced: { bg: '#fef9c3', color: '#a16207', border: '#fde047' },
+    ready_to_order: { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
+    ordered: { bg: '#fefce8', color: '#eab308', border: '#fde047' },
+    received: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' }
+  }
+
+  async function addPart() {
+    if (!newPartName.trim()) return
+    setSaving(true)
+    await fetch('/api/parts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vehicleId, name: newPartName })
+    })
+    setNewPartName(''); setShowAdd(false); setSaving(false); onPartsChange()
+  }
+
+  async function submitUrl(partId: string) {
+    if (!urlInput.trim()) return
+    setSaving(true)
+    await fetch(`/api/parts/${partId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: urlInput })
+    })
+    setAddingUrlId(null); setUrlInput(''); setSaving(false); onPartsChange()
+  }
+
+  async function updatePart(partId: string, updates: Record<string, unknown>) {
+    setSaving(true)
+    await fetch(`/api/parts/${partId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    })
+    setSaving(false); onPartsChange()
+  }
+
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h4 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Parts {parts.length > 0 ? `(${parts.length})` : ''}</h4>
+        <button onClick={() => setShowAdd(!showAdd)} style={{
+          padding: '4px 12px', borderRadius: 6, border: '1px solid #1a1a1a', background: '#1a1a1a',
+          color: '#dffd6e', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+        }}>+ Add Part</button>
+      </div>
+
+      {showAdd && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <input
+            type="text" value={newPartName} onChange={e => setNewPartName(e.target.value)}
+            placeholder="Part name..." autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPart() } }}
+            style={{ flex: 1, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
+          />
+          <button onClick={() => setShowAdd(false)} style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: '#fff', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={addPart} disabled={saving || !newPartName.trim()} style={{
+            padding: '8px 12px', borderRadius: 6, border: 'none', background: '#1a1a1a', color: '#dffd6e',
+            fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: saving || !newPartName.trim() ? 0.5 : 1,
+          }}>{saving ? '...' : 'Add'}</button>
+        </div>
+      )}
+
+      {parts.length === 0 && !showAdd && (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>No parts requested</p>
+      )}
+
+      {parts.map(part => {
+        const ss = statusColors[part.status] || statusColors.requested
+        return (
+          <div key={part.id} style={{
+            padding: '10px 12px', marginBottom: 8, borderRadius: 10,
+            background: '#f8f9fa', border: '1px solid #e5e7eb',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{part.name}</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: ss.bg, color: ss.color, border: `1px solid ${ss.border}` }}>
+                    {statusLabels[part.status]}
+                  </span>
+                </div>
+                {part.url && (
+                  <a href={part.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#2563eb', textDecoration: 'none', display: 'block', marginTop: 3, wordBreak: 'break-all' }}>
+                    {part.url.length > 45 ? part.url.slice(0, 45) + '...' : part.url}
+                  </a>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 4, flexShrink: 0, flexWrap: 'wrap' }}>
+                {part.status === 'requested' && !part.url && (
+                  <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Add Link</button>
+                )}
+                {part.status === 'sourced' && isAdmin && (
+                  <>
+                    <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✓</button>
+                    <button onClick={() => updatePart(part.id, { status: 'requested', url: null })} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✗</button>
+                  </>
+                )}
+                {part.status === 'ready_to_order' && isAdmin && (
+                  <button onClick={() => updatePart(part.id, { status: 'ordered' })} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Order</button>
+                )}
+                {part.status === 'ordered' && isAdmin && (
+                  <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving} style={{ padding: '4px 8px', borderRadius: 5, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>Received</button>
+                )}
+              </div>
+            </div>
+            {addingUrlId === part.id && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="Paste link..." autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitUrl(part.id) } }}
+                  style={{ flex: 1, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 5, fontSize: 12 }} />
+                <button onClick={() => setAddingUrlId(null)} style={{ padding: '6px 8px', borderRadius: 5, border: '1px solid var(--border)', background: '#fff', fontSize: 11, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => submitUrl(part.id)} disabled={saving || !urlInput.trim()} style={{ padding: '6px 8px', borderRadius: 5, border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: saving || !urlInput.trim() ? 0.5 : 1 }}>Submit</button>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

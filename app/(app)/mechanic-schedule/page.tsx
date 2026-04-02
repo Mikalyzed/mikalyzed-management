@@ -77,6 +77,12 @@ export default function MechanicBoard() {
   const [deleteConfirm, setDeleteConfirm] = useState<JobCard | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [externalModal, setExternalModal] = useState<JobCard | null>(null)
+  const [mechParts, setMechParts] = useState<any[]>([])
+  const [mechPartsAddId, setMechPartsAddId] = useState<string | null>(null)
+  const [mechPartsNewName, setMechPartsNewName] = useState('')
+  const [mechPartsUrlId, setMechPartsUrlId] = useState<string | null>(null)
+  const [mechPartsUrlInput, setMechPartsUrlInput] = useState('')
+  const [mechPartsSaving, setMechPartsSaving] = useState(false)
   const [externalSubmitting, setExternalSubmitting] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -143,6 +149,8 @@ export default function MechanicBoard() {
     setPartName('')
     setExpectedDate('')
     setTrackingNumber('')
+    // Load parts for this vehicle
+    fetch(`/api/parts?vehicleId=${job.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])).catch(() => setMechParts([]))
   }
 
   const closeModal = () => { setSelectedJob(null); setShowPauseModal(false) }
@@ -669,6 +677,71 @@ export default function MechanicBoard() {
                         </div>
                       ))}
                     </div>
+                  )}
+                </div>
+
+                {/* Parts Section */}
+                <div style={{ padding: '0 24px 16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>Parts {mechParts.length > 0 ? `(${mechParts.length})` : ''}</p>
+                    <button onClick={() => setMechPartsAddId(mechPartsAddId ? null : selectedJob.vehicle.id)} style={{ padding: '3px 10px', borderRadius: 5, border: '1px solid #1a1a1a', background: '#1a1a1a', color: '#dffd6e', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Add</button>
+                  </div>
+                  {mechPartsAddId && (
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+                      <input type="text" value={mechPartsNewName} onChange={e => setMechPartsNewName(e.target.value)} placeholder="Part name..." autoFocus
+                        onKeyDown={async e => { if (e.key === 'Enter' && mechPartsNewName.trim()) { e.preventDefault(); setMechPartsSaving(true); await fetch('/api/parts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: selectedJob.vehicle.id, name: mechPartsNewName }) }); setMechPartsNewName(''); setMechPartsAddId(null); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) } }}
+                        style={{ flex: 1, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 5, fontSize: 12 }} />
+                      <button onClick={async () => { if (!mechPartsNewName.trim()) return; setMechPartsSaving(true); await fetch('/api/parts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: selectedJob.vehicle.id, name: mechPartsNewName }) }); setMechPartsNewName(''); setMechPartsAddId(null); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) }}
+                        disabled={mechPartsSaving || !mechPartsNewName.trim()} style={{ padding: '6px 10px', borderRadius: 5, border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: mechPartsSaving || !mechPartsNewName.trim() ? 0.5 : 1 }}>Add</button>
+                    </div>
+                  )}
+                  {mechParts.filter(p => p.status !== 'received').map(part => {
+                    const sLabels: Record<string,string> = { requested: 'Requested', sourced: 'Pending Approval', ready_to_order: 'Ready to Order', ordered: 'Ordered' }
+                    const sColors: Record<string,{bg:string;color:string}> = { requested: {bg:'#fef2f2',color:'#ef4444'}, sourced: {bg:'#fef9c3',color:'#a16207'}, ready_to_order: {bg:'#eff6ff',color:'#2563eb'}, ordered: {bg:'#fefce8',color:'#eab308'} }
+                    const sc = sColors[part.status] || sColors.requested
+                    return (
+                      <div key={part.id} style={{ padding: '8px 10px', marginBottom: 6, borderRadius: 8, background: '#f8f9fa', border: '1px solid #e5e7eb' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 12, fontWeight: 600 }}>{part.name}</span>
+                              <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: sc.bg, color: sc.color }}>{sLabels[part.status]}</span>
+                            </div>
+                            {part.url && <a href={part.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: '#2563eb', textDecoration: 'none', wordBreak: 'break-all' }}>{part.url.length > 40 ? part.url.slice(0, 40) + '...' : part.url}</a>}
+                          </div>
+                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                            {part.status === 'requested' && !part.url && (
+                              <button onClick={() => { setMechPartsUrlId(part.id); setMechPartsUrlInput('') }} style={{ padding: '3px 6px', borderRadius: 4, border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>Add Link</button>
+                            )}
+                            {part.status === 'sourced' && isAdmin && (
+                              <>
+                                <button onClick={async () => { setMechPartsSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'ready_to_order' }) }); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) }} style={{ padding: '3px 6px', borderRadius: 4, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>✓</button>
+                                <button onClick={async () => { setMechPartsSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'requested', url: null }) }); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) }} style={{ padding: '3px 6px', borderRadius: 4, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>✗</button>
+                              </>
+                            )}
+                            {part.status === 'ready_to_order' && isAdmin && (
+                              <button onClick={async () => { setMechPartsSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'ordered' }) }); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) }} style={{ padding: '3px 6px', borderRadius: 4, border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>Order</button>
+                            )}
+                            {part.status === 'ordered' && isAdmin && (
+                              <button onClick={async () => { setMechPartsSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'received' }) }); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) }} style={{ padding: '3px 6px', borderRadius: 4, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 10, fontWeight: 600, cursor: 'pointer' }}>Received</button>
+                            )}
+                          </div>
+                        </div>
+                        {mechPartsUrlId === part.id && (
+                          <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
+                            <input type="url" value={mechPartsUrlInput} onChange={e => setMechPartsUrlInput(e.target.value)} placeholder="Paste link..." autoFocus
+                              onKeyDown={async e => { if (e.key === 'Enter' && mechPartsUrlInput.trim()) { e.preventDefault(); setMechPartsSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: mechPartsUrlInput }) }); setMechPartsUrlId(null); setMechPartsUrlInput(''); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) } }}
+                              style={{ flex: 1, padding: '5px 7px', border: '1px solid var(--border)', borderRadius: 4, fontSize: 11 }} />
+                            <button onClick={() => setMechPartsUrlId(null)} style={{ padding: '5px 7px', borderRadius: 4, border: '1px solid var(--border)', background: '#fff', fontSize: 10, cursor: 'pointer' }}>Cancel</button>
+                            <button onClick={async () => { if (!mechPartsUrlInput.trim()) return; setMechPartsSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: mechPartsUrlInput }) }); setMechPartsUrlId(null); setMechPartsUrlInput(''); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) }}
+                              disabled={mechPartsSaving || !mechPartsUrlInput.trim()} style={{ padding: '5px 7px', borderRadius: 4, border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: 10, fontWeight: 600, cursor: 'pointer', opacity: mechPartsSaving || !mechPartsUrlInput.trim() ? 0.5 : 1 }}>Submit</button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {mechParts.filter(p => p.status !== 'received').length === 0 && !mechPartsAddId && (
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '6px 0' }}>No pending parts</p>
                   )}
                 </div>
 
