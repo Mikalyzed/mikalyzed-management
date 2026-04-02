@@ -22,8 +22,9 @@ export default function AddVehiclePage() {
   const [startingStage, setStartingStage] = useState('mechanic')
   const [customTasks, setCustomTasks] = useState<string[]>([])
   const [newTask, setNewTask] = useState('')
-  const [parts, setParts] = useState<string[]>([])
+  const [parts, setParts] = useState<{ name: string; url: string }[]>([])
   const [newPart, setNewPart] = useState('')
+  const [newPartUrl, setNewPartUrl] = useState('')
 
   function addTask() {
     const task = newTask.trim()
@@ -97,11 +98,11 @@ export default function AddVehiclePage() {
       }
       // Create parts if any were added
       if (parts.length > 0) {
-        await Promise.all(parts.map(name =>
+        await Promise.all(parts.map(p =>
           fetch('/api/parts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ vehicleId: result.vehicle.id, name }),
+            body: JSON.stringify({ vehicleId: result.vehicle.id, name: p.name, url: p.url || null }),
           })
         ))
       }
@@ -384,26 +385,35 @@ export default function AddVehiclePage() {
             Parts Needed
           </p>
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: parts.length > 0 ? '16px' : '0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: parts.length > 0 ? '16px' : '0' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                value={newPart}
+                onChange={(e) => setNewPart(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const p = newPart.trim(); if (p) { setParts([...parts, { name: p, url: newPartUrl.trim() }]); setNewPart(''); setNewPartUrl('') } } }}
+                className="input"
+                placeholder="Part name..."
+                style={{ flex: 1 }}
+              />
+              <button
+                type="button"
+                onClick={() => { const p = newPart.trim(); if (p) { setParts([...parts, { name: p, url: newPartUrl.trim() }]); setNewPart(''); setNewPartUrl('') } }}
+                style={{
+                  padding: '12px 20px', borderRadius: '12px', border: '1px solid var(--border)',
+                  background: '#ffffff', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+                  color: 'var(--text-primary)', minHeight: '44px', boxShadow: 'var(--shadow-sm)',
+                }}
+              >
+                Add
+              </button>
+            </div>
             <input
-              value={newPart}
-              onChange={(e) => setNewPart(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); const p = newPart.trim(); if (p) { setParts([...parts, p]); setNewPart('') } } }}
+              value={newPartUrl}
+              onChange={(e) => setNewPartUrl(e.target.value)}
               className="input"
-              placeholder="Add a part needed..."
-              style={{ flex: 1 }}
+              placeholder="Part link (optional)"
+              style={{ fontSize: '13px' }}
             />
-            <button
-              type="button"
-              onClick={() => { const p = newPart.trim(); if (p) { setParts([...parts, p]); setNewPart('') } }}
-              style={{
-                padding: '12px 20px', borderRadius: '12px', border: '1px solid var(--border)',
-                background: '#ffffff', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                color: 'var(--text-primary)', minHeight: '44px', boxShadow: 'var(--shadow-sm)',
-              }}
-            >
-              Add
-            </button>
           </div>
 
           {parts.length > 0 && (
@@ -415,9 +425,16 @@ export default function AddVehiclePage() {
                   borderBottom: i < parts.length - 1 ? '1px solid var(--border-light)' : 'none',
                   background: '#ffffff',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca' }}>Requested</span>
-                    <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>{part}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px', background: part.url ? '#fef9c3' : '#fef2f2', color: part.url ? '#a16207' : '#ef4444', border: `1px solid ${part.url ? '#fde047' : '#fecaca'}` }}>{part.url ? 'Pending Approval' : 'Requested'}</span>
+                      <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)' }}>{part.name}</span>
+                    </div>
+                    {part.url && (
+                      <a href={part.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563eb', textDecoration: 'none', marginTop: '2px', display: 'block', wordBreak: 'break-all' }}>
+                        {part.url.length > 50 ? part.url.slice(0, 50) + '...' : part.url}
+                      </a>
+                    )}
                   </div>
                   <button
                     type="button"
