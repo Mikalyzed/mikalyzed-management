@@ -132,6 +132,7 @@ model VehicleStage {
   timerStartedAt      DateTime? @map("timer_started_at")
   autoPaused          Boolean   @default(false) @map("auto_paused")
   pauseDetail         String?   @map("pause_detail")
+  pausedAt            DateTime? @map("paused_at")
   scheduledDate       DateTime? @map("scheduled_date")
   createdAt           DateTime  @default(now()) @map("created_at")
 

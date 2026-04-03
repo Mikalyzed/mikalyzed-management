@@ -21,6 +21,7 @@ type JobCard = {
   autoPaused: boolean
   pauseReason: string | null
   pauseDetail: string | null
+  pausedAt: string | null
   awaitingParts: boolean
   awaitingPartsName: string | null
   awaitingPartsDate: string | null
@@ -58,7 +59,7 @@ export default function MechanicBoard() {
   const [saving, setSaving] = useState(false)
   const [acting, setActing] = useState(false)
   const [showPauseModal, setShowPauseModal] = useState(false)
-  const [pauseType, setPauseType] = useState<'waiting_on_parts' | 'other' | null>(null)
+  const [pauseType, setPauseType] = useState<'waiting_on_parts' | 'lunch' | 'other' | null>(null)
   const [pauseNote, setPauseNote] = useState('')
   const [partName, setPartName] = useState('')
   const [expectedDate, setExpectedDate] = useState('')
@@ -161,6 +162,7 @@ export default function MechanicBoard() {
     if (!selectedJob || !pauseType) return
     const extra: Record<string, unknown> = { pauseReason: pauseType }
     if (pauseType === 'other') extra.pauseDetail = pauseNote
+    if (pauseType === 'lunch') extra.pauseDetail = null
     if (pauseType === 'waiting_on_parts') {
       extra.partName = partName
       extra.expectedDate = expectedDate || undefined
@@ -248,7 +250,8 @@ export default function MechanicBoard() {
             {job.timerRunning && <Badge text="Active" color={colors.badge} />}
             {job.autoPaused && <Badge text="Auto Paused" color="#a855f7" />}
             {job.awaitingParts && <Badge text="Parts" color="#f59e0b" />}
-            {!job.timerRunning && job.pauseReason && !job.awaitingParts && !job.autoPaused && <Badge text="Paused" color="#f59e0b" />}
+            {!job.timerRunning && job.pauseReason && !job.awaitingParts && !job.autoPaused && job.pauseReason === 'Lunch' && <Badge text="Lunch" color="#8b5cf6" />}
+            {!job.timerRunning && job.pauseReason && !job.awaitingParts && !job.autoPaused && job.pauseReason !== 'Lunch' && <Badge text="Paused" color="#f59e0b" />}
             {job.status === 'pending' && <Badge text="Queued" color="#94a3b8" />}
             {job.status === 'done' && <Badge text="Done" color="#22c55e" />}
             {isOver && <Badge text="Overdue" color="#ef4444" />}
@@ -298,14 +301,19 @@ export default function MechanicBoard() {
 
         {/* Pause info */}
         {job.pauseReason && !job.timerRunning && !job.autoPaused && (
-          <p style={{ fontSize: 11, fontWeight: 600, color: colors.text, marginTop: 8 }}>
-            {job.pauseReason}{job.pauseDetail ? `: ${job.pauseDetail}` : ''}
+          <p style={{ fontSize: 11, fontWeight: 600, color: job.pauseReason === 'Lunch' ? '#7c3aed' : colors.text, marginTop: 8 }}>
+            {job.pauseReason === 'Lunch' ? '🍽️ On Lunch' : job.pauseReason}{job.pauseDetail ? `: ${job.pauseDetail}` : ''}
             {job.awaitingPartsName && ` — ${job.awaitingPartsName}`}
           </p>
         )}
         {job.autoPaused && (
           <p style={{ fontSize: 11, fontWeight: 600, color: '#a855f7', marginTop: 8 }}>Auto Paused — Outside Working Hours</p>
         )}
+        {(job.pauseReason || job.awaitingParts || job.autoPaused) && !job.timerRunning && job.pausedAt && (() => {
+          const mins = Math.floor((Date.now() - new Date(job.pausedAt).getTime()) / 60000)
+          const label = mins < 1 ? 'just now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`
+          return <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>⏸ Paused {label}</p>
+        })()}
 
         {/* Request More Time — when overdue */}
         {isOver && !showActions && (
@@ -524,10 +532,24 @@ export default function MechanicBoard() {
         </Section>
       )}
 
-      {/* Paused / Waiting */}
-      {data.paused.length > 0 && (
-        <Section title="Paused / Waiting" count={data.paused.length} color="#f59e0b">
-          <CardGrid>{data.paused.map(j => renderCard(j))}</CardGrid>
+      {/* Waiting for Parts */}
+      {data.paused.filter(j => j.awaitingParts).length > 0 && (
+        <Section title="Waiting for Parts" count={data.paused.filter(j => j.awaitingParts).length} color="#eab308">
+          <CardGrid>{data.paused.filter(j => j.awaitingParts).map(j => renderCard(j))}</CardGrid>
+        </Section>
+      )}
+
+      {/* On Lunch */}
+      {data.paused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').length > 0 && (
+        <Section title="🍽️ On Lunch" count={data.paused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').length} color="#8b5cf6">
+          <CardGrid>{data.paused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').map(j => renderCard(j))}</CardGrid>
+        </Section>
+      )}
+
+      {/* Paused */}
+      {data.paused.filter(j => !j.awaitingParts && j.pauseReason !== 'Lunch').length > 0 && (
+        <Section title="Paused" count={data.paused.filter(j => !j.awaitingParts && j.pauseReason !== 'Lunch').length} color="#f59e0b">
+          <CardGrid>{data.paused.filter(j => !j.awaitingParts && j.pauseReason !== 'Lunch').map(j => renderCard(j))}</CardGrid>
         </Section>
       )}
 
@@ -585,6 +607,7 @@ export default function MechanicBoard() {
                 {!pauseType ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <button onClick={() => setPauseType('waiting_on_parts')} style={pauseOptionStyle}>Waiting on Parts</button>
+                    <button onClick={() => setPauseType('lunch')} style={pauseOptionStyle}>🍽️ Lunch</button>
                     <button onClick={() => setPauseType('other')} style={pauseOptionStyle}>Other</button>
                     <button onClick={() => setShowPauseModal(false)} style={{ ...pauseOptionStyle, color: '#999', borderColor: '#e5e5e5' }}>Cancel</button>
                   </div>
@@ -602,6 +625,16 @@ export default function MechanicBoard() {
                     <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
                       <FooterBtn label="Back" color="#999" onClick={() => setPauseType(null)} />
                       <FooterBtn label="Pause Job" color="#f59e0b" disabled={!partName.trim()} onClick={submitPause} />
+                    </div>
+                  </div>
+                ) : pauseType === 'lunch' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', padding: '10px 0' }}>
+                    <p style={{ fontSize: 40, marginBottom: 4 }}>🍽️</p>
+                    <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>Going on lunch break</p>
+                    <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Timer will be paused until you resume.</p>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 8, width: '100%' }}>
+                      <FooterBtn label="Back" color="#999" onClick={() => setPauseType(null)} />
+                      <FooterBtn label="Pause for Lunch" color="#f59e0b" onClick={submitPause} />
                     </div>
                   </div>
                 ) : (
@@ -1292,7 +1325,8 @@ function WeekCard({ job, index, getLiveElapsed, openJob, muted }: {
           {isOver && !isDone && <Badge text="Overdue" color="#ef4444" />}
           {isActive && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }} />}
           {isActive && <Badge text="Active" color="#3b82f6" />}
-          {isPaused && <Badge text="Paused" color="#f59e0b" />}
+          {isPaused && job.pauseReason === 'Lunch' && <Badge text="Lunch" color="#8b5cf6" />}
+          {isPaused && job.pauseReason !== 'Lunch' && <Badge text="Paused" color="#f59e0b" />}
           {isAwaiting && <Badge text="Awaiting Parts" color="#eab308" />}
           {isDone && <Badge text="Completed" color="#22c55e" />}
           {!isActive && !isPaused && !isAwaiting && !isDone && job.status === 'pending' && <Badge text="Queued" color="#94a3b8" />}
@@ -1304,7 +1338,7 @@ function WeekCard({ job, index, getLiveElapsed, openJob, muted }: {
       </p>
       {isPaused && job.pauseReason && (
         <p style={{ fontSize: 10, color: '#b45309', marginBottom: 4, fontStyle: 'italic' }}>
-          {job.pauseReason === 'waiting_on_parts' ? `Parts: ${job.awaitingPartsName || 'Pending'}` : job.pauseDetail || 'Paused'}
+          {job.pauseReason === 'Lunch' ? '🍽️ On Lunch' : job.pauseReason === 'waiting_on_parts' ? `Parts: ${job.awaitingPartsName || 'Pending'}` : job.pauseDetail || 'Paused'}
         </p>
       )}
       {isAwaiting && job.awaitingPartsName && (
@@ -1312,6 +1346,11 @@ function WeekCard({ job, index, getLiveElapsed, openJob, muted }: {
           Parts: {job.awaitingPartsName}
         </p>
       )}
+      {(isPaused || isAwaiting) && job.pausedAt && (() => {
+        const mins = Math.floor((Date.now() - new Date(job.pausedAt).getTime()) / 60000)
+        const label = mins < 1 ? 'Just now' : mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ${mins % 60}m ago`
+        return <p style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>Paused {label}</p>
+      })()}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)' }}>
         <span style={{ fontWeight: 700, color: isOver && !isDone ? '#ef4444' : 'var(--text-secondary)' }}>{formatHours(elapsed)}</span>
         <span>{est}h est.</span>

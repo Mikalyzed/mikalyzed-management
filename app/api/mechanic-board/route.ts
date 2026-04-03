@@ -104,6 +104,7 @@ export async function GET() {
     autoPaused: s.autoPaused,
     pauseReason: s.pauseReason,
     pauseDetail: s.pauseDetail,
+    pausedAt: s.pausedAt?.toISOString() || null,
     awaitingParts: s.awaitingParts,
     awaitingPartsName: s.awaitingPartsName,
     awaitingPartsDate: s.awaitingPartsDate?.toISOString() || null,
@@ -254,6 +255,7 @@ export async function POST(req: NextRequest) {
           autoPaused: false,
           pauseReason: null,
           pauseDetail: null,
+          pausedAt: null,
         },
       })
       break
@@ -268,6 +270,7 @@ export async function POST(req: NextRequest) {
         timerStartedAt: null,
         activeSeconds: stage.activeSeconds + Math.max(0, addSeconds),
         autoPaused: false,
+        pausedAt: now,
       }
       if (pauseReason === 'waiting_on_parts') {
         updateData.awaitingParts = true
@@ -278,7 +281,7 @@ export async function POST(req: NextRequest) {
         updateData.pauseReason = 'Waiting on Parts'
         updateData.pauseDetail = partName || null
       } else {
-        updateData.pauseReason = pauseReason === 'other' ? 'Other' : (pauseReason || 'Paused')
+        updateData.pauseReason = pauseReason === 'other' ? 'Other' : pauseReason === 'lunch' ? 'Lunch' : (pauseReason || 'Paused')
         updateData.pauseDetail = pauseDetail || null
       }
       await prisma.vehicleStage.update({ where: { id: stageId }, data: updateData })
@@ -302,6 +305,7 @@ export async function POST(req: NextRequest) {
           awaitingPartsDate: null,
           awaitingPartsTracking: null,
           awaitingPartsSince: null,
+          pausedAt: null,
         },
       })
       break
