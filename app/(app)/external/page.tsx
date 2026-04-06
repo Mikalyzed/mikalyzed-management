@@ -470,56 +470,6 @@ export default function ExternalRepairsPage() {
                   </div>
                 </div>
 
-                {/* Notes section */}
-                {editId === r.id ? (
-                  <div className="ext-notes-area">
-                    <textarea
-                      id={`notes-${r.id}`}
-                      defaultValue={r.notes || ''}
-                      className="input"
-                      rows={2}
-                      style={{ resize: 'vertical', minHeight: '60px', fontSize: '14px' }}
-                      placeholder="Add update notes..."
-                      autoFocus
-                    />
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                      <button
-                        onClick={() => setEditId(null)}
-                        style={{
-                          padding: '8px 18px', borderRadius: '10px', border: '1px solid var(--border)',
-                          background: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer', minHeight: 'auto',
-                        }}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => {
-                          const el = document.getElementById(`notes-${r.id}`) as HTMLTextAreaElement
-                          updateNotes(r.id, el.value)
-                        }}
-                        style={{
-                          padding: '8px 18px', borderRadius: '10px', border: 'none',
-                          background: '#1a1a1a', color: '#dffd6e', fontSize: '13px', fontWeight: 600, cursor: 'pointer', minHeight: 'auto',
-                        }}
-                      >
-                        Save Notes
-                      </button>
-                    </div>
-                  </div>
-                ) : r.notes ? (
-                  <div
-                    className="ext-notes-area"
-                    onClick={() => setEditId(r.id)}
-                    style={{
-                      padding: '12px 14px', borderRadius: '10px',
-                      background: 'var(--bg-primary)', cursor: 'pointer', fontSize: '14px',
-                      color: 'var(--text-secondary)', lineHeight: 1.5,
-                    }}
-                  >
-                    {r.notes}
-                  </div>
-                ) : null}
-
                 {/* Follow-up History */}
                 {(r as any).followUps && Array.isArray((r as any).followUps) && (r as any).followUps.length > 0 && (
                   <div className="ext-notes-area" style={{ padding: '12px 14px' }}>
@@ -570,23 +520,6 @@ export default function ExternalRepairsPage() {
                     borderRadius: '12px',
                     overflow: 'hidden',
                   }}>
-                    <button
-                      onClick={() => setEditId(r.id)}
-                      style={{
-                        padding: '12px 20px',
-                        background: '#ffffff',
-                        border: 'none',
-                        fontSize: '14px',
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        color: 'var(--text-primary)',
-                        minHeight: '44px',
-                        whiteSpace: 'nowrap',
-                        flex: r.status !== 'returned' ? undefined : 1,
-                      }}
-                    >
-                      {r.notes ? 'Edit Notes' : 'Add Notes'}
-                    </button>
                     {(r.status !== 'returned' && (r.estimatedDays && daysOut > r.estimatedDays)) && (
                       <button
                         onClick={() => setFollowUpModal({ 
