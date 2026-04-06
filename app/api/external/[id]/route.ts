@@ -28,10 +28,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const currentFollowUps = (repair.followUps as any[]) || []
       const followupDate = new Date()
       
-      // Calculate new deadline from followup date + entered days
+      // Get the latest deadline to build from (previous follow-up or today)
+      let baseDeadlineTime: number
+      if (currentFollowUps.length > 0) {
+        // Use the last follow-up's deadline as the base
+        const lastFollowUp = currentFollowUps[currentFollowUps.length - 1]
+        baseDeadlineTime = lastFollowUp.calculatedDeadline 
+          ? new Date(lastFollowUp.calculatedDeadline).getTime()
+          : followupDate.getTime()
+      } else {
+        // No previous follow-up, use today
+        baseDeadlineTime = followupDate.getTime()
+      }
+      
+      // Calculate new deadline from the base + entered days
       let calculatedDeadline = null
       if (body.addFollowUp.etaDays) {
-        calculatedDeadline = new Date(followupDate.getTime() + body.addFollowUp.etaDays * 86400000).toISOString()
+        calculatedDeadline = new Date(baseDeadlineTime + body.addFollowUp.etaDays * 86400000).toISOString()
       }
       
       const newFollowUp = {
