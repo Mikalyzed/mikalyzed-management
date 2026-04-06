@@ -161,7 +161,7 @@ export default function ExternalRepairsPage() {
         body: JSON.stringify({
           addFollowUp: {
             note: followUpNote,
-            newEta: followUpNewEta ? Number(followUpNewEta) : null
+            etaDays: followUpNewEta ? Number(followUpNewEta) : null
           }
         })
       })
@@ -375,7 +375,8 @@ export default function ExternalRepairsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filtered.map((r) => {
             const daysOut = getDaysOut(r.sentDate)
-            const overdue = !!(r.estimatedDays && daysOut > r.estimatedDays && r.status !== 'returned')
+            const hasFollowUp = (r as any).followUps && (r as any).followUps.length > 0
+            const overdue = !!(r.estimatedDays && daysOut > r.estimatedDays && r.status !== 'returned' && !hasFollowUp)
 
             return (
               <div key={r.id} style={{
@@ -423,20 +424,46 @@ export default function ExternalRepairsPage() {
                       <p style={{ fontSize: '14px', fontWeight: 500 }}>{r.repairDescription}</p>
                     </div>
                     <div>
-                      <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Timeline</p>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {daysOut} day{daysOut !== 1 ? 's' : ''} out
-                        </p>
+                      <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Timeline</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {/* Total Days Out */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Total out:</span>
+                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{daysOut}d</span>
+                        </div>
+                        
+                        {/* Original Estimate */}
                         {r.estimatedDays && (
-                          <p style={{ fontSize: '12px', color: overdue ? 'var(--danger)' : 'var(--text-muted)' }}>
-                            {overdue ? '⚠ Overdue' : 'Due in'} {overdue ? daysOut - r.estimatedDays : r.estimatedDays - daysOut}d
-                          </p>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                            <span style={{ color: 'var(--text-secondary)' }}>Original est:</span>
+                            <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{r.estimatedDays}d</span>
+                          </div>
                         )}
-                        {(r as any).followUps && (r as any).followUps.length > 0 && (
-                          <p style={{ fontSize: '11px', color: '#8b5cf6', fontWeight: 500 }}>
-                            {(r as any).followUps.length} follow-up{(r as any).followUps.length !== 1 ? 's' : ''}
-                          </p>
+                        
+                        {/* Original Overdue */}
+                        {r.estimatedDays && daysOut > r.estimatedDays && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                            <span style={{ color: 'var(--danger)' }}>⚠ Overdue by:</span>
+                            <span style={{ fontWeight: 600, color: 'var(--danger)' }}>{daysOut - r.estimatedDays}d</span>
+                          </div>
+                        )}
+                        
+                        {/* Latest ETA from Follow-up */}
+                        {(r as any).followUps && (r as any).followUps.length > 0 && ((r as any).followUps as any[]).some((f: any) => f.calculatedDeadline) && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', paddingTop: '6px', borderTop: '1px solid var(--border)' }}>
+                            <span style={{ color: '#8b5cf6', fontWeight: 500 }}>Latest ETA:</span>
+                            <span style={{ fontWeight: 600, color: '#8b5cf6' }}>
+                              {(() => {
+                                const latestFollowUp = ((r as any).followUps as any[])
+                                  .filter((f: any) => f.calculatedDeadline)
+                                  .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0]
+                                if (!latestFollowUp) return ''
+                                const deadline = new Date(latestFollowUp.calculatedDeadline)
+                                const daysLeft = Math.ceil((deadline.getTime() - Date.now()) / 86400000)
+                                return daysLeft > 0 ? `Due in ${daysLeft}d` : `${Math.abs(daysLeft)}d overdue`
+                              })()}
+                            </span>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -506,23 +533,28 @@ export default function ExternalRepairsPage() {
                       Follow-ups ({(r as any).followUps.length}) {expandedFollowUps === r.id ? '▲' : '▼'}
                     </button>
                     {expandedFollowUps === r.id && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {((r as any).followUps as any[]).map((followUp, i) => (
                           <div key={i} style={{
-                            padding: '8px 12px', background: '#f8f9fa', borderRadius: '8px',
-                            borderLeft: '3px solid #6b7280'
+                            padding: '12px', background: '#f8f9fa', borderRadius: '8px',
+                            borderLeft: '3px solid #8b5cf6'
                           }}>
-                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                              {new Date(followUp.date).toLocaleDateString()} - {new Date(followUp.date).toLocaleTimeString()}
-                              {followUp.newEta && (
-                                <span style={{ fontWeight: 600, color: '#f59e0b', marginLeft: '8px' }}>
-                                  New ETA: {followUp.newEta} days
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 500 }}>
+                              {new Date(followUp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                              {followUp.etaDays && (
+                                <span style={{ fontWeight: 600, color: '#8b5cf6', marginLeft: '10px' }}>
+                                  +{followUp.etaDays}d ETA
                                 </span>
                               )}
                             </div>
-                            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', margin: 0 }}>
+                            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '6px 0 0 0', lineHeight: 1.4 }}>
                               {followUp.note}
                             </p>
+                            {followUp.calculatedDeadline && (
+                              <div style={{ fontSize: '11px', color: '#8b5cf6', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid rgba(139,92,246,0.2)' }}>
+                                Deadline: {new Date(followUp.calculatedDeadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -555,7 +587,7 @@ export default function ExternalRepairsPage() {
                     >
                       {r.notes ? 'Edit Notes' : 'Add Notes'}
                     </button>
-                    {overdue && (
+                    {(r.status !== 'returned' && (r.estimatedDays && daysOut > r.estimatedDays)) && (
                       <button
                         onClick={() => setFollowUpModal({ 
                           repairId: r.id, 

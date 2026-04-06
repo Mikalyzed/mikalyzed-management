@@ -26,20 +26,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const repair = await prisma.externalRepair.findUnique({ where: { id } })
     if (repair) {
       const currentFollowUps = (repair.followUps as any[]) || []
+      const followupDate = new Date()
+      
+      // Calculate new deadline from followup date + entered days
+      let calculatedDeadline = null
+      if (body.addFollowUp.etaDays) {
+        calculatedDeadline = new Date(followupDate.getTime() + body.addFollowUp.etaDays * 86400000).toISOString()
+      }
+      
       const newFollowUp = {
-        date: new Date().toISOString(),
+        date: followupDate.toISOString(),
+        etaDays: body.addFollowUp.etaDays || null,
         note: body.addFollowUp.note,
-        newEta: body.addFollowUp.newEta || null
+        calculatedDeadline: calculatedDeadline
       }
       
       const updatedFollowUps = [...currentFollowUps, newFollowUp]
       data.followUps = updatedFollowUps
       
-      // If new ETA provided, update estimatedDays
-      if (body.addFollowUp.newEta) {
-        data.estimatedDays = body.addFollowUp.newEta
-        data.expectedReturn = new Date(repair.sentDate.getTime() + body.addFollowUp.newEta * 86400000)
-      }
+      // DO NOT update estimatedDays — keep original for historical context
     }
   }
 
