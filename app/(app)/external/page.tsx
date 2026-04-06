@@ -396,10 +396,9 @@ export default function ExternalRepairsPage() {
                 borderRadius: '16px',
                 overflow: 'hidden',
                 boxShadow: 'var(--shadow-sm)',
-                cursor: isAdmin ? 'pointer' : 'default',
-              }} onClick={() => isAdmin && setEditRepairModal(r)}>
-                {/* Header */}
-                <div className="ext-card-padding">
+              }}>
+                {/* Header - Clickable for admin */}
+                <div className="ext-card-padding" style={{ cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && setEditRepairModal(r)}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', gap: '12px' }}>
                     <div style={{ minWidth: 0 }}>
                       <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
@@ -418,14 +417,15 @@ export default function ExternalRepairsPage() {
                     </div>
                   </div>
 
-                  {/* Info grid */}
+                  {/* Info grid - Clickable for admin */}
                   <div className="ext-info-grid" style={{
                     display: 'grid',
                     gap: '14px',
                     padding: '14px',
                     background: overdue ? 'rgba(255,255,255,0.6)' : 'var(--bg-primary)',
                     borderRadius: '12px',
-                  }}>
+                    cursor: isAdmin ? 'pointer' : 'default',
+                  }} onClick={() => isAdmin && setEditRepairModal(r)}>
                     <div>
                       <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Shop</p>
                       <p style={{ fontSize: '14px', fontWeight: 600 }}>{r.shopName}</p>
@@ -482,9 +482,9 @@ export default function ExternalRepairsPage() {
                   </div>
                 </div>
 
-                {/* Follow-up History */}
+                {/* Follow-up History - Clickable for admin */}
                 {(r as any).followUps && Array.isArray((r as any).followUps) && (r as any).followUps.length > 0 && (
-                  <div className="ext-notes-area" style={{ padding: '12px 14px' }}>
+                  <div className="ext-notes-area" style={{ padding: '12px 14px', cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && setEditRepairModal(r)}>
                     <button
                       onClick={() => setExpandedFollowUps(expandedFollowUps === r.id ? null : r.id)}
                       style={{
