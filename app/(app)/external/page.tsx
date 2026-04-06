@@ -524,7 +524,7 @@ export default function ExternalRepairsPage() {
                     borderRadius: '12px',
                     overflow: 'hidden',
                   }}>
-                    {(r.status !== 'returned' && (r.estimatedDays && daysOut > r.estimatedDays)) && (
+                    {r.status !== 'returned' && (
                       <button
                         onClick={() => setFollowUpModal({ 
                           repairId: r.id, 
@@ -590,31 +590,17 @@ export default function ExternalRepairsPage() {
                     )}
                   </div>
                 )}
-                {/* Edit & Delete buttons */}
-                <div style={{ display: 'flex', gap: 10, padding: '12px 16px' }}>
+                {/* Edit button */}
+                <div style={{ padding: '12px 16px' }}>
                   <button
                     onClick={() => setEditRepairModal(r)}
                     style={{
-                      flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #6b7280',
+                      width: '100%', padding: '10px 0', borderRadius: 10, border: '1px solid #6b7280',
                       background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                       color: 'var(--text-primary)',
                     }}
                   >
                     Edit
-                  </button>
-                  <button
-                    onClick={() => setDeleteConfirm({
-                      id: r.id,
-                      stock: r.stockNumber,
-                      vehicle: `${r.year} ${r.make} ${r.model}`
-                    })}
-                    style={{
-                      flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #fca5a5',
-                      background: '#fef2f2', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                      color: '#dc2626',
-                    }}
-                  >
-                    Delete
                   </button>
                 </div>
               </div>
@@ -1186,33 +1172,47 @@ export default function ExternalRepairsPage() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-              <button onClick={() => setEditRepairModal(null)} disabled={editRepairSaving} style={{
-                flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
-                background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-              }}>Cancel</button>
-              <button onClick={async () => {
-                setEditRepairSaving(true)
-                try {
-                  await fetch(`/api/external/${editRepairModal.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      shopName: (document.getElementById('edit-shop-name') as HTMLInputElement).value,
-                      shopPhone: (document.getElementById('edit-shop-phone') as HTMLInputElement).value,
-                      repairDescription: (document.getElementById('edit-repair-desc') as HTMLTextAreaElement).value,
-                      estimatedDays: Number((document.getElementById('edit-est-days') as HTMLInputElement).value) || null,
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, flexDirection: 'column' }}>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={() => setEditRepairModal(null)} disabled={editRepairSaving} style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
+                  background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                }}>Cancel</button>
+                <button onClick={async () => {
+                  setEditRepairSaving(true)
+                  try {
+                    await fetch(`/api/external/${editRepairModal.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        shopName: (document.getElementById('edit-shop-name') as HTMLInputElement).value,
+                        shopPhone: (document.getElementById('edit-shop-phone') as HTMLInputElement).value,
+                        repairDescription: (document.getElementById('edit-repair-desc') as HTMLTextAreaElement).value,
+                        estimatedDays: Number((document.getElementById('edit-est-days') as HTMLInputElement).value) || null,
+                      })
                     })
-                  })
-                  setEditRepairModal(null)
-                  load()
-                } catch {}
-                setEditRepairSaving(false)
-              }} disabled={editRepairSaving} style={{
-                flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
-                background: editRepairSaving ? '#e5e5e5' : '#1a1a1a', color: '#dffd6e',
-                fontSize: 14, fontWeight: 700, cursor: 'pointer',
-              }}>{editRepairSaving ? 'Saving...' : 'Save'}</button>
+                    setEditRepairModal(null)
+                    load()
+                  } catch {}
+                  setEditRepairSaving(false)
+                }} disabled={editRepairSaving} style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+                  background: editRepairSaving ? '#e5e5e5' : '#1a1a1a', color: '#dffd6e',
+                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                }}>{editRepairSaving ? 'Saving...' : 'Save'}</button>
+              </div>
+              <button onClick={() => {
+                setDeleteConfirm({
+                  id: editRepairModal.id,
+                  stock: editRepairModal.stockNumber,
+                  vehicle: `${editRepairModal.year} ${editRepairModal.make} ${editRepairModal.model}`
+                })
+                setEditRepairModal(null)
+              }} style={{
+                width: '100%', padding: '12px 0', borderRadius: 10, border: '1px solid #fca5a5',
+                background: '#fef2f2', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                color: '#dc2626',
+              }}>Delete Repair</button>
             </div>
           </div>
         </div>
