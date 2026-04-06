@@ -448,6 +448,16 @@ export default function ExternalRepairsPage() {
                           </div>
                         )}
                         
+                        {/* Extensions from Follow-ups */}
+                        {(r as any).followUps && (r as any).followUps.length > 0 && (r as any).followUps.some((f: any) => f.etaDays) && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                            <span style={{ color: '#8b5cf6' }}>Extended by:</span>
+                            <span style={{ fontWeight: 600, color: '#8b5cf6' }}>
+                              +{((r as any).followUps as any[]).reduce((sum: number, f: any) => sum + (f.etaDays || 0), 0)}d
+                            </span>
+                          </div>
+                        )}
+                        
                         {/* Latest ETA from Follow-up */}
                         {(r as any).followUps && (r as any).followUps.length > 0 && ((r as any).followUps as any[]).some((f: any) => f.calculatedDeadline) && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', paddingTop: '6px', borderTop: '1px solid var(--border)' }}>
