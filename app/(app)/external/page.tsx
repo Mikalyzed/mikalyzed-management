@@ -80,6 +80,10 @@ export default function ExternalRepairsPage() {
   const [followUpNewEta, setFollowUpNewEta] = useState('')
   const [followUpSaving, setFollowUpSaving] = useState(false)
   const [expandedFollowUps, setExpandedFollowUps] = useState<string | null>(null)
+  const [editRepairModal, setEditRepairModal] = useState<ExternalRepair | null>(null)
+  const [editRepairSaving, setEditRepairSaving] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; stock: string; vehicle: string } | null>(null)
+  const [deleteDeleting, setDeleteDeleting] = useState(false)
 
   function load() {
     fetch('/api/external')
@@ -586,6 +590,33 @@ export default function ExternalRepairsPage() {
                     )}
                   </div>
                 )}
+                {/* Edit & Delete buttons */}
+                <div style={{ display: 'flex', gap: 10, padding: '12px 16px' }}>
+                  <button
+                    onClick={() => setEditRepairModal(r)}
+                    style={{
+                      flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #6b7280',
+                      background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      color: 'var(--text-primary)',
+                    }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm({
+                      id: r.id,
+                      stock: r.stockNumber,
+                      vehicle: `${r.year} ${r.make} ${r.model}`
+                    })}
+                    style={{
+                      flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #fca5a5',
+                      background: '#fef2f2', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      color: '#dc2626',
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             )
           })}
@@ -1117,6 +1148,112 @@ export default function ExternalRepairsPage() {
               >
                 {followUpSaving ? 'Saving...' : 'Log Follow-up'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Repair Modal */}
+      {editRepairModal && (
+        <div onClick={() => setEditRepairModal(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: 20,
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480,
+            maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.15)', padding: 24,
+          }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Edit Repair</h2>
+            
+            <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Shop Name</label>
+                <input defaultValue={editRepairModal.shopName} id="edit-shop-name" className="input" />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Shop Phone</label>
+                <input defaultValue={editRepairModal.shopPhone || ''} id="edit-shop-phone" className="input" />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Repair Description</label>
+                <textarea defaultValue={editRepairModal.repairDescription} id="edit-repair-desc" className="input" rows={3} style={{ resize: 'vertical', minHeight: 80 }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Estimated Days</label>
+                <input type="number" defaultValue={editRepairModal.estimatedDays || ''} id="edit-est-days" className="input" style={{ maxWidth: 160 }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={() => setEditRepairModal(null)} disabled={editRepairSaving} style={{
+                flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
+                background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              }}>Cancel</button>
+              <button onClick={async () => {
+                setEditRepairSaving(true)
+                try {
+                  await fetch(`/api/external/${editRepairModal.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      shopName: (document.getElementById('edit-shop-name') as HTMLInputElement).value,
+                      shopPhone: (document.getElementById('edit-shop-phone') as HTMLInputElement).value,
+                      repairDescription: (document.getElementById('edit-repair-desc') as HTMLTextAreaElement).value,
+                      estimatedDays: Number((document.getElementById('edit-est-days') as HTMLInputElement).value) || null,
+                    })
+                  })
+                  setEditRepairModal(null)
+                  load()
+                } catch {}
+                setEditRepairSaving(false)
+              }} disabled={editRepairSaving} style={{
+                flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+                background: editRepairSaving ? '#e5e5e5' : '#1a1a1a', color: '#dffd6e',
+                fontSize: 14, fontWeight: 700, cursor: 'pointer',
+              }}>{editRepairSaving ? 'Saving...' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div onClick={() => setDeleteConfirm(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: 20,
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 16, width: '100%', maxWidth: 400,
+            padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+          }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Delete Repair?</h2>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20 }}>
+              #{deleteConfirm.stock} - {deleteConfirm.vehicle}
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
+              This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setDeleteConfirm(null)} disabled={deleteDeleting} style={{
+                flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
+                background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              }}>Cancel</button>
+              <button onClick={async () => {
+                setDeleteDeleting(true)
+                try {
+                  await fetch(`/api/external/${deleteConfirm.id}`, { method: 'DELETE' })
+                  setDeleteConfirm(null)
+                  load()
+                } catch {}
+                setDeleteDeleting(false)
+              }} disabled={deleteDeleting} style={{
+                flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+                background: deleteDeleting ? '#e5e5e5' : '#dc2626', color: '#fff',
+                fontSize: 14, fontWeight: 700, cursor: 'pointer',
+              }}>{deleteDeleting ? 'Deleting...' : 'Delete'}</button>
             </div>
           </div>
         </div>

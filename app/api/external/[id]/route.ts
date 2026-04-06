@@ -8,6 +8,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const data: Record<string, unknown> = {}
   if (body.status) data.status = body.status
   if (body.notes !== undefined) data.notes = body.notes
+  if (body.shopName !== undefined) data.shopName = body.shopName
+  if (body.shopPhone !== undefined) data.shopPhone = body.shopPhone
+  if (body.repairDescription !== undefined) data.repairDescription = body.repairDescription
   if (body.estimatedDays) {
     data.estimatedDays = body.estimatedDays
     const repair = await prisma.externalRepair.findUnique({ where: { id } })
@@ -63,4 +66,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const updated = await prisma.externalRepair.update({ where: { id }, data })
   return NextResponse.json({ repair: updated })
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  
+  await prisma.externalRepair.delete({ where: { id } })
+  return NextResponse.json({ success: true })
 }
