@@ -95,9 +95,11 @@ export default function ExternalRepairsPage() {
   }
 
   useEffect(() => {
-    fetch('/api/auth/session')
+    fetch('/api/auth/me')
       .then(r => r.json())
-      .then(data => setIsAdmin(data.user?.role === 'admin'))
+      .then(data => {
+        if (data.user?.role === 'admin') setIsAdmin(true)
+      })
       .catch(() => setIsAdmin(false))
     load()
   }, [])
