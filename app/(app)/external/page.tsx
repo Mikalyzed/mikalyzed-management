@@ -424,12 +424,21 @@ export default function ExternalRepairsPage() {
                     </div>
                     <div>
                       <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Timeline</p>
-                      <p style={{ fontSize: '14px', fontWeight: 600, color: overdue ? 'var(--danger)' : 'var(--text-primary)' }}>
-                        {overdue && '⚠ '}{daysOut} day{daysOut !== 1 ? 's' : ''} out
-                      </p>
-                      {r.estimatedDays && (
-                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{r.estimatedDays}d estimated</p>
-                      )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                          {daysOut} day{daysOut !== 1 ? 's' : ''} out
+                        </p>
+                        {r.estimatedDays && (
+                          <p style={{ fontSize: '12px', color: overdue ? 'var(--danger)' : 'var(--text-muted)' }}>
+                            {overdue ? '⚠ Overdue' : 'Due in'} {overdue ? daysOut - r.estimatedDays : r.estimatedDays - daysOut}d
+                          </p>
+                        )}
+                        {(r as any).followUps && (r as any).followUps.length > 0 && (
+                          <p style={{ fontSize: '11px', color: '#8b5cf6', fontWeight: 500 }}>
+                            {(r as any).followUps.length} follow-up{(r as any).followUps.length !== 1 ? 's' : ''}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
