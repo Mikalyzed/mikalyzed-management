@@ -443,7 +443,7 @@ export default function ExternalRepairsPage() {
                         {/* Original Overdue */}
                         {r.estimatedDays && daysOut > r.estimatedDays && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                            <span style={{ color: 'var(--danger)' }}>⚠ Overdue by:</span>
+                            <span style={{ color: 'var(--danger)' }}>Overdue by:</span>
                             <span style={{ fontWeight: 600, color: 'var(--danger)' }}>{daysOut - r.estimatedDays}d</span>
                           </div>
                         )}
