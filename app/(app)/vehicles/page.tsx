@@ -95,7 +95,6 @@ export default function VehiclesPage() {
   const [externalModal, setExternalModal] = useState<{ vehicleId: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null; stageId: string | null } | null>(null)
   const [externalSubmitting, setExternalSubmitting] = useState(false)
   const [skipping, setSkipping] = useState(false)
-  const [skipReturnAfterComplete, setSkipReturnAfterComplete] = useState(true)
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null)
   const didDrag = useRef(false)
   useEffect(() => {
@@ -805,50 +804,32 @@ export default function VehiclesPage() {
                                   ))}
                                 </select>
                                 <button
-                                disabled={skipping}
-                                onClick={async () => {
-                                  const sel = document.getElementById('skip-stage-select') as HTMLSelectElement
-                                  const target = sel.value
-                                  if (!target) return
-                                  setSkipping(true)
-                                  try {
-                                    await fetch(`/api/vehicles/${v.id}/move-stage`, {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ targetStage: target, skipCurrent: true, returnAfterComplete: skipReturnAfterComplete }),
+                                  onClick={() => {
+                                    const sel = document.getElementById('skip-stage-select') as HTMLSelectElement
+                                    const target = sel.value
+                                    if (!target) return
+                                    setMoveModal({
+                                      vehicleId: v.id,
+                                      fromStage: currentStage?.stage || 'mechanic',
+                                      toStage: target,
+                                      tasks: [],
+                                      assigneeId: null,
+                                      teamMembers: teamMembers,
+                                      returnAfterComplete: true,
+                                      saving: false,
                                     })
                                     closeModal()
-                                    const res = await fetch('/api/vehicles')
-                                    const d = await res.json()
-                                    setVehicles(d.vehicles || [])
-                                  } catch { /* ignore */ }
-                                  setSkipping(false)
-                                  setSkipReturnAfterComplete(true)
-                                }}
-                                style={{
-                                  padding: '10px 18px', borderRadius: 10, border: 'none',
-                                  background: skipping ? '#e5e5e5' : '#7c3aed', color: '#fff',
-                                  fontSize: 13, fontWeight: 700, cursor: skipping ? 'default' : 'pointer',
-                                  whiteSpace: 'nowrap', opacity: skipping ? 0.6 : 1,
-                                }}
-                              >
-                                {skipping ? 'Skipping...' : 'Skip'}
-                              </button>
+                                  }}
+                                  style={{
+                                    padding: '10px 18px', borderRadius: 10, border: 'none',
+                                    background: '#7c3aed', color: '#fff',
+                                    fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  Skip
+                                </button>
                               </div>
-                              {laterStages.length > 0 && (
-                                <label style={{
-                                  display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
-                                  color: 'var(--text-secondary)', cursor: 'pointer',
-                                }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={skipReturnAfterComplete}
-                                    onChange={(e) => setSkipReturnAfterComplete(e.target.checked)}
-                                    style={{ width: 16, height: 16, cursor: 'pointer' }}
-                                  />
-                                  Return to {STAGE_LABELS[currentStage?.stage as keyof typeof STAGE_LABELS] || 'current stage'} after {laterStages[0] ? STAGE_LABELS[laterStages[0] as keyof typeof STAGE_LABELS] : 'new stage'} completes?
-                                </label>
-                              )}
                             </div>
                           )}
                           <div style={{ display: 'flex', gap: 10 }}>
