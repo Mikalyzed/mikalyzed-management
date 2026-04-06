@@ -48,6 +48,7 @@ const DEFAULT_INSPECTION = [
 export default function ExternalRepairsPage() {
   const [repairs, setRepairs] = useState<ExternalRepair[]>([])
   const [loading, setLoading] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -93,7 +94,13 @@ export default function ExternalRepairsPage() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then(r => r.json())
+      .then(data => setIsAdmin(data.user?.role === 'admin'))
+      .catch(() => setIsAdmin(false))
+    load()
+  }, [])
 
   const filtered = filter === 'active'
     ? repairs.filter((r) => r.status !== 'returned')
@@ -389,7 +396,8 @@ export default function ExternalRepairsPage() {
                 borderRadius: '16px',
                 overflow: 'hidden',
                 boxShadow: 'var(--shadow-sm)',
-              }}>
+                cursor: isAdmin ? 'pointer' : 'default',
+              }} onClick={() => isAdmin && setEditRepairModal(r)}>
                 {/* Header */}
                 <div className="ext-card-padding">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', gap: '12px' }}>
@@ -590,19 +598,6 @@ export default function ExternalRepairsPage() {
                     )}
                   </div>
                 )}
-                {/* Edit button */}
-                <div style={{ padding: '12px 16px' }}>
-                  <button
-                    onClick={() => setEditRepairModal(r)}
-                    style={{
-                      width: '100%', padding: '10px 0', borderRadius: 10, border: '1px solid #6b7280',
-                      background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                      color: 'var(--text-primary)',
-                    }}
-                  >
-                    Edit
-                  </button>
-                </div>
               </div>
             )
           })}
