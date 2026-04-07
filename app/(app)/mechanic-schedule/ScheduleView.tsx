@@ -28,7 +28,7 @@ type DayBucket = { day: string; jobs: JobCard[] }
 
 type BoardData = {
   active: JobCard[]; paused: JobCard[]; queued: JobCard[]; completedToday: JobCard[]
-  today: JobCard[]; remainingDays: DayBucket[]
+  workedToday: JobCard[]; pausedNotToday: JobCard[]; awaitingParts: JobCard[]; today: JobCard[]; remainingDays: DayBucket[]
   weeklyEstimatedHours: number; weeklyWorkedHours: number; hoursLeftToday: number
   isWorkHours: boolean
 }
@@ -226,20 +226,29 @@ export default function ScheduleView() {
 
   const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
 
-  const todayJobs = data.today || []
+  const workedToday = data.workedToday || []
+  const upNext = data.today || []
   const completedToday = data.completedToday || []
-  const awaitingParts = data.paused.filter(j => j.awaitingParts)
-
   const sections: { label: string; jobs: JobCard[]; muted?: boolean }[] = []
 
-  if (todayJobs.length > 0 || completedToday.length > 0) {
-    sections.push({ label: `Today — ${todayName}`, jobs: [...todayJobs, ...completedToday] })
+  if (workedToday.length > 0 || completedToday.length > 0) {
+    sections.push({ label: `Working Today — ${todayName}`, jobs: [...workedToday, ...completedToday] })
+  }
+
+  const pausedNotToday = data.pausedNotToday || []
+  if (pausedNotToday.length > 0) {
+    sections.push({ label: 'Paused', jobs: pausedNotToday })
+  }
+
+  if (upNext.length > 0) {
+    sections.push({ label: 'Up Next', jobs: upNext })
   }
 
   for (const bucket of (data.remainingDays || [])) {
     sections.push({ label: bucket.day, jobs: bucket.jobs })
   }
 
+  const awaitingParts = data.awaitingParts || []
   if (awaitingParts.length > 0) {
     sections.push({ label: 'Awaiting Parts', jobs: awaitingParts, muted: true })
   }

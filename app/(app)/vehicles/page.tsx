@@ -70,6 +70,7 @@ export default function VehiclesPage() {
   const dragGhostRef = useRef<HTMLDivElement | null>(null)
   const originalOrderRef = useRef<Record<string, string[]>>({})
   const kanbanRef = useRef<HTMLDivElement | null>(null)
+  const [search, setSearch] = useState('')
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null)
   const [modalData, setModalData] = useState<ModalData | null>(null)
   const [modalChecklist, setModalChecklist] = useState<ChecklistItem[]>([])
@@ -129,7 +130,13 @@ export default function VehiclesPage() {
 
   const getColumnVehicles = useCallback(
     (col: string) => {
-      const colVehicles = vehicles.filter((v) => v.status === col)
+      const q = search.toLowerCase().trim()
+      const colVehicles = vehicles.filter((v) => {
+        if (v.status !== col) return false
+        if (!q) return true
+        const desc = `${v.year || ''} ${v.make} ${v.model} ${v.stockNumber} ${v.color || ''}`.toLowerCase()
+        return desc.includes(q)
+      })
       if (dragInfo && liveOrder[col]) {
         // Return vehicles in the live reordered order
         return liveOrder[col]
@@ -138,7 +145,7 @@ export default function VehiclesPage() {
       }
       return colVehicles
     },
-    [vehicles, dragInfo, liveOrder]
+    [vehicles, dragInfo, liveOrder, search]
   )
 
   const handleDragStart = useCallback((e: React.DragEvent, vehicleId: string, column: string) => {
@@ -458,10 +465,17 @@ export default function VehiclesPage() {
     <div>
       <div className="page-header" style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Recon Board</h1>
-        <Link href="/vehicles/new" className="btn btn-primary gap-2">
-          <span style={{ fontSize: '18px', lineHeight: 1 }}>+</span>
-          <span className="hidden sm:inline">Add Vehicle</span>
-        </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <input
+            type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search vehicles..."
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, width: 200 }}
+          />
+          <Link href="/vehicles/new" className="btn btn-primary gap-2">
+            <span style={{ fontSize: '18px', lineHeight: 1 }}>+</span>
+            <span className="hidden sm:inline">Add Vehicle</span>
+          </Link>
+        </div>
       </div>
 
       <div className="kanban-board" ref={kanbanRef} style={{ marginTop: 8 }}>

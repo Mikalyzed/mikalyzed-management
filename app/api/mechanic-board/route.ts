@@ -85,7 +85,7 @@ export async function GET() {
   const paused = stages.filter(s =>
     (s.status === 'in_progress' && !s.timerStartedAt && !s.awaitingParts) ||
     (s.status === 'blocked' && !s.awaitingParts) ||
-    s.awaitingParts
+    (s.awaitingParts && s.status !== 'pending')
   )
   const queued = stages.filter(s => s.status === 'pending')
   const completedToday = stages.filter(s => s.status === 'done' && s.completedAt && s.completedAt >= todayStart)
@@ -154,17 +154,40 @@ export async function GET() {
     ? (h < WORK_START ? HOURS_PER_DAY : h >= WORK_END ? 0 : WORK_END - h)
     : 0
 
-  const activeHoursRemaining = [...active, ...paused.filter(p => !p.awaitingParts)].reduce((sum, s) => {
+  // Split active/paused into "worked today" vs "paused not today" vs "awaiting parts"
+  const workedToday: typeof stages = []
+  const pausedNotToday: typeof stages = []
+  const awaitingPartsAll: typeof stages = []
+
+  for (const s of [...active, ...paused]) {
+    const touchedToday = s.timerStartedAt || (s.pausedAt && s.pausedAt >= todayStart)
+    if (s.awaitingParts) {
+      if (touchedToday) workedToday.push(s)
+      awaitingPartsAll.push(s)
+    } else if (touchedToday) {
+      workedToday.push(s)
+    } else {
+      pausedNotToday.push(s)
+    }
+  }
+
+  // Also add pending vehicles awaiting parts
+  for (const s of queued) {
+    if (s.awaitingParts) awaitingPartsAll.push(s)
+  }
+
+  const workedTodayHours = workedToday.reduce((sum, s) => {
     const est = s.estimatedHours || 2
     const elapsed = getElapsed(s) / 3600
     return sum + Math.max(0, est - elapsed)
   }, 0)
 
-  const todayJobs: typeof stages = [...active, ...paused.filter(p => !p.awaitingParts)]
+  // Up Next = queued vehicles that fit into remaining hours today
+  const todayJobs: typeof stages = []
   const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
   const remainingDays: { day: string; jobs: ReturnType<typeof format>[] }[] = []
 
-  let todayBudget = Math.max(0, hoursLeftToday - activeHoursRemaining)
+  let todayBudget = Math.max(0, hoursLeftToday - workedTodayHours)
   const fullDaysLeft = dayIndex >= 0 && dayIndex <= 4 ? 4 - dayIndex : 0
 
   const dayBuckets: { day: string; budget: number; jobs: typeof stages }[] = []
@@ -175,6 +198,7 @@ export async function GET() {
   let currentBucketIdx = 0
 
   for (const s of queued) {
+    if (s.awaitingParts) continue // skip awaiting parts for scheduling
     const est = s.estimatedHours || 2
     if (todayBudget >= est) {
       todayJobs.push(s)
@@ -215,6 +239,9 @@ export async function GET() {
     paused: paused.map(format),
     queued: queued.map(format),
     completedToday: completedToday.map(format),
+    workedToday: workedToday.map(format),
+    pausedNotToday: pausedNotToday.map(format),
+    awaitingParts: awaitingPartsAll.map(format),
     today: todayJobs.map(format),
     remainingDays,
     weeklyEstimatedHours,

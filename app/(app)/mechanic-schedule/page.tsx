@@ -35,7 +35,7 @@ type DayBucket = { day: string; jobs: JobCard[] }
 
 type BoardData = {
   active: JobCard[]; paused: JobCard[]; queued: JobCard[]; completedToday: JobCard[]
-  today: JobCard[]; remainingDays: DayBucket[]
+  workedToday: JobCard[]; pausedNotToday: JobCard[]; awaitingParts: JobCard[]; today: JobCard[]; remainingDays: DayBucket[]
   weeklyEstimatedHours: number; weeklyWorkedHours: number; remainingHoursThisWeek: number; hoursLeftToday: number
   isWorkHours: boolean
 }
@@ -439,25 +439,47 @@ export default function MechanicBoard() {
         </div>
       </div>
 
-      {/* Today */}
-      {data.today.length > 0 && (
+      {/* Working Today */}
+      {(data.workedToday.length > 0 || data.completedToday.length > 0) && (
         <div style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 4, height: 20, borderRadius: 2, background: '#1a1a1a' }} />
-              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Today</h2>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.today.length} vehicles</span>
+              <div style={{ width: 4, height: 20, borderRadius: 2, background: '#16a34a' }} />
+              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Working Today</h2>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.workedToday.length + data.completedToday.length} vehicles</span>
             </div>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{data.hoursLeftToday}h left today</span>
           </div>
           <div style={{
             display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
             WebkitOverflowScrolling: 'touch',
           }}>
-            {data.today.map((job, i) => <WeekCard key={job.id} job={job} index={i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)}
+            {(() => {
+              const seen = new Set<string>()
+              return [...data.workedToday, ...data.completedToday].filter(j => { if (seen.has(j.id)) return false; seen.add(j.id); return true }).map((job, i) => <WeekCard key={job.id} job={job} index={i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)
+            })()}
           </div>
         </div>
       )}
+
+      {/* Paused */}
+      {data.pausedNotToday.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 4, height: 20, borderRadius: 2, background: '#eab308' }} />
+              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Paused</h2>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.pausedNotToday.length} vehicles</span>
+            </div>
+          </div>
+          <div style={{
+            display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
+            WebkitOverflowScrolling: 'touch',
+          }}>
+            {data.pausedNotToday.map((job, i) => <WeekCard key={job.id} job={job} index={i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)}
+          </div>
+        </div>
+      )}
+
 
       {/* Remaining This Week — collapsed by default, broken down by day */}
       {data.remainingDays.length > 0 && (() => {
@@ -533,9 +555,9 @@ export default function MechanicBoard() {
       )}
 
       {/* Waiting for Parts */}
-      {data.paused.filter(j => j.awaitingParts).length > 0 && (
-        <Section title="Waiting for Parts" count={data.paused.filter(j => j.awaitingParts).length} color="#eab308">
-          <CardGrid>{data.paused.filter(j => j.awaitingParts).map(j => renderCard(j))}</CardGrid>
+      {data.awaitingParts.length > 0 && (
+        <Section title="Waiting for Parts" count={data.awaitingParts.length} color="#eab308">
+          <CardGrid>{data.awaitingParts.map(j => renderCard(j))}</CardGrid>
         </Section>
       )}
 
@@ -543,13 +565,6 @@ export default function MechanicBoard() {
       {data.paused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').length > 0 && (
         <Section title="🍽️ On Lunch" count={data.paused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').length} color="#8b5cf6">
           <CardGrid>{data.paused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').map(j => renderCard(j))}</CardGrid>
-        </Section>
-      )}
-
-      {/* Paused */}
-      {data.paused.filter(j => !j.awaitingParts && j.pauseReason !== 'Lunch').length > 0 && (
-        <Section title="Paused" count={data.paused.filter(j => !j.awaitingParts && j.pauseReason !== 'Lunch').length} color="#f59e0b">
-          <CardGrid>{data.paused.filter(j => !j.awaitingParts && j.pauseReason !== 'Lunch').map(j => renderCard(j))}</CardGrid>
         </Section>
       )}
 

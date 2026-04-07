@@ -53,6 +53,7 @@ export default function ExternalRepairsPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('active')
+  const [search, setSearch] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [reconModal, setReconModal] = useState<ExternalRepair | null>(null)
   const [reconStage, setReconStage] = useState('mechanic')
@@ -104,11 +105,21 @@ export default function ExternalRepairsPage() {
     load()
   }, [])
 
-  const filtered = filter === 'active'
-    ? repairs.filter((r) => r.status !== 'returned')
-    : filter === 'returned'
-      ? repairs.filter((r) => r.status === 'returned')
-      : repairs
+  const filtered = (() => {
+    const q = search.toLowerCase().trim()
+    let list = filter === 'active'
+      ? repairs.filter((r) => r.status !== 'returned')
+      : filter === 'returned'
+        ? repairs.filter((r) => r.status === 'returned')
+        : repairs
+    if (q) {
+      list = list.filter(r => {
+        const desc = `${r.year || ''} ${r.make} ${r.model} ${r.stockNumber} ${r.shopName} ${r.color || ''}`.toLowerCase()
+        return desc.includes(q)
+      })
+    }
+    return list
+  })()
 
   async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -242,18 +253,25 @@ export default function ExternalRepairsPage() {
             Track vehicles sent to outside shops
           </p>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="ext-add-btn"
-          style={{
-            padding: '10px 20px', borderRadius: '12px', border: 'none',
-            background: '#1a1a1a', color: '#dffd6e',
-            fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px',
-            display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0,
-          }}
-        >
-          + <span>Add Repair</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <input
+            type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search vehicles..."
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, width: 200 }}
+          />
+          <button
+            onClick={() => setShowAdd(true)}
+            className="ext-add-btn"
+            style={{
+              padding: '10px 20px', borderRadius: '12px', border: 'none',
+              background: '#1a1a1a', color: '#dffd6e',
+              fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px',
+              display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0,
+            }}
+          >
+            + <span>Add Repair</span>
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
