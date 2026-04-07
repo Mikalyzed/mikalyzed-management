@@ -282,12 +282,30 @@ export default function PartsOverviewPage() {
                   </div>
                 </div>
               ) : (
-                <label style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  padding: '20px', borderRadius: 8, border: '2px dashed var(--border)',
-                  background: '#f9fafb', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)',
-                }}>
-                  <input type="file" accept="image/*" onChange={async (e) => {
+                <label
+                  onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#2563eb' }}
+                  onDragLeave={e => { e.preventDefault(); e.currentTarget.style.borderColor = '' }}
+                  onDrop={async e => {
+                    e.preventDefault(); e.currentTarget.style.borderColor = ''
+                    const file = e.dataTransfer.files?.[0]
+                    if (!file) return
+                    setEditUploading(true)
+                    try {
+                      const formData = new FormData()
+                      formData.append('file', file)
+                      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+                      const data = await res.json()
+                      if (res.ok) setEditImage(data.url)
+                    } catch { /* ignore */ }
+                    setEditUploading(false)
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    padding: '20px', borderRadius: 8, border: '2px dashed var(--border)',
+                    background: '#f9fafb', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)',
+                    transition: 'border-color 0.15s',
+                  }}>
+                  <input type="file" accept="image/*,.pdf" onChange={async (e) => {
                     const file = e.target.files?.[0]
                     if (!file) return
                     setEditUploading(true)
@@ -300,7 +318,7 @@ export default function PartsOverviewPage() {
                     } catch { /* ignore */ }
                     setEditUploading(false)
                   }} style={{ display: 'none' }} />
-                  {editUploading ? 'Uploading...' : 'Click to upload image'}
+                  {editUploading ? 'Uploading...' : 'Click or drag file here'}
                 </label>
               )}
             </div>

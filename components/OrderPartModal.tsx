@@ -95,14 +95,22 @@ export default function OrderPartModal({ partId, partName, onClose, onComplete }
               }}>×</button>
             </div>
           ) : (
-            <label style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              padding: '20px', borderRadius: 8, border: '2px dashed var(--border)',
-              background: '#f9fafb', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)',
-              transition: 'border-color 0.15s',
-            }}>
-              <input type="file" accept="image/*" onChange={handleUpload} style={{ display: 'none' }} />
-              {uploading ? 'Uploading...' : '📷 Click to upload image'}
+            <label
+              onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#2563eb' }}
+              onDragLeave={e => { e.preventDefault(); e.currentTarget.style.borderColor = '' }}
+              onDrop={async e => {
+                e.preventDefault(); e.currentTarget.style.borderColor = ''
+                const file = e.dataTransfer.files?.[0]
+                if (file) handleUpload({ target: { files: [file] } } as any)
+              }}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '20px', borderRadius: 8, border: '2px dashed var(--border)',
+                background: '#f9fafb', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)',
+                transition: 'border-color 0.15s',
+              }}>
+              <input type="file" accept="image/*,.pdf" onChange={handleUpload} style={{ display: 'none' }} />
+              {uploading ? 'Uploading...' : 'Click or drag file here'}
             </label>
           )}
         </div>
