@@ -89,6 +89,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
   mechanic: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { href: '/mechanic-schedule', label: 'My Schedule', icon: 'calendar' },
+    { href: '/parts', label: 'Parts', icon: 'external' },
     { href: '/transport', label: 'Transport', icon: 'transport' },
   ],
   detailer: [

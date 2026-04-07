@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
     ]
   })
 
-  return NextResponse.json({ parts })
+  return NextResponse.json({ parts, userRole: user.role })
 }
 
 export async function POST(req: NextRequest) {
