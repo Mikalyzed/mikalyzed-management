@@ -55,9 +55,24 @@ export async function POST(request: Request) {
     resolvedStageId = firstStage.id
   }
 
-  // Weighted round robin if no assignee specified
+  // Assign rep: returning contacts get same rep, new contacts get round robin
   let resolvedAssigneeId = assigneeId
   if (!resolvedAssigneeId) {
+    // Check if this contact has a previous opportunity with an assigned rep
+    const previousOpp = await prisma.opportunity.findFirst({
+      where: { contactId, assigneeId: { not: null } },
+      orderBy: { createdAt: 'desc' },
+      select: { assigneeId: true, assignee: { select: { isActive: true } } },
+    })
+
+    if (previousOpp?.assigneeId && previousOpp.assignee?.isActive) {
+      // Returning contact — assign same rep
+      resolvedAssigneeId = previousOpp.assigneeId
+    }
+  }
+
+  if (!resolvedAssigneeId) {
+    // New contact — weighted round robin
     // Check for custom weights first
     const weights = await prisma.roundRobinWeight.findMany({
       where: { pipelineId },

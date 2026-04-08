@@ -42,6 +42,7 @@ model User {
   assignedParts    Part[]            @relation("PartAssignedTo")
   roundRobinWeights RoundRobinWeight[]
   dispositionLogs  DispositionLog[]
+  sentMessages     Message[]         @relation("MessageSender")
 
   @@map("users")
 }
@@ -338,26 +339,32 @@ model PipelineStage {
 }
 
 model Contact {
-  id             String   @id @default(uuid())
-  firstName      String   @map("first_name")
-  lastName       String   @map("last_name")
+  id             String    @id @default(uuid())
+  firstName      String    @map("first_name")
+  lastName       String    @map("last_name")
   email          String?
   phone          String?
-  secondaryPhone String?  @map("secondary_phone")
+  secondaryPhone String?   @map("secondary_phone")
+  dateOfBirth    DateTime? @map("date_of_birth")
+  contactType    String    @default("lead") @map("contact_type") // lead, customer, vendor
   address        String?
   city           String?
   state          String?
   zip            String?
-  source         String   @default("other") // website, meta_ad, phone_call, walk_in, referral, other
-  tags           String[] @default([])
+  country        String?
+  website        String?
+  timezone       String?
+  source         String    @default("other")
+  tags           String[]  @default([])
   notes          String?
-  createdById    String?  @map("created_by")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdById    String?   @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   createdBy       User?            @relation("ContactCreatedBy", fields: [createdById], references: [id])
   opportunities   Opportunity[]
   vehicleInterests VehicleInterest[]
+  messages        Message[]
 
   @@index([email])
   @@index([phone])
@@ -536,6 +543,29 @@ model LeadSource {
   sortOrder Int     @default(0) @map("sort_order")
 
   @@map("lead_sources")
+}
+
+// ═══ Messaging ═══
+
+model Message {
+  id          String    @id @default(uuid())
+  contactId   String    @map("contact_id")
+  direction   String    // inbound, outbound
+  channel     String    @default("sms") // sms, email, instagram, whatsapp
+  body        String
+  mediaUrl    String?   @map("media_url") // for MMS/images/videos
+  status      String    @default("sent") // sent, delivered, failed, received
+  externalId  String?   @map("external_id") // Twilio SID or external message ID
+  senderId    String?   @map("sender_id") // user who sent (null for inbound)
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  contact     Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  sender      User?     @relation("MessageSender", fields: [senderId], references: [id])
+
+  @@index([contactId, createdAt])
+  @@index([externalId])
+  @@map("messages")
 }
 
 // ═══ Calendar ═══
