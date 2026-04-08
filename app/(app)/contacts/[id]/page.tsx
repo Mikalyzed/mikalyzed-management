@@ -131,17 +131,32 @@ export default function ContactDetailPage() {
   }
 
   async function sendMessage() {
-    if (!msgText.trim() || !contact?.phone) return
+    if (!msgText.trim()) return
+    if (msgTab === 'sms' && !contact?.phone) return
     setSending(true)
     try {
-      const res = await fetch('/api/sms/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: contact.phone, body: msgText, contactId: id }),
-      })
-      if (res.ok) {
-        setMsgText('')
-        loadMessages()
+      if (msgTab === 'internal') {
+        // Save internal note directly to messages table
+        const res = await fetch('/api/messages/internal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contactId: id, body: msgText }),
+        })
+        if (res.ok) {
+          setMsgText('')
+          loadMessages()
+        }
+      } else {
+        // Send SMS via Twilio
+        const res = await fetch('/api/sms/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to: contact!.phone, body: msgText, contactId: id }),
+        })
+        if (res.ok) {
+          setMsgText('')
+          loadMessages()
+        }
       }
     } catch (e) { console.error(e) }
     setSending(false)
@@ -367,10 +382,31 @@ export default function ContactDetailPage() {
                       {new Date(msg.createdAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </div>
                   )}
-                  <div style={{
-                    display: 'flex', justifyContent: msg.direction === 'outbound' ? 'flex-end' : 'flex-start',
-                    marginBottom: 6,
-                  }}>
+                  {msg.channel === 'internal' ? (
+                    /* Internal note — full width yellow sticky */
+                    <div style={{
+                      display: 'flex', justifyContent: 'center', marginBottom: 6,
+                    }}>
+                      <div style={{
+                        maxWidth: '85%', width: '100%', padding: '10px 14px', borderRadius: 10,
+                        background: '#fefce8', border: '1px solid #fde047',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: '#a16207', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Internal Note</span>
+                        </div>
+                        <p style={{ fontSize: 13, lineHeight: 1.4, margin: 0, color: '#92400e', wordBreak: 'break-word' }}>{msg.body}</p>
+                        <p style={{ fontSize: 10, margin: '4px 0 0', color: '#a16207', opacity: 0.7 }}>
+                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                          {msg.sender && ` · ${msg.sender.name}`}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    /* SMS / regular message */
+                    <div style={{
+                      display: 'flex', justifyContent: msg.direction === 'outbound' ? 'flex-end' : 'flex-start',
+                      marginBottom: 6,
+                    }}>
                     {msg.direction === 'inbound' && (
                       <div style={{
                         width: 28, height: 28, borderRadius: '50%', background: '#e2e8f0', color: '#64748b',
@@ -410,6 +446,7 @@ export default function ContactDetailPage() {
                       </div>
                     )}
                   </div>
+                  )}
                 </div>
               )
             })}
