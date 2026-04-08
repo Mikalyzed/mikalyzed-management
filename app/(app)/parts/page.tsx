@@ -15,6 +15,7 @@ type Part = {
   orderImage: string | null
   notes: string | null
   createdAt: string
+  updatedAt: string
   vehicle: {
     id: string
     stockNumber: string
@@ -219,6 +220,11 @@ export default function PartsOverviewPage() {
                   {part.status === 'ordered' && part.expectedDelivery && (
                     <p style={{ fontSize: '12px', color: '#2563eb', margin: '2px 0 0', fontWeight: 500 }}>
                       Expected: {new Date(part.expectedDelivery).toLocaleDateString()}
+                    </p>
+                  )}
+                  {part.status === 'received' && (
+                    <p style={{ fontSize: '12px', color: '#16a34a', margin: '2px 0 0', fontWeight: 500 }}>
+                      Received: {new Date(part.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {new Date(part.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                     </p>
                   )}
                 </div>

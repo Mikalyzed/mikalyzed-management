@@ -72,6 +72,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
     {
       label: 'Sales', icon: 'sales', children: [
         { href: '/leads', label: 'Leads', icon: 'leads' },
+        { href: '/conversations', label: 'Conversations', icon: 'board' },
         { href: '/contacts', label: 'Contacts', icon: 'contacts' },
         { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
       ],
@@ -106,12 +107,14 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
   sales: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { href: '/leads', label: 'Leads', icon: 'leads' },
+    { href: '/conversations', label: 'Conversations', icon: 'board' },
     { href: '/contacts', label: 'Contacts', icon: 'contacts' },
     { href: '/transport/new', label: 'New Request', icon: 'newrequest' },
   ],
   sales_manager: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { href: '/leads', label: 'Leads', icon: 'leads' },
+    { href: '/conversations', label: 'Conversations', icon: 'board' },
     { href: '/contacts', label: 'Contacts', icon: 'contacts' },
     { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
     { href: '/reports', label: 'Reports', icon: 'reports' },
