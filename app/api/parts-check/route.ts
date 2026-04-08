@@ -2,9 +2,30 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { sendNotificationEmail } from '@/lib/email'
 
+// Log who's calling this so we can trace the source
+export async function GET(req: Request) {
+  const headers = Object.fromEntries(req.headers.entries())
+  console.log('[parts-check] GET called by:', JSON.stringify({
+    userAgent: headers['user-agent'],
+    referer: headers['referer'],
+    origin: headers['origin'],
+    ip: headers['x-forwarded-for'],
+    host: headers['host'],
+  }))
+  return NextResponse.json({ error: 'Use POST', method: 'GET', logged: true }, { status: 405 })
+}
+
 // Check for parts with expected delivery dates that have passed or are today
 // Called by cron or manually
-export async function POST() {
+export async function POST(req: Request) {
+  const headers = Object.fromEntries(req.headers.entries())
+  console.log('[parts-check] POST called by:', JSON.stringify({
+    userAgent: headers['user-agent'],
+    referer: headers['referer'],
+    origin: headers['origin'],
+    ip: headers['x-forwarded-for'],
+    host: headers['host'],
+  }))
   const now = new Date()
   const todayEnd = new Date(now)
   todayEnd.setHours(23, 59, 59, 999)
@@ -74,8 +95,24 @@ export async function POST() {
     await prisma.notification.createMany({ data: notifData })
   }
 
-  // Also send email summary to management
-  if (dueStages.length > 0) {
+  // Also send email summary to management (only once per day)
+  const todayStartEmail = new Date(now)
+  todayStartEmail.setHours(0, 0, 0, 0)
+  const emailSentToday = await prisma.notification.findFirst({
+    where: { entityType: 'parts_check_email', createdAt: { gte: todayStartEmail } },
+  })
+
+  if (dueStages.length > 0 && !emailSentToday) {
+    // Mark that we sent the email today
+    await prisma.notification.create({
+      data: {
+        userId: admins[0]?.id || '',
+        type: 'parts_due_email',
+        title: 'Parts check email sent',
+        entityType: 'parts_check_email',
+        entityId: 'daily',
+      },
+    })
     const items = dueStages.map(s => {
       const v = s.vehicle
       return `#${v.stockNumber} ${v.year ?? ''} ${v.make} ${v.model} — ${s.awaitingPartsName || 'Unknown'}`
