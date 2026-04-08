@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
 type ContactDetail = {
@@ -28,6 +28,8 @@ type Message = {
 export default function ContactDetailPage() {
   const { id } = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const backTo = searchParams.get('from') || '/contacts'
   const [contact, setContact] = useState<ContactDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [messages, setMessages] = useState<Message[]>([])
@@ -226,7 +228,7 @@ export default function ContactDetailPage() {
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', margin: '-40px -32px -40px -32px' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border)', marginBottom: 0 }}>
-        <button onClick={() => router.push('/contacts')} style={{
+        <button onClick={() => router.push(backTo)} style={{
           background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text-muted)', padding: 4,
         }}>←</button>
         <div style={{

@@ -195,7 +195,7 @@ export default function LeadsPage() {
                     <div key={opp.id} draggable
                       onDragStart={e => e.dataTransfer.setData('oppId', opp.id)}
                     >
-                      <div onClick={() => router.push(`/contacts/${opp.contact.id}`)} style={{ textDecoration: 'none', color: 'inherit' }}>
+                      <div onClick={() => router.push(`/contacts/${opp.contact.id}?from=/leads`)} style={{ textDecoration: 'none', color: 'inherit' }}>
                         <div className="card" style={{ padding: '14px 16px', cursor: 'grab' }}>
                           {/* Title + assignee avatar */}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
@@ -319,7 +319,7 @@ export default function LeadsPage() {
                 return true
               }).map(opp => (
                 <tr key={opp.id} style={{ borderBottom: '1px solid var(--border-light)', cursor: 'pointer' }}
-                  onClick={() => router.push(`/contacts/${opp.contact.id}`)}>
+                  onClick={() => router.push(`/contacts/${opp.contact.id}?from=/leads`)}>
                   <td style={{ padding: '12px 16px', fontWeight: 600 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       {opp.assignee && (

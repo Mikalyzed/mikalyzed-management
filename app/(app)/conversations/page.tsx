@@ -202,7 +202,7 @@ export default function ConversationsPage() {
                 <span style={{ fontSize: 15, fontWeight: 600 }}>{contactInfo?.firstName} {contactInfo?.lastName}</span>
                 {contactInfo?.phone && <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>{contactInfo.phone}</span>}
               </div>
-              <button onClick={() => router.push(`/contacts/${selectedId}`)} style={{
+              <button onClick={() => router.push(`/contacts/${selectedId}?from=/conversations`)} style={{
                 padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)',
                 background: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
               }}>View Contact</button>
