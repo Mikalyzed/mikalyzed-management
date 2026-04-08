@@ -29,3 +29,7 @@ export function requireRole(userRole: string, allowed: Role[]): boolean {
   if (userRole === 'admin') return true
   return allowed.includes(userRole as Role)
 }
+
+export function canSeeAllLeads(role: string): boolean {
+  return role === 'admin' || role === 'sales_manager'
+}

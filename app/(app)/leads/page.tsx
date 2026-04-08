@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { LEAD_SOURCE_LABELS } from '@/lib/crm'
 import KanbanScrollbar from '@/components/KanbanScrollbar'
 
@@ -34,6 +35,7 @@ function initialsColor(name: string) {
 }
 
 export default function LeadsPage() {
+  const router = useRouter()
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
   const [activePipelineId, setActivePipelineId] = useState('')
   const [opps, setOpps] = useState<Opp[]>([])
@@ -193,7 +195,7 @@ export default function LeadsPage() {
                     <div key={opp.id} draggable
                       onDragStart={e => e.dataTransfer.setData('oppId', opp.id)}
                     >
-                      <Link href={`/leads/${opp.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                      <div onClick={() => router.push(`/leads/${opp.id}`)} style={{ textDecoration: 'none', color: 'inherit' }}>
                         <div className="card" style={{ padding: '14px 16px', cursor: 'grab' }}>
                           {/* Title + assignee avatar */}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
@@ -279,7 +281,7 @@ export default function LeadsPage() {
                             </span>
                           </div>
                         </div>
-                      </Link>
+                      </div>
                     </div>
                   ))}
                 </div>

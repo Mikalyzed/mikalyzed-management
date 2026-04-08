@@ -55,22 +55,53 @@ export async function POST(request: Request) {
     resolvedStageId = firstStage.id
   }
 
-  // Round robin if no assignee specified
+  // Weighted round robin if no assignee specified
   let resolvedAssigneeId = assigneeId
   if (!resolvedAssigneeId) {
-    const salesUsers = await prisma.user.findMany({
-      where: { isActive: true, role: { in: ['sales', 'admin'] } },
-      orderBy: { name: 'asc' },
+    // Check for custom weights first
+    const weights = await prisma.roundRobinWeight.findMany({
+      where: { pipelineId },
+      include: { user: { select: { id: true, name: true, isActive: true } } },
     })
-    if (salesUsers.length > 0) {
+
+    const activeWeights = weights.filter(w => w.user.isActive)
+
+    if (activeWeights.length > 0) {
+      // Build weighted list: user with weight 2 appears twice, weight 3 appears 3x, etc.
+      const weightedList: string[] = []
+      for (const w of activeWeights) {
+        for (let i = 0; i < w.weight; i++) {
+          weightedList.push(w.userId)
+        }
+      }
+
       const rrState = await prisma.roundRobinState.findUnique({ where: { pipelineId } })
       if (rrState) {
-        const lastIdx = salesUsers.findIndex(u => u.id === rrState.lastAssignedId)
-        const nextIdx = (lastIdx + 1) % salesUsers.length
-        resolvedAssigneeId = salesUsers[nextIdx].id
+        const lastIdx = weightedList.indexOf(rrState.lastAssignedId)
+        const nextIdx = (lastIdx + 1) % weightedList.length
+        resolvedAssigneeId = weightedList[nextIdx]
       } else {
-        resolvedAssigneeId = salesUsers[0].id
+        resolvedAssigneeId = weightedList[0]
       }
+    } else {
+      // Fallback: equal distribution across all active sales users
+      const salesUsers = await prisma.user.findMany({
+        where: { isActive: true, role: { in: ['sales', 'sales_manager', 'admin'] } },
+        orderBy: { name: 'asc' },
+      })
+      if (salesUsers.length > 0) {
+        const rrState = await prisma.roundRobinState.findUnique({ where: { pipelineId } })
+        if (rrState) {
+          const lastIdx = salesUsers.findIndex(u => u.id === rrState.lastAssignedId)
+          const nextIdx = (lastIdx + 1) % salesUsers.length
+          resolvedAssigneeId = salesUsers[nextIdx].id
+        } else {
+          resolvedAssigneeId = salesUsers[0].id
+        }
+      }
+    }
+
+    if (resolvedAssigneeId) {
       await prisma.roundRobinState.upsert({
         where: { pipelineId },
         update: { lastAssignedId: resolvedAssigneeId },

@@ -90,7 +90,22 @@ export default function PartsOverviewPage() {
     received: parts.filter(p => p.status === 'received').length,
   }
 
-  const filtered = filter === 'active' ? parts.filter(p => p.status !== 'received') : parts.filter(p => p.status === filter)
+  const filtered = (() => {
+    let list = filter === 'active' ? parts.filter(p => p.status !== 'received') : parts.filter(p => p.status === filter)
+    // Sort ordered parts by expected delivery (soonest first, null at end)
+    if (filter === 'ordered' || filter === 'active') {
+      list = [...list].sort((a, b) => {
+        if (a.status === 'ordered' && b.status === 'ordered') {
+          if (!a.expectedDelivery && !b.expectedDelivery) return 0
+          if (!a.expectedDelivery) return 1
+          if (!b.expectedDelivery) return -1
+          return new Date(a.expectedDelivery).getTime() - new Date(b.expectedDelivery).getTime()
+        }
+        return 0
+      })
+    }
+    return list
+  })()
 
   if (loading) {
     return (
@@ -138,6 +153,26 @@ export default function PartsOverviewPage() {
           </button>
         ))}
       </div>
+
+      {/* Arriving Today banner */}
+      {(() => {
+        const today = new Date().toISOString().slice(0, 10)
+        const arrivingToday = parts.filter(p => p.status === 'ordered' && p.expectedDelivery && p.expectedDelivery.slice(0, 10) <= today)
+        if (arrivingToday.length === 0 || (filter !== 'ordered' && filter !== 'active')) return null
+        return (
+          <div style={{
+            background: '#fefce8', border: '1px solid #eab308', borderRadius: 10,
+            padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#92400e' }}>
+              {arrivingToday.length} part{arrivingToday.length > 1 ? 's' : ''} expected today or overdue
+            </span>
+            <span style={{ fontSize: 12, color: '#a16207' }}>
+              {arrivingToday.map(p => p.name).join(', ')}
+            </span>
+          </div>
+        )
+      })()}
 
       {filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '80px 24px', color: 'var(--text-muted)' }}>

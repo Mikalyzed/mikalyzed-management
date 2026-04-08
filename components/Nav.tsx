@@ -109,6 +109,14 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
     { href: '/contacts', label: 'Contacts', icon: 'contacts' },
     { href: '/transport/new', label: 'New Request', icon: 'newrequest' },
   ],
+  sales_manager: [
+    { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { href: '/leads', label: 'Leads', icon: 'leads' },
+    { href: '/contacts', label: 'Contacts', icon: 'contacts' },
+    { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
+    { href: '/reports', label: 'Reports', icon: 'reports' },
+    { href: '/transport/new', label: 'New Request', icon: 'newrequest' },
+  ],
   coordinator: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { href: '/transport', label: 'Queue', icon: 'queue' },
