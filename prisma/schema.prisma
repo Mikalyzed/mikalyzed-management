@@ -40,6 +40,8 @@ model User {
   taskApprovals    TaskApproval[]
   requestedParts   Part[]            @relation("PartRequestedBy")
   assignedParts    Part[]            @relation("PartAssignedTo")
+  roundRobinWeights RoundRobinWeight[]
+  dispositionLogs  DispositionLog[]
 
   @@map("users")
 }
@@ -313,6 +315,7 @@ model Pipeline {
 
   stages        PipelineStage[]
   opportunities Opportunity[]
+  dispositions  Disposition[]
 
   @@map("pipelines")
 }
@@ -328,6 +331,7 @@ model PipelineStage {
 
   pipeline      Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   opportunities Opportunity[]
+  dispositions  Disposition[]
 
   @@index([pipelineId])
   @@map("pipeline_stages")
@@ -388,6 +392,7 @@ model Opportunity {
   tasks      OpportunityTask[]
   notes      OpportunityNote[]
   activities ActivityEvent[]
+  dispositionLogs DispositionLog[]
 
   @@index([contactId])
   @@index([pipelineId, stageId])
@@ -474,6 +479,63 @@ model RoundRobinState {
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   @@map("round_robin_state")
+}
+
+model RoundRobinWeight {
+  id         String @id @default(uuid())
+  pipelineId String @map("pipeline_id")
+  userId     String @map("user_id")
+  weight     Int    @default(1) // e.g., 2 means gets 2x leads
+
+  user       User   @relation(fields: [userId], references: [id])
+
+  @@unique([pipelineId, userId])
+  @@map("round_robin_weights")
+}
+
+model Disposition {
+  id              String  @id @default(uuid())
+  name            String
+  pipelineId      String? @map("pipeline_id") // null = global
+  moveToStageId   String? @map("move_to_stage_id") // optional auto-move
+  followUpMinutes Int?    @map("follow_up_minutes") // optional auto follow-up
+  sortOrder       Int     @default(0) @map("sort_order")
+  isActive        Boolean @default(true) @map("is_active")
+  color           String? // optional color for UI
+
+  pipeline  Pipeline?      @relation(fields: [pipelineId], references: [id])
+  moveToStage PipelineStage? @relation(fields: [moveToStageId], references: [id])
+  logs      DispositionLog[]
+
+  @@map("dispositions")
+}
+
+model DispositionLog {
+  id              String    @id @default(uuid())
+  opportunityId   String    @map("opportunity_id")
+  dispositionId   String    @map("disposition_id")
+  userId          String    @map("user_id")
+  notes           String?
+  followUpAt      DateTime? @map("follow_up_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  disposition Disposition @relation(fields: [dispositionId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@index([opportunityId])
+  @@index([userId])
+  @@map("disposition_logs")
+}
+
+model LeadSource {
+  id        String  @id @default(uuid())
+  name      String  @unique // display name
+  key       String  @unique // internal key like "autotrader"
+  isActive  Boolean @default(true) @map("is_active")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  @@map("lead_sources")
 }
 
 // ═══ Calendar ═══
