@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { sendNotificationEmail } from '@/lib/email'
 
 // Log who's calling this so we can trace the source
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const headers = Object.fromEntries(req.headers.entries())
   console.log('[parts-check] GET called by:', JSON.stringify({
     userAgent: headers['user-agent'],
@@ -12,12 +12,11 @@ export async function GET(req: Request) {
     ip: headers['x-forwarded-for'],
     host: headers['host'],
   }))
-  return NextResponse.json({ error: 'Use POST', method: 'GET', logged: true }, { status: 405 })
+  // Run the check on GET too (crons use GET)
+  return runPartsCheck()
 }
 
-// Check for parts with expected delivery dates that have passed or are today
-// Called by cron or manually
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const headers = Object.fromEntries(req.headers.entries())
   console.log('[parts-check] POST called by:', JSON.stringify({
     userAgent: headers['user-agent'],
@@ -26,113 +25,137 @@ export async function POST(req: Request) {
     ip: headers['x-forwarded-for'],
     host: headers['host'],
   }))
+  return runPartsCheck()
+}
+
+async function runPartsCheck() {
   const now = new Date()
+  const todayStart = new Date(now)
+  todayStart.setHours(0, 0, 0, 0)
   const todayEnd = new Date(now)
   todayEnd.setHours(23, 59, 59, 999)
 
-  // Find stages awaiting parts with expected date <= today
+  // Check if we already sent the daily email
+  const emailSentToday = await prisma.notification.findFirst({
+    where: { entityType: 'parts_check_email', createdAt: { gte: todayStart } },
+  })
+
+  if (emailSentToday) {
+    return NextResponse.json({ checked: true, alreadySent: true, alerts: 0 })
+  }
+
+  // Find parts from the Part model with expected delivery today or overdue
+  const dueParts = await prisma.part.findMany({
+    where: {
+      status: 'ordered',
+      expectedDelivery: { lte: todayEnd },
+    },
+    include: {
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+      requestedBy: { select: { name: true } },
+    },
+  })
+
+  // Also check old vehicle stages awaiting parts
   const dueStages = await prisma.vehicleStage.findMany({
     where: {
       awaitingParts: true,
       awaitingPartsDate: { lte: todayEnd },
     },
     include: {
-      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
-      assignee: { select: { id: true, name: true } },
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
     },
   })
 
-  if (dueStages.length === 0) {
+  const totalAlerts = dueParts.length + dueStages.length
+
+  if (totalAlerts === 0) {
     return NextResponse.json({ checked: true, alerts: 0 })
   }
 
-  // Create notifications for admins and assigned mechanic
-  const admins = await prisma.user.findMany({ where: { role: 'admin', isActive: true } })
-
-  for (const stage of dueStages) {
-    const v = stage.vehicle
-    const desc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
-    const partName = stage.awaitingPartsName || 'Unknown part'
-    const dateStr = stage.awaitingPartsDate
-      ? new Date(stage.awaitingPartsDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  // Build email content
+  const partItems = dueParts.map(p => {
+    const v = p.vehicle
+    const dateStr = p.expectedDelivery
+      ? new Date(p.expectedDelivery).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       : 'today'
+    const isOverdue = p.expectedDelivery && new Date(p.expectedDelivery) < todayStart
+    return `<tr>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px;">#${v.stockNumber} ${v.year ?? ''} ${v.make} ${v.model}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; font-weight: 600;">${p.name}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: ${isOverdue ? '#ef4444' : '#2563eb'};">${isOverdue ? 'Overdue' : dateStr}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px; color: #666;">${p.tracking || '—'}</td>
+    </tr>`
+  }).join('')
 
-    const title = `Parts expected ${dateStr} for #${v.stockNumber} ${desc} — ${partName}`
+  const stageItems = dueStages.map(s => {
+    const v = s.vehicle
+    const dateStr = s.awaitingPartsDate
+      ? new Date(s.awaitingPartsDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      : 'today'
+    return `<tr>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px;">#${v.stockNumber} ${v.year ?? ''} ${v.make} ${v.model}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; font-weight: 600;">${s.awaitingPartsName || 'Unknown part'}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 14px; color: #2563eb;">${dateStr}</td>
+      <td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-size: 13px; color: #666;">${s.awaitingPartsTracking || '—'}</td>
+    </tr>`
+  }).join('')
 
-    // Check if we already notified today (avoid spam)
-    const todayStart = new Date(now)
-    todayStart.setHours(0, 0, 0, 0)
-    const existingNotification = await prisma.notification.findFirst({
-      where: {
-        entityType: 'parts_check',
-        entityId: stage.id,
-        createdAt: { gte: todayStart },
-      },
-    })
+  const allItems = partItems + stageItems
 
-    if (existingNotification) continue // Already notified today
+  // Mark email as sent BEFORE sending (prevents duplicates from concurrent calls)
+  const admins = await prisma.user.findMany({ where: { role: 'admin', isActive: true } })
+  await prisma.notification.create({
+    data: {
+      userId: admins[0]?.id || '',
+      type: 'parts_due_email',
+      title: `Parts check: ${totalAlerts} parts arriving today`,
+      entityType: 'parts_check_email',
+      entityId: 'daily',
+    },
+  })
 
-    // Notify admins
+  // Send email
+  await sendNotificationEmail({
+    to: 'ab-management@mikalyzedautoboutique.com',
+    subject: `Parts Alert: ${totalAlerts} part${totalAlerts > 1 ? 's' : ''} expected today`,
+    html: `
+      <div style="font-family: -apple-system, sans-serif; max-width: 600px;">
+        <h2 style="font-size: 18px; margin-bottom: 4px;">Parts Expected Today</h2>
+        <p style="color: #666; font-size: 14px; margin-top: 0;">The following parts are expected to arrive today or are overdue:</p>
+        <table style="width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+          <thead>
+            <tr style="background: #f9fafb;">
+              <th style="padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 600; color: #6b7280;">Vehicle</th>
+              <th style="padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 600; color: #6b7280;">Part</th>
+              <th style="padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 600; color: #6b7280;">Expected</th>
+              <th style="padding: 8px 12px; text-align: left; font-size: 12px; font-weight: 600; color: #6b7280;">Tracking</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${allItems}
+          </tbody>
+        </table>
+        <p style="color: #999; font-size: 12px; margin-top: 16px;">
+          <a href="https://mikalyzed-management.vercel.app/parts" style="color: #2563eb;">View Parts Management</a>
+        </p>
+      </div>
+    `,
+  })
+
+  // Create in-app notifications
+  for (const part of dueParts) {
+    const v = part.vehicle
+    const title = `Part arriving today: ${part.name} for #${v.stockNumber} ${v.year ?? ''} ${v.make} ${v.model}`
     const notifData = admins.map(admin => ({
       userId: admin.id,
       type: 'parts_due',
       title,
       entityType: 'parts_check',
-      entityId: stage.id,
+      entityId: part.id,
     }))
-
-    // Also notify assigned mechanic if any
-    if (stage.assignee) {
-      notifData.push({
-        userId: stage.assignee.id,
-        type: 'parts_due',
-        title,
-        entityType: 'parts_check',
-        entityId: stage.id,
-      })
-    }
-
-    await prisma.notification.createMany({ data: notifData })
+    await prisma.notification.createMany({ data: notifData, skipDuplicates: true })
   }
 
-  // Also send email summary to management (only once per day)
-  const todayStartEmail = new Date(now)
-  todayStartEmail.setHours(0, 0, 0, 0)
-  const emailSentToday = await prisma.notification.findFirst({
-    where: { entityType: 'parts_check_email', createdAt: { gte: todayStartEmail } },
-  })
-
-  if (dueStages.length > 0 && !emailSentToday) {
-    // Mark that we sent the email today
-    await prisma.notification.create({
-      data: {
-        userId: admins[0]?.id || '',
-        type: 'parts_due_email',
-        title: 'Parts check email sent',
-        entityType: 'parts_check_email',
-        entityId: 'daily',
-      },
-    })
-    const items = dueStages.map(s => {
-      const v = s.vehicle
-      return `#${v.stockNumber} ${v.year ?? ''} ${v.make} ${v.model} — ${s.awaitingPartsName || 'Unknown'}`
-    }).join('<br>')
-
-    await sendNotificationEmail({
-      to: 'ab-management@mikalyzedautoboutique.com',
-      subject: `Parts Alert: ${dueStages.length} vehicle${dueStages.length > 1 ? 's' : ''} expecting parts today`,
-      html: `
-        <div style="font-family: -apple-system, sans-serif; max-width: 500px;">
-          <h2 style="font-size: 18px;">Parts Expected Today</h2>
-          <p style="color: #666; font-size: 14px;">The following vehicles have parts that were expected by today:</p>
-          <div style="background: #fefce8; border: 1px solid #eab308; border-radius: 10px; padding: 16px; font-size: 14px;">
-            ${items}
-          </div>
-          <p style="color: #999; font-size: 12px; margin-top: 16px;">Check the mechanic board for details and update status when parts arrive.</p>
-        </div>
-      `,
-    })
-  }
-
-  return NextResponse.json({ checked: true, alerts: dueStages.length })
+  return NextResponse.json({ checked: true, alerts: totalAlerts, emailSent: true })
 }
