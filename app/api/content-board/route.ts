@@ -24,6 +24,13 @@ export async function GET() {
     orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
   })
 
+  // Week start (Monday)
+  const now = new Date()
+  const dayOfWeek = now.getDay()
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  const weekStart = new Date(today + 'T00:00:00-04:00')
+  weekStart.setDate(weekStart.getDate() + mondayOffset)
+
   // Completed today (vehicles)
   const completedToday = await prisma.vehicleStage.findMany({
     where: { stage: 'content', status: 'done', completedAt: { gte: todayStart } },
@@ -44,6 +51,22 @@ export async function GET() {
   // Completed content tasks today
   const completedTasks = await prisma.task.findMany({
     where: { category: 'content', status: 'done', updatedAt: { gte: todayStart } },
+    include: { assignee: { select: { id: true, name: true } } },
+    orderBy: { updatedAt: 'desc' },
+  })
+
+  // Completed this week (vehicles) — excluding today to avoid duplicates
+  const completedThisWeek = await prisma.vehicleStage.findMany({
+    where: { stage: 'content', status: 'done', completedAt: { gte: weekStart, lt: todayStart } },
+    include: {
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
+      assignee: { select: { id: true, name: true } },
+    },
+    orderBy: { completedAt: 'desc' },
+  })
+
+  const completedTasksThisWeek = await prisma.task.findMany({
+    where: { category: 'content', status: 'done', updatedAt: { gte: weekStart, lt: todayStart } },
     include: { assignee: { select: { id: true, name: true } } },
     orderBy: { updatedAt: 'desc' },
   })
@@ -88,11 +111,14 @@ export async function GET() {
     queuedTasks: queuedTasks.map(formatTask),
     completedToday: completedToday.map(formatStage),
     completedTasks: completedTasks.map(formatTask),
+    completedThisWeek: completedThisWeek.map(formatStage),
+    completedTasksThisWeek: completedTasksThisWeek.map(formatTask),
     stats: {
       total: stages.length + contentTasks.length,
       activeCount: activeVehicles.length + activeTasks.length,
       todayCount: todayVehicles.length + todayTasks.length,
       completedToday: completedToday.length + completedTasks.length,
+      completedThisWeek: completedToday.length + completedTasks.length + completedThisWeek.length + completedTasksThisWeek.length,
     },
   })
 }

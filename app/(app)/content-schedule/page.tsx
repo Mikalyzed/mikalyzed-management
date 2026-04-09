@@ -22,14 +22,20 @@ type BoardData = {
   today: VehicleJob[]; todayTasks: ContentTask[]
   queuedVehicles: VehicleJob[]; queuedTasks: ContentTask[]
   completedToday: VehicleJob[]; completedTasks: ContentTask[]
-  stats: { total: number; activeCount: number; todayCount: number; completedToday: number }
+  completedThisWeek: VehicleJob[]; completedTasksThisWeek: ContentTask[]
+  stats: { total: number; activeCount: number; todayCount: number; completedToday: number; completedThisWeek: number }
 }
 
-function StatBox({ label, value, color }: { label: string; value: number; color?: string }) {
+function StatBox({ label, value, color, onClick, active }: { label: string; value: number; color?: string; onClick?: () => void; active?: boolean }) {
   return (
-    <div style={{ background: '#fff', borderRadius: 12, padding: '14px 18px', border: '1px solid #e8e8e8', flex: '1 1 120px', minWidth: 100 }}>
-      <p style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>{label}</p>
-      <p style={{ fontSize: 28, fontWeight: 800, margin: '4px 0 0', color: color || 'var(--text-primary)' }}>{value}</p>
+    <div onClick={onClick} style={{
+      background: active ? '#1a1a1a' : '#fff', borderRadius: 12, padding: '14px 18px',
+      border: active ? '1px solid #1a1a1a' : '1px solid #e8e8e8',
+      flex: '1 1 120px', minWidth: 100, cursor: onClick ? 'pointer' : 'default',
+      transition: 'all 0.15s',
+    }}>
+      <p style={{ fontSize: 11, color: active ? '#999' : 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>{label}</p>
+      <p style={{ fontSize: 28, fontWeight: 800, margin: '4px 0 0', color: active ? '#dffd6e' : (color || 'var(--text-primary)') }}>{value}</p>
     </div>
   )
 }
@@ -585,6 +591,7 @@ export default function ContentBoard() {
   const [showAllVehicles, setShowAllVehicles] = useState(false)
   const [showAllTasks, setShowAllTasks] = useState(false)
   const [userRole, setUserRole] = useState('')
+  const [showWeekCompleted, setShowWeekCompleted] = useState(false)
   const [scheduling, setScheduling] = useState<{ id: string; type: 'vehicle' | 'task' } | null>(null)
   const [showAddTask, setShowAddTask] = useState(false)
   const [editTask, setEditTask] = useState<ContentTask | null>(null)
@@ -741,6 +748,8 @@ export default function ContentBoard() {
         <StatBox label="Active" value={data.stats.activeCount} color="#f59e0b" />
         <StatBox label="Today" value={data.stats.todayCount} color="#3b82f6" />
         <StatBox label="Done Today" value={data.stats.completedToday} color="#22c55e" />
+        <StatBox label="Done This Week" value={data.stats.completedThisWeek} color="#8b5cf6"
+          onClick={() => setShowWeekCompleted(!showWeekCompleted)} active={showWeekCompleted} />
       </div>
 
       {/* Active */}
@@ -876,6 +885,7 @@ export default function ContentBoard() {
                     <div>
                       <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>#{v.stockNumber}</p>
                       <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>{`${v.year ?? ''} ${v.make} ${v.model}`.trim()}{job.assignee ? ` · ${job.assignee.name}` : ''}</p>
+                      {job.completedAt && <p style={{ fontSize: 11, color: '#16a34a', margin: '4px 0 0', fontWeight: 500 }}>{new Date(job.completedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</p>}
                     </div>
                     <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: '#22c55e18', color: '#22c55e', textTransform: 'uppercase' }}>Done</span>
                   </div>
@@ -890,6 +900,43 @@ export default function ContentBoard() {
                     {task.assignee && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>{task.assignee.name}</p>}
                   </div>
                   <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: '#22c55e18', color: '#22c55e', textTransform: 'uppercase' }}>Done</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Completed This Week */}
+      {showWeekCompleted && (data.completedToday.length + data.completedTasks.length + data.completedThisWeek.length + data.completedTasksThisWeek.length > 0) && (
+        <div style={{ marginBottom: 28 }}>
+          <SectionHeader label="Completed This Week" count={data.stats.completedThisWeek} color="#8b5cf6" />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+            {[...data.completedToday, ...data.completedThisWeek].map(job => {
+              const v = job.vehicle
+              return (
+                <div key={job.id} style={{ background: '#faf5ff', borderRadius: 14, padding: '16px 20px', border: '1px solid #8b5cf620', flex: '1 1 280px', maxWidth: 420 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>#{v.stockNumber}</p>
+                      <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>{`${v.year ?? ''} ${v.make} ${v.model}`.trim()}{job.assignee ? ` · ${job.assignee.name}` : ''}</p>
+                      <p style={{ fontSize: 11, color: '#8b5cf6', margin: '4px 0 0', fontWeight: 500 }}>
+                        {job.completedAt ? `${new Date(job.completedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} at ${new Date(job.completedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}
+                      </p>
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: '#8b5cf618', color: '#8b5cf6', textTransform: 'uppercase' }}>Done</span>
+                  </div>
+                </div>
+              )
+            })}
+            {[...data.completedTasks, ...data.completedTasksThisWeek].map(task => (
+              <div key={task.id} style={{ background: '#faf5ff', borderRadius: 14, padding: '16px 20px', border: '1px solid #8b5cf620', flex: '1 1 280px', maxWidth: 420 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>{task.title}</p>
+                    {task.assignee && <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '2px 0 0' }}>{task.assignee.name}</p>}
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 100, background: '#8b5cf618', color: '#8b5cf6', textTransform: 'uppercase' }}>Done</span>
                 </div>
               </div>
             ))}

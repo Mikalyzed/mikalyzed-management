@@ -40,6 +40,9 @@ export default function ContactDetailPage() {
   const [activities, setActivities] = useState<any[]>([])
   const [oppNotes, setOppNotes] = useState<any[]>([])
   const [oppTasks, setOppTasks] = useState<any[]>([])
+  const [dispositions, setDispositions] = useState<any[]>([])
+  const [showDispositions, setShowDispositions] = useState(false)
+  const [dispSaving, setDispSaving] = useState(false)
   const [newNote, setNewNote] = useState('')
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskDue, setNewTaskDue] = useState('')
@@ -51,6 +54,7 @@ export default function ContactDetailPage() {
 
   useEffect(() => {
     fetch(`/api/contacts/${id}`).then(r => r.json()).then(d => { setContact(d); setLoading(false) })
+    fetch('/api/settings/dispositions').then(r => r.json()).then(d => setDispositions(d.dispositions || []))
   }, [id])
 
   function loadMessages() {
@@ -130,6 +134,45 @@ export default function ContactDetailPage() {
       body: JSON.stringify({ status: newStatus }),
     })
     setTimeout(loadRightPanel, 300)
+  }
+
+  async function logDisposition(disp: any) {
+    if (!contact?.opportunities?.length) return
+    setDispSaving(true)
+    const oppId = contact.opportunities[0].id
+    try {
+      // Log the disposition
+      await fetch(`/api/opportunities/${oppId}/dispositions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dispositionId: disp.id }),
+      })
+      // If disposition has auto-move, move the stage
+      if (disp.moveToStageId) {
+        await fetch(`/api/opportunities/${oppId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stageId: disp.moveToStageId }),
+        })
+      }
+      // If disposition has follow-up, create a task
+      if (disp.followUpMinutes) {
+        const followUpAt = new Date(Date.now() + disp.followUpMinutes * 60000)
+        await fetch(`/api/opportunities/${oppId}/tasks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: `Follow up: ${disp.name}`,
+            dueDate: followUpAt.toISOString(),
+          }),
+        })
+      }
+      setShowDispositions(false)
+      // Refresh data
+      fetch(`/api/contacts/${id}`).then(r => r.json()).then(d => setContact(d))
+      setTimeout(loadRightPanel, 500)
+    } catch (e) { console.error(e) }
+    setDispSaving(false)
   }
 
   async function sendMessage() {
@@ -263,6 +306,42 @@ export default function ContactDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
               </svg>
             </a>
+          )}
+          {/* Disposition button */}
+          {contact.opportunities.length > 0 && (
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setShowDispositions(!showDispositions)} style={{
+                padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)',
+                background: showDispositions ? '#1a1a1a' : '#fff', color: showDispositions ? '#dffd6e' : 'var(--text-secondary)',
+                fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+              }}>
+                Log Outcome
+              </button>
+              {showDispositions && (
+                <div style={{
+                  position: 'absolute', right: 0, top: 42, width: 220, background: '#fff',
+                  border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                  zIndex: 100, padding: '6px 0',
+                }}>
+                  {dispositions.filter((d: any) => d.isActive).map((d: any) => (
+                    <button key={d.id} onClick={() => logDisposition(d)} disabled={dispSaving} style={{
+                      width: '100%', padding: '8px 14px', border: 'none', background: 'none',
+                      fontSize: 13, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+                    }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >
+                      <span>{d.name}</span>
+                      {d.moveToStage && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>→ {d.moveToStage.name}</span>}
+                      {d.followUpMinutes && <span style={{ fontSize: 10, color: '#2563eb' }}>{d.followUpMinutes >= 1440 ? `${Math.round(d.followUpMinutes / 1440)}d` : d.followUpMinutes >= 60 ? `${Math.round(d.followUpMinutes / 60)}h` : `${d.followUpMinutes}m`}</span>}
+                    </button>
+                  ))}
+                  {dispositions.filter((d: any) => d.isActive).length === 0 && (
+                    <p style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>No dispositions configured. Add them in Settings → Sales.</p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
