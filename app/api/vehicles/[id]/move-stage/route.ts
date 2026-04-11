@@ -11,7 +11,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id: vehicleId } = await params
-  const { targetStage, checklist: customChecklist, assigneeId: customAssigneeId, skipCurrent, returnAfterComplete = true } = await req.json()
+  const body = await req.json()
+  const { targetStage, checklist: customChecklist, assigneeId: customAssigneeId, skipCurrent, returnAfterComplete = true } = body
+  console.log('[move-stage] Received:', JSON.stringify({ targetStage, skipCurrent, returnAfterComplete, hasChecklist: !!customChecklist, checklistLen: customChecklist?.length }))
 
   if (!STAGES.includes(targetStage) && targetStage !== 'completed') {
     return NextResponse.json({ error: 'Invalid stage' }, { status: 400 })
@@ -106,13 +108,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         currentAssigneeId: assigneeId,
       }
 
-      // If skipping with uncompleted tasks, add to return queue
-      if (skipCurrent && uncompletedTasks.length > 0 && returnAfterComplete && currentStage) {
+      // If skipping with return flag, add to return queue
+      if (skipCurrent && returnAfterComplete && currentStage) {
         const currentReturnQueue = vehicle.returnQueue as any[] || []
         const newReturnEntry = {
           stage: currentStage.stage,
           fromStage: targetStage,
-          reason: `Skipped with ${uncompletedTasks.length} remaining tasks`,
+          reason: uncompletedTasks.length > 0
+            ? `Skipped with ${uncompletedTasks.length} remaining tasks`
+            : `Return to ${currentStage.stage} after ${targetStage}`,
           uncompletedTasks: uncompletedTasks
         }
         vehicleUpdates.returnQueue = [...currentReturnQueue, newReturnEntry]

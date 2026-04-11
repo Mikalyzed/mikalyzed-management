@@ -83,6 +83,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
     { href: '/parts', label: 'Parts', icon: 'external' },
     { href: '/calendar', label: 'Calendar', icon: 'calendar' },
     { href: '/events', label: 'Events', icon: 'events' },
+    { href: '/admin/generate-ad', label: 'Ad Generator', icon: 'tasks' },
     { href: '/reports', label: 'Reports', icon: 'reports' },
     { href: '/team', label: 'Team', icon: 'team' },
     { href: '/settings', label: 'Settings', icon: 'settings' },

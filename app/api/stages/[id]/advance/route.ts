@@ -33,7 +33,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'This is not the current stage' }, { status: 400 })
   }
 
-  const nextStage = NEXT_STAGE[stage.stage as Stage]
+  // Check if this vehicle has a return queue entry for this stage
+  const returnQueue = (stage.vehicle.returnQueue as any[]) || []
+  const returnEntry = returnQueue.find((r: any) => r.fromStage === stage.stage)
+
+  // If there's a return entry, go back to that stage instead of forward
+  const nextStage = returnEntry ? returnEntry.stage : NEXT_STAGE[stage.stage as Stage]
 
   await prisma.$transaction(async (tx) => {
     // Mark current stage done
@@ -41,6 +46,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       where: { id },
       data: { status: 'done', completedAt: new Date() },
     })
+
+    // Remove the return entry from the queue if we used it
+    if (returnEntry) {
+      const updatedQueue = returnQueue.filter((r: any) => r !== returnEntry)
+      await tx.vehicle.update({
+        where: { id: stage.vehicleId },
+        data: { returnQueue: updatedQueue },
+      })
+    }
 
     if (nextStage === 'completed') {
       // Vehicle is fully done
@@ -53,8 +67,61 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           currentAssigneeId: null,
         },
       })
+    } else if (returnEntry) {
+      // Returning to previous stage — reactivate the skipped stage
+      const skippedStage = await tx.vehicleStage.findFirst({
+        where: { vehicleId: stage.vehicleId, stage: nextStage, status: 'skipped' },
+        orderBy: { createdAt: 'desc' },
+      })
+
+      if (skippedStage) {
+        // Reactivate the skipped stage with its remaining tasks
+        await tx.vehicleStage.update({
+          where: { id: skippedStage.id },
+          data: { status: 'pending', completedAt: null },
+        })
+
+        await tx.vehicle.update({
+          where: { id: stage.vehicleId },
+          data: {
+            status: nextStage,
+            currentStageId: skippedStage.id,
+            currentAssigneeId: skippedStage.assigneeId,
+          },
+        })
+      } else {
+        // No skipped stage found, create a new one with uncompleted tasks
+        const config = await tx.stageConfig.findUnique({ where: { stage: nextStage } })
+        const checklist = returnEntry.uncompletedTasks ||
+          (DEFAULT_CHECKLISTS[nextStage as Stage] || []).map((item: string) => ({ item, done: false, note: '' }))
+
+        const maxPriority = await tx.vehicleStage.aggregate({
+          where: { stage: nextStage, status: { notIn: ['done', 'skipped'] } },
+          _max: { priority: true },
+        })
+
+        const newStage = await tx.vehicleStage.create({
+          data: {
+            vehicleId: stage.vehicleId,
+            stage: nextStage,
+            status: 'pending',
+            assigneeId: config?.defaultAssigneeId || null,
+            checklist,
+            priority: (maxPriority._max.priority ?? -1) + 1,
+          },
+        })
+
+        await tx.vehicle.update({
+          where: { id: stage.vehicleId },
+          data: {
+            status: nextStage,
+            currentStageId: newStage.id,
+            currentAssigneeId: config?.defaultAssigneeId || null,
+          },
+        })
+      }
     } else {
-      // Create next stage
+      // Normal advance — create next stage
       const config = await tx.stageConfig.findUnique({ where: { stage: nextStage } })
 
       // Use custom checklist from body (scope template), or fall back to defaults

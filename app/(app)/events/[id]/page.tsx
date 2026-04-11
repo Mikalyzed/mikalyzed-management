@@ -57,6 +57,13 @@ export default function EventDetailPage() {
   const [addingSectionName, setAddingSectionName] = useState('')
   const [showAddSection, setShowAddSection] = useState(false)
   const [personFilter, setPersonFilter] = useState('')
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editNotes, setEditNotes] = useState('')
+  const [editAssignee, setEditAssignee] = useState('')
+  const [editDue, setEditDue] = useState('')
+  const [editPriority, setEditPriority] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
 
   const loadEvent = useCallback(() => {
     fetch(`/api/events/${eventId}`).then(r => r.json()).then(d => { setEvent(d); setLoading(false) })
@@ -124,6 +131,34 @@ export default function EventDetailPage() {
   async function deleteSection(sectionId: string) {
     if (!confirm('Delete this section and all its tasks?')) return
     await fetch(`/api/events/${eventId}/sections/${sectionId}`, { method: 'DELETE' })
+    loadEvent()
+  }
+
+  function openEditTask(task: Task) {
+    setEditingTask(task)
+    setEditTitle(task.title)
+    setEditNotes(task.notes || '')
+    setEditAssignee(task.assignee?.id || '')
+    setEditDue(task.dueDate ? task.dueDate.slice(0, 10) : '')
+    setEditPriority(task.priority)
+  }
+
+  async function saveEditTask() {
+    if (!editingTask) return
+    setEditSaving(true)
+    await fetch(`/api/events/${eventId}/tasks/${editingTask.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: editTitle.trim(),
+        notes: editNotes.trim() || null,
+        assigneeId: editAssignee || null,
+        dueDate: editDue || null,
+        priority: editPriority,
+      }),
+    })
+    setEditSaving(false)
+    setEditingTask(null)
     loadEvent()
   }
 
@@ -345,8 +380,8 @@ export default function EventDetailPage() {
                           )}
                         </button>
 
-                        {/* Task content */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
+                        {/* Task content — click to edit */}
+                        <div onClick={() => openEditTask(task)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
                           <div style={{
                             fontSize: 14,
                             fontWeight: 500,
@@ -355,6 +390,11 @@ export default function EventDetailPage() {
                           }}>
                             {task.title}
                           </div>
+                          {task.notes && (
+                            <div style={{ fontSize: 11, color: '#2563eb', marginTop: 2 }}>
+                              Note: {task.notes.length > 40 ? task.notes.slice(0, 40) + '...' : task.notes}
+                            </div>
+                          )}
                           {task.dueDate && (
                             <div style={{ fontSize: 11, color: isOverdue ? '#ef4444' : 'var(--text-muted)', marginTop: 2 }}>
                               Due {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -498,6 +538,76 @@ export default function EventDetailPage() {
               + Add Section
             </button>
           )}
+        </div>
+      )}
+      {/* Edit Task Modal */}
+      {editingTask && (
+        <div onClick={() => setEditingTask(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20,
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: '#fff', borderRadius: 16, width: '100%', maxWidth: 480,
+            padding: 24, boxShadow: '0 -4px 30px rgba(0,0,0,0.15)',
+          }}>
+            <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 16 }}>Edit Task</h3>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Title</label>
+              <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }} />
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Notes</label>
+              <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={3}
+                placeholder="Add notes about this task..."
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, resize: 'vertical', fontFamily: 'inherit' }} />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Assigned To</label>
+                <select value={editAssignee} onChange={e => setEditAssignee(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }}>
+                  <option value="">Unassigned</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Due Date</label>
+                <input type="date" value={editDue} onChange={e => setEditDue(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Priority</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {['normal', 'high', 'urgent'].map(p => (
+                  <button key={p} onClick={() => setEditPriority(p)} style={{
+                    padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    border: `1px solid ${editPriority === p ? (p === 'urgent' ? '#ef4444' : p === 'high' ? '#f59e0b' : '#1a1a1a') : 'var(--border)'}`,
+                    background: editPriority === p ? (p === 'urgent' ? '#fef2f2' : p === 'high' ? '#fefce8' : '#f5f5f3') : '#fff',
+                    color: editPriority === p ? (p === 'urgent' ? '#ef4444' : p === 'high' ? '#f59e0b' : 'var(--text-primary)') : 'var(--text-muted)',
+                    textTransform: 'capitalize',
+                  }}>{p}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setEditingTask(null)} style={{
+                flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid var(--border)',
+                background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              }}>Cancel</button>
+              <button onClick={saveEditTask} disabled={editSaving || !editTitle.trim()} style={{
+                flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
+                background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                opacity: editSaving || !editTitle.trim() ? 0.5 : 1,
+              }}>{editSaving ? 'Saving...' : 'Save'}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

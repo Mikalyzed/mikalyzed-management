@@ -351,7 +351,7 @@ export default function VehiclesPage() {
       setModalData(data)
       setModalParts(partsData.parts || [])
       const currentStage = data.vehicle?.stages?.find(
-        (s: { stage: string }) => s.stage === data.vehicle.status
+        (s: { id: string }) => s.id === data.vehicle.currentStageId
       )
       setModalChecklist(currentStage?.checklist ? JSON.parse(JSON.stringify(currentStage.checklist)) : [])
     } catch { /* ignore */ }
@@ -367,7 +367,7 @@ export default function VehiclesPage() {
 
   const getCurrentStage = useCallback(() => {
     if (!modalData) return null
-    return modalData.vehicle.stages.find(s => s.stage === modalData.vehicle.status) || null
+    return modalData.vehicle.stages.find(s => s.id === modalData.vehicle.currentStageId) || null
   }, [modalData])
 
   const toggleChecklistItem = useCallback(async (index: number) => {
@@ -418,6 +418,8 @@ export default function VehiclesPage() {
           targetStage: moveModal.toStage,
           checklist: checklist.length > 0 ? checklist : undefined,
           assigneeId: moveModal.assigneeId,
+          skipCurrent: true,
+          returnAfterComplete: moveModal.returnAfterComplete,
         }),
       })
       setMoveModal(null)
