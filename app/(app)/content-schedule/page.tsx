@@ -8,7 +8,7 @@ type VehicleJob = {
   id: string; vehicleId: string; vehicle: Vehicle
   assignee: { id: string; name: string } | null
   status: string; checklist: ChecklistItem[]; priority: number
-  scheduledDate: string | null; type: 'vehicle'
+  scheduledDate: string | null; completedAt: string | null; type: 'vehicle'
 }
 type SubtaskItem = { item: string; done: boolean }
 type ContentTask = {

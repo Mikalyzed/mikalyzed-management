@@ -92,7 +92,7 @@ export async function GET() {
     id: s.id, vehicleId: s.vehicle.id, vehicle: s.vehicle,
     assignee: s.assignee, status: s.status,
     checklist: s.checklist as { item: string; done: boolean; note: string }[],
-    priority: s.priority, scheduledDate: s.scheduledDate, type: 'vehicle' as const,
+    priority: s.priority, scheduledDate: s.scheduledDate, completedAt: s.completedAt?.toISOString() || null, type: 'vehicle' as const,
   })
 
   const formatTask = (t: typeof contentTasks[number]) => ({
