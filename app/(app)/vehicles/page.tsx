@@ -17,6 +17,7 @@ type VehicleWithStage = {
   model: string
   color: string | null
   status: string
+  currentStageId: string | null
   currentAssignee: { id: string; name: string } | null
   stages: Array<{
     id?: string
@@ -44,6 +45,7 @@ type ModalData = {
     model: string
     color: string | null
     status: string
+    currentStageId: string | null
     currentAssignee: { id: string; name: string } | null
     stages: Array<{
       id: string

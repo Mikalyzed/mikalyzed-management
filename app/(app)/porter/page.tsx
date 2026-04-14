@@ -371,48 +371,6 @@ export default function PorterPage() {
             </div>
           ))}
 
-          <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 8 }}>Completed Today ({completedTasks.length})</p>
-          {completedTasks.length > 0 ? (
-            <div>
-              {completedTasks.map(t => (
-                <div key={t.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', marginBottom: 6,
-                  background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10,
-                }}>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                    border: '2px solid #22c55e', background: '#22c55e',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 6 9 17l-5-5" />
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 13, margin: 0, color: '#16a34a', fontWeight: 600 }}>{t.title}</p>
-                    {t.startedAt && (
-                      <p style={{ fontSize: 10, color: '#22c55e', margin: '2px 0 0' }}>
-                        {new Date(t.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                        {t.completedAt && ` — ${new Date(t.completedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
-                      </p>
-                    )}
-                  </div>
-                  <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#16a34a' }}>
-                    {t.startedAt ? formatDuration(t.startedAt, t.completedAt) : '—'}
-                  </span>
-                  {isAdmin && (
-                    <button onClick={() => deleteTask(t.id)} style={{
-                      fontSize: 14, color: '#86efac', background: 'none', border: 'none', cursor: 'pointer',
-                    }}>×</button>
-                  )}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: 8 }}>No tasks completed yet</p>
-          )}
-          </div>
         </div>
       )}
 
@@ -508,23 +466,61 @@ export default function PorterPage() {
         </div>
       )}
 
-      {/* Completed */}
-      {completed.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <p style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: 10 }}>
-            Completed ({completed.length})
+
+      {/* Completed Today — bottom of page */}
+      {(completedTasks.length > 0 || completed.length > 0) && (
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20, marginTop: 20 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)', marginBottom: 12 }}>
+            Completed Today
           </p>
+
+          {completedTasks.map(t => (
+            <div key={t.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', marginBottom: 6,
+              background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10,
+            }}>
+              <div style={{
+                width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                background: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: '#16a34a' }}>{t.title}</p>
+                {t.startedAt && (
+                  <p style={{ fontSize: 10, color: '#22c55e', margin: '2px 0 0' }}>
+                    {new Date(t.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                    {t.completedAt && ` — ${new Date(t.completedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                  </p>
+                )}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#16a34a' }}>
+                {t.startedAt ? formatDuration(t.startedAt, t.completedAt) : '—'}
+              </span>
+            </div>
+          ))}
+
           {completed.map(entry => (
             <div key={entry.id} style={{
-              background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12,
-              padding: '12px 20px', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', marginBottom: 6,
+              background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10,
             }}>
-              <div>
-                <span style={{ fontSize: 14, fontWeight: 600, color: '#16a34a' }}>{entry.carName}</span>
-                <span style={{ fontSize: 12, color: '#22c55e', marginLeft: 10 }}>...{entry.vin6}</span>
+              <div style={{
+                width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                background: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: '#16a34a' }}>{entry.carName}</p>
+                <p style={{ fontSize: 10, color: '#22c55e', margin: '2px 0 0' }}>...{entry.vin6}</p>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#16a34a', fontFamily: 'monospace' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#16a34a' }}>
                   {formatDuration(entry.startedAt, entry.finishedAt)}
                 </span>
                 {entry.startedAt && (

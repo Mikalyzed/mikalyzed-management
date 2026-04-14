@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
       .png()
       .toBuffer()
 
-    return new NextResponse(outputBuffer, {
+    return new NextResponse(outputBuffer as unknown as BodyInit, {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `attachment; filename="ad-${vehicleName || 'vehicle'}.png"`,
