@@ -43,6 +43,9 @@ model User {
   roundRobinWeights RoundRobinWeight[]
   dispositionLogs  DispositionLog[]
   sentMessages     Message[]         @relation("MessageSender")
+  porterEntries    PorterEntry[]     @relation("PorterEntries")
+  porterTasksAssigned PorterTask[]   @relation("PorterTaskAssignee")
+  porterTasksCreated  PorterTask[]   @relation("PorterTaskCreator")
 
   @@map("users")
 }
@@ -566,6 +569,49 @@ model Message {
   @@index([contactId, createdAt])
   @@index([externalId])
   @@map("messages")
+}
+
+// ═══ Porter ═══
+
+model PorterEntry {
+  id          String   @id @default(uuid())
+  vin6        String   @map("vin6") // last 6 of VIN
+  carName     String   @map("car_name") // e.g. "Black Camaro"
+  wipeDown    Boolean  @default(false) @map("wipe_down")
+  tirePressure Boolean @default(false) @map("tire_pressure")
+  matUnderCar Boolean  @default(false) @map("mat_under_car")
+  charger     Boolean  @default(false)
+  startedAt   DateTime? @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  completedAt DateTime? @map("completed_at")
+  date        DateTime @default(now()) // which day this entry is for
+  porterId    String?  @map("porter_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  porter      User?    @relation("PorterEntries", fields: [porterId], references: [id])
+
+  @@index([date])
+  @@index([porterId])
+  @@map("porter_entries")
+}
+
+model PorterTask {
+  id          String    @id @default(uuid())
+  title       String
+  notes       String?
+  assignedToId String?  @map("assigned_to_id")
+  status      String   @default("pending") // pending, in_progress, completed
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  assignedTo  User?    @relation("PorterTaskAssignee", fields: [assignedToId], references: [id])
+  createdBy   User?    @relation("PorterTaskCreator", fields: [createdById], references: [id])
+
+  @@index([assignedToId])
+  @@map("porter_tasks")
 }
 
 // ═══ Calendar ═══

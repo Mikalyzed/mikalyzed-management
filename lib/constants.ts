@@ -64,7 +64,7 @@ export const DEFAULT_CHECKLISTS: Record<Stage, string[]> = {
   ],
 }
 
-export const ROLES = ['admin', 'mechanic', 'detailer', 'content', 'sales', 'sales_manager', 'coordinator'] as const
+export const ROLES = ['admin', 'mechanic', 'detailer', 'content', 'sales', 'sales_manager', 'coordinator', 'porter'] as const
 export type Role = (typeof ROLES)[number]
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -75,4 +75,5 @@ export const ROLE_LABELS: Record<Role, string> = {
   sales: 'Sales',
   sales_manager: 'Sales Manager',
   coordinator: 'Coordinator',
+  porter: 'Porter',
 }

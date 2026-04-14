@@ -81,6 +81,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
     { href: '/mechanic-schedule', label: 'Mechanic Schedule', icon: 'calendar' },
     { href: '/external', label: 'External Repairs', icon: 'external' },
     { href: '/parts', label: 'Parts', icon: 'external' },
+    { href: '/porter', label: 'Porter', icon: 'tasks' },
     { href: '/calendar', label: 'Calendar', icon: 'calendar' },
     { href: '/events', label: 'Events', icon: 'events' },
     { href: '/admin/generate-ad', label: 'Ad Generator', icon: 'tasks' },
@@ -124,6 +125,9 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
   coordinator: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
     { href: '/transport', label: 'Queue', icon: 'queue' },
+  ],
+  porter: [
+    { href: '/porter', label: 'My Tasks', icon: 'tasks' },
   ],
 }
 
