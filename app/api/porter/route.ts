@@ -42,8 +42,8 @@ export async function GET() {
   weekStart.setHours(0, 0, 0, 0)
 
   const weeklyEntries = await prisma.porterEntry.findMany({
-    where: { date: { gte: weekStart } },
-    orderBy: { createdAt: 'desc' },
+    where: { date: { gte: weekStart }, completedAt: { not: null } },
+    orderBy: { completedAt: 'desc' },
     include: { porter: { select: { id: true, name: true } } },
   })
 

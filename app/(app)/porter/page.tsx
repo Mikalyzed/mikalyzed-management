@@ -258,7 +258,7 @@ export default function PorterPage() {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: allDone ? '#16a34a' : 'var(--text-muted)' }}>
-                          {formatDuration(e.startedAt, e.finishedAt)}
+                          {formatDuration(e.startedAt, e.finishedAt || e.completedAt)}
                         </span>
                         {e.startedAt && (
                           <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '2px 0 0' }}>
@@ -517,18 +517,15 @@ export default function PorterPage() {
               </div>
               <div style={{ flex: 1 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: '#16a34a' }}>{entry.carName}</p>
-                <p style={{ fontSize: 10, color: '#22c55e', margin: '2px 0 0' }}>...{entry.vin6}</p>
+                <p style={{ fontSize: 10, color: '#22c55e', margin: '2px 0 0' }}>
+                  ...{entry.vin6}
+                  {entry.startedAt && ` · Started ${new Date(entry.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
+                </p>
               </div>
               <div style={{ textAlign: 'right' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#16a34a' }}>
-                  {formatDuration(entry.startedAt, entry.finishedAt)}
+                  {formatDuration(entry.startedAt, entry.finishedAt || entry.completedAt)}
                 </span>
-                {entry.startedAt && (
-                  <p style={{ fontSize: 10, color: '#22c55e', margin: '2px 0 0' }}>
-                    {new Date(entry.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                    {entry.finishedAt && ` — ${new Date(entry.finishedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}
-                  </p>
-                )}
               </div>
             </div>
           ))}
