@@ -1,6 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import VehicleSearch from '@/components/VehicleSearch'
+
+type InventoryPick = {
+  stockNumber: string; vin: string | null
+  year: number | null; make: string; model: string; color: string | null
+}
 
 type ExternalRepair = {
   id: string
@@ -50,6 +56,7 @@ export default function ExternalRepairsPage() {
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [selectedInv, setSelectedInv] = useState<InventoryPick | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('active')
@@ -147,6 +154,7 @@ export default function ExternalRepairsPage() {
       })
       if (!res.ok) { const d = await res.json(); setError(d.error); return }
       setShowAdd(false)
+      setSelectedInv(null)
       load()
     } catch { setError('Network error') }
     finally { setSaving(false) }
@@ -334,28 +342,46 @@ export default function ExternalRepairsPage() {
       {showAdd && (
         <div style={{ background: '#fff', border: '2px solid var(--accent)', borderRadius: '16px', padding: '20px', marginBottom: '24px', boxShadow: 'var(--shadow)' }}>
           <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '16px' }}>Add External Repair</h2>
-          <form onSubmit={handleAdd} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>
+              Find vehicle in inventory
+            </label>
+            <VehicleSearch
+              placeholder="Search by stock #, VIN, or name..."
+              onSelect={(v) => setSelectedInv({
+                stockNumber: v.stockNumber, vin: v.vin,
+                year: v.year, make: v.make, model: v.model, color: v.color,
+              })}
+            />
+            {selectedInv && (
+              <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>Selected: #{selectedInv.stockNumber} — {selectedInv.year} {selectedInv.make} {selectedInv.model}</span>
+                <button type="button" onClick={() => setSelectedInv(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a', fontSize: 13, fontWeight: 600 }}>Clear</button>
+              </div>
+            )}
+          </div>
+          <form key={selectedInv?.stockNumber || 'blank'} onSubmit={handleAdd} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div className="ext-form-grid-4" style={{ display: 'grid', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Stock # *</label>
-                <input name="stockNumber" required className="input" placeholder="A1234" />
+                <input name="stockNumber" required className="input" placeholder="A1234" defaultValue={selectedInv?.stockNumber || ''} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Year</label>
-                <input name="year" type="number" className="input" placeholder="2024" />
+                <input name="year" type="number" className="input" placeholder="2024" defaultValue={selectedInv?.year || ''} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Make *</label>
-                <input name="make" required className="input" placeholder="BMW" />
+                <input name="make" required className="input" placeholder="BMW" defaultValue={selectedInv?.make || ''} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Model *</label>
-                <input name="model" required className="input" placeholder="X5" />
+                <input name="model" required className="input" placeholder="X5" defaultValue={selectedInv?.model || ''} />
               </div>
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Color</label>
-              <input name="color" className="input" placeholder="Optional" />
+              <input name="color" className="input" placeholder="Optional" defaultValue={selectedInv?.color || ''} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
@@ -387,7 +413,7 @@ export default function ExternalRepairsPage() {
             </div>
             {error && <div style={{ padding: '12px 16px', borderRadius: '12px', fontSize: '14px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-border)' }}>{error}</div>}
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="button" onClick={() => setShowAdd(false)} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--border)', background: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px' }}>Cancel</button>
+              <button type="button" onClick={() => { setShowAdd(false); setSelectedInv(null) }} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--border)', background: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px' }}>Cancel</button>
               <button type="submit" disabled={saving} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px', opacity: saving ? 0.5 : 1 }}>
                 {saving ? 'Adding...' : 'Add Repair'}
               </button>

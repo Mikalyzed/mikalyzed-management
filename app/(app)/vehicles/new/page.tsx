@@ -2,6 +2,12 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import VehicleSearch from '@/components/VehicleSearch'
+
+type InventoryPick = {
+  stockNumber: string; vin: string | null
+  year: number | null; make: string; model: string; color: string | null
+}
 
 const DEFAULT_INSPECTION = [
   'Oil & fluids check',
@@ -25,6 +31,7 @@ export default function AddVehiclePage() {
   const [parts, setParts] = useState<{ name: string; url: string }[]>([])
   const [newPart, setNewPart] = useState('')
   const [newPartUrl, setNewPartUrl] = useState('')
+  const [selectedInv, setSelectedInv] = useState<InventoryPick | null>(null)
 
   function addTask() {
     const task = newTask.trim()
@@ -122,7 +129,33 @@ export default function AddVehiclePage() {
 
       <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: '32px' }}>Add Vehicle</h1>
 
-      <form onSubmit={handleSubmit}>
+      {/* Inventory search */}
+      <div style={{
+        background: '#ffffff', border: '1px solid var(--border)', borderRadius: '16px',
+        padding: '20px', marginBottom: '16px', boxShadow: 'var(--shadow-sm)',
+      }}>
+        <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
+          Find Vehicle in Inventory
+        </p>
+        <VehicleSearch
+          placeholder="Search by stock #, VIN, or name..."
+          onSelect={(v) => setSelectedInv({
+            stockNumber: v.stockNumber, vin: v.vin,
+            year: v.year, make: v.make, model: v.model, color: v.color,
+          })}
+        />
+        {selectedInv && (
+          <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Selected: #{selectedInv.stockNumber} — {selectedInv.year} {selectedInv.make} {selectedInv.model}</span>
+            <button type="button" onClick={() => setSelectedInv(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a', fontSize: 13, fontWeight: 600 }}>Clear</button>
+          </div>
+        )}
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>
+          Pick from inventory to auto-fill, or skip and enter manually below.
+        </p>
+      </div>
+
+      <form key={selectedInv?.stockNumber || 'blank'} onSubmit={handleSubmit}>
         {/* Vehicle Info Card */}
         <div style={{
           background: '#ffffff',
@@ -139,33 +172,33 @@ export default function AddVehiclePage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Stock Number *</label>
-              <input name="stockNumber" required className="input" placeholder="e.g. N018750" />
+              <input name="stockNumber" required className="input" placeholder="e.g. N018750" defaultValue={selectedInv?.stockNumber || ''} />
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>VIN</label>
-              <input name="vin" className="input" placeholder="Optional" />
+              <input name="vin" className="input" placeholder="Optional" defaultValue={selectedInv?.vin || ''} />
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Year</label>
-                <input name="year" type="number" className="input" placeholder="2024" />
+                <input name="year" type="number" className="input" placeholder="2024" defaultValue={selectedInv?.year || ''} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Color</label>
-                <input name="color" className="input" placeholder="White" />
+                <input name="color" className="input" placeholder="White" defaultValue={selectedInv?.color || ''} />
               </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Make *</label>
-                <input name="make" required className="input" placeholder="Toyota" />
+                <input name="make" required className="input" placeholder="Toyota" defaultValue={selectedInv?.make || ''} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Model *</label>
-                <input name="model" required className="input" placeholder="Camry" />
+                <input name="model" required className="input" placeholder="Camry" defaultValue={selectedInv?.model || ''} />
               </div>
             </div>
 
