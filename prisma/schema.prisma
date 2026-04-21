@@ -571,6 +571,35 @@ model Message {
   @@map("messages")
 }
 
+// ═══ Inventory ═══
+
+model InventoryVehicle {
+  id            String    @id @default(uuid())
+  stockNumber   String    @unique @map("stock_number")
+  vin           String?
+  vehicleInfo   String    @map("vehicle_info") // full description from DealerCenter
+  year          Int?
+  make          String
+  model         String
+  trim          String?
+  color         String?
+  mileage       Int?
+  location      String?
+  askingPrice   Float?    @map("asking_price")
+  vehicleCost   Float?    @map("vehicle_cost")
+  purchaseType  String?   @map("purchase_type") // FLOORING, CONSIGNMENT, TRADE-IN
+  purchasedFrom String?   @map("purchased_from")
+  titleStatus   String?   @map("title_status") // RECEIVED, NOT RECEIVED
+  dateInStock   DateTime? @map("date_in_stock")
+  status        String    @default("in_stock") @map("status") // in_stock, sold, in_recon
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([make, model])
+  @@map("inventory_vehicles")
+}
+
 // ═══ Porter ═══
 
 model PorterEntry {

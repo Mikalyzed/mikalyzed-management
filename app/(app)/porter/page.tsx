@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import VehicleSearch from '@/components/VehicleSearch'
 
 type Entry = {
   id: string; vin6: string; carName: string
@@ -379,19 +380,30 @@ export default function PorterPage() {
         Vehicle Checkup {pending.length > 0 && `· ${pending.length} remaining · ${completed.length} done`}
       </p>
 
-      {/* Add car */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-        <input value={vin6} onChange={e => setVin6(e.target.value.slice(0, 6))} placeholder="Last 6 of VIN"
-          style={{ width: 130, padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, textTransform: 'uppercase' }}
-          onKeyDown={e => e.key === 'Enter' && document.getElementById('carNameInput')?.focus()} />
-        <input id="carNameInput" value={carName} onChange={e => setCarName(e.target.value)} placeholder="Car name (e.g. Black Camaro)"
-          style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14 }}
-          onKeyDown={e => e.key === 'Enter' && addCar()} />
-        <button onClick={addCar} disabled={saving || !vin6.trim() || !carName.trim()} style={{
-          padding: '10px 20px', borderRadius: 10, border: 'none',
-          background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 700,
-          cursor: 'pointer', opacity: saving || !vin6.trim() || !carName.trim() ? 0.5 : 1,
-        }}>Add Car</button>
+      {/* Add car — search from inventory or manual entry */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <VehicleSearch
+            placeholder="Search vehicle by stock #, name, or VIN..."
+            onSelect={(v) => {
+              setVin6(v.vin ? v.vin.slice(-6) : v.stockNumber.slice(-6))
+              setCarName(`${v.year || ''} ${v.make} ${v.model}`.trim())
+              setTimeout(() => addCar(), 100)
+            }}
+          />
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <input value={vin6} onChange={e => setVin6(e.target.value.slice(0, 6))} placeholder="Last 6 VIN"
+              style={{ width: 110, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, textTransform: 'uppercase' }} />
+            <input value={carName} onChange={e => setCarName(e.target.value)} placeholder="Car name"
+              style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }}
+              onKeyDown={e => e.key === 'Enter' && addCar()} />
+            <button onClick={addCar} disabled={saving || !vin6.trim() || !carName.trim()} style={{
+              padding: '8px 16px', borderRadius: 8, border: 'none',
+              background: '#1a1a1a', color: '#dffd6e', fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', opacity: saving || !vin6.trim() || !carName.trim() ? 0.5 : 1,
+            }}>Add</button>
+          </div>
+        </div>
       </div>
 
       {/* Pending cars */}
