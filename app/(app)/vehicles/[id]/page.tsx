@@ -40,6 +40,13 @@ type Part = {
   assignedTo: { id: string; name: string } | null
 }
 
+type ReturnQueueEntry = {
+  stage: string
+  reason?: string
+  fromStage?: string
+  uncompletedTasks?: string[]
+}
+
 type Vehicle = {
   id: string
   stockNumber: string
@@ -56,6 +63,7 @@ type Vehicle = {
   createdAt: string
   completedAt: string | null
   stages: Stage[]
+  returnQueue?: ReturnQueueEntry[]
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -441,6 +449,25 @@ export default function VehicleDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Return queue banner */}
+      {vehicle.returnQueue && vehicle.returnQueue.length > 0 && (
+        <div style={{
+          background: '#fef3c7', border: '1px solid #fcd34d', borderLeft: '4px solid #f59e0b',
+          borderRadius: '12px', padding: '14px 18px', marginBottom: '16px',
+        }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Queued Return{vehicle.returnQueue.length > 1 ? 's' : ''}
+          </p>
+          {vehicle.returnQueue.map((r, i) => (
+            <p key={i} style={{ fontSize: 13, color: '#78350f', marginTop: i > 0 ? 4 : 0 }}>
+              After <strong>{STAGE_LABELS[r.fromStage || ''] || r.fromStage || 'current stage'}</strong>,
+              returns to <strong>{STAGE_LABELS[r.stage] || r.stage}</strong>
+              {r.reason && ` — ${r.reason}`}
+            </p>
+          ))}
+        </div>
+      )}
 
       {/* Notes */}
       {vehicle.notes && (
@@ -891,6 +918,8 @@ function VehicleHistorySection({ history, loading }: {
         return status === 'returned' ? '🏠' : '🏪'
       case 'activity':
         return '📋'
+      case 'queued_return':
+        return '↺'
       default:
         return '•'
     }
@@ -907,6 +936,8 @@ function VehicleHistorySection({ history, loading }: {
         return status === 'returned' ? '#16a34a' : '#f59e0b'
       case 'activity':
         return '#6b7280'
+      case 'queued_return':
+        return '#f59e0b'
       default:
         return '#6b7280'
     }
@@ -1120,6 +1151,23 @@ function VehicleHistorySection({ history, loading }: {
                       <p style={{ margin: 0 }}>
                         {event.details.actor && `by ${event.details.actor}`}
                       </p>
+                    )}
+
+                    {event.type === 'queued_return' && (
+                      <div>
+                        <p style={{ margin: '0 0 4px 0' }}>
+                          From <strong>{STAGE_LABELS[event.details.fromStage] || event.details.fromStage}</strong>{' '}
+                          → <strong>{STAGE_LABELS[event.details.toStage] || event.details.toStage}</strong>
+                        </p>
+                        {event.details.reason && (
+                          <p style={{ margin: '4px 0 0 0' }}>Reason: {event.details.reason}</p>
+                        )}
+                        {event.details.uncompletedTasks?.length > 0 && (
+                          <p style={{ margin: '4px 0 0 0', color: '#92400e' }}>
+                            Carrying over: {event.details.uncompletedTasks.join(', ')}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

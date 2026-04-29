@@ -34,7 +34,7 @@ export async function GET() {
   const stages = await prisma.vehicleStage.findMany({
     where: { stage: 'mechanic' },
     include: {
-      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true, returnQueue: true } },
       assignee: { select: { id: true, name: true } },
     },
     orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],

@@ -18,7 +18,7 @@ export async function GET() {
   const stages = await prisma.vehicleStage.findMany({
     where: { stage: 'content', status: { notIn: ['done', 'skipped'] } },
     include: {
-      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true, returnQueue: true } },
       assignee: { select: { id: true, name: true } },
     },
     orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
@@ -35,7 +35,7 @@ export async function GET() {
   const completedToday = await prisma.vehicleStage.findMany({
     where: { stage: 'content', status: 'done', completedAt: { gte: todayStart } },
     include: {
-      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true, returnQueue: true } },
       assignee: { select: { id: true, name: true } },
     },
     orderBy: { completedAt: 'desc' },
@@ -59,7 +59,7 @@ export async function GET() {
   const completedThisWeek = await prisma.vehicleStage.findMany({
     where: { stage: 'content', status: 'done', completedAt: { gte: weekStart, lt: todayStart } },
     include: {
-      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true, returnQueue: true } },
       assignee: { select: { id: true, name: true } },
     },
     orderBy: { completedAt: 'desc' },

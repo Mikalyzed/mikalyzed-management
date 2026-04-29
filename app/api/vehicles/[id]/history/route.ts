@@ -11,7 +11,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   // Get vehicle to verify it exists and get stock number
   const vehicle = await prisma.vehicle.findUnique({
     where: { id },
-    select: { stockNumber: true }
+    select: { stockNumber: true, returnQueue: true }
   })
 
   if (!vehicle) {
@@ -194,6 +194,23 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   // Sort all events chronologically
   events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  // Append queued return entries at the end (future events)
+  const returnQueue = (vehicle.returnQueue as any[]) || []
+  returnQueue.forEach((r: any) => {
+    events.push({
+      type: 'queued_return',
+      date: new Date().toISOString(),
+      title: `Queued Return to ${(r.stage || '').charAt(0).toUpperCase() + (r.stage || '').slice(1)}`,
+      status: 'queued',
+      details: {
+        fromStage: r.fromStage,
+        toStage: r.stage,
+        reason: r.reason || null,
+        uncompletedTasks: r.uncompletedTasks || [],
+      },
+    })
+  })
 
   return NextResponse.json({ events })
 }

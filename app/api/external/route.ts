@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
+import { recomputeInventoryStatus } from '@/lib/inventory-status'
 
 export async function GET() {
   const repairs = await prisma.externalRepair.findMany({
@@ -42,6 +43,8 @@ export async function POST(request: Request) {
       createdById: user.id,
     },
   })
+
+  await recomputeInventoryStatus(stockNumber).catch(() => {})
 
   return NextResponse.json({ repair }, { status: 201 })
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
+import { recomputeInventoryStatus } from '@/lib/inventory-status'
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
@@ -64,7 +65,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   }
 
   const { id } = await params
+  const v = await prisma.vehicle.findUnique({ where: { id }, select: { stockNumber: true } })
   await prisma.vehicle.delete({ where: { id } })
+  if (v) await recomputeInventoryStatus(v.stockNumber).catch(() => {})
 
   return NextResponse.json({ success: true })
 }

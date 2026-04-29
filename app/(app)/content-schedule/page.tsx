@@ -3,7 +3,23 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
-type Vehicle = { id: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null }
+type ReturnQueueEntry = { stage: string; fromStage?: string; reason?: string }
+type Vehicle = { id: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null; returnQueue?: ReturnQueueEntry[] }
+
+function ReturnBadge({ vehicle }: { vehicle: Vehicle }) {
+  if (!vehicle.returnQueue || vehicle.returnQueue.length === 0) return null
+  const next = vehicle.returnQueue[0]
+  const label = next.stage.charAt(0).toUpperCase() + next.stage.slice(1)
+  return (
+    <span title={next.reason || `Returns to ${label}`} style={{
+      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+      background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+    }}>
+      Returns to {label}
+    </span>
+  )
+}
 type VehicleJob = {
   id: string; vehicleId: string; vehicle: Vehicle
   assignee: { id: string; name: string } | null
@@ -67,7 +83,10 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
     <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `2px solid ${borderColor}`, flex: '1 1 340px', maxWidth: 420 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
         <div>
-          <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>#{v.stockNumber}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>#{v.stockNumber}</p>
+            <ReturnBadge vehicle={v} />
+          </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
             {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}{v.color ? ` · ${v.color}` : ''}
           </p>
@@ -234,7 +253,10 @@ function QueueVehicleCard({ job, onStart, isAdmin, onSchedule, index }: {
         <span style={{ fontSize: 14, fontWeight: 800, color: '#d1d5db', minWidth: 20, textAlign: 'center', flexShrink: 0 }}>{index + 1}</span>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>#{v.stockNumber} — {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>#{v.stockNumber} — {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}</p>
+          <ReturnBadge vehicle={v} />
+        </div>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
           {job.assignee?.name || 'Unassigned'} · {doneCount}/{job.checklist.length} tasks
         </p>

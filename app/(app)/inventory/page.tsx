@@ -52,12 +52,23 @@ function mapRow(row: Record<string, string>) {
   }
 }
 
+const STATUS_TABS: { key: string; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'in_stock', label: 'In Stock' },
+  { key: 'in_recon', label: 'In Recon' },
+  { key: 'external_repair', label: 'External Repair' },
+  { key: 'sold', label: 'Sold' },
+  { key: 'removed', label: 'Removed' },
+]
+
 export default function InventoryPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [total, setTotal] = useState(0)
+  const [counts, setCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [searchDebounced, setSearchDebounced] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<string | null>(null)
 
@@ -70,14 +81,16 @@ export default function InventoryPage() {
     setLoading(true)
     const params = new URLSearchParams()
     if (searchDebounced) params.set('search', searchDebounced)
+    if (statusFilter !== 'all') params.set('status', statusFilter)
     fetch(`/api/inventory?${params}`).then(r => r.json()).then(d => {
       setVehicles(d.vehicles || [])
       setTotal(d.total || 0)
+      setCounts(d.counts || {})
       setLoading(false)
     })
   }
 
-  useEffect(() => { load() }, [searchDebounced])
+  useEffect(() => { load() }, [searchDebounced, statusFilter])
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -95,7 +108,13 @@ export default function InventoryPage() {
       body: JSON.stringify({ action: 'import', rows }),
     })
     const result = await res.json()
-    setImportResult(`Imported: ${result.imported} · Skipped: ${result.skipped} · Errors: ${result.errors}`)
+    const parts = [
+      `Imported: ${result.imported}`,
+      `Skipped: ${result.skipped}`,
+      `Errors: ${result.errors}`,
+    ]
+    if (result.markedSold) parts.push(`Marked sold: ${result.markedSold}`)
+    setImportResult(parts.join(' · '))
     setImporting(false)
     load()
     e.target.value = ''
@@ -129,6 +148,36 @@ export default function InventoryPage() {
           {importResult}
         </div>
       )}
+
+      {/* Status tabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid var(--border)' }}>
+        {STATUS_TABS.map(tab => {
+          const active = statusFilter === tab.key
+          const count = counts[tab.key] ?? 0
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setStatusFilter(tab.key)}
+              style={{
+                padding: '10px 14px', borderRadius: '8px 8px 0 0',
+                border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 600,
+                color: active ? 'var(--text-primary)' : 'var(--text-muted)',
+                borderBottom: active ? '2px solid #1a1a1a' : '2px solid transparent',
+                marginBottom: -1,
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}
+            >
+              {tab.label}
+              <span style={{
+                fontSize: 11, fontWeight: 600, padding: '1px 7px', borderRadius: 100,
+                background: active ? '#1a1a1a' : 'var(--border)',
+                color: active ? '#dffd6e' : 'var(--text-muted)',
+              }}>{count}</span>
+            </button>
+          )
+        })}
+      </div>
 
       {loading ? (
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Loading...</p>

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
 import { DEFAULT_CHECKLISTS } from '@/lib/constants'
 import type { Stage } from '@/lib/constants'
+import { recomputeInventoryStatus } from '@/lib/inventory-status'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
@@ -67,6 +68,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     })
   })
+
+  await recomputeInventoryStatus(vehicle.stockNumber).catch(() => {})
 
   return NextResponse.json({ success: true })
 }

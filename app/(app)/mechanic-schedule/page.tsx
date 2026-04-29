@@ -6,10 +6,26 @@ import PlanView from './PlanView'
 import OrderPartModal from '@/components/OrderPartModal'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
+type ReturnQueueEntry = { stage: string; fromStage?: string; reason?: string }
+
+function ReturnBadge({ returnQueue }: { returnQueue?: ReturnQueueEntry[] }) {
+  if (!returnQueue || returnQueue.length === 0) return null
+  const next = returnQueue[0]
+  const label = next.stage.charAt(0).toUpperCase() + next.stage.slice(1)
+  return (
+    <span title={next.reason || `Returns to ${label}`} style={{
+      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+      background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+    }}>
+      Returns to {label}
+    </span>
+  )
+}
 
 type JobCard = {
   id: string
-  vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null }
+  vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null; returnQueue?: ReturnQueueEntry[] }
   assignee: { id: string; name: string } | null
   status: string
   estimatedHours: number | null
@@ -243,7 +259,10 @@ export default function MechanicBoard() {
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <div>
-            <p style={{ fontSize: 15, fontWeight: 700 }}>#{v.stockNumber}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <p style={{ fontSize: 15, fontWeight: 700 }}>#{v.stockNumber}</p>
+              <ReturnBadge returnQueue={v.returnQueue} />
+            </div>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{desc}{v.color ? ` · ${v.color}` : ''}</p>
           </div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -1347,7 +1366,10 @@ function WeekCard({ job, index, getLiveElapsed, openJob, muted }: {
           {!isActive && !isPaused && !isAwaiting && !isDone && job.status === 'pending' && <Badge text="Queued" color="#94a3b8" />}
         </div>
       </div>
-      <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>#{v.stockNumber}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
+        <p style={{ fontSize: 13, fontWeight: 700 }}>#{v.stockNumber}</p>
+        <ReturnBadge returnQueue={v.returnQueue} />
+      </div>
       <p style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}
       </p>

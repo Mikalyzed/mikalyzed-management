@@ -4,6 +4,7 @@ import { getSessionUser, requireRole } from '@/lib/auth'
 import { DEFAULT_CHECKLISTS, STAGE_LABELS } from '@/lib/constants'
 import { sendNotificationEmail } from '@/lib/email'
 import { newVehicleEmail } from '@/lib/email-templates'
+import { recomputeInventoryStatus } from '@/lib/inventory-status'
 
 export async function GET(request: Request) {
   const user = await getSessionUser()
@@ -245,6 +246,9 @@ export async function POST(request: Request) {
 
     return v
   })
+
+  // Sync inventory status
+  await recomputeInventoryStatus(stockNumber).catch(() => {})
 
   // Fire-and-forget: notify assignee
   if (stageAssigneeId) {

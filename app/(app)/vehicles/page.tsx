@@ -19,6 +19,7 @@ type VehicleWithStage = {
   status: string
   currentStageId: string | null
   currentAssignee: { id: string; name: string } | null
+  returnQueue?: { stage: string; fromStage?: string; reason?: string }[]
   stages: Array<{
     id?: string
     status: string
@@ -567,6 +568,7 @@ export default function VehiclesPage() {
                           assigneeName={v.currentAssignee?.name}
                           timeInStage={getTimeInStage(v)}
                           partsLabel={(v as any).partsLabel}
+                          returnQueue={v.returnQueue}
                         />
                       </div>
                     </div>

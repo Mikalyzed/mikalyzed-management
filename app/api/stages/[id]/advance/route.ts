@@ -5,6 +5,7 @@ import { NEXT_STAGE, DEFAULT_CHECKLISTS, STAGE_LABELS } from '@/lib/constants'
 import type { Stage } from '@/lib/constants'
 import { sendNotificationEmail } from '@/lib/email'
 import { stageAdvanceEmail } from '@/lib/email-templates'
+import { recomputeInventoryStatus } from '@/lib/inventory-status'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
@@ -213,6 +214,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }).catch(() => {})
     }
   }
+
+  const vehicleForSync = await prisma.vehicle.findUnique({
+    where: { id: stage.vehicleId },
+    select: { stockNumber: true },
+  })
+  if (vehicleForSync) await recomputeInventoryStatus(vehicleForSync.stockNumber).catch(() => {})
 
   return NextResponse.json({ success: true, nextStage })
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { recomputeInventoryStatus } from '@/lib/inventory-status'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -65,12 +66,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const updated = await prisma.externalRepair.update({ where: { id }, data })
+  await recomputeInventoryStatus(updated.stockNumber).catch(() => {})
   return NextResponse.json({ repair: updated })
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  
+
+  const existing = await prisma.externalRepair.findUnique({ where: { id }, select: { stockNumber: true } })
   await prisma.externalRepair.delete({ where: { id } })
+  if (existing) await recomputeInventoryStatus(existing.stockNumber).catch(() => {})
   return NextResponse.json({ success: true })
 }

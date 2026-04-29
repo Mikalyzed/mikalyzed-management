@@ -140,6 +140,8 @@ input, select, textarea { font-size: 16px; font-family: inherit; }
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .badge-pending { background: var(--info-bg); color: var(--info); border: 1px solid var(--info-border); }
 .badge-in-progress { background: var(--success-bg); color: #16a34a; border: 1px solid var(--success-border); }

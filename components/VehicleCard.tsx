@@ -1,6 +1,8 @@
 'use client'
 
-import { StageBadge, StatusBadge } from './StageBadge'
+import { StatusBadge } from './StageBadge'
+
+type ReturnQueueEntry = { stage: string; fromStage?: string; reason?: string }
 
 type VehicleCardProps = {
   id: string
@@ -15,6 +17,7 @@ type VehicleCardProps = {
   assigneeName?: string | null
   timeInStage?: string
   partsLabel?: string | null
+  returnQueue?: ReturnQueueEntry[]
   onClick?: () => void
 }
 
@@ -27,28 +30,30 @@ const PARTS_COLORS: Record<string, { bg: string; color: string }> = {
 
 export default function VehicleCard({
   id, stockNumber, year, make, model, color,
-  status, stageStatus, stageDetail, assigneeName, timeInStage, partsLabel, onClick,
+  status, stageStatus, stageDetail, assigneeName, timeInStage, partsLabel, returnQueue, onClick,
 }: VehicleCardProps) {
   const partsStyle = partsLabel ? PARTS_COLORS[partsLabel] || { bg: '#f3f4f6', color: '#6b7280' } : null
+  const nextReturn = returnQueue && returnQueue.length > 0 ? returnQueue[0] : null
 
   return (
     <div onClick={onClick} className="card" style={{ cursor: onClick ? 'pointer' : undefined }}>
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div>
-            <p className="text-sm font-semibold tracking-tight">
-              #{stockNumber}
-            </p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-              {year} {make} {model}
-              {color && <span className="ml-1">· {color}</span>}
-            </p>
-          </div>
-          <StageBadge stage={status} />
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <p className="text-sm font-semibold tracking-tight">#{stockNumber}</p>
+          {stageStatus && <StatusBadge status={stageStatus} detail={stageDetail} />}
         </div>
+        <p className="text-xs mb-3" style={{
+          color: 'var(--text-muted)',
+          whiteSpace: 'normal',
+          overflowWrap: 'anywhere',
+          wordBreak: 'break-word',
+          lineHeight: 1.35,
+        }}>
+          {year} {make} {model}
+          {color && <span className="ml-1">· {color}</span>}
+        </p>
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {stageStatus && <StatusBadge status={stageStatus} detail={stageDetail} />}
             {assigneeName && (
               <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
                 {assigneeName}
@@ -62,6 +67,19 @@ export default function VehicleCard({
           )}
         </div>
 
+        {nextReturn && (
+          <div
+            title={nextReturn.reason || `Returns to ${nextReturn.stage}`}
+            style={{
+              marginTop: '8px', padding: '4px 8px', borderRadius: '6px',
+              background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+              fontSize: '11px', fontWeight: 600, textAlign: 'center',
+            }}
+          >
+            Returns to {nextReturn.stage.charAt(0).toUpperCase() + nextReturn.stage.slice(1)}
+          </div>
+        )}
+
         {partsLabel && partsStyle && (
           <div style={{
             marginTop: '8px',
@@ -73,7 +91,7 @@ export default function VehicleCard({
             fontWeight: 600,
             textAlign: 'center',
           }}>
-            🔧 {partsLabel}
+            {partsLabel}
           </div>
         )}
       </div>
