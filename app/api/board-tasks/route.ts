@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { title, description, category, assigneeId, dueDate, priority, subtasks } = body
+  const { title, description, category, assigneeId, dueDate, priority, subtasks, stockNumbers } = body
 
   if (!title) return NextResponse.json({ error: 'Title is required' }, { status: 400 })
 
@@ -49,6 +49,7 @@ export async function POST(request: Request) {
       dueDate: dueDate ? new Date(dueDate) : null,
       priority: priority || 0,
       subtasks: subtasks && Array.isArray(subtasks) ? subtasks : [],
+      stockNumbers: Array.isArray(stockNumbers) ? stockNumbers.filter(Boolean) : [],
     },
     include: {
       assignee: { select: { id: true, name: true } },

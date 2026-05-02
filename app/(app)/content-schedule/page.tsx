@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import VehicleSearch from '@/components/VehicleSearch'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
 type ReturnQueueEntry = { stage: string; fromStage?: string; reason?: string }
@@ -44,6 +45,7 @@ type ContentTask = {
   assignee: { id: string; name: string } | null
   status: string; scheduledDate: string | null; type: 'task'
   subtasks?: SubtaskItem[]
+  stockNumbers?: string[]
 }
 type BoardData = {
   active: VehicleJob[]; activeTasks: ContentTask[]
@@ -168,8 +170,13 @@ function ActiveTaskCard({ task, onComplete, onToggleSubtask, onEdit, adminAction
     <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `2px solid ${borderColor}`, flex: '1 1 340px', maxWidth: 420 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>{task.title}</p>
+            {task.stockNumbers && task.stockNumbers.map(sn => (
+              <span key={sn} style={{ fontSize: 10, color: '#0d9488', fontWeight: 700, background: '#ccfbf1', padding: '2px 8px', borderRadius: 6, border: '1px solid #99f6e4' }}>
+                #{sn}
+              </span>
+            ))}
             {onEdit && (
               <button onClick={() => onEdit(task)} style={{
                 background: 'none', border: 'none', cursor: 'pointer', color: '#8b5cf6', padding: 2, flexShrink: 0,
@@ -315,8 +322,13 @@ function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete, onEdit, i
         <span style={{ fontSize: 14, fontWeight: 800, color: '#d1d5db', minWidth: 20, textAlign: 'center', flexShrink: 0 }}>{index + 1}</span>
       )}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{task.title}</p>
+          {task.stockNumbers && task.stockNumbers.map(sn => (
+            <span key={sn} style={{ fontSize: 10, color: '#0d9488', fontWeight: 700, background: '#ccfbf1', padding: '2px 8px', borderRadius: 6, border: '1px solid #99f6e4' }}>
+              #{sn}
+            </span>
+          ))}
           {(task.subtasks?.length || 0) > 0 ? (
             <span style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 600, background: '#faf5ff', padding: '2px 8px', borderRadius: 6 }}>
               {task.subtasks!.filter(s => s.done).length}/{task.subtasks!.length} subtasks
@@ -401,16 +413,29 @@ function ScheduleModal({ onConfirm, onCancel }: {
   )
 }
 
+type LinkedVehicle = {
+  stockNumber: string; vin: string | null
+  year: number | null; make: string; model: string; color: string | null
+}
+
 /* ── Add Task Modal ── */
 function AddTaskModal({ users, onConfirm, onCancel }: {
   users: { id: string; name: string }[]
-  onConfirm: (title: string, assigneeId: string | null, subtasks: { item: string; done: boolean }[]) => void
+  onConfirm: (title: string, assigneeId: string | null, subtasks: { item: string; done: boolean }[], stockNumbers: string[]) => void
   onCancel: () => void
 }) {
   const [title, setTitle] = useState('')
   const [assigneeId, setAssigneeId] = useState('')
   const [subtasks, setSubtasks] = useState<string[]>([''])
   const [newSubtask, setNewSubtask] = useState('')
+  const [linkedVehicles, setLinkedVehicles] = useState<LinkedVehicle[]>([])
+
+  const addLinkedVehicle = (v: LinkedVehicle) => {
+    setLinkedVehicles((prev) => prev.find(x => x.stockNumber === v.stockNumber) ? prev : [...prev, v])
+  }
+  const removeLinkedVehicle = (stockNumber: string) => {
+    setLinkedVehicles((prev) => prev.filter(v => v.stockNumber !== stockNumber))
+  }
 
   const addSubtask = () => {
     const val = newSubtask.trim()
@@ -443,6 +468,37 @@ function AddTaskModal({ users, onConfirm, onCancel }: {
             }}
           />
         </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+            Linked Vehicles (optional)
+          </label>
+          <VehicleSearch
+            placeholder="Search inventory to tag a vehicle..."
+            onSelect={(v) => addLinkedVehicle({
+              stockNumber: v.stockNumber, vin: v.vin,
+              year: v.year, make: v.make, model: v.model, color: v.color,
+            })}
+          />
+          {linkedVehicles.length > 0 && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {linkedVehicles.map((v) => (
+                <div key={v.stockNumber} style={{
+                  padding: '8px 12px', borderRadius: 8, background: '#f0fdf4',
+                  border: '1px solid #bbf7d0',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  fontSize: 13,
+                }}>
+                  <span>#{v.stockNumber} — {[v.year, v.make, v.model].filter(Boolean).join(' ')}</span>
+                  <button type="button" onClick={() => removeLinkedVehicle(v.stockNumber)} style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: '#16a34a', fontSize: 16, fontWeight: 600, lineHeight: 1,
+                  }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Assign to</label>
           <select
@@ -504,7 +560,8 @@ function AddTaskModal({ users, onConfirm, onCancel }: {
             onClick={() => title.trim() && onConfirm(
               title.trim(),
               assigneeId || null,
-              validSubtasks.map(s => ({ item: s, done: false }))
+              validSubtasks.map(s => ({ item: s, done: false })),
+              linkedVehicles.map(v => v.stockNumber)
             )}
             disabled={!title.trim()}
             style={{
@@ -735,10 +792,10 @@ export default function ContentBoard() {
     fetchData()
   }
 
-  const createTask = async (title: string, assigneeId: string | null, subtasks: { item: string; done: boolean }[]) => {
+  const createTask = async (title: string, assigneeId: string | null, subtasks: { item: string; done: boolean }[], stockNumbers: string[]) => {
     await fetch('/api/board-tasks', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, category: 'content', assigneeId, subtasks }),
+      body: JSON.stringify({ title, category: 'content', assigneeId, subtasks, stockNumbers }),
     })
     setShowAddTask(false)
     fetchData()

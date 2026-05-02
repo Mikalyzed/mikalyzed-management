@@ -103,6 +103,7 @@ export async function GET() {
     assignee: t.assignee, status: t.status,
     scheduledDate: t.scheduledDate, type: 'task' as const,
     subtasks: (t.subtasks as { item: string; done: boolean }[] | null) || [],
+    stockNumbers: (t.stockNumbers as string[] | null) || [],
   })
 
   return NextResponse.json({
