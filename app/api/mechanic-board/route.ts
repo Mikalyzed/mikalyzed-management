@@ -72,6 +72,7 @@ export async function GET() {
     where: { vehicleId: { in: vehicleIds }, status: { not: 'received' } },
     select: { vehicleId: true, status: true },
   }) : []
+
   const partsMap: Record<string, string> = {}
   for (const vid of vehicleIds) {
     const vParts = allParts.filter(p => p.vehicleId === vid).map(p => p.status)
@@ -93,6 +94,7 @@ export async function GET() {
   const format = (s: typeof stages[0]) => ({
     id: s.id,
     vehicle: s.vehicle,
+    scopeName: s.scopeName,
     assignee: s.assignee,
     status: s.status,
     estimatedHours: s.estimatedHours,
@@ -154,9 +156,10 @@ export async function GET() {
     ? (h < WORK_START ? HOURS_PER_DAY : h >= WORK_END ? 0 : WORK_END - h)
     : 0
 
-  // Split active/paused into "worked today" vs "paused not today" vs "awaiting parts"
+  // Split active/paused into "worked today" vs "back in queue" vs "awaiting parts"
+  // Vehicles paused on a prior day flow back into the queue (sorted by priority alongside pending)
   const workedToday: typeof stages = []
-  const pausedNotToday: typeof stages = []
+  const backToQueue: typeof stages = []
   const awaitingPartsAll: typeof stages = []
 
   for (const s of [...active, ...paused]) {
@@ -167,12 +170,18 @@ export async function GET() {
     } else if (touchedToday) {
       workedToday.push(s)
     } else {
-      pausedNotToday.push(s)
+      backToQueue.push(s)
     }
   }
 
+  // Merge paused-from-prior-days into the queue, sorted by priority
+  const queuedWithReturned = [...queued, ...backToQueue].sort((a, b) => {
+    if (a.priority !== b.priority) return a.priority - b.priority
+    return a.createdAt.getTime() - b.createdAt.getTime()
+  })
+
   // Also add pending vehicles awaiting parts
-  for (const s of queued) {
+  for (const s of queuedWithReturned) {
     if (s.awaitingParts) awaitingPartsAll.push(s)
   }
 
@@ -197,7 +206,7 @@ export async function GET() {
 
   let currentBucketIdx = 0
 
-  for (const s of queued) {
+  for (const s of queuedWithReturned) {
     if (s.awaitingParts) continue // skip awaiting parts for scheduling
     const est = s.estimatedHours || 2
     if (todayBudget >= est) {
@@ -237,10 +246,10 @@ export async function GET() {
   return NextResponse.json({
     active: active.map(format),
     paused: paused.map(format),
-    queued: queued.map(format),
+    queued: queuedWithReturned.map(format),
     completedToday: completedToday.map(format),
     workedToday: workedToday.map(format),
-    pausedNotToday: pausedNotToday.map(format),
+    pausedNotToday: [],
     awaitingParts: awaitingPartsAll.map(format),
     today: todayJobs.map(format),
     remainingDays,

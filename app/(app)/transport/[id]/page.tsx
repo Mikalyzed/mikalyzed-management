@@ -22,12 +22,12 @@ type TransportDetail = {
   updatedAt: string
 }
 
-const STATUS_FLOW = ['requested', 'accepted', 'scheduled', 'in_transit', 'delivered']
+const STATUS_FLOW = ['requested', 'scheduled', 'in_transit']
 const STATUS_LABELS: Record<string, string> = {
-  requested: 'Requested',
+  requested: 'Pending',
   accepted: 'Accepted',
   scheduled: 'Scheduled',
-  in_transit: 'In Transit',
+  in_transit: 'Vehicle Picked Up',
   delivered: 'Delivered',
 }
 
@@ -181,7 +181,7 @@ export default function TransportDetailPage() {
         {nextStatus && (
           <button onClick={() => updateStatus(nextStatus)} disabled={updating}
             className="btn btn-primary w-full" style={updating ? { opacity: 0.5 } : {}}>
-            {updating ? 'Updating...' : nextStatus === 'accepted' ? 'Accept Request' : `Mark as ${STATUS_LABELS[nextStatus]}`}
+            {updating ? 'Updating...' : `Mark as ${STATUS_LABELS[nextStatus]}`}
           </button>
         )}
 

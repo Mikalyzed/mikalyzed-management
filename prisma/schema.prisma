@@ -166,6 +166,9 @@ model TransportRequest {
   urgency            String    @default("standard")
   preferredDate      DateTime? @map("preferred_date")
   transportType      String?   @map("transport_type") // internal, third_party
+  purpose            String?   // event, ship_to_client, other
+  purposeNote        String?   @map("purpose_note") // free text when purpose = other
+  estimatedPrice     Float?    @map("estimated_price") // ship-to-client quote
   status             String    @default("requested")
   coordinatorId      String?   @map("coordinator_id")
   carrierInfo        String?   @map("carrier_info")

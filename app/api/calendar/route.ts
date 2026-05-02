@@ -41,7 +41,109 @@ export async function GET(request: Request) {
     orderBy: { date: 'asc' },
   })
 
-  return NextResponse.json(items)
+  // Synthesize transport + event entries so they appear on the calendar too
+  const dateRange: { gte?: Date; lte?: Date } = {}
+  if (start) dateRange.gte = new Date(start)
+  if (end) dateRange.lte = new Date(end)
+
+  type Synth = typeof items[number]
+  const synthItems: Synth[] = []
+
+  // Transports — only include if filter doesn't exclude them
+  const includeTransports = !type || type === 'transport'
+  if (includeTransports && !vehicleId && !eventId && !assigneeId) {
+    const transportWhere: Record<string, unknown> = {
+      scheduledDate: { not: null },
+      status: { not: 'cancelled' },
+    }
+    if (dateRange.gte || dateRange.lte) {
+      transportWhere.scheduledDate = {
+        ...(dateRange.gte ? { gte: dateRange.gte } : {}),
+        ...(dateRange.lte ? { lte: dateRange.lte } : {}),
+      }
+    }
+    const transports = await prisma.transportRequest.findMany({
+      where: transportWhere,
+      include: {
+        vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+        coordinator: { select: { id: true, name: true, role: true } },
+      },
+    })
+    for (const t of transports) {
+      const vehicleDesc = t.vehicleDescription ||
+        (t.vehicle ? `${t.vehicle.year ?? ''} ${t.vehicle.make} ${t.vehicle.model}`.trim() : 'Vehicle')
+      synthItems.push({
+        id: `transport-${t.id}`,
+        title: `Transport: ${vehicleDesc}`,
+        type: 'transport',
+        date: t.scheduledDate as Date,
+        endDate: null,
+        allDay: false,
+        location: t.deliveryLocation || t.pickupLocation,
+        notes: t.notes,
+        status: t.status === 'delivered' ? 'completed' : 'scheduled',
+        vehicleId: t.vehicleId,
+        eventId: null,
+        createdById: t.requestedById,
+        assignees: t.coordinator
+          ? [{ user: t.coordinator, userId: t.coordinator.id, calendarItemId: `transport-${t.id}` } as any]
+          : [],
+        vehicle: t.vehicle,
+        event: null,
+        createdBy: null,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+      } as any)
+    }
+  }
+
+  // Events — only include if filter doesn't exclude them
+  const includeEvents = !type || type === 'event'
+  if (includeEvents && !vehicleId && !eventId && !assigneeId) {
+    const eventWhere: Record<string, unknown> = {
+      status: { not: 'cancelled' },
+    }
+    if (dateRange.gte || dateRange.lte) {
+      eventWhere.date = {
+        ...(dateRange.gte ? { gte: dateRange.gte } : {}),
+        ...(dateRange.lte ? { lte: dateRange.lte } : {}),
+      }
+    }
+    const events = await prisma.event.findMany({
+      where: eventWhere,
+      include: { owner: { select: { id: true, name: true, role: true } } },
+    })
+    for (const e of events) {
+      synthItems.push({
+        id: `event-${e.id}`,
+        title: e.name,
+        type: 'event',
+        date: e.date,
+        endDate: e.endDate,
+        allDay: !e.endDate,
+        location: e.location,
+        notes: e.description,
+        status: e.status === 'completed' ? 'completed' : 'scheduled',
+        vehicleId: null,
+        eventId: e.id,
+        createdById: e.createdById,
+        assignees: e.owner
+          ? [{ user: e.owner, userId: e.owner.id, calendarItemId: `event-${e.id}` } as any]
+          : [],
+        vehicle: null,
+        event: { id: e.id, name: e.name },
+        createdBy: null,
+        createdAt: e.createdAt,
+        updatedAt: e.updatedAt,
+      } as any)
+    }
+  }
+
+  const merged = [...items, ...synthItems].sort((a, b) =>
+    new Date(a.date).getTime() - new Date(b.date).getTime()
+  )
+
+  return NextResponse.json(merged)
 }
 
 export async function POST(request: Request) {

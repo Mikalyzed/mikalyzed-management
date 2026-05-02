@@ -4,6 +4,8 @@ import { getSessionUser } from '@/lib/auth'
 import { sendNotificationEmail } from '@/lib/email'
 import { transportUpdateEmail } from '@/lib/email-templates'
 
+const TRANSPORT_DISTRO = process.env.TRANSPORT_NOTIFY_EMAIL || 'transport@mikalyzedautoboutique.com'
+
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const req = await prisma.transportRequest.findUnique({
@@ -55,30 +57,34 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     },
   })
 
-  // Fire-and-forget: notify requester
+  // Fire-and-forget: notify the transport distribution list + requester
   prisma.transportRequest.findUnique({
     where: { id },
-    include: { requestedBy: true },
+    include: { requestedBy: true, vehicle: { select: { year: true, make: true, model: true } } },
   }).then((tr) => {
-    if (!tr?.requestedBy) return
-    const vehicleDesc = tr.vehicleDescription || 'Transport request'
+    if (!tr) return
+    const vehicleDesc = tr.vehicleDescription
+      || (tr.vehicle ? `${tr.vehicle.year ?? ''} ${tr.vehicle.make} ${tr.vehicle.model}`.trim() : 'Transport request')
     const { subject, html } = transportUpdateEmail({
       vehicleDesc,
       status: updated.status,
       updatedBy: user!.name,
       transportId: id,
     })
-    sendNotificationEmail({ to: tr.requestedBy.email, subject, html }).catch(() => {})
-    prisma.notification.create({
-      data: {
-        userId: tr.requestedBy.id,
-        type: 'transport_update',
-        title: subject,
-        message: `${vehicleDesc} — status: ${updated.status}`,
-        entityType: 'transport',
-        entityId: id,
-      },
-    }).catch(() => {})
+    sendNotificationEmail({ to: TRANSPORT_DISTRO, subject, html }).catch(() => {})
+    if (tr.requestedBy && tr.requestedBy.email !== TRANSPORT_DISTRO) {
+      sendNotificationEmail({ to: tr.requestedBy.email, subject, html }).catch(() => {})
+      prisma.notification.create({
+        data: {
+          userId: tr.requestedBy.id,
+          type: 'transport_update',
+          title: subject,
+          message: `${vehicleDesc} — status: ${updated.status}`,
+          entityType: 'transport',
+          entityId: id,
+        },
+      }).catch(() => {})
+    }
   }).catch(() => {})
 
   return NextResponse.json({ request: updated })

@@ -27,7 +27,7 @@ type ExternalRepair = {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  sent: 'At Shop',
+  sent: 'Awaiting Pickup',
   in_progress: 'In Progress',
   ready: 'Ready for Pickup',
   returned: 'Returned',
@@ -116,9 +116,7 @@ export default function ExternalRepairsPage() {
     const q = search.toLowerCase().trim()
     let list = filter === 'active'
       ? repairs.filter((r) => r.status !== 'returned')
-      : filter === 'returned'
-        ? repairs.filter((r) => r.status === 'returned')
-        : repairs
+      : repairs.filter((r) => r.status === filter)
     if (q) {
       list = list.filter(r => {
         const desc = `${r.year || ''} ${r.make} ${r.model} ${r.stockNumber} ${r.shopName} ${r.color || ''}`.toLowerCase()
@@ -291,15 +289,23 @@ export default function ExternalRepairsPage() {
         overflow: 'hidden',
         background: '#ffffff',
       }}>
-        {['active', 'returned', 'all'].map((f, i) => {
-          const count = f === 'active' ? repairs.filter(r => r.status !== 'returned').length
-            : f === 'returned' ? repairs.filter(r => r.status === 'returned').length
-            : repairs.length
-          const active = filter === f
-          return (
+        {(() => {
+          const TABS = [
+            { key: 'active', label: 'Active' },
+            { key: 'sent', label: 'Awaiting Pickup' },
+            { key: 'in_progress', label: 'In Progress' },
+            { key: 'ready', label: 'Ready' },
+            { key: 'returned', label: 'Returned' },
+          ]
+          return TABS.map((tab, i) => {
+            const count = tab.key === 'active'
+              ? repairs.filter(r => r.status !== 'returned').length
+              : repairs.filter(r => r.status === tab.key).length
+            const active = filter === tab.key
+            return (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
+              key={tab.key}
+              onClick={() => setFilter(tab.key)}
               style={{
                 flex: 1,
                 padding: '12px 8px',
@@ -307,7 +313,7 @@ export default function ExternalRepairsPage() {
                 fontWeight: active ? 700 : 500,
                 cursor: 'pointer',
                 border: 'none',
-                borderRight: i < 2 ? '1px solid var(--border)' : 'none',
+                borderRight: i < TABS.length - 1 ? '1px solid var(--border)' : 'none',
                 minHeight: 'auto',
                 transition: 'all 0.15s ease',
                 background: active ? 'var(--bg-primary)' : '#ffffff',
@@ -319,7 +325,7 @@ export default function ExternalRepairsPage() {
                 gap: '6px',
               }}
             >
-              {f}
+              {tab.label}
               {count > 0 && (
                 <span style={{
                   background: active ? '#1a1a1a' : '#e8e8e4',
@@ -334,8 +340,9 @@ export default function ExternalRepairsPage() {
                 </span>
               )}
             </button>
-          )
-        })}
+            )
+          })
+        })()}
       </div>
 
       {/* Add form */}
@@ -532,7 +539,10 @@ export default function ExternalRepairsPage() {
                 {(r as any).followUps && Array.isArray((r as any).followUps) && (r as any).followUps.length > 0 && (
                   <div className="ext-notes-area" style={{ padding: '12px 14px', cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && setEditRepairModal(r)}>
                     <button
-                      onClick={() => setExpandedFollowUps(expandedFollowUps === r.id ? null : r.id)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setExpandedFollowUps(expandedFollowUps === r.id ? null : r.id)
+                      }}
                       style={{
                         background: 'none', border: 'none', fontSize: '13px', fontWeight: 600,
                         color: 'var(--text-primary)', cursor: 'pointer', padding: 0, marginBottom: '8px'

@@ -80,6 +80,75 @@ ${ctaButton(`${BASE_URL}/transport`, 'View Transport')}
   return { subject, html }
 }
 
+export function newTransportRequestEmail({
+  vehicleDesc,
+  pickupLocation,
+  deliveryLocation,
+  trailerType,
+  purpose,
+  purposeNote,
+  scheduledDate,
+  carrierInfo,
+  estimatedPrice,
+  urgency,
+  clientName,
+  clientPhone,
+  notes,
+  status,
+  requestedBy,
+}: {
+  vehicleDesc: string
+  pickupLocation: string
+  deliveryLocation: string
+  trailerType: string | null
+  purpose: string | null
+  purposeNote: string | null
+  scheduledDate: Date | null
+  carrierInfo: string | null
+  estimatedPrice: number | null
+  urgency: string
+  clientName: string | null
+  clientPhone: string | null
+  notes: string | null
+  status: string
+  requestedBy: string
+}) {
+  const purposeLabel = purpose === 'event' ? 'Event'
+    : purpose === 'ship_to_client' ? 'Ship to Client'
+    : purpose === 'other' ? (purposeNote || 'Other')
+    : 'Not set'
+  const isScheduled = status === 'scheduled'
+  const statusLabel = isScheduled ? 'Scheduled' : 'Pending'
+  const urgencyLabel = urgency === 'rush' ? 'Rush' : 'Standard'
+
+  const detailRow = (label: string, value: string | null | undefined) =>
+    value ? `<tr><td style="padding:6px 0;font-size:13px;color:#86868b;width:140px">${label}</td><td style="padding:6px 0;font-size:14px;color:#1d1d1f">${value}</td></tr>` : ''
+
+  const headline = isScheduled ? 'Transport Scheduled' : 'New Transport Pending'
+  const subject = isScheduled
+    ? `Transport scheduled: ${vehicleDesc}`
+    : `New transport pending: ${vehicleDesc}`
+  const html = layout(`
+<h1 style="margin:0 0 8px;font-size:22px;color:#1d1d1f">${headline}</h1>
+<p style="margin:0 0 16px;font-size:15px;color:#86868b">Requested by ${requestedBy} · ${statusLabel}${urgency === 'rush' ? ' · <strong style="color:#ef4444">Rush</strong>' : ''}</p>
+${vehicleBox(vehicleDesc)}
+<table cellpadding="0" cellspacing="0" style="width:100%;margin:16px 0">
+  ${detailRow('Purpose', purposeLabel)}
+  ${detailRow('Pickup', pickupLocation)}
+  ${detailRow('Delivery', deliveryLocation)}
+  ${detailRow('Trailer', trailerType === 'enclosed' ? 'Enclosed' : trailerType === 'open' ? 'Open' : null)}
+  ${detailRow('Scheduled', scheduledDate ? new Date(scheduledDate).toLocaleDateString() : null)}
+  ${detailRow('Carrier', carrierInfo)}
+  ${detailRow('Estimated Price', estimatedPrice != null ? `$${Number(estimatedPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : null)}
+  ${detailRow('Urgency', urgencyLabel)}
+  ${detailRow('Client', clientName || clientPhone ? [clientName, clientPhone].filter(Boolean).join(' · ') : null)}
+  ${detailRow('Notes', notes)}
+</table>
+${ctaButton(`${BASE_URL}/transport`, 'View Transport')}
+`)
+  return { subject, html }
+}
+
 export function newVehicleEmail({
   vehicleDesc,
   assigneeName,

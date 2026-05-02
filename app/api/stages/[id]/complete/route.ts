@@ -4,11 +4,9 @@ import { getSessionUser } from '@/lib/auth'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
 
 /**
- * Stage completion. Replaces the old fixed-pipeline auto-advance with a
- * queue-based flow: marks the current stage as done and parks the vehicle
- * in 'awaiting_routing' so an admin can decide where it goes next.
- *
- * Kept at the /advance path for backwards compatibility with existing UI.
+ * Worker-facing stage completion. Marks stage as done and parks the vehicle
+ * in 'awaiting_routing' so an admin can decide where it goes next instead
+ * of auto-advancing through a fixed pipeline.
  */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
@@ -22,22 +20,25 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   })
   if (!stage) return NextResponse.json({ error: 'Stage not found' }, { status: 404 })
 
-  if (stage.assigneeId !== user.id && user.role !== 'admin') {
-    return NextResponse.json({ error: 'Not authorized to complete this stage' }, { status: 403 })
-  }
-
-  if (stage.vehicle.currentStageId !== stage.id) {
+  if (stage.vehicle.currentStageId !== id) {
     return NextResponse.json({ error: 'This is not the current stage' }, { status: 400 })
   }
 
   await prisma.$transaction(async (tx) => {
     await tx.vehicleStage.update({
       where: { id },
-      data: { status: 'done', completedAt: new Date(), timerStartedAt: null },
+      data: {
+        status: 'done',
+        completedAt: new Date(),
+        timerStartedAt: null,
+      },
     })
     await tx.vehicle.update({
       where: { id: stage.vehicleId },
-      data: { status: 'awaiting_routing', currentAssigneeId: null },
+      data: {
+        status: 'awaiting_routing',
+        currentAssigneeId: null,
+      },
     })
     await tx.activityLog.create({
       data: {

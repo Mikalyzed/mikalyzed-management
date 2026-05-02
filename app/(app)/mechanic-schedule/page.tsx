@@ -26,6 +26,7 @@ function ReturnBadge({ returnQueue }: { returnQueue?: ReturnQueueEntry[] }) {
 type JobCard = {
   id: string
   vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null; returnQueue?: ReturnQueueEntry[] }
+  scopeName?: string | null
   assignee: { id: string; name: string } | null
   status: string
   estimatedHours: number | null
@@ -252,15 +253,23 @@ export default function MechanicBoard() {
 
     return (
       <div key={job.id} onClick={() => openJob(job)} style={{
-        background: colors.bg, border: `1px solid ${colors.border}`,
-        borderLeft: `4px solid ${colors.border}`, borderRadius: 14,
-        padding: '16px 18px', cursor: 'pointer', transition: 'box-shadow 0.15s',
+        background: colors.bg,
+        border: job.scopeName === 'Sold Delivery' ? '2px solid #f59e0b' : `1px solid ${colors.border}`,
+        borderLeft: job.scopeName === 'Sold Delivery' ? '4px solid #f59e0b' : `4px solid ${colors.border}`,
+        borderRadius: 14, padding: '16px 18px', cursor: 'pointer', transition: 'box-shadow 0.15s',
       }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               <p style={{ fontSize: 15, fontWeight: 700 }}>#{v.stockNumber}</p>
+              {job.scopeName === 'Sold Delivery' && (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                  background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+                  textTransform: 'uppercase', letterSpacing: '0.04em',
+                }}>Sold</span>
+              )}
               <ReturnBadge returnQueue={v.returnQueue} />
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{desc}{v.color ? ` · ${v.color}` : ''}</p>
@@ -479,26 +488,6 @@ export default function MechanicBoard() {
           </div>
         </div>
       )}
-
-      {/* Paused */}
-      {data.pausedNotToday.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 4, height: 20, borderRadius: 2, background: '#eab308' }} />
-              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Paused</h2>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.pausedNotToday.length} vehicles</span>
-            </div>
-          </div>
-          <div style={{
-            display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
-            WebkitOverflowScrolling: 'touch',
-          }}>
-            {data.pausedNotToday.map((job, i) => <WeekCard key={job.id} job={job} index={i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)}
-          </div>
-        </div>
-      )}
-
 
       {/* Remaining This Week — collapsed by default, broken down by day */}
       {data.remainingDays.length > 0 && (() => {

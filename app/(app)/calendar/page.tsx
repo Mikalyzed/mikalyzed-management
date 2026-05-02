@@ -223,7 +223,11 @@ export default function CalendarPage() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {dayItems.map(item => (
-                    <Link key={item.id} href={`/calendar/${item.id}`} style={{
+                    <Link key={item.id} href={
+                      item.id.startsWith('transport-') ? `/transport/${item.id.slice('transport-'.length)}`
+                      : item.id.startsWith('event-') ? `/events/${item.id.slice('event-'.length)}`
+                      : `/calendar/${item.id}`
+                    } style={{
                       display: 'block',
                       padding: '6px 8px',
                       borderRadius: 6,
@@ -253,8 +257,13 @@ function ItemCard({ item }: { item: CalendarItem }) {
   const typeColor = CALENDAR_TYPE_COLORS[item.type as keyof typeof CALENDAR_TYPE_COLORS] || '#6b7280'
   const typeLabel = CALENDAR_TYPE_LABELS[item.type as keyof typeof CALENDAR_TYPE_LABELS] || item.type
 
+  const href =
+    item.id.startsWith('transport-') ? `/transport/${item.id.slice('transport-'.length)}`
+    : item.id.startsWith('event-') ? `/events/${item.id.slice('event-'.length)}`
+    : `/calendar/${item.id}`
+
   return (
-    <Link href={`/calendar/${item.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+    <Link href={href} style={{ textDecoration: 'none', color: 'inherit' }}>
       <div className="card" style={{
         padding: '16px 20px',
         borderLeft: `4px solid ${typeColor}`,

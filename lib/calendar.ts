@@ -7,6 +7,8 @@ export const CALENDAR_TYPES = [
   'content_shoot',
   'event_task',
   'errand',
+  'transport',
+  'event',
 ] as const
 export type CalendarType = (typeof CALENDAR_TYPES)[number]
 
@@ -19,6 +21,8 @@ export const CALENDAR_TYPE_LABELS: Record<CalendarType, string> = {
   content_shoot: 'Content Shoot',
   event_task: 'Event Task',
   errand: 'Errand',
+  transport: 'Transport',
+  event: 'Event',
 }
 
 export const CALENDAR_TYPE_COLORS: Record<CalendarType, string> = {
@@ -30,6 +34,8 @@ export const CALENDAR_TYPE_COLORS: Record<CalendarType, string> = {
   content_shoot: '#d97706',
   event_task: '#65a30d',
   errand: '#6b7280',
+  transport: '#0d9488',
+  event: '#db2777',
 }
 
 export const CALENDAR_STATUSES = [

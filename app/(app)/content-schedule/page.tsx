@@ -6,6 +6,17 @@ type ChecklistItem = { item: string; done: boolean; note: string }
 type ReturnQueueEntry = { stage: string; fromStage?: string; reason?: string }
 type Vehicle = { id: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null; returnQueue?: ReturnQueueEntry[] }
 
+function SoldBadge({ scope }: { scope?: string | null }) {
+  if (scope !== 'Sold Delivery') return null
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+      background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+      textTransform: 'uppercase', letterSpacing: '0.04em',
+    }}>Sold</span>
+  )
+}
+
 function ReturnBadge({ vehicle }: { vehicle: Vehicle }) {
   if (!vehicle.returnQueue || vehicle.returnQueue.length === 0) return null
   const next = vehicle.returnQueue[0]
@@ -25,6 +36,7 @@ type VehicleJob = {
   assignee: { id: string; name: string } | null
   status: string; checklist: ChecklistItem[]; priority: number
   scheduledDate: string | null; completedAt: string | null; type: 'vehicle'
+  scopeName?: string | null
 }
 type SubtaskItem = { item: string; done: boolean }
 type ContentTask = {
@@ -77,14 +89,16 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
   const allDone = totalCount > 0 && doneCount === totalCount
   const progress = totalCount > 0 ? doneCount / totalCount : 0
   const isActive = job.status === 'in_progress'
-  const borderColor = isActive ? '#f59e0b' : '#3b82f6'
+  const isSold = job.scopeName === 'Sold Delivery'
+  const borderColor = isSold ? '#f59e0b' : isActive ? '#f59e0b' : '#3b82f6'
 
   return (
     <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `2px solid ${borderColor}`, flex: '1 1 340px', maxWidth: 420 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <p style={{ fontSize: 15, fontWeight: 800, margin: 0 }}>#{v.stockNumber}</p>
+            <SoldBadge scope={job.scopeName} />
             <ReturnBadge vehicle={v} />
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
@@ -239,10 +253,12 @@ function QueueVehicleCard({ job, onStart, isAdmin, onSchedule, index }: {
 }) {
   const v = job.vehicle
   const doneCount = job.checklist.filter(c => c.done).length
+  const isSold = job.scopeName === 'Sold Delivery'
   return (
     <div style={{
       background: '#fff', borderRadius: 12, padding: '14px 18px',
-      border: '1px solid #e8e8e8', display: 'flex', alignItems: 'center', gap: 12,
+      border: isSold ? '2px solid #f59e0b' : '1px solid #e8e8e8',
+      display: 'flex', alignItems: 'center', gap: 12,
     }}>
       {isAdmin && (
         <div style={{ cursor: 'grab', color: '#ccc', flexShrink: 0 }}>
@@ -255,6 +271,7 @@ function QueueVehicleCard({ job, onStart, isAdmin, onSchedule, index }: {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>#{v.stockNumber} — {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}</p>
+          <SoldBadge vehicle={v} />
           <ReturnBadge vehicle={v} />
         </div>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>

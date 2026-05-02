@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import OrderPartModal from '@/components/OrderPartModal'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
@@ -88,7 +88,11 @@ export default function VehicleDetailPage() {
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [activeTab, setActiveTab] = useState('overview')
+  const searchParams = useSearchParams()
+  const initialTab = searchParams.get('tab') === 'history' ? 'history'
+    : searchParams.get('tab') === 'parts' ? 'parts'
+    : 'overview'
+  const [activeTab, setActiveTab] = useState(initialTab)
   
   // Parts state
   const [parts, setParts] = useState<Part[]>([])
@@ -135,6 +139,11 @@ export default function VehicleDetailPage() {
       .catch(console.error)
       .finally(() => setHistoryLoading(false))
   }
+
+  useEffect(() => {
+    if (initialTab === 'history') loadHistory()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTab])
 
   useEffect(() => {
     refresh().finally(() => setLoading(false))

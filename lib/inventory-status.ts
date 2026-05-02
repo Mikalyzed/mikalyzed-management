@@ -18,7 +18,11 @@ export async function recomputeInventoryStatus(stockNumber: string) {
 
   const [activeRecon, activeExternal] = await Promise.all([
     prisma.vehicle.findFirst({
-      where: { stockNumber, completedAt: null },
+      where: {
+        stockNumber,
+        completedAt: null,
+        status: { notIn: ['completed'] },
+      },
       select: { id: true },
     }),
     prisma.externalRepair.findFirst({

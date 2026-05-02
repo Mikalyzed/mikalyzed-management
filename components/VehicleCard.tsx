@@ -14,6 +14,7 @@ type VehicleCardProps = {
   status: string
   stageStatus?: string
   stageDetail?: string
+  stageScope?: string | null
   assigneeName?: string | null
   timeInStage?: string
   partsLabel?: string | null
@@ -30,15 +31,34 @@ const PARTS_COLORS: Record<string, { bg: string; color: string }> = {
 
 export default function VehicleCard({
   id, stockNumber, year, make, model, color,
-  status, stageStatus, stageDetail, assigneeName, timeInStage, partsLabel, returnQueue, onClick,
+  status, stageStatus, stageDetail, stageScope, assigneeName, timeInStage, partsLabel, returnQueue, onClick,
 }: VehicleCardProps) {
   const partsStyle = partsLabel ? PARTS_COLORS[partsLabel] || { bg: '#f3f4f6', color: '#6b7280' } : null
   const nextReturn = returnQueue && returnQueue.length > 0 ? returnQueue[0] : null
+  const isSold = stageScope === 'Sold Delivery'
 
   return (
-    <div onClick={onClick} className="card" style={{ cursor: onClick ? 'pointer' : undefined }}>
+    <div
+      onClick={onClick}
+      className="card"
+      style={{
+        cursor: onClick ? 'pointer' : undefined,
+        ...(isSold ? { border: '2px solid #f59e0b', boxShadow: '0 0 0 1px #fef3c7' } : {}),
+      }}
+    >
         <div className="flex items-center justify-between gap-3 mb-1">
-          <p className="text-sm font-semibold tracking-tight">#{stockNumber}</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold tracking-tight">#{stockNumber}</p>
+            {isSold && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+                textTransform: 'uppercase', letterSpacing: '0.04em',
+              }}>
+                Sold
+              </span>
+            )}
+          </div>
           {stageStatus && <StatusBadge status={stageStatus} detail={stageDetail} />}
         </div>
         <p className="text-xs mb-3" style={{

@@ -30,7 +30,7 @@ export async function GET(request: Request) {
         take: 1,
         select: {
           id: true, status: true, startedAt: true, totalBlockedSeconds: true,
-          priority: true, estimatedHours: true, checklist: true,
+          priority: true, estimatedHours: true, checklist: true, scopeName: true,
           awaitingParts: true, awaitingPartsName: true, pauseReason: true,
           timerStartedAt: true, autoPaused: true,
           assignee: { select: { id: true, name: true } },
@@ -43,6 +43,42 @@ export async function GET(request: Request) {
     },
     orderBy: { createdAt: 'desc' },
   })
+
+  // Pull inventory status (sold/in_stock/etc) for SOLD badges
+  const stockNumbers = vehicles.map(v => v.stockNumber).filter(Boolean) as string[]
+  const inventoryRows = stockNumbers.length > 0
+    ? await prisma.inventoryVehicle.findMany({
+        where: { stockNumber: { in: stockNumbers } },
+        select: { stockNumber: true, status: true },
+      })
+    : []
+  const invByStock = Object.fromEntries(inventoryRows.map(i => [i.stockNumber, i.status]))
+
+  // For routing UI: fetch the most recent completed stage for any awaiting_routing vehicles
+  const awaitingIds = vehicles.filter(v => v.status === 'awaiting_routing').map(v => v.id)
+  const lastCompletedByVehicle: Record<string, {
+    stage: string; completedAt: Date | null; checklist: any; scopeName: string | null;
+    assignee: { id: string; name: string } | null
+  }> = {}
+  if (awaitingIds.length > 0) {
+    const lastDone = await prisma.vehicleStage.findMany({
+      where: { vehicleId: { in: awaitingIds }, status: 'done' },
+      orderBy: { completedAt: 'desc' },
+      select: {
+        vehicleId: true, stage: true, completedAt: true, checklist: true, scopeName: true,
+        assignee: { select: { id: true, name: true } },
+      },
+    })
+    for (const s of lastDone) {
+      if (!lastCompletedByVehicle[s.vehicleId]) {
+        lastCompletedByVehicle[s.vehicleId] = {
+          stage: s.stage, completedAt: s.completedAt,
+          checklist: s.checklist, scopeName: s.scopeName,
+          assignee: s.assignee,
+        }
+      }
+    }
+  }
 
   // Sort vehicles by their current stage priority
   vehicles.sort((a, b) => {
@@ -59,7 +95,14 @@ export async function GET(request: Request) {
     else if (partStatuses.includes('sourced')) partsLabel = 'Parts pending approval'
     else if (partStatuses.includes('ready_to_order')) partsLabel = 'Parts need to be ordered'
     else if (partStatuses.includes('ordered')) partsLabel = 'Parts ordered'
-    return { ...v, partsLabel, partsCount: partStatuses.length }
+    return {
+      ...v,
+      partsLabel,
+      partsCount: partStatuses.length,
+      lastCompletedStage: lastCompletedByVehicle[v.id]?.stage || null,
+      lastCompleted: lastCompletedByVehicle[v.id] || null,
+      inventoryStatus: invByStock[v.stockNumber] || null,
+    }
   })
 
   return NextResponse.json({ vehicles: vehiclesWithParts })
@@ -73,9 +116,17 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist, startingStage: rawStartingStage, estimatedHours } = body
+  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist, startingStage: rawStartingStage, estimatedHours, soldDelivery: rawSoldDelivery } = body
   const validStages = ['mechanic', 'detailing', 'content', 'publish']
   const startingStage = validStages.includes(rawStartingStage) ? rawStartingStage : 'mechanic'
+  const soldDelivery = !!rawSoldDelivery && startingStage === 'detailing'
+
+  const SOLD_DELIVERY_TASKS = [
+    'Floor mats placed in vehicle',
+    'Gift box placed in vehicle',
+    'Air freshener',
+    'Full interior + exterior clean',
+  ]
 
   if (!stockNumber || !make || !model) {
     return NextResponse.json({ error: 'Stock number, make, and model are required' }, { status: 400 })
@@ -96,9 +147,14 @@ export async function POST(request: Request) {
       const configChecklist = (stageConfig?.defaultChecklist as string[] | undefined)?.length
         ? stageConfig!.defaultChecklist as string[]
         : null
-      const checklistItems = mechanicChecklist && mechanicChecklist.length > 0
+      let checklistItems = mechanicChecklist && mechanicChecklist.length > 0
         ? mechanicChecklist
         : configChecklist || DEFAULT_CHECKLISTS[startingStage as keyof typeof DEFAULT_CHECKLISTS] || ['Inspect & clear']
+      if (soldDelivery) {
+        checklistItems = mechanicChecklist && mechanicChecklist.length > 0
+          ? mechanicChecklist
+          : SOLD_DELIVERY_TASKS
+      }
       const checklist = checklistItems.map((item: string) => ({ item, done: false, note: '' }))
 
       const maxPriority = await prisma.vehicleStage.aggregate({
@@ -131,6 +187,7 @@ export async function POST(request: Request) {
             checklist,
             priority: nextPriority,
             estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
+            scopeName: soldDelivery ? 'Sold Delivery' : null,
           },
         })
 
@@ -199,9 +256,14 @@ export async function POST(request: Request) {
     const configChecklist = (stageConfig?.defaultChecklist as string[] | undefined)?.length
       ? stageConfig!.defaultChecklist as string[]
       : null
-    const checklistItems = mechanicChecklist && mechanicChecklist.length > 0
+    let checklistItems = mechanicChecklist && mechanicChecklist.length > 0
       ? mechanicChecklist
       : configChecklist || DEFAULT_CHECKLISTS[startingStage as keyof typeof DEFAULT_CHECKLISTS] || ['Inspect & clear']
+    if (soldDelivery) {
+      checklistItems = mechanicChecklist && mechanicChecklist.length > 0
+        ? mechanicChecklist
+        : SOLD_DELIVERY_TASKS
+    }
     const checklist = checklistItems.map((item: string) => ({
       item,
       done: false,
@@ -224,6 +286,7 @@ export async function POST(request: Request) {
         checklist,
         priority: nextPriority,
         estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
+        scopeName: soldDelivery ? 'Sold Delivery' : null,
       },
     })
 

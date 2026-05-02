@@ -32,6 +32,7 @@ export default function AddVehiclePage() {
   const [newPart, setNewPart] = useState('')
   const [newPartUrl, setNewPartUrl] = useState('')
   const [selectedInv, setSelectedInv] = useState<InventoryPick | null>(null)
+  const [soldDelivery, setSoldDelivery] = useState(false)
 
   function addTask() {
     const task = newTask.trim()
@@ -52,7 +53,10 @@ export default function AddVehiclePage() {
     const form = new FormData(e.currentTarget)
 
     let mechanicChecklist: string[] = []
-    if (fullInspection) {
+    if (soldDelivery) {
+      // Server uses Sold Delivery defaults if empty, else our custom tasks
+      mechanicChecklist = customTasks
+    } else if (fullInspection) {
       mechanicChecklist = [...DEFAULT_INSPECTION, ...customTasks]
     } else if (customTasks.length > 0) {
       mechanicChecklist = customTasks
@@ -72,6 +76,7 @@ export default function AddVehiclePage() {
       startingStage,
       mechanicChecklist,
       estimatedHours: form.get('estimatedHours') ? parseFloat(form.get('estimatedHours') as string) : null,
+      soldDelivery: startingStage === 'detailing' ? soldDelivery : false,
     }
 
     try {
@@ -270,45 +275,67 @@ export default function AddVehiclePage() {
             {startingStage === 'mechanic' ? 'Mechanic' : startingStage === 'detailing' ? 'Detailing' : startingStage === 'content' ? 'Content' : 'Publish'} Tasks
           </p>
 
-          {/* General Inspection Toggle */}
-          <label style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '14px',
-            padding: '14px 16px',
-            borderRadius: '12px',
-            border: fullInspection ? '2px solid #1a1a1a' : '1px solid var(--border)',
-            background: fullInspection ? '#fafaf8' : '#ffffff',
-            cursor: 'pointer',
-            marginBottom: '20px',
-            transition: 'all 0.15s ease',
-          }}>
-            <span style={{
-              width: '22px',
-              height: '22px',
-              borderRadius: '6px',
-              border: fullInspection ? 'none' : '2px solid #d4d4d4',
-              background: fullInspection ? '#1a1a1a' : 'transparent',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
+          {/* General Inspection Toggle (mechanic only) */}
+          {startingStage === 'mechanic' && (
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: '14px',
+              padding: '14px 16px', borderRadius: '12px',
+              border: fullInspection ? '2px solid #1a1a1a' : '1px solid var(--border)',
+              background: fullInspection ? '#fafaf8' : '#ffffff',
+              cursor: 'pointer', marginBottom: '20px', transition: 'all 0.15s ease',
             }}>
-              {fullInspection && <span style={{ color: '#dffd6e', fontSize: '13px', fontWeight: 700 }}>✓</span>}
-            </span>
-            <input
-              type="checkbox"
-              checked={fullInspection}
-              onChange={(e) => setFullInspection(e.target.checked)}
-              style={{ display: 'none' }}
-            />
-            <div>
-              <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>New Inventory Vehicle</p>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                Add full general inspection: oil, brakes, tires, engine, AC, electrical, test drive, body
-              </p>
-            </div>
-          </label>
+              <span style={{
+                width: '22px', height: '22px', borderRadius: '6px',
+                border: fullInspection ? 'none' : '2px solid #d4d4d4',
+                background: fullInspection ? '#1a1a1a' : 'transparent',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                {fullInspection && <span style={{ color: '#dffd6e', fontSize: '13px', fontWeight: 700 }}>✓</span>}
+              </span>
+              <input
+                type="checkbox" checked={fullInspection}
+                onChange={(e) => setFullInspection(e.target.checked)}
+                style={{ display: 'none' }}
+              />
+              <div>
+                <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>New Inventory Vehicle</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Add full general inspection: oil, brakes, tires, engine, AC, electrical, test drive, body
+                </p>
+              </div>
+            </label>
+          )}
+
+          {/* Sold Delivery Toggle (detailing only) */}
+          {startingStage === 'detailing' && (
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: '14px',
+              padding: '14px 16px', borderRadius: '12px',
+              border: soldDelivery ? '2px solid #1a1a1a' : '1px solid var(--border)',
+              background: soldDelivery ? '#fafaf8' : '#ffffff',
+              cursor: 'pointer', marginBottom: '20px', transition: 'all 0.15s ease',
+            }}>
+              <span style={{
+                width: '22px', height: '22px', borderRadius: '6px',
+                border: soldDelivery ? 'none' : '2px solid #d4d4d4',
+                background: soldDelivery ? '#1a1a1a' : 'transparent',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                {soldDelivery && <span style={{ color: '#dffd6e', fontSize: '13px', fontWeight: 700 }}>✓</span>}
+              </span>
+              <input
+                type="checkbox" checked={soldDelivery}
+                onChange={(e) => setSoldDelivery(e.target.checked)}
+                style={{ display: 'none' }}
+              />
+              <div>
+                <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>Sold — delivery prep</p>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  Adds delivery checklist: floor mats, gift box, air freshener, full clean
+                </p>
+              </div>
+            </label>
+          )}
 
           {/* Add task input */}
           <div style={{ display: 'flex', gap: '8px', marginBottom: customTasks.length > 0 ? '16px' : '0' }}>

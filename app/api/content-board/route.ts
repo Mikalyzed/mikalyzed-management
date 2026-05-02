@@ -76,6 +76,7 @@ export async function GET() {
     return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) === today
   }
 
+
   // Active = in_progress
   const activeVehicles = stages.filter(s => s.status === 'in_progress')
   const activeTasks = contentTasks.filter(t => t.status === 'in_progress')
@@ -89,7 +90,9 @@ export async function GET() {
   const queuedTasks = contentTasks.filter(t => t.status !== 'in_progress' && !isScheduledToday(t.scheduledDate))
 
   const formatStage = (s: typeof stages[number]) => ({
-    id: s.id, vehicleId: s.vehicle.id, vehicle: s.vehicle,
+    id: s.id, vehicleId: s.vehicle.id,
+    vehicle: s.vehicle,
+    scopeName: s.scopeName,
     assignee: s.assignee, status: s.status,
     checklist: s.checklist as { item: string; done: boolean; note: string }[],
     priority: s.priority, scheduledDate: s.scheduledDate, completedAt: s.completedAt?.toISOString() || null, type: 'vehicle' as const,

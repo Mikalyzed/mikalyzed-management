@@ -3,6 +3,29 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
+type TransportDetail = {
+  id: string
+  vehicleDescription: string | null
+  vehicle: { stockNumber: string; year: number | null; make: string; model: string } | null
+  requestedBy: { name: string; email?: string }
+  coordinator: { name: string } | null
+  pickupLocation: string
+  deliveryLocation: string
+  urgency: string
+  preferredDate: string | null
+  transportType: string | null
+  status: string
+  carrierInfo: string | null
+  scheduledDate: string | null
+  notes: string | null
+  trailerType: string | null
+  clientName: string | null
+  clientPhone: string | null
+  purpose: string | null
+  purposeNote: string | null
+  createdAt: string
+}
+
 type TransportRequest = {
   id: string
   vehicleDescription: string | null
@@ -14,15 +37,42 @@ type TransportRequest = {
   status: string
   transportType: string | null
   scheduledDate: string | null
+  purpose: string | null
+  purposeNote: string | null
+  estimatedPrice: number | null
   createdAt: string
 }
 
-const STATUS_ORDER = ['requested', 'accepted', 'scheduled', 'in_transit', 'delivered']
+const PURPOSE_LABELS: Record<string, string> = {
+  event: 'Event',
+  ship_to_client: 'Ship to Client',
+  other: 'Other',
+}
+const PURPOSE_COLORS: Record<string, { bg: string; fg: string; border: string }> = {
+  event: { bg: '#fce7f3', fg: '#be185d', border: '#fbcfe8' },
+  ship_to_client: { bg: '#dbeafe', fg: '#1d4ed8', border: '#bfdbfe' },
+  other: { bg: '#f3f4f6', fg: '#4b5563', border: '#e5e7eb' },
+}
+
+function PurposeBadge({ purpose, purposeNote }: { purpose: string | null; purposeNote: string | null }) {
+  if (!purpose) return null
+  const c = PURPOSE_COLORS[purpose] || PURPOSE_COLORS.other
+  const label = purpose === 'other' && purposeNote ? purposeNote : PURPOSE_LABELS[purpose] || purpose
+  return (
+    <span style={{
+      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+      background: c.bg, color: c.fg, border: `1px solid ${c.border}`,
+      textTransform: 'uppercase', letterSpacing: '0.04em',
+    }}>{label}</span>
+  )
+}
+
+const STATUS_ORDER = ['requested', 'scheduled', 'in_transit']
 const STATUS_LABELS: Record<string, string> = {
-  requested: 'Requested',
+  requested: 'Pending',
   accepted: 'Accepted',
   scheduled: 'Scheduled',
-  in_transit: 'In Transit',
+  in_transit: 'Vehicle Picked Up',
   delivered: 'Delivered',
 }
 
@@ -30,6 +80,52 @@ export default function TransportPage() {
   const [requests, setRequests] = useState<TransportRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<TransportDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [updating, setUpdating] = useState(false)
+
+  function loadList() {
+    fetch('/api/transport')
+      .then((r) => r.json())
+      .then((data) => setRequests(data.requests || []))
+  }
+
+  function openModal(id: string) {
+    setOpenId(id)
+    setDetail(null)
+    setDetailLoading(true)
+    fetch(`/api/transport/${id}`)
+      .then(r => r.json())
+      .then(d => setDetail(d.request))
+      .finally(() => setDetailLoading(false))
+  }
+
+  async function updateStatus(status: string) {
+    if (!openId) return
+    setUpdating(true)
+    await fetch(`/api/transport/${openId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    const d = await fetch(`/api/transport/${openId}`).then(r => r.json())
+    setDetail(d.request)
+    loadList()
+    setUpdating(false)
+  }
+
+  async function updateField(field: string, value: string) {
+    if (!openId) return
+    await fetch(`/api/transport/${openId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    })
+    const d = await fetch(`/api/transport/${openId}`).then(r => r.json())
+    setDetail(d.request)
+    loadList()
+  }
 
   useEffect(() => {
     fetch('/api/transport')
@@ -128,7 +224,7 @@ export default function TransportPage() {
               : req.vehicleDescription || 'Unknown vehicle'
 
             return (
-              <Link key={req.id} href={`/transport/${req.id}`}>
+              <div key={req.id} onClick={() => openModal(req.id)} style={{ cursor: 'pointer' }}>
                 <div className="card transport-card">
                   <div className="flex items-start justify-between mb-3">
                     <div>
@@ -137,7 +233,8 @@ export default function TransportPage() {
                         Requested by {req.requestedBy.name}
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap" style={{ justifyContent: 'flex-end' }}>
+                      <PurposeBadge purpose={req.purpose} purposeNote={req.purposeNote} />
                       {req.urgency === 'rush' && <span className="badge badge-rush">Rush</span>}
                       <span className={`badge badge-${req.status === 'in_transit' ? 'in-progress' : req.status === 'delivered' ? 'done' : req.status === 'accepted' ? 'in-progress' : 'pending'}`}>
                         {STATUS_LABELS[req.status]}
@@ -156,9 +253,153 @@ export default function TransportPage() {
                     </p>
                   )}
                 </div>
-              </Link>
+              </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {openId && (
+        <div
+          onClick={() => { setOpenId(null); setDetail(null) }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 16, padding: 24,
+              width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto',
+            }}
+          >
+            {detailLoading || !detail ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+                <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#e0e0e0', borderTopColor: 'transparent' }} />
+              </div>
+            ) : (() => {
+              const vehicleName = detail.vehicle
+                ? `${detail.vehicle.year ?? ''} ${detail.vehicle.make} ${detail.vehicle.model} (#${detail.vehicle.stockNumber})`.trim()
+                : detail.vehicleDescription || 'Unknown vehicle'
+              const currentIdx = STATUS_ORDER.indexOf(detail.status)
+              const nextStatus = currentIdx >= 0 && currentIdx < STATUS_ORDER.length - 1 ? STATUS_ORDER[currentIdx + 1] : null
+              return (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                    <div>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Transport Request
+                      </p>
+                      <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{vehicleName}</h2>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                        Requested by {detail.requestedBy.name} · {new Date(detail.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', flexShrink: 0 }}>
+                      <PurposeBadge purpose={detail.purpose} purposeNote={detail.purposeNote} />
+                      {detail.urgency === 'rush' && <span className="badge badge-rush">Rush</span>}
+                      <span className={`badge badge-${detail.status === 'in_transit' ? 'in-progress' : detail.status === 'delivered' ? 'done' : 'pending'}`}>
+                        {STATUS_LABELS[detail.status] || detail.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Status flow */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 20 }}>
+                    {STATUS_ORDER.map((s, i) => {
+                      const reached = STATUS_ORDER.indexOf(detail.status) >= i
+                      return (
+                        <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                          <div style={{
+                            width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+                            background: reached ? '#16a34a' : '#e5e7eb',
+                            color: '#fff', fontSize: 11, fontWeight: 700,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>{reached ? '✓' : i + 1}</div>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: reached ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                            {STATUS_LABELS[s]}
+                          </span>
+                          {i < STATUS_ORDER.length - 1 && (
+                            <div style={{ flex: 1, height: 2, background: STATUS_ORDER.indexOf(detail.status) > i ? '#16a34a' : '#e5e7eb' }} />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                    <div>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Pickup</p>
+                      <p style={{ fontSize: 14 }}>{detail.pickupLocation}</p>
+                    </div>
+                    <div>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Delivery</p>
+                      <p style={{ fontSize: 14 }}>{detail.deliveryLocation}</p>
+                    </div>
+                    {(detail.clientName || detail.clientPhone) && (
+                      <div>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Client</p>
+                        <p style={{ fontSize: 14 }}>{detail.clientName} {detail.clientPhone ? `· ${detail.clientPhone}` : ''}</p>
+                      </div>
+                    )}
+                    {detail.scheduledDate && (
+                      <div>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Scheduled</p>
+                        <p style={{ fontSize: 14 }}>{new Date(detail.scheduledDate).toLocaleDateString()}</p>
+                      </div>
+                    )}
+                    {detail.purpose === 'ship_to_client' && detail.estimatedPrice != null && (
+                      <div>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Estimated Price</p>
+                        <p style={{ fontSize: 14, fontWeight: 600 }}>${Number(detail.estimatedPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>Carrier / Driver</label>
+                    <input
+                      defaultValue={detail.carrierInfo || ''}
+                      onBlur={(e) => e.target.value !== (detail.carrierInfo || '') && updateField('carrierInfo', e.target.value)}
+                      placeholder="Name, company, phone..."
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, marginTop: 4 }}
+                    />
+                  </div>
+
+                  {detail.notes && (
+                    <div style={{ marginBottom: 12 }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Notes</p>
+                      <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{detail.notes}</p>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                    <button
+                      onClick={() => { setOpenId(null); setDetail(null) }}
+                      style={{ flex: 1, padding: 12, borderRadius: 10, border: '1px solid var(--border)', background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Close
+                    </button>
+                    {nextStatus && (
+                      <button
+                        onClick={() => updateStatus(nextStatus)}
+                        disabled={updating}
+                        style={{
+                          flex: 1, padding: 12, borderRadius: 10, border: 'none',
+                          background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 600,
+                          cursor: 'pointer', opacity: updating ? 0.5 : 1,
+                        }}
+                      >
+                        {updating ? 'Updating...' : `Mark as ${STATUS_LABELS[nextStatus]}`}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )
+            })()}
+          </div>
         </div>
       )}
     </div>

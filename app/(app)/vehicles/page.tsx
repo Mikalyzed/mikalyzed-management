@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import VehicleCard from '@/components/VehicleCard'
 import KanbanScrollbar from '@/components/KanbanScrollbar'
@@ -19,6 +20,15 @@ type VehicleWithStage = {
   status: string
   currentStageId: string | null
   currentAssignee: { id: string; name: string } | null
+  lastCompletedStage?: string | null
+  lastCompleted?: {
+    stage: string
+    completedAt: string | null
+    checklist: { item: string; done: boolean; note?: string }[]
+    scopeName: string | null
+    assignee: { id: string; name: string } | null
+  } | null
+  inventoryStatus?: string | null
   returnQueue?: { stage: string; fromStage?: string; reason?: string }[]
   stages: Array<{
     id?: string
@@ -63,6 +73,7 @@ type ModalData = {
 const COLUMNS = ['mechanic', 'detailing', 'content', 'publish', 'completed'] as const
 
 export default function VehiclesPage() {
+  const router = useRouter()
   const [vehicles, setVehicles] = useState<VehicleWithStage[]>([])
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -84,6 +95,15 @@ export default function VehiclesPage() {
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([])
   const [assigningUser, setAssigningUser] = useState(false)
   const [hoverColumn, setHoverColumn] = useState<string | null>(null)
+  const [routingVehicle, setRoutingVehicle] = useState<VehicleWithStage | null>(null)
+  const [expandedRoutingId, setExpandedRoutingId] = useState<string | null>(null)
+  const [routingNext, setRoutingNext] = useState<string>('detailing')
+  const [routingReason, setRoutingReason] = useState('')
+  const [routingTasks, setRoutingTasks] = useState<string[]>([])
+  const [routingNewTask, setRoutingNewTask] = useState('')
+  const [routingEstHours, setRoutingEstHours] = useState('')
+  const [routingSoldDelivery, setRoutingSoldDelivery] = useState(false)
+  const [routingSaving, setRoutingSaving] = useState(false)
   const [moveModal, setMoveModal] = useState<{
     vehicleId: string
     fromStage: string
@@ -483,6 +503,104 @@ export default function VehiclesPage() {
         </div>
       </div>
 
+      {/* Pending Routing — admin only */}
+      {isAdmin && vehicles.some(v => v.status === 'awaiting_routing') && (
+        <div style={{
+          background: '#fffbeb', border: '1px solid #fcd34d', borderLeft: '4px solid #f59e0b',
+          borderRadius: 12, padding: '16px 20px', marginBottom: 20,
+        }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+            Pending Routing · {vehicles.filter(v => v.status === 'awaiting_routing').length}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {vehicles.filter(v => v.status === 'awaiting_routing').map(v => {
+              const expanded = expandedRoutingId === v.id
+              const last = v.lastCompleted
+              const doneCount = last?.checklist?.filter(c => c.done).length ?? 0
+              const totalCount = last?.checklist?.length ?? 0
+              return (
+                <div key={v.id} style={{
+                  background: '#fff', borderRadius: 10, border: '1px solid #fde68a', overflow: 'hidden',
+                }}>
+                  <div
+                    onClick={() => setExpandedRoutingId(expanded ? null : v.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 14px', cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{expanded ? '▾' : '▸'}</span>
+                      <div>
+                        <p style={{ fontSize: 14, fontWeight: 700 }}>
+                          #{v.stockNumber} — {v.year} {v.make} {v.model}
+                        </p>
+                        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {v.lastCompletedStage
+                            ? `Just completed ${STAGE_LABELS[v.lastCompletedStage as keyof typeof STAGE_LABELS] || v.lastCompletedStage}${totalCount > 0 ? ` · ${doneCount}/${totalCount} tasks done` : ''}`
+                            : 'Awaiting next stage assignment'}
+                          {last?.scopeName && ` · ${last.scopeName}`}
+                          {last?.assignee && ` · ${last.assignee.name}`}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setRoutingVehicle(v)
+                        setRoutingNext('detailing')
+                        setRoutingReason('')
+                        setRoutingTasks([])
+                        setRoutingNewTask('')
+                        setRoutingEstHours('')
+                        setRoutingSoldDelivery(false)
+                      }}
+                      style={{
+                        padding: '8px 14px', borderRadius: 8, border: 'none',
+                        background: '#1a1a1a', color: '#dffd6e', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      Route
+                    </button>
+                  </div>
+                  {expanded && last?.checklist && last.checklist.length > 0 && (
+                    <div style={{ borderTop: '1px solid #fde68a', background: '#fffbeb', padding: '10px 14px 12px 36px' }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                        Tasks from {STAGE_LABELS[last.stage as keyof typeof STAGE_LABELS] || last.stage}
+                      </p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {last.checklist.map((t, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                            <span style={{
+                              width: 14, height: 14, borderRadius: 4, flexShrink: 0,
+                              border: t.done ? 'none' : '1.5px solid #d4d4d4',
+                              background: t.done ? '#16a34a' : 'transparent',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: '#fff', fontSize: 10, fontWeight: 700,
+                            }}>
+                              {t.done ? '✓' : ''}
+                            </span>
+                            <span style={{
+                              color: t.done ? 'var(--text-muted)' : 'var(--text-primary)',
+                              textDecoration: t.done ? 'line-through' : 'none',
+                            }}>{t.item}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {expanded && (!last?.checklist || last.checklist.length === 0) && (
+                    <div style={{ borderTop: '1px solid #fde68a', background: '#fffbeb', padding: '10px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
+                      No tasks recorded for this stage.
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="kanban-board" ref={kanbanRef} style={{ marginTop: 8 }}>
         {COLUMNS.map((col) => {
           const colVehicles = getColumnVehicles(col)
@@ -548,7 +666,19 @@ export default function VehiclesPage() {
                         style={{ flex: 1, minWidth: 0 }}
                         className="vehicle-card-inner"
                         onMouseDown={handleCardMouseDown}
-                        onClick={(e) => handleCardClick(e, v.id)}
+                        onClick={(e) => {
+                          if (didDrag.current) return
+                          if (mouseDownPos.current) {
+                            const dx = Math.abs(e.clientX - mouseDownPos.current.x)
+                            const dy = Math.abs(e.clientY - mouseDownPos.current.y)
+                            if (dx > 5 || dy > 5) return
+                          }
+                          if (v.status === 'completed') {
+                            router.push(`/vehicles/${v.id}?tab=history`)
+                          } else {
+                            handleCardClick(e, v.id)
+                          }
+                        }}
                       >
                         <VehicleCard
                           id={v.id}
@@ -569,6 +699,7 @@ export default function VehiclesPage() {
                           timeInStage={getTimeInStage(v)}
                           partsLabel={(v as any).partsLabel}
                           returnQueue={v.returnQueue}
+                          stageScope={(v.stages[0] as any)?.scopeName || null}
                         />
                       </div>
                     </div>
@@ -585,6 +716,194 @@ export default function VehiclesPage() {
         })}
       </div>
       <KanbanScrollbar boardRef={kanbanRef} />
+
+      {/* Routing Modal */}
+      {routingVehicle && (
+        <div
+          onClick={() => !routingSaving && setRoutingVehicle(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto' }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Route Vehicle
+            </p>
+            <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 4, marginBottom: 4 }}>
+              #{routingVehicle.stockNumber} — {routingVehicle.year} {routingVehicle.make} {routingVehicle.model}
+            </h2>
+            {routingVehicle.lastCompletedStage && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                Just completed: <strong>{STAGE_LABELS[routingVehicle.lastCompletedStage as keyof typeof STAGE_LABELS] || routingVehicle.lastCompletedStage}</strong>
+              </p>
+            )}
+
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Send to:</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+              {[
+                { v: 'mechanic', label: 'Mechanic' },
+                { v: 'detailing', label: 'Detailing' },
+                { v: 'content', label: 'Content' },
+                { v: 'publish', label: 'Publish' },
+                { v: 'completed', label: 'Back to Showroom' },
+              ].map(opt => {
+                const active = routingNext === opt.v
+                return (
+                  <button
+                    key={opt.v}
+                    onClick={() => setRoutingNext(opt.v)}
+                    style={{
+                      padding: '10px 14px', borderRadius: 10,
+                      border: active ? '2px solid #1a1a1a' : '1px solid var(--border)',
+                      background: active ? '#fafaf8' : '#fff',
+                      fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+
+            {routingNext === 'detailing' && (
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                borderRadius: 10, marginBottom: 14, cursor: 'pointer',
+                border: routingSoldDelivery ? '2px solid #1a1a1a' : '1px solid var(--border)',
+                background: routingSoldDelivery ? '#fafaf8' : '#fff',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={routingSoldDelivery}
+                  onChange={e => setRoutingSoldDelivery(e.target.checked)}
+                  style={{ width: 18, height: 18 }}
+                />
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 600 }}>Sold — delivery prep</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Adds delivery checklist (floor mats, gift box, air freshener, full clean)
+                  </p>
+                </div>
+              </label>
+            )}
+
+            {routingNext !== 'completed' && (
+              <>
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Tasks for {routingNext}
+                  <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>
+                    (leave empty to use default checklist)
+                  </span>
+                </p>
+                <div style={{ display: 'flex', gap: 8, marginBottom: routingTasks.length > 0 ? 8 : 12 }}>
+                  <input
+                    value={routingNewTask}
+                    onChange={e => setRoutingNewTask(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        const t = routingNewTask.trim()
+                        if (t) { setRoutingTasks([...routingTasks, t]); setRoutingNewTask('') }
+                      }
+                    }}
+                    placeholder="Add a task..."
+                    style={{ flex: 1, padding: 10, borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const t = routingNewTask.trim()
+                      if (t) { setRoutingTasks([...routingTasks, t]); setRoutingNewTask('') }
+                    }}
+                    style={{ padding: '10px 16px', borderRadius: 8, border: '1px solid var(--border)', background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    Add
+                  </button>
+                </div>
+                {routingTasks.length > 0 && (
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 8, marginBottom: 12, overflow: 'hidden' }}>
+                    {routingTasks.map((t, i) => (
+                      <div key={i} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '8px 12px', fontSize: 13,
+                        borderBottom: i < routingTasks.length - 1 ? '1px solid var(--border)' : 'none',
+                      }}>
+                        <span>{t}</span>
+                        <button
+                          type="button"
+                          onClick={() => setRoutingTasks(routingTasks.filter((_, j) => j !== i))}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16 }}
+                        >×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {routingNext === 'mechanic' && (
+                  <>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Estimated hours (optional)</p>
+                    <input
+                      type="number" step="0.5" min="0"
+                      value={routingEstHours}
+                      onChange={e => setRoutingEstHours(e.target.value)}
+                      placeholder="e.g. 4"
+                      style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, marginBottom: 12 }}
+                    />
+                  </>
+                )}
+              </>
+            )}
+
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Reason (optional)</p>
+            <textarea
+              value={routingReason}
+              onChange={e => setRoutingReason(e.target.value)}
+              rows={2}
+              placeholder="e.g. Quick fix, no detailing needed"
+              style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, marginBottom: 16, resize: 'vertical' }}
+            />
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setRoutingVehicle(null)}
+                disabled={routingSaving}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: '1px solid var(--border)', background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                disabled={routingSaving}
+                onClick={async () => {
+                  if (!routingVehicle) return
+                  setRoutingSaving(true)
+                  await fetch(`/api/vehicles/${routingVehicle.id}/route-stage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      nextStage: routingNext,
+                      reason: routingReason || null,
+                      tasks: routingTasks,
+                      estimatedHours: routingEstHours || null,
+                      soldDelivery: routingNext === 'detailing' ? routingSoldDelivery : false,
+                    }),
+                  })
+                  const res = await fetch('/api/vehicles')
+                  const data = await res.json()
+                  setVehicles(data.vehicles || [])
+                  setRoutingSaving(false)
+                  setRoutingVehicle(null)
+                }}
+                style={{
+                  flex: 1, padding: 12, borderRadius: 10, border: 'none',
+                  background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                  opacity: routingSaving ? 0.5 : 1,
+                }}
+              >
+                {routingSaving ? 'Routing...' : 'Confirm Route'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Vehicle Detail Modal */}
       {selectedVehicleId && (
