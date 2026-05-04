@@ -23,6 +23,7 @@ type TransportDetail = {
   clientPhone: string | null
   purpose: string | null
   purposeNote: string | null
+  estimatedPrice: number | null
   createdAt: string
 }
 
