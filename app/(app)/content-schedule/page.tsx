@@ -278,7 +278,7 @@ function QueueVehicleCard({ job, onStart, isAdmin, onSchedule, index }: {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>#{v.stockNumber} — {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}</p>
-          <SoldBadge vehicle={v} />
+          <SoldBadge scope={job.scopeName} />
           <ReturnBadge vehicle={v} />
         </div>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
