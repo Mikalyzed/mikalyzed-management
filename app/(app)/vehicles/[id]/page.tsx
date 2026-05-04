@@ -1157,9 +1157,14 @@ function VehicleHistorySection({ history, loading }: {
                     )}
 
                     {event.type === 'activity' && (
-                      <p style={{ margin: 0 }}>
-                        {event.details.actor && `by ${event.details.actor}`}
-                      </p>
+                      <div>
+                        {event.details.reason && (
+                          <p style={{ margin: '0 0 4px 0' }}>Reason: <strong>{event.details.reason}</strong></p>
+                        )}
+                        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+                          {event.details.actor && `by ${event.details.actor}`}
+                        </p>
+                      </div>
                     )}
 
                     {event.type === 'queued_return' && (

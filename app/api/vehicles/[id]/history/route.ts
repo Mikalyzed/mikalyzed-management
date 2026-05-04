@@ -161,7 +161,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   // Add activity log events (filtered for important ones)
   activityLogs.forEach(log => {
-    if (['vehicle_created', 'stage_moved', 'status_changed'].includes(log.action)) {
+    if (['vehicle_created', 'stage_moved', 'status_changed', 'recon_restarted', 'routed'].includes(log.action)) {
       events.push({
         type: 'activity',
         date: log.createdAt,
@@ -170,7 +170,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         details: {
           actor: log.actor?.name || 'System',
           action: log.action,
-          details: log.details
+          details: log.details,
+          reason: (log.details as any)?.reason || null,
         }
       })
     }
@@ -223,6 +224,10 @@ function getActivityTitle(action: string, details: any): string {
       return `Moved from ${details?.from || 'Unknown'} to ${details?.to || 'Unknown'}`
     case 'status_changed':
       return `Status Changed`
+    case 'recon_restarted':
+      return 'Sent Back Through Recon'
+    case 'routed':
+      return `Routed to ${details?.to ? details.to.charAt(0).toUpperCase() + details.to.slice(1) : 'next stage'}`
     default:
       return action.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
