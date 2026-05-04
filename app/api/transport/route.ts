@@ -66,9 +66,12 @@ export async function POST(request: Request) {
 
   // Notify the transport distribution list
   ;(async () => {
-    const vehicleDesc = req.vehicleDescription || (vehicleId
-      ? (await prisma.vehicle.findUnique({ where: { id: vehicleId }, select: { year: true, make: true, model: true } }).then(v => v ? `${v.year ?? ''} ${v.make} ${v.model}`.trim() : 'Vehicle'))
-      : 'Vehicle')
+    let vehicleDesc: string = req.vehicleDescription || ''
+    if (!vehicleDesc && vehicleId) {
+      const v = await prisma.vehicle.findUnique({ where: { id: vehicleId }, select: { year: true, make: true, model: true } })
+      vehicleDesc = v ? `${v.year ?? ''} ${v.make} ${v.model}`.trim() : ''
+    }
+    if (!vehicleDesc) vehicleDesc = 'Vehicle'
     const { subject, html } = newTransportRequestEmail({
       vehicleDesc,
       pickupLocation: req.pickupLocation,
