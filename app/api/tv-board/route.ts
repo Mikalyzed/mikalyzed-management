@@ -41,49 +41,54 @@ export async function GET() {
         done: done.length,
       }
 
+      // For mechanic: timer-running items show first within in_progress (paused fall behind)
+      const sortedInProgress = stage === 'mechanic'
+        ? [...inProgress].sort((a, b) => {
+            const aRunning = a.timerStartedAt ? 0 : 1
+            const bRunning = b.timerStartedAt ? 0 : 1
+            return aRunning - bRunning
+          })
+        : inProgress
+
       if (stage === 'content') {
-        // Content column: show ALL recon content stages + all standalone content tasks
-        const ordered = [...inProgress, ...pending]
+        const ordered = [...sortedInProgress, ...pending]
         stageVehicles[stage] = ordered.map(formatJob)
       } else {
-        // Other stages: top 5
-        const ordered = [...inProgress, ...pending].slice(0, 5)
+        const ordered = [...sortedInProgress, ...pending].slice(0, 5)
         stageVehicles[stage] = ordered.map(formatJob)
       }
     }
 
-    // Standalone content tasks — append after the recon content stages
+    // Standalone content tasks — combine with recon content stages then sort all in_progress to top
     const contentTasks = await prisma.task.findMany({
       where: { category: 'content', status: { notIn: ['done', 'skipped'] } },
       include: { assignee: { select: { name: true } } },
-      orderBy: [
-        { status: 'asc' }, // in_progress sorts before pending alphabetically? in_progress < pending? false. Let's sort manually.
-        { sortOrder: 'asc' },
-        { createdAt: 'desc' },
-      ],
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     })
-    const taskCards = contentTasks
-      .sort((a, b) => {
-        const aActive = a.status === 'in_progress' ? 0 : 1
-        const bActive = b.status === 'in_progress' ? 0 : 1
-        if (aActive !== bActive) return aActive - bActive
-        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
-      })
-      .map(t => ({
-        stockNumber: '',
-        vehicle: t.title,
-        color: null as string | null,
-        assignee: t.assignee?.name || 'Unassigned',
-        estimatedHours: null as number | null,
-        activeSeconds: 0,
-        timerRunning: false,
-        timerStartedAt: null as string | null,
-        stage: 'content',
-        status: t.status === 'in_progress' ? 'in_progress' : 'pending',
-        isTask: true,
-      }))
-    stageVehicles['content'] = [...(stageVehicles['content'] || []), ...taskCards]
-    // Include task in_progress count in pipeline summary
+    const taskCards = contentTasks.map(t => ({
+      stockNumber: '',
+      vehicle: t.title,
+      color: null as string | null,
+      assignee: t.assignee?.name || 'Unassigned',
+      estimatedHours: null as number | null,
+      activeSeconds: 0,
+      timerRunning: false,
+      timerStartedAt: null as string | null,
+      stage: 'content',
+      status: t.status === 'in_progress' ? 'in_progress' : 'pending',
+      isTask: true as const,
+    }))
+    // Combine recon + tasks, then sort: in_progress first (recon before tasks), then pending (recon before tasks)
+    const combined = [...(stageVehicles['content'] || []), ...taskCards]
+    combined.sort((a, b) => {
+      const aActive = a.status === 'in_progress' ? 0 : 1
+      const bActive = b.status === 'in_progress' ? 0 : 1
+      if (aActive !== bActive) return aActive - bActive
+      const aIsTask = (a as any).isTask ? 1 : 0
+      const bIsTask = (b as any).isTask ? 1 : 0
+      return aIsTask - bIsTask
+    })
+    stageVehicles['content'] = combined
     const activeTaskCount = contentTasks.filter(t => t.status === 'in_progress').length
     if (pipeline.content) {
       pipeline.content.inProgress += activeTaskCount
