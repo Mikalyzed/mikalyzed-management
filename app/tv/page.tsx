@@ -228,7 +228,7 @@ export default function TVBoard() {
           { label: 'Completed Today', value: data.completedToday, color: '#22c55e' },
           { label: 'Awaiting Parts', value: data.awaitingParts, color: '#eab308' },
           { label: 'External Repairs', value: data.externalRepairs, color: '#f97316' },
-          { label: 'Active Now', value: allActive.filter(j => j.timerRunning).length, color: '#06b6d4' },
+          { label: 'Active Now', value: allActive.filter(j => j.timerRunning || j.status === 'in_progress').length, color: '#06b6d4' },
           { label: 'Total Vehicles', value: data.totalInventory, color: '#8b5cf6' },
         ].map(stat => (
           <div key={stat.label} style={{
@@ -268,7 +268,10 @@ export default function TVBoard() {
               </div>
 
               {/* Vehicle cards under this stage */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+              <div style={{
+                display: 'flex', flexDirection: 'column', gap: 8, flex: 1,
+                ...(stage === 'content' ? { maxHeight: 520, overflowY: 'auto' } : {}),
+              }}>
                 {vehicles.length > 0 ? vehicles.map((job, idx) => (
                   <VehicleCard key={job.stockNumber || `task-${idx}`} job={job} color={color} />
                 )) : (

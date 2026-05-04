@@ -41,21 +41,35 @@ export async function GET() {
         done: done.length,
       }
 
-      // Top 5: in_progress first, then pending
-      const ordered = [...inProgress, ...pending].slice(0, 5)
-      stageVehicles[stage] = ordered.map(formatJob)
+      if (stage === 'content') {
+        // Content column: show ALL recon content stages + all standalone content tasks
+        const ordered = [...inProgress, ...pending]
+        stageVehicles[stage] = ordered.map(formatJob)
+      } else {
+        // Other stages: top 5
+        const ordered = [...inProgress, ...pending].slice(0, 5)
+        stageVehicles[stage] = ordered.map(formatJob)
+      }
     }
 
-    // Content-to-create tasks: fill remaining content slots up to 5
-    const contentVehicleCount = stageVehicles['content']?.length || 0
-    if (contentVehicleCount < 5) {
-      const contentTasks = await prisma.task.findMany({
-        where: { category: 'content', status: { notIn: ['done', 'skipped'] } },
-        include: { assignee: { select: { name: true } } },
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
-        take: 5 - contentVehicleCount,
+    // Standalone content tasks — append after the recon content stages
+    const contentTasks = await prisma.task.findMany({
+      where: { category: 'content', status: { notIn: ['done', 'skipped'] } },
+      include: { assignee: { select: { name: true } } },
+      orderBy: [
+        { status: 'asc' }, // in_progress sorts before pending alphabetically? in_progress < pending? false. Let's sort manually.
+        { sortOrder: 'asc' },
+        { createdAt: 'desc' },
+      ],
+    })
+    const taskCards = contentTasks
+      .sort((a, b) => {
+        const aActive = a.status === 'in_progress' ? 0 : 1
+        const bActive = b.status === 'in_progress' ? 0 : 1
+        if (aActive !== bActive) return aActive - bActive
+        return (a.sortOrder ?? 0) - (b.sortOrder ?? 0)
       })
-      const taskCards = contentTasks.map(t => ({
+      .map(t => ({
         stockNumber: '',
         vehicle: t.title,
         color: null as string | null,
@@ -68,7 +82,13 @@ export async function GET() {
         status: t.status === 'in_progress' ? 'in_progress' : 'pending',
         isTask: true,
       }))
-      stageVehicles['content'] = [...(stageVehicles['content'] || []), ...taskCards]
+    stageVehicles['content'] = [...(stageVehicles['content'] || []), ...taskCards]
+    // Include task in_progress count in pipeline summary
+    const activeTaskCount = contentTasks.filter(t => t.status === 'in_progress').length
+    if (pipeline.content) {
+      pipeline.content.inProgress += activeTaskCount
+      pipeline.content.total += contentTasks.length
+      pipeline.content.pending += contentTasks.filter(t => t.status !== 'in_progress').length
     }
 
     // Awaiting parts count
