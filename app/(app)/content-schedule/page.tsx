@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import VehicleSearch from '@/components/VehicleSearch'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
@@ -682,7 +682,7 @@ function EditTaskModal({ task, onSave, onCancel }: {
 }
 
 export default function ContentBoard() {
-  const [data, setData] = useState<BoardData | null>(null)
+  const [rawData, setData] = useState<BoardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [showAllVehicles, setShowAllVehicles] = useState(false)
   const [showAllTasks, setShowAllTasks] = useState(false)
@@ -692,10 +692,41 @@ export default function ContentBoard() {
   const [showAddTask, setShowAddTask] = useState(false)
   const [editTask, setEditTask] = useState<ContentTask | null>(null)
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
+  const [search, setSearch] = useState('')
   const dragItem = useRef<number | null>(null)
   const dragOver = useRef<number | null>(null)
 
   const isAdmin = userRole === 'admin'
+
+  const data = useMemo<BoardData | null>(() => {
+    if (!rawData) return null
+    const q = search.trim().toLowerCase()
+    if (!q) return rawData
+    const matchVehicle = (j: VehicleJob) => {
+      const v = j.vehicle
+      const hay = [v.stockNumber, v.year, v.make, v.model, v.color, j.assignee?.name]
+        .filter(Boolean).join(' ').toLowerCase()
+      return hay.includes(q)
+    }
+    const matchTask = (t: ContentTask) => {
+      const hay = [t.title, t.description, t.assignee?.name, ...(t.stockNumbers || [])]
+        .filter(Boolean).join(' ').toLowerCase()
+      return hay.includes(q)
+    }
+    return {
+      ...rawData,
+      active: rawData.active.filter(matchVehicle),
+      activeTasks: rawData.activeTasks.filter(matchTask),
+      today: rawData.today.filter(matchVehicle),
+      todayTasks: rawData.todayTasks.filter(matchTask),
+      queuedVehicles: rawData.queuedVehicles.filter(matchVehicle),
+      queuedTasks: rawData.queuedTasks.filter(matchTask),
+      completedToday: rawData.completedToday.filter(matchVehicle),
+      completedTasks: rawData.completedTasks.filter(matchTask),
+      completedThisWeek: rawData.completedThisWeek.filter(matchVehicle),
+      completedTasksThisWeek: rawData.completedTasksThisWeek.filter(matchTask),
+    }
+  }, [rawData, search])
 
   const fetchData = useCallback(() => {
     fetch('/api/content-board').then(r => r.json()).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
@@ -708,15 +739,15 @@ export default function ContentBoard() {
   }, [fetchData])
 
   const toggleTask = async (jobId: string, taskIdx: number) => {
-    if (!data) return
+    if (!rawData) return
     const updateJobs = (jobs: VehicleJob[]) => jobs.map(j => {
       if (j.id !== jobId) return j
       const updated = [...j.checklist]
       updated[taskIdx] = { ...updated[taskIdx], done: !updated[taskIdx].done }
       return { ...j, checklist: updated }
     })
-    setData({ ...data, today: updateJobs(data.today), queuedVehicles: updateJobs(data.queuedVehicles) })
-    const job = [...data.today, ...data.queuedVehicles].find(j => j.id === jobId)
+    setData({ ...rawData, today: updateJobs(rawData.today), queuedVehicles: updateJobs(rawData.queuedVehicles) })
+    const job = [...rawData.today, ...rawData.queuedVehicles].find(j => j.id === jobId)
     if (!job) return
     const updated = [...job.checklist]
     updated[taskIdx] = { ...updated[taskIdx], done: !updated[taskIdx].done }
@@ -764,11 +795,11 @@ export default function ContentBoard() {
   }
 
   const reorderVehicles = async (fromIdx: number, toIdx: number) => {
-    if (!data) return
-    const reordered = [...data.queuedVehicles]
+    if (!rawData) return
+    const reordered = [...rawData.queuedVehicles]
     const [moved] = reordered.splice(fromIdx, 1)
     reordered.splice(toIdx, 0, moved)
-    setData({ ...data, queuedVehicles: reordered })
+    setData({ ...rawData, queuedVehicles: reordered })
     await fetch('/api/stages/reorder', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage: 'content', orderedIds: reordered.map(v => v.vehicleId) }),
@@ -776,11 +807,11 @@ export default function ContentBoard() {
   }
 
   const reorderTasks = async (fromIdx: number, toIdx: number) => {
-    if (!data) return
-    const reordered = [...data.queuedTasks]
+    if (!rawData) return
+    const reordered = [...rawData.queuedTasks]
     const [moved] = reordered.splice(fromIdx, 1)
     reordered.splice(toIdx, 0, moved)
-    setData({ ...data, queuedTasks: reordered })
+    setData({ ...rawData, queuedTasks: reordered })
     await fetch('/api/board-tasks/reorder', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ orderedIds: reordered.map(t => t.id) }),
@@ -802,7 +833,7 @@ export default function ContentBoard() {
   }
 
   const toggleSubtask = async (taskId: string, subIdx: number) => {
-    if (!data) return
+    if (!rawData) return
     // Optimistic update
     const updateTasks = (tasks: ContentTask[]) => tasks.map(t => {
       if (t.id !== taskId || !t.subtasks) return t
@@ -811,12 +842,12 @@ export default function ContentBoard() {
       return { ...t, subtasks: updated }
     })
     setData({
-      ...data,
-      activeTasks: updateTasks(data.activeTasks),
-      todayTasks: updateTasks(data.todayTasks),
+      ...rawData,
+      activeTasks: updateTasks(rawData.activeTasks),
+      todayTasks: updateTasks(rawData.todayTasks),
     })
     // Find the task to get current subtasks
-    const task = [...data.activeTasks, ...data.todayTasks].find(t => t.id === taskId)
+    const task = [...rawData.activeTasks, ...rawData.todayTasks].find(t => t.id === taskId)
     if (!task?.subtasks) return
     const updated = [...task.subtasks]
     updated[subIdx] = { ...updated[subIdx], done: !updated[subIdx].done }
@@ -837,7 +868,18 @@ export default function ContentBoard() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 20 }}>Content Board</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Content Board</h1>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by stock #, vehicle, task, or assignee..."
+          style={{
+            padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)',
+            fontSize: 14, width: 280, background: '#fff',
+          }}
+        />
+      </div>
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 28, flexWrap: 'wrap' }}>
         <StatBox label="Total" value={data.stats.total} />

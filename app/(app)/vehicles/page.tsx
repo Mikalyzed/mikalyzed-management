@@ -743,7 +743,7 @@ export default function VehiclesPage() {
                 { v: 'detailing', label: 'Detailing' },
                 { v: 'content', label: 'Content' },
                 { v: 'publish', label: 'Publish' },
-                { v: 'completed', label: 'Back to Showroom' },
+                { v: 'completed', label: 'Complete' },
               ].map(opt => {
                 const active = routingNext === opt.v
                 return (
