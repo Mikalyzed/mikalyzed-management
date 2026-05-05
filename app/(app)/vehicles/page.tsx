@@ -285,7 +285,7 @@ export default function VehiclesPage() {
             tasks: defaultTasks.map(item => ({ item, selected: true })),
             assigneeId: defaultAssignee,
             teamMembers: (teamData.users || []).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })),
-            returnAfterComplete: true, // Default to true when skipping
+            returnAfterComplete: false, // Don't auto-check — admin opts in if they want a return
             saving: false,
           })
         } catch {
@@ -297,7 +297,7 @@ export default function VehiclesPage() {
             tasks: [],
             assigneeId: null,
             teamMembers: [],
-            returnAfterComplete: true, // Default to true when skipping
+            returnAfterComplete: false, // Don't auto-check — admin opts in if they want a return
             saving: false,
           })
         }
@@ -1154,7 +1154,7 @@ export default function VehiclesPage() {
                                       tasks: [],
                                       assigneeId: null,
                                       teamMembers: teamMembers,
-                                      returnAfterComplete: true,
+                                      returnAfterComplete: false,
                                       saving: false,
                                     })
                                     closeModal()

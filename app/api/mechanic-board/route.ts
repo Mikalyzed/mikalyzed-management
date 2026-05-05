@@ -166,6 +166,7 @@ export async function GET() {
     const touchedToday = s.timerStartedAt || (s.pausedAt && s.pausedAt >= todayStart)
     if (s.awaitingParts) {
       if (touchedToday) workedToday.push(s)
+      else backToQueue.push(s) // surface awaiting-parts vehicles in the queue too (parity with pending+awaiting-parts)
       awaitingPartsAll.push(s)
     } else if (touchedToday) {
       workedToday.push(s)
@@ -180,8 +181,8 @@ export async function GET() {
     return a.createdAt.getTime() - b.createdAt.getTime()
   })
 
-  // Also add pending vehicles awaiting parts
-  for (const s of queuedWithReturned) {
+  // Add pending+awaiting-parts to the awaiting parts list (in_progress+awaiting-parts already added above)
+  for (const s of queued) {
     if (s.awaitingParts) awaitingPartsAll.push(s)
   }
 
