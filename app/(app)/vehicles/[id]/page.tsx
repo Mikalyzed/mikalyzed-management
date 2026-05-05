@@ -1201,11 +1201,18 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
   isAdmin: boolean
 }) {
   const [showAddForm, setShowAddForm] = useState(false)
-  const [newPart, setNewPart] = useState({ name: '', notes: '' })
+  const [newPart, setNewPart] = useState({ name: '', notes: '', assignedToId: '' })
   const [addingUrl, setAddingUrl] = useState<string | null>(null)
   const [urlInput, setUrlInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [orderModalPart, setOrderModalPart] = useState<{ id: string; name: string } | null>(null)
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    fetch('/api/users').then(r => r.json()).then((d) => {
+      setUsers((d.users || d).filter((u: { isActive?: boolean }) => u.isActive !== false).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })))
+    }).catch(() => {})
+  }, [])
 
   const statusLabels: Record<string, string> = {
     requested: 'Requested',
@@ -1230,10 +1237,15 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
       const response = await fetch('/api/parts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vehicleId, name: newPart.name, notes: newPart.notes || null })
+        body: JSON.stringify({
+          vehicleId,
+          name: newPart.name,
+          notes: newPart.notes || null,
+          assignedToId: newPart.assignedToId || null,
+        })
       })
       if (response.ok) {
-        setNewPart({ name: '', notes: '' })
+        setNewPart({ name: '', notes: '', assignedToId: '' })
         setShowAddForm(false)
         onPartsChange()
       }
@@ -1286,6 +1298,22 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
             <div>
               <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Part Name *</label>
               <input type="text" value={newPart.name} onChange={e => setNewPart({ ...newPart, name: e.target.value })} placeholder="e.g. Front brake pads" style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                Assign to find part (optional)
+                <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6, fontSize: 12 }}>
+                  Defaults to admin if unassigned
+                </span>
+              </label>
+              <select
+                value={newPart.assignedToId}
+                onChange={e => setNewPart({ ...newPart, assignedToId: e.target.value })}
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px', background: '#fff' }}
+              >
+                <option value="">Unassigned (admin handles)</option>
+                {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
             </div>
             <div>
               <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Notes (optional)</label>

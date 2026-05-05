@@ -108,6 +108,19 @@ export async function GET(request: Request) {
     take: 10,
   })
 
+  // Parts I'm assigned to find/source (still in 'requested' status — open to-do)
+  const myParts = await prisma.part.findMany({
+    where: {
+      assignedToId: user.id,
+      status: 'requested',
+    },
+    include: {
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+  })
+
   // Pending task approvals (for admin)
   const pendingApprovals = user.role === 'admin' ? await prisma.taskApproval.findMany({
     where: { status: 'pending' },
@@ -159,6 +172,7 @@ export async function GET(request: Request) {
     myEventTasks,
     myCalendarItems,
     myBoardTasks,
+    myParts,
     upcomingEvents: upcomingEventsWithProgress,
     pendingApprovals,
   })

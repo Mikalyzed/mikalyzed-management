@@ -58,6 +58,34 @@ export default function PartsOverviewPage() {
   const [editDelivery, setEditDelivery] = useState('')
   const [editImage, setEditImage] = useState<string | null>(null)
   const [editUploading, setEditUploading] = useState(false)
+  const [users, setUsers] = useState<{ id: string; name: string }[]>([])
+
+  useEffect(() => {
+    fetch('/api/users').then(r => r.json()).then((d) => {
+      setUsers((d.users || d).filter((u: { isActive?: boolean }) => u.isActive !== false).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })))
+    }).catch(() => {})
+  }, [])
+
+  // Scroll to + highlight a specific part if hash is in URL
+  useEffect(() => {
+    if (loading) return
+    const hash = typeof window !== 'undefined' ? window.location.hash : ''
+    if (!hash.startsWith('#part-')) return
+    const partId = hash.slice('#part-'.length)
+    // Wait for render
+    setTimeout(() => {
+      const el = document.getElementById(`part-${partId}`)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.style.transition = 'box-shadow 0.3s, border-color 0.3s'
+      el.style.boxShadow = '0 0 0 3px #3b82f6'
+      el.style.borderColor = '#3b82f6'
+      setTimeout(() => {
+        el.style.boxShadow = ''
+        el.style.borderColor = ''
+      }, 2400)
+    }, 200)
+  }, [loading])
 
   function load() {
     fetch('/api/parts')
@@ -189,7 +217,7 @@ export default function PartsOverviewPage() {
             const vehicleDesc = `${part.vehicle.year || ''} ${part.vehicle.make} ${part.vehicle.model}`.trim()
 
             return (
-              <div key={part.id} onClick={() => {
+              <div key={part.id} id={`part-${part.id}`} onClick={() => {
                 if (isAdmin && part.status === 'ordered') {
                   setEditingPart(part); setEditTracking(part.tracking || ''); setEditDelivery(part.expectedDelivery ? part.expectedDelivery.slice(0, 10) : ''); setEditImage(part.orderImage || null)
                 }
@@ -214,9 +242,29 @@ export default function PartsOverviewPage() {
                       {part.url.length > 50 ? part.url.slice(0, 50) + '...' : part.url}
                     </a>
                   )}
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                    by {part.requestedBy.name}{part.price ? ` • ${part.price}` : ''}
-                  </p>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span>by {part.requestedBy.name}</span>
+                    {part.status === 'requested' ? (
+                      <>
+                        <span>•</span>
+                        <select
+                          value={part.assignedTo?.id || ''}
+                          onChange={e => updatePart(part.id, { assignedToId: e.target.value || null })}
+                          onClick={e => e.stopPropagation()}
+                          style={{
+                            padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)',
+                            fontSize: 12, background: '#fff', color: 'var(--text-secondary)',
+                          }}
+                        >
+                          <option value="">Unassigned (admin)</option>
+                          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                        </select>
+                      </>
+                    ) : (
+                      <span>{part.assignedTo ? `• Assigned to ${part.assignedTo.name}` : '• Unassigned'}</span>
+                    )}
+                    {part.price && <span>• {part.price}</span>}
+                  </div>
                   {part.status === 'ordered' && part.expectedDelivery && (
                     <p style={{ fontSize: '12px', color: '#2563eb', margin: '2px 0 0', fontWeight: 500 }}>
                       Expected: {new Date(part.expectedDelivery).toLocaleDateString()}
@@ -244,7 +292,7 @@ export default function PartsOverviewPage() {
                 </div>
 
                 {/* Actions */}
-                <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
                   {part.status === 'requested' && !part.url && (
                     <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Add Link</button>
                   )}
@@ -259,6 +307,19 @@ export default function PartsOverviewPage() {
                   )}
                   {part.status === 'ordered' && (
                     <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mark Received</button>
+                  )}
+                  {/* Wrong Part — reset to requested, available on any status past requested */}
+                  {['sourced', 'ready_to_order', 'ordered', 'received'].includes(part.status) && (
+                    <button
+                      onClick={() => {
+                        if (!confirm('Mark this as wrong part and reset to Requested? The link will be cleared.')) return
+                        updatePart(part.id, { status: 'requested', url: null, tracking: null, expectedDelivery: null, orderImage: null })
+                      }}
+                      disabled={saving === part.id}
+                      style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #f59e0b', background: '#fffbeb', color: '#b45309', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      Wrong Part
+                    </button>
                   )}
                 </div>
                 {/* Inline URL input */}

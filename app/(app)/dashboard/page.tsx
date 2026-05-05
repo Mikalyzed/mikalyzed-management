@@ -27,6 +27,10 @@ type DashboardData = {
   myBoardTasks: Array<{
     id: string; title: string; category: string; status: string; priority: number; dueDate: string | null
   }>
+  myParts: Array<{
+    id: string; name: string; status: string; url: string | null
+    vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string }
+  }>
   pendingApprovals: Array<{
     id: string; taskName: string; additionalHours: number | null; status: string; createdAt: string
     tasks: Array<{ name: string; hours: number; note: string | null }> | null
@@ -53,16 +57,18 @@ function MyAssignments({ data }: { data: DashboardData }) {
   const hasEvents = data.myEventTasks.length > 0
   const hasCalendar = data.myCalendarItems.length > 0
   const hasBoardTasks = (data.myBoardTasks || []).length > 0
+  const hasParts = (data.myParts || []).length > 0
 
   // Count how many categories have items
-  const categories = [hasRecon, hasEvents, hasCalendar, hasBoardTasks].filter(Boolean).length
+  const categories = [hasRecon, hasEvents, hasCalendar, hasBoardTasks, hasParts].filter(Boolean).length
   const showTabs = categories > 1
 
-  const [filter, setFilter] = useState<'all' | 'recon' | 'events' | 'calendar' | 'tasks'>('all')
+  const [filter, setFilter] = useState<'all' | 'recon' | 'events' | 'calendar' | 'tasks' | 'parts'>('all')
 
   const tabs: { key: typeof filter; label: string; count: number }[] = []
-  tabs.push({ key: 'all', label: 'All', count: data.myReconTasks.length + data.myEventTasks.length + data.myCalendarItems.length + (data.myBoardTasks || []).length })
+  tabs.push({ key: 'all', label: 'All', count: data.myReconTasks.length + data.myEventTasks.length + data.myCalendarItems.length + (data.myBoardTasks || []).length + (data.myParts || []).length })
   if (hasRecon) tabs.push({ key: 'recon', label: 'Recon', count: data.myReconTasks.length })
+  if (hasParts) tabs.push({ key: 'parts', label: 'Parts', count: (data.myParts || []).length })
   if (hasBoardTasks) tabs.push({ key: 'tasks', label: 'Tasks', count: (data.myBoardTasks || []).length })
   if (hasEvents) tabs.push({ key: 'events', label: 'Events', count: data.myEventTasks.length })
   if (hasCalendar) tabs.push({ key: 'calendar', label: 'Calendar', count: data.myCalendarItems.length })
@@ -70,6 +76,24 @@ function MyAssignments({ data }: { data: DashboardData }) {
   const showRecon = filter === 'all' || filter === 'recon'
   const showEvents = filter === 'all' || filter === 'events'
   const showCalendar = filter === 'all' || filter === 'calendar'
+  const showParts = filter === 'all' || filter === 'parts'
+
+  const [linkingPartId, setLinkingPartId] = useState<string | null>(null)
+  const [partLinkInput, setPartLinkInput] = useState('')
+  const [savingPartLink, setSavingPartLink] = useState(false)
+
+  async function submitPartLink(partId: string) {
+    if (!partLinkInput.trim()) return
+    setSavingPartLink(true)
+    await fetch(`/api/parts/${partId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: partLinkInput.trim() }),
+    })
+    setLinkingPartId(null); setPartLinkInput(''); setSavingPartLink(false)
+    // Refresh dashboard so the part disappears from the list (status moves to sourced)
+    if (typeof window !== 'undefined') window.location.reload()
+  }
 
   return (
     <div style={{ marginBottom: 32 }}>
@@ -112,6 +136,72 @@ function MyAssignments({ data }: { data: DashboardData }) {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* ── Parts to Source ── */}
+        {showParts && hasParts && (
+          <>
+            {filter === 'all' && categories > 1 && (
+              <div className="section-label" style={{ marginTop: 4 }}>Parts to Source</div>
+            )}
+            {data.myParts.map(part => (
+              <div key={part.id} className="card" style={{ padding: '14px 20px', borderLeft: '4px solid #ef4444' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <Link
+                    href={`/parts#part-${part.id}`}
+                    style={{ flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit' }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{part.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {part.vehicle.year} {part.vehicle.make} {part.vehicle.model}
+                      <span style={{ marginLeft: 8 }}>#{part.vehicle.stockNumber}</span>
+                    </div>
+                  </Link>
+                  {linkingPartId !== part.id && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); setLinkingPartId(part.id); setPartLinkInput('') }}
+                      style={{
+                        padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb',
+                        background: '#eff6ff', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
+                      Add Link
+                    </button>
+                  )}
+                </div>
+                {linkingPartId === part.id && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <input
+                      type="url"
+                      value={partLinkInput}
+                      onChange={(e) => setPartLinkInput(e.target.value)}
+                      placeholder="Paste part link..."
+                      autoFocus
+                      onKeyDown={(e) => { if (e.key === 'Enter' && partLinkInput.trim()) { e.preventDefault(); submitPartLink(part.id) } }}
+                      style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13 }}
+                    />
+                    <button
+                      onClick={() => { setLinkingPartId(null); setPartLinkInput('') }}
+                      style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid var(--border)', background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => submitPartLink(part.id)}
+                      disabled={!partLinkInput.trim() || savingPartLink}
+                      style={{
+                        padding: '8px 14px', borderRadius: 6, border: 'none',
+                        background: '#1a1a1a', color: '#dffd6e', fontSize: 12, fontWeight: 600,
+                        cursor: 'pointer', opacity: !partLinkInput.trim() || savingPartLink ? 0.5 : 1,
+                      }}
+                    >
+                      {savingPartLink ? 'Saving...' : 'Submit'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+
         {/* ── Recon Section ── */}
         {showRecon && hasRecon && (
           <>
@@ -357,7 +447,7 @@ export default function DashboardPage() {
   }
 
   const isAdmin = data.user.role === 'admin'
-  const hasAssignments = data.myReconTasks.length > 0 || data.myEventTasks.length > 0 || data.myCalendarItems.length > 0 || (data.myBoardTasks || []).length > 0
+  const hasAssignments = data.myReconTasks.length > 0 || data.myEventTasks.length > 0 || data.myCalendarItems.length > 0 || (data.myBoardTasks || []).length > 0 || (data.myParts || []).length > 0
 
   return (
     <div>
@@ -402,6 +492,15 @@ export default function DashboardPage() {
               </div>
             </Link>
           </div>
+        </div>
+      )}
+
+      {/* ═══ My Assignments — between pipeline and approvals so personal items aren't buried ═══ */}
+      {hasAssignments && <MyAssignments data={data} />}
+
+      {!hasAssignments && !isAdmin && (
+        <div className="card" style={{ textAlign: 'center', padding: 40, marginBottom: 32, color: 'var(--text-muted)' }}>
+          No assignments right now. You're all caught up.
         </div>
       )}
 
@@ -572,16 +671,6 @@ export default function DashboardPage() {
               )
             })}
           </div>
-        </div>
-      )}
-
-      {/* ═══ My Assignments ═══ */}
-      {hasAssignments && <MyAssignments data={data} />}
-
-      {/* No assignments for workers */}
-      {!hasAssignments && !isAdmin && (
-        <div className="card" style={{ textAlign: 'center', padding: 40, marginBottom: 32, color: 'var(--text-muted)' }}>
-          No assignments right now. You're all caught up.
         </div>
       )}
 
