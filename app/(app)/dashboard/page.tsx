@@ -45,6 +45,11 @@ type DashboardData = {
     owner: { id: string; name: string }
     progress: number; totalTasks: number; completedTasks: number
   }>
+  inspectionRequests: Array<{
+    vehicleId: string; stageId: string
+    stockNumber: string; year: number | null; make: string; model: string
+    requests: { index: number; item: string; estimatedHours: number | null }[]
+  }>
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -501,6 +506,109 @@ export default function DashboardPage() {
       {!hasAssignments && !isAdmin && (
         <div className="card" style={{ textAlign: 'center', padding: 40, marginBottom: 32, color: 'var(--text-muted)' }}>
           No assignments right now. You're all caught up.
+        </div>
+      )}
+
+      {/* ═══ New Vehicle Inspection Requests ═══ */}
+      {isAdmin && (data.inspectionRequests || []).length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700 }}>
+              New Vehicle Inspection Requests
+              <span style={{
+                fontSize: 12, fontWeight: 700, marginLeft: 10, padding: '3px 10px',
+                borderRadius: 6, background: '#dbeafe', color: '#1d4ed8',
+              }}>
+                {data.inspectionRequests.reduce((sum, r) => sum + r.requests.length, 0)}
+              </span>
+            </h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {data.inspectionRequests.map(group => (
+              <div key={group.stageId} className="card" style={{ padding: '16px 20px', borderLeft: '4px solid #2563eb' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Stock #{group.stockNumber}
+                    </p>
+                    <p style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>
+                      {group.year} {group.make} {group.model}
+                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {group.requests.length} task{group.requests.length === 1 ? '' : 's'} requested · est{' '}
+                      {group.requests.reduce((sum, r) => sum + (r.estimatedHours || 0), 0)}h total
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={async () => {
+                        await fetch(`/api/stages/${group.stageId}/inspection-requests`, {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ action: 'approveAll' }),
+                        })
+                        const fresh = await fetch('/api/dashboard').then(r => r.json())
+                        setData(fresh)
+                      }}
+                      style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                    >Approve all</button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm(`Decline all ${group.requests.length} requested task(s) for #${group.stockNumber}?`)) return
+                        await fetch(`/api/stages/${group.stageId}/inspection-requests`, {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ action: 'declineAll' }),
+                        })
+                        const fresh = await fetch('/api/dashboard').then(r => r.json())
+                        setData(fresh)
+                      }}
+                      style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                    >Decline all</button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {group.requests.map(req => (
+                    <div key={req.index} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                      padding: '8px 12px', borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a',
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{req.item}</span>
+                        {req.estimatedHours != null && (
+                          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 600, color: '#92400e', background: '#fef3c7', padding: '2px 8px', borderRadius: 100, border: '1px solid #fcd34d' }}>
+                            {req.estimatedHours}h
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        <button
+                          onClick={async () => {
+                            await fetch(`/api/stages/${group.stageId}/inspection-requests`, {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ action: 'approve', index: req.index }),
+                            })
+                            const fresh = await fetch('/api/dashboard').then(r => r.json())
+                            setData(fresh)
+                          }}
+                          style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                        >✓ Approve</button>
+                        <button
+                          onClick={async () => {
+                            await fetch(`/api/stages/${group.stageId}/inspection-requests`, {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ action: 'decline', index: req.index }),
+                            })
+                            const fresh = await fetch('/api/dashboard').then(r => r.json())
+                            setData(fresh)
+                          }}
+                          style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                        >✗ Decline</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

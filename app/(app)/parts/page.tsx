@@ -218,13 +218,13 @@ export default function PartsOverviewPage() {
 
             return (
               <div key={part.id} id={`part-${part.id}`} onClick={() => {
-                if (isAdmin && part.status === 'ordered') {
+                if (isAdmin) {
                   setEditingPart(part); setEditTracking(part.tracking || ''); setEditDelivery(part.expectedDelivery ? part.expectedDelivery.slice(0, 10) : ''); setEditImage(part.orderImage || null)
                 }
               }} style={{
                 background: '#fff', border: '1px solid var(--border)', borderRadius: '12px',
                 padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px',
-                cursor: isAdmin && part.status === 'ordered' ? 'pointer' : 'default',
+                cursor: isAdmin ? 'pointer' : 'default',
               }}>
                 {/* Vehicle */}
                 <div style={{ width: '220px', flex: '0 0 220px' }}>
@@ -308,19 +308,6 @@ export default function PartsOverviewPage() {
                   {part.status === 'ordered' && (
                     <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mark Received</button>
                   )}
-                  {/* Wrong Part — reset to requested, available on any status past requested */}
-                  {['sourced', 'ready_to_order', 'ordered', 'received'].includes(part.status) && (
-                    <button
-                      onClick={() => {
-                        if (!confirm('Mark this as wrong part and reset to Requested? The link will be cleared.')) return
-                        updatePart(part.id, { status: 'requested', url: null, tracking: null, expectedDelivery: null, orderImage: null })
-                      }}
-                      disabled={saving === part.id}
-                      style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #f59e0b', background: '#fffbeb', color: '#b45309', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
-                    >
-                      Wrong Part
-                    </button>
-                  )}
                 </div>
                 {/* Inline URL input */}
                 {addingUrlId === part.id && (
@@ -344,20 +331,39 @@ export default function PartsOverviewPage() {
       {editingPart && (
         <div onClick={() => setEditingPart(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, padding: '24px', boxShadow: '0 -4px 30px rgba(0,0,0,0.15)' }}>
-            <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Edit Ordered Part</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>{editingPart.name}</p>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Tracking Number</label>
-              <input type="text" value={editTracking} onChange={e => setEditTracking(e.target.value)} placeholder="Enter tracking number..."
-                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
+            <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Part Details</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>{editingPart.name}</p>
+            <div style={{ marginBottom: 20 }}>
+              <span style={{
+                display: 'inline-block', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 4,
+                background: (STATUS_COLORS[editingPart.status] || STATUS_COLORS.requested).bg,
+                color: (STATUS_COLORS[editingPart.status] || STATUS_COLORS.requested).color,
+                border: `1px solid ${(STATUS_COLORS[editingPart.status] || STATUS_COLORS.requested).border}`,
+              }}>{STATUS_LABELS[editingPart.status]}</span>
             </div>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Expected Delivery Date</label>
-              <input type="date" value={editDelivery} onChange={e => setEditDelivery(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
-            </div>
+            {editingPart.url && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Link</label>
+                <a href={editingPart.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: '#2563eb', wordBreak: 'break-all' }}>
+                  {editingPart.url}
+                </a>
+              </div>
+            )}
+
+            {editingPart.status === 'ordered' && (
+              <>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Tracking Number</label>
+                  <input type="text" value={editTracking} onChange={e => setEditTracking(e.target.value)} placeholder="Enter tracking number..."
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Expected Delivery Date</label>
+                  <input type="date" value={editDelivery} onChange={e => setEditDelivery(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
+                </div>
 
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Order Confirmation / Receipt</label>
@@ -425,25 +431,51 @@ export default function PartsOverviewPage() {
               )}
             </div>
 
-            <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setEditingPart(null)} style={{
+                    flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
+                    background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                  }}>Cancel</button>
+                  <button onClick={async () => {
+                    setSaving(editingPart.id)
+                    await updatePart(editingPart.id, {
+                      tracking: editTracking.trim() || null,
+                      expectedDelivery: editDelivery || null,
+                      orderImage: editImage || null,
+                    })
+                    setEditingPart(null)
+                  }} disabled={saving === editingPart.id} style={{
+                    flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+                    background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                    opacity: saving === editingPart.id ? 0.5 : 1,
+                  }}>{saving === editingPart.id ? 'Saving...' : 'Save'}</button>
+                </div>
+              </>
+            )}
+
+            {editingPart.status !== 'ordered' && (
               <button onClick={() => setEditingPart(null)} style={{
-                flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
+                width: '100%', padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
                 background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-              }}>Cancel</button>
+              }}>Close</button>
+            )}
+
+            {/* Wrong Part — for any status past requested */}
+            {['sourced', 'ready_to_order', 'ordered', 'received'].includes(editingPart.status) && (
               <button onClick={async () => {
+                if (!confirm('Mark as wrong part and reset to Requested? The link will be cleared.')) return
                 setSaving(editingPart.id)
                 await updatePart(editingPart.id, {
-                  tracking: editTracking.trim() || null,
-                  expectedDelivery: editDelivery || null,
-                  orderImage: editImage || null,
+                  status: 'requested', url: null, tracking: null,
+                  expectedDelivery: null, orderImage: null,
                 })
                 setEditingPart(null)
               }} disabled={saving === editingPart.id} style={{
-                flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
-                background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-                opacity: saving === editingPart.id ? 0.5 : 1,
-              }}>{saving === editingPart.id ? 'Saving...' : 'Save'}</button>
-            </div>
+                width: '100%', marginTop: 10, padding: '10px 0', borderRadius: 10,
+                border: '1px solid #f59e0b', background: '#fffbeb', color: '#b45309',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}>Wrong Part — Reset</button>
+            )}
 
             <button onClick={async () => {
               if (!confirm('Delete this part?')) return
@@ -453,7 +485,7 @@ export default function PartsOverviewPage() {
               setEditingPart(null)
               load()
             }} disabled={saving === editingPart.id} style={{
-              width: '100%', marginTop: 12, padding: '10px 0', borderRadius: 10,
+              width: '100%', marginTop: 10, padding: '10px 0', borderRadius: 10,
               border: '1px solid #fca5a5', background: '#fef2f2', color: '#ef4444',
               fontSize: 13, fontWeight: 600, cursor: 'pointer',
             }}>Delete Part</button>

@@ -275,14 +275,13 @@ export default function VehiclesPage() {
           const configData = await configRes.json()
           const teamData = await teamRes.json()
           const stageConfig = configData.stages?.find((s: { stage: string }) => s.stage === column)
-          const defaultTasks: string[] = stageConfig?.defaultChecklist || []
           const defaultAssignee: string | null = stageConfig?.defaultAssigneeId || null
 
           setMoveModal({
             vehicleId,
             fromStage,
             toStage: column,
-            tasks: defaultTasks.map(item => ({ item, selected: true })),
+            tasks: [],
             assigneeId: defaultAssignee,
             teamMembers: (teamData.users || []).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })),
             returnAfterComplete: false, // Don't auto-check — admin opts in if they want a return

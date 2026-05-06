@@ -9,15 +9,18 @@ type InventoryPick = {
   year: number | null; make: string; model: string; color: string | null
 }
 
-const DEFAULT_INSPECTION = [
-  'Oil & fluids check',
-  'Brake inspection',
-  'Tire condition',
-  'Engine check',
-  'AC system',
-  'Electrical systems',
-  'Test drive',
-  'Body assessment',
+const DEFAULT_INSPECTION: { item: string; type?: string }[] = [
+  { item: 'Test drive' },
+  { item: 'Oil & fluids check', type: 'fluids' },
+  { item: 'Brake inspection', type: 'brakePads' },
+  { item: 'Tire condition', type: 'tirePsi' },
+  { item: 'Engine check', type: 'engineCheck' },
+  { item: 'AC system' },
+  { item: 'Electrical systems', type: 'electrical' },
+  { item: 'Steering check', type: 'steeringCheck' },
+  { item: 'Suspension check', type: 'suspensionCheck' },
+  { item: 'Transmission check' },
+  { item: 'Body assessment' },
 ]
 
 export default function AddVehiclePage() {
@@ -52,9 +55,9 @@ export default function AddVehiclePage() {
 
     const form = new FormData(e.currentTarget)
 
-    let mechanicChecklist: string[] = []
+    type ChecklistInput = string | { item: string; type?: string }
+    let mechanicChecklist: ChecklistInput[] = []
     if (soldDelivery) {
-      // Server uses Sold Delivery defaults if empty, else our custom tasks
       mechanicChecklist = customTasks
     } else if (fullInspection) {
       mechanicChecklist = [...DEFAULT_INSPECTION, ...customTasks]
@@ -77,6 +80,7 @@ export default function AddVehiclePage() {
       mechanicChecklist,
       estimatedHours: form.get('estimatedHours') ? parseFloat(form.get('estimatedHours') as string) : null,
       soldDelivery: startingStage === 'detailing' ? soldDelivery : false,
+      newInventory: startingStage === 'mechanic' && fullInspection,
     }
 
     try {

@@ -116,10 +116,18 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist, startingStage: rawStartingStage, estimatedHours, soldDelivery: rawSoldDelivery } = body
+  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist, startingStage: rawStartingStage, estimatedHours, soldDelivery: rawSoldDelivery, newInventory: rawNewInventory } = body
   const validStages = ['mechanic', 'detailing', 'content', 'publish']
   const startingStage = validStages.includes(rawStartingStage) ? rawStartingStage : 'mechanic'
   const soldDelivery = !!rawSoldDelivery && startingStage === 'detailing'
+  const newInventory = !!rawNewInventory && startingStage === 'mechanic'
+
+  // Helpers to normalize checklist items: accept either string or { item, type }
+  type ChecklistInput = string | { item: string; type?: string }
+  const toChecklistObj = (entry: ChecklistInput) => {
+    if (typeof entry === 'string') return { item: entry, done: false, note: '' }
+    return { item: entry.item, done: false, note: '', ...(entry.type ? { type: entry.type } : {}) }
+  }
 
   const SOLD_DELIVERY_TASKS = [
     'Floor mats placed in vehicle',
@@ -147,15 +155,15 @@ export async function POST(request: Request) {
       const configChecklist = (stageConfig?.defaultChecklist as string[] | undefined)?.length
         ? stageConfig!.defaultChecklist as string[]
         : null
-      let checklistItems = mechanicChecklist && mechanicChecklist.length > 0
+      let checklistItems: ChecklistInput[] = mechanicChecklist && mechanicChecklist.length > 0
         ? mechanicChecklist
-        : configChecklist || DEFAULT_CHECKLISTS[startingStage as keyof typeof DEFAULT_CHECKLISTS] || ['Inspect & clear']
+        : (configChecklist || DEFAULT_CHECKLISTS[startingStage as keyof typeof DEFAULT_CHECKLISTS] || ['Inspect & clear'])
       if (soldDelivery) {
         checklistItems = mechanicChecklist && mechanicChecklist.length > 0
           ? mechanicChecklist
           : SOLD_DELIVERY_TASKS
       }
-      const checklist = checklistItems.map((item: string) => ({ item, done: false, note: '' }))
+      const checklist = checklistItems.map(toChecklistObj)
 
       const maxPriority = await prisma.vehicleStage.aggregate({
         where: { stage: startingStage, status: { notIn: ['done', 'skipped'] } },
@@ -187,7 +195,7 @@ export async function POST(request: Request) {
             checklist,
             priority: nextPriority,
             estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
-            scopeName: soldDelivery ? 'Sold Delivery' : null,
+            scopeName: soldDelivery ? 'Sold Delivery' : newInventory ? 'New Inventory' : null,
           },
         })
 
@@ -256,19 +264,15 @@ export async function POST(request: Request) {
     const configChecklist = (stageConfig?.defaultChecklist as string[] | undefined)?.length
       ? stageConfig!.defaultChecklist as string[]
       : null
-    let checklistItems = mechanicChecklist && mechanicChecklist.length > 0
+    let checklistItems: ChecklistInput[] = mechanicChecklist && mechanicChecklist.length > 0
       ? mechanicChecklist
-      : configChecklist || DEFAULT_CHECKLISTS[startingStage as keyof typeof DEFAULT_CHECKLISTS] || ['Inspect & clear']
+      : (configChecklist || DEFAULT_CHECKLISTS[startingStage as keyof typeof DEFAULT_CHECKLISTS] || ['Inspect & clear'])
     if (soldDelivery) {
       checklistItems = mechanicChecklist && mechanicChecklist.length > 0
         ? mechanicChecklist
         : SOLD_DELIVERY_TASKS
     }
-    const checklist = checklistItems.map((item: string) => ({
-      item,
-      done: false,
-      note: '',
-    }))
+    const checklist = checklistItems.map(toChecklistObj)
 
     // Set priority to max + 1 so new vehicles go to bottom
     const maxPriority = await tx.vehicleStage.aggregate({
@@ -286,7 +290,7 @@ export async function POST(request: Request) {
         checklist,
         priority: nextPriority,
         estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
-        scopeName: soldDelivery ? 'Sold Delivery' : null,
+        scopeName: soldDelivery ? 'Sold Delivery' : newInventory ? 'New Inventory' : null,
       },
     })
 

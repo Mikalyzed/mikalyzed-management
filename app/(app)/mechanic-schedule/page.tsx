@@ -1,11 +1,31 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import ScheduleView from './ScheduleView'
 import PlanView from './PlanView'
 import OrderPartModal from '@/components/OrderPartModal'
 
-type ChecklistItem = { item: string; done: boolean; note: string }
+type ChecklistItem = {
+  item: string; done: boolean; note: string
+  type?: string
+  data?: Record<string, unknown>
+  addedByMechanic?: boolean
+  approved?: 'pending' | 'approved' | 'declined'
+  estimatedHours?: number
+}
+
+// Status pills can store either a plain string (legacy) or { status, note } (new)
+function getPillStatus(v: unknown): string | undefined {
+  if (!v) return undefined
+  if (typeof v === 'string') return v
+  if (typeof v === 'object' && v && 'status' in v) return (v as { status?: string }).status
+  return undefined
+}
+function getPillNote(v: unknown): string {
+  if (v && typeof v === 'object' && 'note' in v) return (v as { note?: string }).note || ''
+  return ''
+}
+const ISSUE_STATUSES = new Set(['issue', 'yes'])
 type ReturnQueueEntry = { stage: string; fromStage?: string; reason?: string }
 
 function ReturnBadge({ returnQueue }: { returnQueue?: ReturnQueueEntry[] }) {
@@ -73,6 +93,40 @@ export default function MechanicBoard() {
   const [loading, setLoading] = useState(true)
   const [selectedJob, setSelectedJob] = useState<JobCard | null>(null)
   const [modalChecklist, setModalChecklist] = useState<ChecklistItem[]>([])
+  const [expandedTaskIdx, setExpandedTaskIdx] = useState<number | null>(null)
+  const [followupDrafts, setFollowupDrafts] = useState<Record<number, string>>({})
+  const [followupHourDrafts, setFollowupHourDrafts] = useState<Record<number, string>>({})
+  // Per sub-item draft for "add as task" inline form (key = `${parentIdx}-${subKey}`)
+  const [issueTaskDrafts, setIssueTaskDrafts] = useState<Record<string, string | undefined>>({})
+  const [issueTaskHourDrafts, setIssueTaskHourDrafts] = useState<Record<string, string>>({})
+
+  const addIssueTask = async (parentIdx: number, subKey: string, label: string) => {
+    if (!selectedJob) return
+    const key = `${parentIdx}-${subKey}`
+    const name = (issueTaskDrafts[key] || label).trim()
+    const hours = parseFloat(issueTaskHourDrafts[key] || '')
+    if (!name || !(hours > 0)) return
+    const updated = [...modalChecklist, {
+      item: name,
+      done: false,
+      note: '',
+      addedByMechanic: true,
+      approved: 'pending' as const,
+      estimatedHours: hours,
+    }]
+    setModalChecklist(updated)
+    setIssueTaskDrafts(prev => ({ ...prev, [key]: undefined }))
+    setIssueTaskHourDrafts(prev => ({ ...prev, [key]: '' }))
+    setSaving(true)
+    try {
+      await fetch(`/api/stages/${selectedJob.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: updated }),
+      })
+    } catch { /* ignore */ }
+    setSaving(false)
+  }
   const [saving, setSaving] = useState(false)
   const [acting, setActing] = useState(false)
   const [showPauseModal, setShowPauseModal] = useState(false)
@@ -144,8 +198,104 @@ export default function MechanicBoard() {
     setActing(false)
   }
 
+  const addFollowupTask = async (sourceIdx: number) => {
+    if (!selectedJob) return
+    const name = (followupDrafts[sourceIdx] || '').trim()
+    const hours = parseFloat(followupHourDrafts[sourceIdx] || '')
+    if (!name || !(hours > 0)) return
+    const updated = [...modalChecklist, {
+      item: name,
+      done: false,
+      note: '',
+      addedByMechanic: true,
+      approved: 'pending' as const,
+      estimatedHours: hours,
+    }]
+    setModalChecklist(updated)
+    setFollowupDrafts(prev => ({ ...prev, [sourceIdx]: '' }))
+    setFollowupHourDrafts(prev => ({ ...prev, [sourceIdx]: '' }))
+    setSaving(true)
+    try {
+      await fetch(`/api/stages/${selectedJob.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: updated }),
+      })
+    } catch { /* ignore */ }
+    setSaving(false)
+  }
+
+  const declineFollowupTask = async (index: number) => {
+    if (!selectedJob) return
+    const updated = modalChecklist.filter((_, idx) => idx !== index)
+    setModalChecklist(updated)
+    setSaving(true)
+    try {
+      await fetch(`/api/stages/${selectedJob.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: updated }),
+      })
+    } catch { /* ignore */ }
+    setSaving(false)
+  }
+
+  const updateChecklistItem = async (index: number, patch: Partial<ChecklistItem>) => {
+    if (!selectedJob) return
+    const updated = [...modalChecklist]
+    updated[index] = { ...updated[index], ...patch }
+    setModalChecklist(updated)
+    setSaving(true)
+    try {
+      await fetch(`/api/stages/${selectedJob.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: updated }),
+      })
+    } catch { /* ignore */ }
+    setSaving(false)
+  }
+
+  const isStructuredComplete = (item: ChecklistItem): boolean => {
+    const d = (item.data || {}) as Record<string, unknown>
+    if (item.type === 'tirePsi') {
+      return ['fl', 'fr', 'rl', 'rr'].every(k => typeof d[k] === 'number')
+    }
+    if (item.type === 'brakePads') {
+      return ['frontMm', 'rearMm'].every(k => typeof d[k] === 'number')
+    }
+    if (item.type === 'fluids') {
+      return ['powerSteering', 'brake', 'engineOil', 'transmission', 'antifreeze'].every(k => !!getPillStatus(d[k]))
+    }
+    if (item.type === 'engineCheck') {
+      return ['sparkPlug', 'coil', 'distributorCap', 'sparkPlugWires'].every(k => !!getPillStatus(d[k]))
+    }
+    if (item.type === 'electrical') {
+      // top is optional (only some vehicles have one)
+      return ['regularBeam', 'highBeam', 'fogLights', 'radio', 'brakeLights', 'reverseLights', 'turnSignals'].every(k => !!getPillStatus(d[k]))
+    }
+    if (item.type === 'steeringCheck') {
+      return !!getPillStatus(d.play)
+    }
+    if (item.type === 'suspensionCheck') {
+      return !!getPillStatus(d.shaking) && !!getPillStatus(d.noises)
+    }
+    return true
+  }
+
   const toggleChecklist = async (index: number) => {
     if (!selectedJob) return
+    const target = modalChecklist[index]
+    // Block check-on if mechanic-added task isn't approved yet
+    if (!target.done && target.addedByMechanic && target.approved !== 'approved') {
+      setExpandedTaskIdx(index)
+      return
+    }
+    // Block check-on if structured fields aren't filled
+    if (!target.done && !isStructuredComplete(target)) {
+      setExpandedTaskIdx(index)
+      return
+    }
     const updated = [...modalChecklist]
     updated[index] = { ...updated[index], done: !updated[index].done }
     setModalChecklist(updated)
@@ -270,6 +420,13 @@ export default function MechanicBoard() {
                   textTransform: 'uppercase', letterSpacing: '0.04em',
                 }}>Sold</span>
               )}
+              {job.scopeName === 'New Inventory' && (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                  background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe',
+                  textTransform: 'uppercase', letterSpacing: '0.04em',
+                }}>New Inventory</span>
+              )}
               <ReturnBadge returnQueue={v.returnQueue} />
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{desc}{v.color ? ` · ${v.color}` : ''}</p>
@@ -293,7 +450,7 @@ export default function MechanicBoard() {
             background: job.partsLabel.includes('found') ? '#fef2f2' : job.partsLabel.includes('approval') ? '#fef9c3' : job.partsLabel.includes('ordered') ? '#fefce8' : '#eff6ff',
             color: job.partsLabel.includes('found') ? '#ef4444' : job.partsLabel.includes('approval') ? '#a16207' : job.partsLabel.includes('ordered') ? '#eab308' : '#2563eb',
           }}>
-            🔧 {job.partsLabel}
+            {job.partsLabel}
           </div>
         )}
 
@@ -620,8 +777,8 @@ export default function MechanicBoard() {
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
         }}>
           <div onClick={e => e.stopPropagation()} style={{
-            background: '#fff', borderRadius: 20, width: '100%', maxWidth: 480,
-            maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+            background: '#fff', borderRadius: 20, width: '100%', maxWidth: 720,
+            maxHeight: '92vh', display: 'flex', flexDirection: 'column',
             boxShadow: '0 25px 60px rgba(0,0,0,0.2)',
           }}>
             {showPauseModal ? (
@@ -678,7 +835,23 @@ export default function MechanicBoard() {
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e5e5' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                      <p style={{ fontSize: 18, fontWeight: 700 }}>#{selectedJob.vehicle.stockNumber}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <p style={{ fontSize: 18, fontWeight: 700 }}>#{selectedJob.vehicle.stockNumber}</p>
+                        {selectedJob.scopeName === 'New Inventory' && (
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                            background: '#dbeafe', color: '#1d4ed8', border: '1px solid #bfdbfe',
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                          }}>New Inventory</span>
+                        )}
+                        {selectedJob.scopeName === 'Sold Delivery' && (
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                            background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                          }}>Sold Delivery</span>
+                        )}
+                      </div>
                       <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
                         {`${selectedJob.vehicle.year ?? ''} ${selectedJob.vehicle.make} ${selectedJob.vehicle.model}`.trim()}
                         {selectedJob.vehicle.color ? ` · ${selectedJob.vehicle.color}` : ''}
@@ -709,33 +882,604 @@ export default function MechanicBoard() {
 
                 {/* Checklist */}
                 <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
-                  <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--text-secondary)' }}>
-                    Tasks ({doneCount}/{modalChecklist.length})
-                    {saving && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 8, color: 'var(--text-muted)' }}>Saving...</span>}
-                  </p>
+                  {(() => {
+                    const isInspection = modalChecklist.some(it => !!it.type)
+                    const inspectionItems = modalChecklist.filter(it => !it.addedByMechanic)
+                    const followupItems = modalChecklist.filter(it => !!it.addedByMechanic)
+                    const inspectionDone = inspectionItems.filter(it => it.done).length
+                    const followupDone = followupItems.filter(it => it.done).length
+                    return (
+                      <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--text-secondary)' }}>
+                        {isInspection ? 'Inspection Tasks' : 'Tasks'} ({inspectionDone}/{inspectionItems.length})
+                        {isInspection && followupItems.length === 0 && (
+                          <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8 }}>
+                            ({doneCount}/{modalChecklist.length} total)
+                          </span>
+                        )}
+                        {saving && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 8, color: 'var(--text-muted)' }}>Saving...</span>}
+                      </p>
+                    )
+                  })()}
                   {modalChecklist.length === 0 ? (
                     <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No tasks assigned</p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {modalChecklist.map((item, i) => (
-                        <div key={i} onClick={() => toggleChecklist(i)} style={{
-                          display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                          background: item.done ? '#f0fdf4' : '#f9fafb', borderRadius: 10,
-                          cursor: 'pointer', border: '1px solid', borderColor: item.done ? '#bbf7d0' : '#e2e5ea',
-                        }}>
+                      {modalChecklist.map((item, i) => {
+                        // Hide declined follow-ups so they're effectively removed
+                        if (item.approved === 'declined') return null
+                        const isExpanded = expandedTaskIdx === i
+                        const hasStructured = item.type === 'tirePsi' || item.type === 'brakePads' || item.type === 'fluids' || item.type === 'engineCheck' || item.type === 'electrical' || item.type === 'steeringCheck' || item.type === 'suspensionCheck'
+                        const data = (item.data || {}) as any
+                        const visiblePrev = modalChecklist.slice(0, i).reverse().find(x => x.approved !== 'declined')
+                        const isFirstFollowup = item.addedByMechanic && (!visiblePrev || !visiblePrev.addedByMechanic)
+                        const followupTotal = modalChecklist.filter(x => x.addedByMechanic && x.approved !== 'declined').length
+                        const followupDone = modalChecklist.filter(x => x.addedByMechanic && x.done && x.approved !== 'declined').length
+                        return (
+                          <Fragment key={i}>
+                            {isFirstFollowup && (
+                              <p style={{ fontSize: 13, fontWeight: 700, marginTop: 12, marginBottom: 4, color: 'var(--text-secondary)' }}>
+                                Tasks ({followupDone}/{followupTotal})
+                              </p>
+                            )}
                           <div style={{
-                            width: 22, height: 22, borderRadius: 6, border: '2px solid',
-                            borderColor: item.done ? '#22c55e' : '#d1d5db',
-                            background: item.done ? '#22c55e' : '#fff',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                            background: item.done ? '#f0fdf4' : '#f9fafb', borderRadius: 10,
+                            border: '1px solid', borderColor: item.done ? '#bbf7d0' : '#e2e5ea',
+                            overflow: 'hidden',
                           }}>
-                            {item.done && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                            <div style={{
+                              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
+                            }}>
+                              <div
+                                onClick={() => toggleChecklist(i)}
+                                style={{
+                                  width: 22, height: 22, borderRadius: 6, border: '2px solid',
+                                  borderColor: item.done ? '#22c55e' : '#d1d5db',
+                                  background: item.done ? '#22c55e' : '#fff',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {item.done && <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>}
+                              </div>
+                              <div
+                                onClick={() => setExpandedTaskIdx(isExpanded ? null : i)}
+                                style={{
+                                  flex: 1, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                                }}
+                              >
+                                <span style={{ flex: 1, fontSize: 14, color: item.done ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: item.done ? 'line-through' : 'none' }}>
+                                  {item.item}
+                                  {hasStructured && !isExpanded && item.note && (
+                                    <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>· {item.note}</span>
+                                  )}
+                                </span>
+                                {item.addedByMechanic && (
+                                  <span style={{
+                                    fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                                    background: item.approved === 'approved' ? '#dcfce7' : '#fef3c7',
+                                    color: item.approved === 'approved' ? '#16a34a' : '#92400e',
+                                    border: `1px solid ${item.approved === 'approved' ? '#bbf7d0' : '#fcd34d'}`,
+                                    textTransform: 'uppercase', letterSpacing: '0.04em',
+                                  }}>
+                                    {item.approved === 'approved' ? 'Approved' : 'Requested'}
+                                  </span>
+                                )}
+                                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{isExpanded ? '▾' : '▸'}</span>
+                              </div>
+                            </div>
+
+                            {isExpanded && (
+                              <div style={{ padding: '0 12px 12px 46px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {hasStructured && !isStructuredComplete(item) && (
+                                  <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', padding: '6px 10px', borderRadius: 6, margin: 0 }}>
+                                    Fill in all fields below before marking this task complete.
+                                  </p>
+                                )}
+                                {item.addedByMechanic && item.approved === 'pending' && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
+                                    {isAdmin ? (
+                                      <>
+                                        <span style={{ fontSize: 12, color: '#92400e', flex: 1 }}>Approve this task?</span>
+                                        <button onClick={() => updateChecklistItem(i, { approved: 'approved' })} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✓ Approve</button>
+                                        <button onClick={() => declineFollowupTask(i)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✗ Decline</button>
+                                      </>
+                                    ) : (
+                                      <span style={{ fontSize: 12, color: '#92400e' }}>Waiting on admin approval before this can be worked on.</span>
+                                    )}
+                                  </div>
+                                )}
+
+                                {item.type === 'tirePsi' && (
+                                  <div>
+                                    <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Tire pressure (PSI)</p>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                      {[
+                                        { key: 'fl', label: 'Front Left' },
+                                        { key: 'fr', label: 'Front Right' },
+                                        { key: 'rl', label: 'Rear Left' },
+                                        { key: 'rr', label: 'Rear Right' },
+                                      ].map(({ key, label }) => (
+                                        <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</label>
+                                          <input
+                                            type="number" min="0" step="0.5" inputMode="decimal"
+                                            value={data[key] ?? ''}
+                                            onChange={(e) => {
+                                              const next = { ...data, [key]: e.target.value === '' ? undefined : Number(e.target.value) }
+                                              updateChecklistItem(i, { data: next })
+                                            }}
+                                            placeholder="32"
+                                            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {item.type === 'brakePads' && (
+                                  <div>
+                                    <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Brake pad thickness (mm)</p>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                      {[
+                                        { key: 'frontMm', label: 'Front pads' },
+                                        { key: 'rearMm', label: 'Rear pads' },
+                                      ].map(({ key, label }) => (
+                                        <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</label>
+                                          <input
+                                            type="number" min="0" step="0.5" inputMode="decimal"
+                                            value={data[key] ?? ''}
+                                            onChange={(e) => {
+                                              const next = { ...data, [key]: e.target.value === '' ? undefined : Number(e.target.value) }
+                                              updateChecklistItem(i, { data: next })
+                                            }}
+                                            placeholder="8"
+                                            style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}
+                                          />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {item.type === 'fluids' && (
+                                  <div>
+                                    <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Fluids check</p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                      {[
+                                        { key: 'powerSteering', label: 'Power steering fluid' },
+                                        { key: 'brake', label: 'Brake fluid' },
+                                        { key: 'engineOil', label: 'Engine oil' },
+                                        { key: 'transmission', label: 'Transmission fluid' },
+                                        { key: 'antifreeze', label: 'Antifreeze' },
+                                      ].map(({ key, label }) => {
+                                        const status = getPillStatus(data[key])
+                                        const subNote = getPillNote(data[key])
+                                        return (
+                                          <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                              <span style={{ fontSize: 13, flex: 1 }}>{label}</span>
+                                              <div style={{ display: 'flex', gap: 4 }}>
+                                                {(['ok', 'topped', 'issue'] as const).map(opt => {
+                                                  const active = status === opt
+                                                  const colors = opt === 'ok' ? { bg: '#dcfce7', fg: '#16a34a', border: '#bbf7d0' }
+                                                    : opt === 'topped' ? { bg: '#dbeafe', fg: '#2563eb', border: '#bfdbfe' }
+                                                    : { bg: '#fee2e2', fg: '#dc2626', border: '#fecaca' }
+                                                  const labels = { ok: 'OK', topped: 'Topped', issue: 'Issue' }
+                                                  return (
+                                                    <button key={opt} type="button" onClick={() => {
+                                                      const next = { ...data, [key]: active ? undefined : { status: opt, note: subNote } }
+                                                      updateChecklistItem(i, { data: next })
+                                                    }} style={{
+                                                      padding: '4px 10px', borderRadius: 6,
+                                                      border: '1px solid', borderColor: active ? colors.border : 'var(--border)',
+                                                      background: active ? colors.bg : '#fff', color: active ? colors.fg : 'var(--text-muted)',
+                                                      fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                                                    }}>{labels[opt]}</button>
+                                                  )
+                                                })}
+                                              </div>
+                                            </div>
+                                            {status && ISSUE_STATUSES.has(status) && (() => {
+                                              const taskKey = `${i}-${key}`
+                                              const taskDraft = issueTaskDrafts[taskKey]
+                                              const isAddingTask = taskDraft !== undefined
+                                              return (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                  <input
+                                                    type="text"
+                                                    defaultValue={subNote}
+                                                    onBlur={(e) => {
+                                                      if (e.target.value === subNote) return
+                                                      const next = { ...data, [key]: { status, note: e.target.value } }
+                                                      updateChecklistItem(i, { data: next })
+                                                    }}
+                                                    placeholder={`What's the issue with ${label.toLowerCase()}?`}
+                                                    style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', fontSize: 12, width: '100%' }}
+                                                  />
+                                                  {!isAddingTask ? (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setIssueTaskDrafts(prev => ({
+                                                        ...prev,
+                                                        [taskKey]: subNote ? `${label}: ${subNote}` : `Fix ${label.toLowerCase()}`,
+                                                      }))}
+                                                      style={{
+                                                        alignSelf: 'flex-start', fontSize: 11, padding: '4px 10px', borderRadius: 6,
+                                                        border: '1px dashed #fca5a5', background: '#fff', color: '#dc2626',
+                                                        fontWeight: 600, cursor: 'pointer',
+                                                      }}
+                                                    >+ Add as task</button>
+                                                  ) : (
+                                                    <div style={{
+                                                      display: 'flex', flexDirection: 'column', gap: 6,
+                                                      padding: 8, borderRadius: 8, background: '#fff', border: '1px solid var(--border)',
+                                                    }}>
+                                                      <input
+                                                        type="text"
+                                                        value={taskDraft}
+                                                        onChange={(e) => setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
+                                                        placeholder="Task name"
+                                                        autoFocus
+                                                        style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13 }}
+                                                      />
+                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        <input
+                                                          type="number" step="0.5" min="0"
+                                                          value={issueTaskHourDrafts[taskKey] || ''}
+                                                          onChange={(e) => setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
+                                                          onKeyDown={(e) => { if (e.key === 'Enter' && taskDraft.trim() && parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) { e.preventDefault(); addIssueTask(i, key, label) } }}
+                                                          placeholder="Hours"
+                                                          style={{ width: 90, padding: '7px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12 }}
+                                                        />
+                                                        <div style={{ flex: 1 }} />
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => { setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: undefined })); setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: '' })) }}
+                                                          style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)', background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                                                        >Cancel</button>
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => addIssueTask(i, key, label)}
+                                                          disabled={!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving}
+                                                          style={{
+                                                            padding: '7px 14px', borderRadius: 6, border: 'none',
+                                                            background: '#1a1a1a', color: '#dffd6e', fontSize: 12, fontWeight: 600,
+                                                            cursor: 'pointer', opacity: (!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving) ? 0.5 : 1,
+                                                          }}
+                                                        >Add task</button>
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )
+                                            })()}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {(item.type === 'engineCheck' || item.type === 'electrical') && (
+                                  <div>
+                                    <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                                      {item.type === 'engineCheck' ? 'Engine components' : 'Electrical systems'}
+                                    </p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                      {(item.type === 'engineCheck' ? [
+                                        { key: 'sparkPlug', label: 'Spark plug' },
+                                        { key: 'coil', label: 'Coil' },
+                                        { key: 'distributorCap', label: 'Distributor cap' },
+                                        { key: 'sparkPlugWires', label: 'Spark plug wires' },
+                                      ] : [
+                                        { key: 'regularBeam', label: 'Regular beam' },
+                                        { key: 'highBeam', label: 'High beam' },
+                                        { key: 'fogLights', label: 'Fog lights' },
+                                        { key: 'radio', label: 'Radio' },
+                                        { key: 'top', label: 'Top (if it has one)' },
+                                        { key: 'brakeLights', label: 'Brake lights' },
+                                        { key: 'reverseLights', label: 'Reverse lights' },
+                                        { key: 'turnSignals', label: 'Turn signals' },
+                                      ]).map(({ key, label }) => {
+                                        const status = getPillStatus(data[key])
+                                        const subNote = getPillNote(data[key])
+                                        return (
+                                          <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                              <span style={{ fontSize: 13, flex: 1 }}>{label}</span>
+                                              <div style={{ display: 'flex', gap: 4 }}>
+                                                {(['ok', 'issue'] as const).map(opt => {
+                                                  const active = status === opt
+                                                  const colors = opt === 'ok'
+                                                    ? { bg: '#dcfce7', fg: '#16a34a', border: '#bbf7d0' }
+                                                    : { bg: '#fee2e2', fg: '#dc2626', border: '#fecaca' }
+                                                  const labels = { ok: 'OK', issue: 'Issue' }
+                                                  return (
+                                                    <button key={opt} type="button" onClick={() => {
+                                                      const next = { ...data, [key]: active ? undefined : { status: opt, note: subNote } }
+                                                      updateChecklistItem(i, { data: next })
+                                                    }} style={{
+                                                      padding: '4px 10px', borderRadius: 6,
+                                                      border: '1px solid', borderColor: active ? colors.border : 'var(--border)',
+                                                      background: active ? colors.bg : '#fff', color: active ? colors.fg : 'var(--text-muted)',
+                                                      fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                                                    }}>{labels[opt]}</button>
+                                                  )
+                                                })}
+                                              </div>
+                                            </div>
+                                            {status && ISSUE_STATUSES.has(status) && (() => {
+                                              const taskKey = `${i}-${key}`
+                                              const taskDraft = issueTaskDrafts[taskKey]
+                                              const isAddingTask = taskDraft !== undefined
+                                              return (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                  <input
+                                                    type="text"
+                                                    defaultValue={subNote}
+                                                    onBlur={(e) => {
+                                                      if (e.target.value === subNote) return
+                                                      const next = { ...data, [key]: { status, note: e.target.value } }
+                                                      updateChecklistItem(i, { data: next })
+                                                    }}
+                                                    placeholder={`What's the issue with ${label.toLowerCase()}?`}
+                                                    style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', fontSize: 12, width: '100%' }}
+                                                  />
+                                                  {!isAddingTask ? (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setIssueTaskDrafts(prev => ({
+                                                        ...prev,
+                                                        [taskKey]: subNote ? `${label}: ${subNote}` : `Fix ${label.toLowerCase()}`,
+                                                      }))}
+                                                      style={{
+                                                        alignSelf: 'flex-start', fontSize: 11, padding: '4px 10px', borderRadius: 6,
+                                                        border: '1px dashed #fca5a5', background: '#fff', color: '#dc2626',
+                                                        fontWeight: 600, cursor: 'pointer',
+                                                      }}
+                                                    >+ Add as task</button>
+                                                  ) : (
+                                                    <div style={{
+                                                      display: 'flex', flexDirection: 'column', gap: 6,
+                                                      padding: 8, borderRadius: 8, background: '#fff', border: '1px solid var(--border)',
+                                                    }}>
+                                                      <input
+                                                        type="text"
+                                                        value={taskDraft}
+                                                        onChange={(e) => setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
+                                                        placeholder="Task name"
+                                                        autoFocus
+                                                        style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13 }}
+                                                      />
+                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        <input
+                                                          type="number" step="0.5" min="0"
+                                                          value={issueTaskHourDrafts[taskKey] || ''}
+                                                          onChange={(e) => setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
+                                                          onKeyDown={(e) => { if (e.key === 'Enter' && taskDraft.trim() && parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) { e.preventDefault(); addIssueTask(i, key, label) } }}
+                                                          placeholder="Hours"
+                                                          style={{ width: 90, padding: '7px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12 }}
+                                                        />
+                                                        <div style={{ flex: 1 }} />
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => { setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: undefined })); setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: '' })) }}
+                                                          style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)', background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                                                        >Cancel</button>
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => addIssueTask(i, key, label)}
+                                                          disabled={!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving}
+                                                          style={{
+                                                            padding: '7px 14px', borderRadius: 6, border: 'none',
+                                                            background: '#1a1a1a', color: '#dffd6e', fontSize: 12, fontWeight: 600,
+                                                            cursor: 'pointer', opacity: (!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving) ? 0.5 : 1,
+                                                          }}
+                                                        >Add task</button>
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )
+                                            })()}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {(item.type === 'steeringCheck' || item.type === 'suspensionCheck') && (
+                                  <div>
+                                    <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                                      {item.type === 'steeringCheck' ? 'Steering' : 'Suspension'}
+                                    </p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                      {(item.type === 'steeringCheck' ? [
+                                        { key: 'play', label: 'Play in the steering' },
+                                      ] : [
+                                        { key: 'shaking', label: 'Shaking' },
+                                        { key: 'noises', label: 'Noises' },
+                                      ]).map(({ key, label }) => {
+                                        const status = getPillStatus(data[key])
+                                        const subNote = getPillNote(data[key])
+                                        return (
+                                          <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                              <span style={{ fontSize: 13, flex: 1 }}>{label}</span>
+                                              <div style={{ display: 'flex', gap: 4 }}>
+                                                {(['no', 'yes'] as const).map(opt => {
+                                                  const active = status === opt
+                                                  const colors = opt === 'no'
+                                                    ? { bg: '#dcfce7', fg: '#16a34a', border: '#bbf7d0' }
+                                                    : { bg: '#fee2e2', fg: '#dc2626', border: '#fecaca' }
+                                                  const labels = { no: 'No', yes: 'Yes' }
+                                                  return (
+                                                    <button key={opt} type="button" onClick={() => {
+                                                      const next = { ...data, [key]: active ? undefined : { status: opt, note: subNote } }
+                                                      updateChecklistItem(i, { data: next })
+                                                    }} style={{
+                                                      padding: '4px 10px', borderRadius: 6,
+                                                      border: '1px solid', borderColor: active ? colors.border : 'var(--border)',
+                                                      background: active ? colors.bg : '#fff', color: active ? colors.fg : 'var(--text-muted)',
+                                                      fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                                                    }}>{labels[opt]}</button>
+                                                  )
+                                                })}
+                                              </div>
+                                            </div>
+                                            {status && ISSUE_STATUSES.has(status) && (() => {
+                                              const taskKey = `${i}-${key}`
+                                              const taskDraft = issueTaskDrafts[taskKey]
+                                              const isAddingTask = taskDraft !== undefined
+                                              return (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                  <input
+                                                    type="text"
+                                                    defaultValue={subNote}
+                                                    onBlur={(e) => {
+                                                      if (e.target.value === subNote) return
+                                                      const next = { ...data, [key]: { status, note: e.target.value } }
+                                                      updateChecklistItem(i, { data: next })
+                                                    }}
+                                                    placeholder={`What's the issue with ${label.toLowerCase()}?`}
+                                                    style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', fontSize: 12, width: '100%' }}
+                                                  />
+                                                  {!isAddingTask ? (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setIssueTaskDrafts(prev => ({
+                                                        ...prev,
+                                                        [taskKey]: subNote ? `${label}: ${subNote}` : `Fix ${label.toLowerCase()}`,
+                                                      }))}
+                                                      style={{
+                                                        alignSelf: 'flex-start', fontSize: 11, padding: '4px 10px', borderRadius: 6,
+                                                        border: '1px dashed #fca5a5', background: '#fff', color: '#dc2626',
+                                                        fontWeight: 600, cursor: 'pointer',
+                                                      }}
+                                                    >+ Add as task</button>
+                                                  ) : (
+                                                    <div style={{
+                                                      display: 'flex', flexDirection: 'column', gap: 6,
+                                                      padding: 8, borderRadius: 8, background: '#fff', border: '1px solid var(--border)',
+                                                    }}>
+                                                      <input
+                                                        type="text"
+                                                        value={taskDraft}
+                                                        onChange={(e) => setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
+                                                        placeholder="Task name"
+                                                        autoFocus
+                                                        style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13 }}
+                                                      />
+                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                        <input
+                                                          type="number" step="0.5" min="0"
+                                                          value={issueTaskHourDrafts[taskKey] || ''}
+                                                          onChange={(e) => setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
+                                                          onKeyDown={(e) => { if (e.key === 'Enter' && taskDraft.trim() && parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) { e.preventDefault(); addIssueTask(i, key, label) } }}
+                                                          placeholder="Hours"
+                                                          style={{ width: 90, padding: '7px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12 }}
+                                                        />
+                                                        <div style={{ flex: 1 }} />
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => { setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: undefined })); setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: '' })) }}
+                                                          style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)', background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                                                        >Cancel</button>
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => addIssueTask(i, key, label)}
+                                                          disabled={!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving}
+                                                          style={{
+                                                            padding: '7px 14px', borderRadius: 6, border: 'none',
+                                                            background: '#1a1a1a', color: '#dffd6e', fontSize: 12, fontWeight: 600,
+                                                            cursor: 'pointer', opacity: (!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving) ? 0.5 : 1,
+                                                          }}
+                                                        >Add task</button>
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )
+                                            })()}
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Subtle divider between inspection fields and the wrap-up section */}
+                                <div style={{
+                                  display: 'flex', flexDirection: 'column', gap: 10,
+                                  marginTop: 4, paddingTop: 12, borderTop: '1px solid #ececec',
+                                }}>
+                                  {/* "+ Add task" — only on regular items, sent to admin for approval */}
+                                  {!item.addedByMechanic && (() => {
+                                    const taskName = followupDrafts[i] || ''
+                                    const taskHours = followupHourDrafts[i] || ''
+                                    const canAdd = taskName.trim() && parseFloat(taskHours) > 0
+                                    return (
+                                      <div>
+                                        <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                                          Add task (sent for admin approval)
+                                        </label>
+                                        <div style={{ display: 'flex', gap: 6 }}>
+                                          <input
+                                            type="text"
+                                            value={taskName}
+                                            onChange={(e) => setFollowupDrafts(prev => ({ ...prev, [i]: e.target.value }))}
+                                            placeholder="e.g. Replace front brake pads"
+                                            style={{ flex: 1, padding: '7px 10px', borderRadius: 6, border: '1px dashed var(--border)', fontSize: 13, background: '#fafafa' }}
+                                          />
+                                          <input
+                                            type="number" step="0.5" min="0"
+                                            value={taskHours}
+                                            onChange={(e) => setFollowupHourDrafts(prev => ({ ...prev, [i]: e.target.value }))}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' && canAdd) { e.preventDefault(); addFollowupTask(i) } }}
+                                            placeholder="hrs"
+                                            style={{ width: 70, padding: '7px 10px', borderRadius: 6, border: '1px dashed var(--border)', fontSize: 13, background: '#fafafa' }}
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => addFollowupTask(i)}
+                                            disabled={!canAdd || saving}
+                                            style={{
+                                              padding: '7px 12px', borderRadius: 6, border: 'none',
+                                              background: '#1a1a1a', color: '#dffd6e', fontSize: 12, fontWeight: 600,
+                                              cursor: 'pointer', opacity: !canAdd || saving ? 0.5 : 1,
+                                            }}
+                                          >Add</button>
+                                        </div>
+                                      </div>
+                                    )
+                                  })()}
+
+                                  {/* Generic note for every task */}
+                                  <div>
+                                    <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Additional notes</label>
+                                    <textarea
+                                      rows={2}
+                                      defaultValue={item.note || ''}
+                                      onBlur={(e) => {
+                                        if (e.target.value !== (item.note || '')) updateChecklistItem(i, { note: e.target.value })
+                                      }}
+                                      placeholder="Add details..."
+                                      style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, resize: 'vertical' }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                          <span style={{ fontSize: 14, color: item.done ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: item.done ? 'line-through' : 'none' }}>{item.item}</span>
-                        </div>
-                      ))}
+                          </Fragment>
+                        )
+                      })}
                     </div>
                   )}
+
                 </div>
 
                 {/* Parts Section */}

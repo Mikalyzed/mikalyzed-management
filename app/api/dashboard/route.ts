@@ -135,6 +135,44 @@ export async function GET(request: Request) {
     orderBy: { createdAt: 'desc' },
   }) : []
 
+  // Inspection task requests — mechanic-added tasks awaiting admin approval, grouped by vehicle
+  type InspectionRequest = {
+    vehicleId: string
+    stageId: string
+    stockNumber: string
+    year: number | null
+    make: string
+    model: string
+    requests: { index: number; item: string; estimatedHours: number | null }[]
+  }
+  let inspectionRequests: InspectionRequest[] = []
+  if (user.role === 'admin') {
+    const pendingStages = await prisma.vehicleStage.findMany({
+      where: { status: { notIn: ['done', 'skipped'] } },
+      include: {
+        vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+      },
+    })
+    for (const s of pendingStages) {
+      const checklist = (s.checklist as Array<{ addedByMechanic?: boolean; approved?: string; item?: string; estimatedHours?: number }>) || []
+      const requests = checklist
+        .map((c, idx) => ({ c, idx }))
+        .filter(({ c }) => c.addedByMechanic && c.approved === 'pending')
+        .map(({ c, idx }) => ({ index: idx, item: c.item || '', estimatedHours: typeof c.estimatedHours === 'number' ? c.estimatedHours : null }))
+      if (requests.length > 0) {
+        inspectionRequests.push({
+          vehicleId: s.vehicle.id,
+          stageId: s.id,
+          stockNumber: s.vehicle.stockNumber,
+          year: s.vehicle.year,
+          make: s.vehicle.make,
+          model: s.vehicle.model,
+          requests,
+        })
+      }
+    }
+  }
+
   // Upcoming events (for admin)
   const upcomingEvents = user.role === 'admin' ? await prisma.event.findMany({
     where: {
@@ -175,5 +213,6 @@ export async function GET(request: Request) {
     myParts,
     upcomingEvents: upcomingEventsWithProgress,
     pendingApprovals,
+    inspectionRequests,
   })
 }
