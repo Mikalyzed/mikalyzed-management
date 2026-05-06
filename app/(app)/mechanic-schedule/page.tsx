@@ -256,6 +256,38 @@ export default function MechanicBoard() {
     setSaving(false)
   }
 
+  const structuredProgress = (item: ChecklistItem): { filled: number; total: number } | null => {
+    const d = (item.data || {}) as Record<string, unknown>
+    if (item.type === 'tirePsi') {
+      const keys = ['fl', 'fr', 'rl', 'rr']
+      return { filled: keys.filter(k => typeof d[k] === 'number').length, total: keys.length }
+    }
+    if (item.type === 'brakePads') {
+      const keys = ['frontMm', 'rearMm']
+      return { filled: keys.filter(k => typeof d[k] === 'number').length, total: keys.length }
+    }
+    if (item.type === 'fluids') {
+      const keys = ['powerSteering', 'brake', 'engineOil', 'transmission', 'antifreeze']
+      return { filled: keys.filter(k => !!getPillStatus(d[k])).length, total: keys.length }
+    }
+    if (item.type === 'engineCheck') {
+      const keys = ['sparkPlug', 'coil', 'distributorCap', 'sparkPlugWires']
+      return { filled: keys.filter(k => !!getPillStatus(d[k])).length, total: keys.length }
+    }
+    if (item.type === 'electrical') {
+      const keys = ['regularBeam', 'highBeam', 'fogLights', 'radio', 'top', 'brakeLights', 'reverseLights', 'turnSignals']
+      return { filled: keys.filter(k => !!getPillStatus(d[k])).length, total: keys.length }
+    }
+    if (item.type === 'steeringCheck') {
+      return { filled: getPillStatus(d.play) ? 1 : 0, total: 1 }
+    }
+    if (item.type === 'suspensionCheck') {
+      const keys = ['shaking', 'noises']
+      return { filled: keys.filter(k => !!getPillStatus(d[k])).length, total: keys.length }
+    }
+    return null
+  }
+
   const isStructuredComplete = (item: ChecklistItem): boolean => {
     const d = (item.data || {}) as Record<string, unknown>
     if (item.type === 'tirePsi') {
@@ -953,6 +985,20 @@ export default function MechanicBoard() {
                               >
                                 <span style={{ flex: 1, fontSize: 14, color: item.done ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: item.done ? 'line-through' : 'none' }}>
                                   {item.item}
+                                  {(() => {
+                                    const prog = structuredProgress(item)
+                                    if (!prog) return null
+                                    const isFull = prog.filled === prog.total
+                                    return (
+                                      <span style={{
+                                        marginLeft: 8, fontSize: 11, fontWeight: 700,
+                                        padding: '2px 8px', borderRadius: 100,
+                                        background: isFull ? '#dcfce7' : '#fef3c7',
+                                        color: isFull ? '#16a34a' : '#92400e',
+                                        border: `1px solid ${isFull ? '#bbf7d0' : '#fcd34d'}`,
+                                      }}>{prog.filled}/{prog.total}</span>
+                                    )
+                                  })()}
                                   {hasStructured && !isExpanded && item.note && (
                                     <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}>· {item.note}</span>
                                   )}
