@@ -80,6 +80,161 @@ ${ctaButton(`${BASE_URL}/transport`, 'View Transport')}
   return { subject, html }
 }
 
+export function inspectionReportEmail({
+  vehicleDesc,
+  stockNumber,
+  mechanicName,
+  vehicleId,
+  checklist,
+  followUps,
+}: {
+  vehicleDesc: string
+  stockNumber: string
+  mechanicName: string
+  vehicleId: string
+  checklist: Array<{
+    item: string
+    done: boolean
+    note?: string
+    type?: string
+    data?: Record<string, unknown>
+  }>
+  followUps: Array<{
+    item: string
+    estimatedHours?: number | null
+    approved?: string
+    done?: boolean
+  }>
+}) {
+  const STATUS_COLORS: Record<string, string> = {
+    ok: '#16a34a', no: '#16a34a', topped: '#2563eb',
+    issue: '#dc2626', yes: '#dc2626',
+  }
+  const STATUS_LABELS: Record<string, string> = {
+    ok: 'OK', topped: 'Topped Off', issue: 'Issue',
+    no: 'No', yes: 'Yes',
+  }
+
+  const getStatus = (v: unknown): string | undefined => {
+    if (!v) return undefined
+    if (typeof v === 'string') return v
+    if (typeof v === 'object' && v && 'status' in v) return (v as { status?: string }).status
+    return undefined
+  }
+  const getNote = (v: unknown): string => {
+    if (v && typeof v === 'object' && 'note' in v) return (v as { note?: string }).note || ''
+    return ''
+  }
+
+  const pillRow = (key: string, label: string, data: Record<string, unknown>) => {
+    const status = getStatus(data[key])
+    const note = getNote(data[key])
+    if (!status) return ''
+    const color = STATUS_COLORS[status] || '#86868b'
+    return `<tr>
+      <td style="padding:4px 8px 4px 0;font-size:13px;color:#1d1d1f">${label}</td>
+      <td style="padding:4px 0;text-align:right">
+        <span style="display:inline-block;padding:2px 10px;border-radius:100px;background:${color}20;color:${color};font-size:11px;font-weight:700;text-transform:uppercase">${STATUS_LABELS[status] || status}</span>
+      </td>
+    </tr>${note ? `<tr><td colspan="2" style="padding:0 0 8px 0;font-size:12px;color:#86868b;font-style:italic">→ ${note}</td></tr>` : ''}`
+  }
+
+  const renderStructured = (item: { type?: string; data?: Record<string, unknown> }) => {
+    const d = item.data || {}
+    if (item.type === 'tirePsi') {
+      const cells = ['fl', 'fr', 'rl', 'rr'].map(k => `<td style="padding:6px 8px;text-align:center;font-size:13px;color:#1d1d1f;background:#f5f5f7;border-radius:6px;width:60px">${d[k] ?? '—'}</td>`).join('<td style="width:6px"></td>')
+      const labels = ['FL', 'FR', 'RL', 'RR'].map(l => `<td style="padding:0 8px 4px;text-align:center;font-size:11px;color:#86868b;font-weight:600">${l}</td>`).join('<td></td>')
+      return `<table cellpadding="0" cellspacing="0" style="width:100%;margin-top:6px"><tr>${labels}</tr><tr>${cells}</tr></table>`
+    }
+    if (item.type === 'brakePads') {
+      const front = d.frontMm ?? '—'
+      const rear = d.rearMm ?? '—'
+      return `<p style="margin:6px 0 0;font-size:13px;color:#1d1d1f">Front pads: <strong>${front}mm</strong> · Rear pads: <strong>${rear}mm</strong></p>`
+    }
+    if (item.type === 'fluids') {
+      const rows = [
+        ['powerSteering', 'Power steering'],
+        ['brake', 'Brake'],
+        ['engineOil', 'Engine oil'],
+        ['transmission', 'Transmission'],
+        ['antifreeze', 'Antifreeze'],
+      ].map(([k, l]) => pillRow(k, l, d as Record<string, unknown>)).join('')
+      return `<table cellpadding="0" cellspacing="0" style="width:100%;margin-top:6px">${rows}</table>`
+    }
+    if (item.type === 'engineCheck') {
+      const rows = [
+        ['sparkPlug', 'Spark plug'],
+        ['coil', 'Coil'],
+        ['distributorCap', 'Distributor cap'],
+        ['sparkPlugWires', 'Spark plug wires'],
+      ].map(([k, l]) => pillRow(k, l, d as Record<string, unknown>)).join('')
+      return `<table cellpadding="0" cellspacing="0" style="width:100%;margin-top:6px">${rows}</table>`
+    }
+    if (item.type === 'electrical') {
+      const rows = [
+        ['regularBeam', 'Regular beam'],
+        ['highBeam', 'High beam'],
+        ['fogLights', 'Fog lights'],
+        ['radio', 'Radio'],
+        ['top', 'Top'],
+        ['brakeLights', 'Brake lights'],
+        ['reverseLights', 'Reverse lights'],
+        ['turnSignals', 'Turn signals'],
+      ].map(([k, l]) => pillRow(k, l, d as Record<string, unknown>)).join('')
+      return `<table cellpadding="0" cellspacing="0" style="width:100%;margin-top:6px">${rows}</table>`
+    }
+    if (item.type === 'steeringCheck') {
+      return `<table cellpadding="0" cellspacing="0" style="width:100%;margin-top:6px">${pillRow('play', 'Play in the steering', d as Record<string, unknown>)}</table>`
+    }
+    if (item.type === 'suspensionCheck') {
+      const rows = [['shaking', 'Shaking'], ['noises', 'Noises']]
+        .map(([k, l]) => pillRow(k, l, d as Record<string, unknown>)).join('')
+      return `<table cellpadding="0" cellspacing="0" style="width:100%;margin-top:6px">${rows}</table>`
+    }
+    return ''
+  }
+
+  const inspectionItems = checklist.filter(c => !((c as { addedByMechanic?: boolean }).addedByMechanic))
+  const doneCount = inspectionItems.filter(c => c.done).length
+
+  const renderItem = (item: { item: string; done: boolean; note?: string; type?: string; data?: Record<string, unknown> }) => `
+<div style="background:#ffffff;border:1px solid #e5e5e5;border-radius:10px;padding:14px 16px;margin:0 0 10px">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+    <span style="font-size:14px;font-weight:600;color:#1d1d1f">${item.item}</span>
+    <span style="display:inline-block;padding:2px 10px;border-radius:100px;background:${item.done ? '#dcfce720' : '#f5f5f720'};color:${item.done ? '#16a34a' : '#86868b'};font-size:11px;font-weight:700">${item.done ? '✓ Done' : 'Not done'}</span>
+  </div>
+  ${renderStructured(item)}
+  ${item.note ? `<p style="margin:8px 0 0;padding:8px 10px;background:#f5f5f7;border-radius:6px;font-size:12px;color:#1d1d1f"><strong style="color:#86868b">Notes:</strong> ${item.note}</p>` : ''}
+</div>`
+
+  const followUpRows = followUps.length > 0 ? `
+<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 16px;margin:16px 0">
+  <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.04em">Follow-up Tasks Requested</p>
+  ${followUps.map(f => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-top:1px solid #fde68a">
+      <span style="font-size:13px;color:#1d1d1f">${f.item}</span>
+      <span style="display:inline-flex;gap:6px">
+        ${f.estimatedHours != null ? `<span style="padding:2px 8px;border-radius:100px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700">${f.estimatedHours}h</span>` : ''}
+        <span style="padding:2px 8px;border-radius:100px;background:${f.approved === 'approved' ? '#dcfce7' : '#fef3c7'};color:${f.approved === 'approved' ? '#16a34a' : '#92400e'};font-size:11px;font-weight:700;text-transform:uppercase">${f.approved === 'approved' ? 'Approved' : 'Pending'}</span>
+      </span>
+    </div>
+  `).join('')}
+</div>` : ''
+
+  const subject = `Inspection report: ${vehicleDesc}`
+  const html = layout(`
+<h1 style="margin:0 0 4px;font-size:22px;color:#1d1d1f">Vehicle Inspection Report</h1>
+<p style="margin:0 0 16px;font-size:13px;color:#86868b">By ${mechanicName} · ${doneCount}/${inspectionItems.length} tasks complete</p>
+${vehicleBox(`${vehicleDesc} · #${stockNumber}`)}
+<div style="margin:16px 0">
+  ${inspectionItems.map(renderItem).join('')}
+</div>
+${followUpRows}
+${ctaButton(`${BASE_URL}/vehicles/${vehicleId}`, 'View Vehicle')}
+`)
+  return { subject, html }
+}
+
 export function newTransportRequestEmail({
   vehicleDesc,
   pickupLocation,

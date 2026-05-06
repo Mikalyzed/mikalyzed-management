@@ -914,6 +914,10 @@ export default function MechanicBoard() {
                         const isFirstFollowup = item.addedByMechanic && (!visiblePrev || !visiblePrev.addedByMechanic)
                         const followupTotal = modalChecklist.filter(x => x.addedByMechanic && x.approved !== 'declined').length
                         const followupDone = modalChecklist.filter(x => x.addedByMechanic && x.done && x.approved !== 'declined').length
+                        // Detect if this is the last visible inspection item (next item is undefined or a follow-up)
+                        const visibleNext = modalChecklist.slice(i + 1).find(x => x.approved !== 'declined')
+                        const isLastInspectionItem = !item.addedByMechanic && (!visibleNext || visibleNext.addedByMechanic)
+                        const isNewInventory = selectedJob.scopeName === 'New Inventory'
                         return (
                           <Fragment key={i}>
                             {isFirstFollowup && (
@@ -1474,6 +1478,44 @@ export default function MechanicBoard() {
                               </div>
                             )}
                           </div>
+                          {isLastInspectionItem && isNewInventory && (() => {
+                            const allDone = modalChecklist.filter(x => !x.addedByMechanic).every(x => x.done)
+                            return (
+                              <button
+                                type="button"
+                                disabled={!allDone || saving}
+                                onClick={async () => {
+                                  if (!confirm('Complete inspection? A report will be emailed and the vehicle will move to admin routing.')) return
+                                  setSaving(true)
+                                  try {
+                                    const res = await fetch(`/api/stages/${selectedJob.id}/complete-inspection`, { method: 'POST' })
+                                    if (!res.ok) {
+                                      const err = await res.json()
+                                      alert(err.message || err.error || 'Could not complete inspection')
+                                      setSaving(false)
+                                      return
+                                    }
+                                    setSelectedJob(null)
+                                    fetchData()
+                                  } catch {
+                                    setSaving(false)
+                                  }
+                                }}
+                                style={{
+                                  width: '100%', marginTop: 4, padding: '12px 16px',
+                                  borderRadius: 10, border: 'none',
+                                  background: allDone ? '#16a34a' : '#e2e5ea',
+                                  color: allDone ? '#fff' : '#999',
+                                  fontSize: 14, fontWeight: 700,
+                                  cursor: allDone && !saving ? 'pointer' : 'not-allowed',
+                                  opacity: saving ? 0.5 : 1,
+                                }}
+                                title={!allDone ? 'Finish all inspection tasks first' : ''}
+                              >
+                                {saving ? 'Sending report...' : 'Complete Inspection'}
+                              </button>
+                            )
+                          })()}
                           </Fragment>
                         )
                       })}
