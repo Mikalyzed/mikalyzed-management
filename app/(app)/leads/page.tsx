@@ -57,6 +57,8 @@ export default function LeadsPage() {
   const [newTaskDue, setNewTaskDue] = useState('')
   const [newNote, setNewNote] = useState('')
   const [modalSaving, setModalSaving] = useState(false)
+  const [draggingOppId, setDraggingOppId] = useState<string | null>(null)
+  const [dragOverStageId, setDragOverStageId] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/settings/dispositions').then(r => r.json()).then(d => setDispositions((d.dispositions || []).filter((x: any) => x.isActive)))
@@ -279,19 +281,50 @@ export default function LeadsPage() {
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 }}
-                  onDragOver={e => e.preventDefault()}
+                <div style={{
+                  display: 'flex', flexDirection: 'column', gap: 8, minHeight: 80,
+                  borderRadius: 12,
+                  padding: dragOverStageId === stage.id ? 6 : 0,
+                  margin: dragOverStageId === stage.id ? -6 : 0,
+                  background: dragOverStageId === stage.id ? 'rgba(223, 253, 110, 0.15)' : 'transparent',
+                  outline: dragOverStageId === stage.id ? '2px dashed #1a1a1a' : 'none',
+                  outlineOffset: -2,
+                  transition: 'background 0.12s ease, padding 0.12s ease',
+                }}
+                  onDragOver={e => {
+                    e.preventDefault()
+                    if (draggingOppId && dragOverStageId !== stage.id) setDragOverStageId(stage.id)
+                  }}
+                  onDragLeave={e => {
+                    // Only clear if leaving the column (not entering a child)
+                    const related = e.relatedTarget as Node | null
+                    if (!e.currentTarget.contains(related)) {
+                      setDragOverStageId(prev => (prev === stage.id ? null : prev))
+                    }
+                  }}
                   onDrop={e => {
                     const oppId = e.dataTransfer.getData('oppId')
+                    setDragOverStageId(null)
+                    setDraggingOppId(null)
                     if (oppId) moveOpp(oppId, stage.id)
                   }}
                 >
                   {stageOpps.map(opp => (
                     <div key={opp.id} draggable
-                      onDragStart={e => e.dataTransfer.setData('oppId', opp.id)}
+                      onDragStart={e => {
+                        e.dataTransfer.setData('oppId', opp.id)
+                        e.dataTransfer.effectAllowed = 'move'
+                        setDraggingOppId(opp.id)
+                      }}
+                      onDragEnd={() => { setDraggingOppId(null); setDragOverStageId(null) }}
+                      style={{
+                        opacity: draggingOppId === opp.id ? 0.4 : 1,
+                        transform: draggingOppId === opp.id ? 'scale(0.97)' : 'scale(1)',
+                        transition: 'opacity 0.12s ease, transform 0.12s ease',
+                      }}
                     >
                       <div onClick={() => { setModalOpp(opp); setModalTab('details'); loadModalData(opp.id) }} style={{ textDecoration: 'none', color: 'inherit' }}>
-                        <div className="card" style={{ padding: '14px 16px', cursor: 'grab' }}>
+                        <div className="card lead-card" style={{ padding: '14px 16px', cursor: 'grab' }}>
                           {/* Title + assignee avatar */}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
                             <span style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.3 }}>

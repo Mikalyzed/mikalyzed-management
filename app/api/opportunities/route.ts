@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSessionUser } from '@/lib/auth'
+import { getSessionUser, canSeeAllLeads } from '@/lib/auth'
 
 export async function GET(request: Request) {
   const user = await getSessionUser()
@@ -17,6 +17,11 @@ export async function GET(request: Request) {
   if (stageId) where.stageId = stageId
   if (assigneeId) where.assigneeId = assigneeId
   if (source) where.source = source
+
+  // Sales reps see only their own opportunities; admins/managers see all
+  if (!canSeeAllLeads(user.role)) {
+    where.assigneeId = user.id
+  }
 
   const opportunities = await prisma.opportunity.findMany({
     where,

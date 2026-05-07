@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSessionUser } from '@/lib/auth'
+import { getSessionUser, canSeeAllLeads } from '@/lib/auth'
 
 export async function GET(request: Request) {
   const user = await getSessionUser()
@@ -22,6 +22,11 @@ export async function GET(request: Request) {
     ]
   }
   if (source) where.source = source
+
+  // Sales reps see only contacts with at least one opportunity assigned to them
+  if (!canSeeAllLeads(user.role)) {
+    where.opportunities = { some: { assigneeId: user.id } }
+  }
 
   const [contacts, total] = await Promise.all([
     prisma.contact.findMany({

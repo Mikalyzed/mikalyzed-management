@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSessionUser } from '@/lib/auth'
+import { getSessionUser, canSeeAllLeads } from '@/lib/auth'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
@@ -24,6 +24,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   })
 
   if (!contact) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Sales reps can only access contacts they have at least one opportunity with
+  if (!canSeeAllLeads(user.role)) {
+    const hasOwnOpp = contact.opportunities.some(o => o.assigneeId === user.id)
+    if (!hasOwnOpp) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+  }
+
   return NextResponse.json(contact)
 }
 
@@ -32,6 +41,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
+
+  // Same access guard as GET — reps can only edit contacts they own an opp on
+  if (!canSeeAllLeads(user.role)) {
+    const ownOpp = await prisma.opportunity.findFirst({
+      where: { contactId: id, assigneeId: user.id },
+      select: { id: true },
+    })
+    if (!ownOpp) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
   const body = await request.json()
   const { firstName, lastName, email, phone, secondaryPhone, address, city, state, zip, source, tags, notes } = body
 

@@ -129,6 +129,16 @@ input, select, textarea { font-size: 16px; font-family: inherit; }
   box-shadow: 0 2px 4px rgba(0,0,0,0.04), 0 12px 28px rgba(0,0,0,0.08);
   border-color: rgba(0,0,0,0.06);
 }
+.lead-card {
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.lead-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.lead-card:active {
+  cursor: grabbing !important;
+}
 .card-flat {
   background: var(--bg-card);
   border: 1px solid var(--border);

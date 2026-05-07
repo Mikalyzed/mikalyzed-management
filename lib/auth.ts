@@ -33,3 +33,11 @@ export function requireRole(userRole: string, allowed: Role[]): boolean {
 export function canSeeAllLeads(role: string): boolean {
   return role === 'admin' || role === 'sales_manager'
 }
+
+export function canAccessOpportunity(
+  user: { id: string; role: string },
+  opp: { assigneeId: string | null },
+): boolean {
+  if (canSeeAllLeads(user.role)) return true
+  return opp.assigneeId === user.id
+}
