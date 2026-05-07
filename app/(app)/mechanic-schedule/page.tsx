@@ -26,6 +26,13 @@ function getPillNote(v: unknown): string {
   return ''
 }
 const ISSUE_STATUSES = new Set(['issue', 'yes'])
+function sentenceCase(s: string | null | undefined): string {
+  if (!s) return ''
+  const trimmed = s.trim()
+  if (!trimmed) return ''
+  const lower = trimmed.toLowerCase()
+  return lower.charAt(0).toUpperCase() + lower.slice(1)
+}
 type ReturnQueueEntry = { stage: string; fromStage?: string; reason?: string }
 
 function ReturnBadge({ returnQueue }: { returnQueue?: ReturnQueueEntry[] }) {
@@ -519,8 +526,8 @@ export default function MechanicBoard() {
         {/* Pause info */}
         {job.pauseReason && !job.timerRunning && !job.autoPaused && (
           <p style={{ fontSize: 11, fontWeight: 600, color: job.pauseReason === 'Lunch' ? '#7c3aed' : colors.text, marginTop: 8 }}>
-            {job.pauseReason === 'Lunch' ? '🍽️ On Lunch' : job.pauseReason}{job.pauseDetail ? `: ${job.pauseDetail}` : ''}
-            {job.awaitingPartsName && ` — ${job.awaitingPartsName}`}
+            {job.pauseReason === 'Lunch' ? '🍽️ On Lunch' : job.pauseReason}{job.pauseDetail ? `: ${sentenceCase(job.pauseDetail)}` : ''}
+            {job.awaitingPartsName && ` — ${sentenceCase(job.awaitingPartsName)}`}
           </p>
         )}
         {job.autoPaused && (
@@ -2196,7 +2203,7 @@ function WeekCard({ job, index, getLiveElapsed, openJob, muted }: {
       </p>
       {isPaused && job.pauseReason && (
         <p style={{ fontSize: 10, color: '#b45309', marginBottom: 4, fontStyle: 'italic' }}>
-          {job.pauseReason === 'Lunch' ? '🍽️ On Lunch' : job.pauseReason === 'waiting_on_parts' ? `Parts: ${job.awaitingPartsName || 'Pending'}` : job.pauseDetail || 'Paused'}
+          {job.pauseReason === 'Lunch' ? '🍽️ On Lunch' : job.pauseReason === 'waiting_on_parts' ? `Parts: ${sentenceCase(job.awaitingPartsName) || 'Pending'}` : sentenceCase(job.pauseDetail) || 'Paused'}
         </p>
       )}
       {isAwaiting && job.awaitingPartsName && (

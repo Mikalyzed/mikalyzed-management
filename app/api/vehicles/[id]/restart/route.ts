@@ -24,15 +24,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Vehicle is not completed' }, { status: 400 })
   }
 
-  let body: { reason?: string } = {}
+  let body: { reason?: string; newInventory?: boolean; mechanicChecklist?: (string | { item: string; type?: string })[] } = {}
   try { body = await request.json() } catch { /* ok */ }
 
   const firstStage: Stage = 'mechanic'
   const config = await prisma.stageConfig.findUnique({ where: { stage: firstStage } })
-  const checklistItems = (config?.defaultChecklist as string[] | undefined)?.length
+  const fallback = (config?.defaultChecklist as string[] | undefined)?.length
     ? config!.defaultChecklist as string[]
     : DEFAULT_CHECKLISTS[firstStage] || []
-  const checklist = checklistItems.map((item: string) => ({ item, done: false, note: '' }))
+  const rawChecklist = body.mechanicChecklist && body.mechanicChecklist.length > 0
+    ? body.mechanicChecklist
+    : fallback
+  const checklist = rawChecklist.map((entry) => {
+    if (typeof entry === 'string') return { item: entry, done: false, note: '' }
+    return { item: entry.item, done: false, note: '', ...(entry.type ? { type: entry.type } : {}) }
+  })
 
   await prisma.$transaction(async (tx) => {
     // Create new first stage
@@ -43,6 +49,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: 'pending',
         assigneeId: config?.defaultAssigneeId || null,
         checklist,
+        scopeName: body.newInventory ? 'New Inventory' : null,
       },
     })
 

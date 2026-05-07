@@ -99,7 +99,11 @@ export default function AddVehiclePage() {
             const restartRes = await fetch(`/api/vehicles/${result.vehicleId}/restart`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ reason }),
+              body: JSON.stringify({
+                reason,
+                newInventory: startingStage === 'mechanic' && fullInspection,
+                mechanicChecklist,
+              }),
             })
             if (restartRes.ok) {
               router.push(`/vehicles/${result.vehicleId}`)

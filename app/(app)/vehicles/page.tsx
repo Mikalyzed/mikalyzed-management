@@ -24,7 +24,12 @@ type VehicleWithStage = {
   lastCompleted?: {
     stage: string
     completedAt: string | null
-    checklist: { item: string; done: boolean; note?: string }[]
+    checklist: {
+      item: string; done: boolean; note?: string
+      addedByMechanic?: boolean
+      approved?: string
+      estimatedHours?: number
+    }[]
     scopeName: string | null
     assignee: { id: string; name: string } | null
   } | null
@@ -42,6 +47,7 @@ type VehicleWithStage = {
     awaitingParts?: boolean
     awaitingPartsName?: string | null
     pauseReason?: string | null
+    pauseDetail?: string | null
     timerStartedAt?: string | null
     autoPaused?: boolean
   }>
@@ -100,6 +106,7 @@ export default function VehiclesPage() {
   const [routingNext, setRoutingNext] = useState<string>('detailing')
   const [routingReason, setRoutingReason] = useState('')
   const [routingTasks, setRoutingTasks] = useState<string[]>([])
+  const [routingCarry, setRoutingCarry] = useState<Set<number>>(new Set())
   const [routingNewTask, setRoutingNewTask] = useState('')
   const [routingEstHours, setRoutingEstHours] = useState('')
   const [routingSoldDelivery, setRoutingSoldDelivery] = useState(false)
@@ -550,6 +557,9 @@ export default function VehiclesPage() {
                         setRoutingNext('detailing')
                         setRoutingReason('')
                         setRoutingTasks([])
+                        const addedTasks = (v.lastCompleted?.checklist || [])
+                          .filter(t => t.addedByMechanic && t.approved !== 'declined')
+                        setRoutingCarry(new Set(addedTasks.map((_, i) => i)))
                         setRoutingNewTask('')
                         setRoutingEstHours('')
                         setRoutingSoldDelivery(false)
@@ -562,32 +572,54 @@ export default function VehiclesPage() {
                       Route
                     </button>
                   </div>
-                  {expanded && last?.checklist && last.checklist.length > 0 && (
-                    <div style={{ borderTop: '1px solid #fde68a', background: '#fffbeb', padding: '10px 14px 12px 36px' }}>
-                      <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
-                        Tasks from {STAGE_LABELS[last.stage as keyof typeof STAGE_LABELS] || last.stage}
-                      </p>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {last.checklist.map((t, i) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                            <span style={{
-                              width: 14, height: 14, borderRadius: 4, flexShrink: 0,
-                              border: t.done ? 'none' : '1.5px solid #d4d4d4',
-                              background: t.done ? '#16a34a' : 'transparent',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              color: '#fff', fontSize: 10, fontWeight: 700,
-                            }}>
-                              {t.done ? '✓' : ''}
-                            </span>
-                            <span style={{
-                              color: t.done ? 'var(--text-muted)' : 'var(--text-primary)',
-                              textDecoration: t.done ? 'line-through' : 'none',
-                            }}>{t.item}</span>
-                          </div>
-                        ))}
+                  {expanded && last?.checklist && last.checklist.length > 0 && (() => {
+                    const inspectionItems = last.checklist.filter(t => !t.addedByMechanic)
+                    const addedTasks = last.checklist.filter(t => t.addedByMechanic && t.approved !== 'declined')
+                    const renderRow = (t: typeof last.checklist[number], i: number) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                        <span style={{
+                          width: 14, height: 14, borderRadius: 4, flexShrink: 0,
+                          border: t.done ? 'none' : '1.5px solid #d4d4d4',
+                          background: t.done ? '#16a34a' : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#fff', fontSize: 10, fontWeight: 700,
+                        }}>
+                          {t.done ? '✓' : ''}
+                        </span>
+                        <span style={{
+                          flex: 1,
+                          color: t.done ? 'var(--text-muted)' : 'var(--text-primary)',
+                          textDecoration: t.done ? 'line-through' : 'none',
+                        }}>{t.item}</span>
+                        {t.estimatedHours != null && (
+                          <span style={{
+                            fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 100,
+                            background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+                          }}>{t.estimatedHours}h</span>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    )
+                    return (
+                      <div style={{ borderTop: '1px solid #fde68a', background: '#fffbeb', padding: '10px 14px 12px 36px' }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                          {last.scopeName === 'New Inventory' ? 'Inspection' : `Tasks from ${STAGE_LABELS[last.stage as keyof typeof STAGE_LABELS] || last.stage}`}
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {inspectionItems.map((t, i) => renderRow(t, i))}
+                        </div>
+                        {addedTasks.length > 0 && (
+                          <>
+                            <p style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 14, marginBottom: 8 }}>
+                              Tasks added during inspection ({addedTasks.length})
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              {addedTasks.map((t, i) => renderRow(t, i))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )
+                  })()}
                   {expanded && (!last?.checklist || last.checklist.length === 0) && (
                     <div style={{ borderTop: '1px solid #fde68a', background: '#fffbeb', padding: '10px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
                       No tasks recorded for this stage.
@@ -699,6 +731,20 @@ export default function VehiclesPage() {
                           partsLabel={(v as any).partsLabel}
                           returnQueue={v.returnQueue}
                           stageScope={(v.stages[0] as any)?.scopeName || null}
+                          pauseReason={(() => {
+                            const s = v.stages[0]
+                            if (!s || s.status !== 'in_progress' || s.timerStartedAt) return null
+                            const reason = s.pauseReason
+                            if (!reason) return null
+                            const detail = s.pauseDetail?.trim()
+                            // 'other' = use freeform note only
+                            if (reason.toLowerCase() === 'other') return detail || null
+                            // Friendly labels for known reasons
+                            const friendly = reason.toLowerCase() === 'lunch' ? 'Lunch'
+                              : reason.toLowerCase() === 'waiting_on_parts' ? 'Waiting on parts'
+                              : reason
+                            return detail ? `${friendly}: ${detail}` : friendly
+                          })()}
                         />
                       </div>
                     </div>
@@ -734,6 +780,66 @@ export default function VehiclesPage() {
                 Just completed: <strong>{STAGE_LABELS[routingVehicle.lastCompletedStage as keyof typeof STAGE_LABELS] || routingVehicle.lastCompletedStage}</strong>
               </p>
             )}
+
+            {(() => {
+              const addedTasks = (routingVehicle.lastCompleted?.checklist || [])
+                .filter(t => t.addedByMechanic && t.approved !== 'declined')
+              if (addedTasks.length === 0) return null
+              const allChecked = addedTasks.every((_, i) => routingCarry.has(i))
+              const toggleAll = () => {
+                if (allChecked) setRoutingCarry(new Set())
+                else setRoutingCarry(new Set(addedTasks.map((_, i) => i)))
+              }
+              const toggleOne = (i: number) => {
+                const next = new Set(routingCarry)
+                if (next.has(i)) next.delete(i); else next.add(i)
+                setRoutingCarry(next)
+              }
+              return (
+                <div style={{
+                  background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10,
+                  padding: '10px 12px', marginBottom: 16,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Tasks added during inspection ({addedTasks.length})
+                    </p>
+                    <button
+                      type="button"
+                      onClick={toggleAll}
+                      style={{ background: 'none', border: 'none', fontSize: 11, fontWeight: 700, color: '#1d4ed8', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.04em' }}
+                    >
+                      {allChecked ? 'Uncheck all' : 'Check all'}
+                    </button>
+                  </div>
+                  <p style={{ fontSize: 11, color: '#1e3a8a', marginBottom: 8 }}>
+                    Checked tasks will be added to the next stage&apos;s checklist.
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {addedTasks.map((t, i) => {
+                      const checked = routingCarry.has(i)
+                      return (
+                        <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleOne(i)}
+                            style={{ width: 14, height: 14, flexShrink: 0, cursor: 'pointer', accentColor: '#1d4ed8' }}
+                          />
+                          <span style={{ flex: 1, color: 'var(--text-primary)' }}>{t.item}</span>
+                          {t.estimatedHours != null && (
+                            <span style={{
+                              fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 100,
+                              background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+                            }}>{t.estimatedHours}h</span>
+                          )}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
 
             <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Send to:</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
@@ -874,13 +980,19 @@ export default function VehiclesPage() {
                 onClick={async () => {
                   if (!routingVehicle) return
                   setRoutingSaving(true)
+                  const addedTasks = (routingVehicle.lastCompleted?.checklist || [])
+                    .filter(t => t.addedByMechanic && t.approved !== 'declined')
+                  const carriedNames = addedTasks
+                    .map((t, i) => routingCarry.has(i) ? t.item : null)
+                    .filter((s): s is string => !!s)
+                  const mergedTasks = [...carriedNames, ...routingTasks]
                   await fetch(`/api/vehicles/${routingVehicle.id}/route-stage`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       nextStage: routingNext,
                       reason: routingReason || null,
-                      tasks: routingTasks,
+                      tasks: mergedTasks,
                       estimatedHours: routingEstHours || null,
                       soldDelivery: routingNext === 'detailing' ? routingSoldDelivery : false,
                     }),

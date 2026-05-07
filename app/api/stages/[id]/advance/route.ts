@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
+import { consumeReturnQueue } from '@/lib/return-queue'
 
 /**
- * Stage completion. Replaces the old fixed-pipeline auto-advance with a
- * queue-based flow: marks the current stage as done and parks the vehicle
- * in 'awaiting_routing' so an admin can decide where it goes next.
+ * Stage completion. If the vehicle has a queued return (admin previously
+ * dragged it back from a downstream stage), auto-route to that stage.
+ * Otherwise park in 'awaiting_routing' for admin to decide.
  *
  * Kept at the /advance path for backwards compatibility with existing UI.
  */
@@ -30,14 +31,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'This is not the current stage' }, { status: 400 })
   }
 
-  await prisma.$transaction(async (tx) => {
+  const returned = await prisma.$transaction(async (tx) => {
     await tx.vehicleStage.update({
       where: { id },
       data: { status: 'done', completedAt: new Date(), timerStartedAt: null },
-    })
-    await tx.vehicle.update({
-      where: { id: stage.vehicleId },
-      data: { status: 'awaiting_routing', currentAssigneeId: null },
     })
     await tx.activityLog.create({
       data: {
@@ -48,9 +45,18 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         details: { stage: stage.stage },
       },
     }).catch(() => {})
+
+    const consumed = await consumeReturnQueue(tx, stage.vehicleId, user.id)
+    if (!consumed) {
+      await tx.vehicle.update({
+        where: { id: stage.vehicleId },
+        data: { status: 'awaiting_routing', currentAssigneeId: null },
+      })
+    }
+    return consumed
   })
 
   await recomputeInventoryStatus(stage.vehicle.stockNumber).catch(() => {})
 
-  return NextResponse.json({ success: true, awaitingRouting: true })
+  return NextResponse.json({ success: true, awaitingRouting: !returned, returned })
 }

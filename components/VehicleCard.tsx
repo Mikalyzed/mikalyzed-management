@@ -19,101 +19,222 @@ type VehicleCardProps = {
   timeInStage?: string
   partsLabel?: string | null
   returnQueue?: ReturnQueueEntry[]
+  pauseReason?: string | null
   onClick?: () => void
 }
 
-const PARTS_COLORS: Record<string, { bg: string; color: string }> = {
-  'Parts need to be found': { bg: '#fef2f2', color: '#ef4444' },
-  'Parts pending approval': { bg: '#fef9c3', color: '#a16207' },
-  'Parts need to be ordered': { bg: '#eff6ff', color: '#2563eb' },
-  'Parts ordered': { bg: '#fefce8', color: '#eab308' },
+const PARTS_COLORS: Record<string, string> = {
+  'Parts need to be found': '#ef4444',
+  'Parts pending approval': '#a16207',
+  'Parts need to be ordered': '#2563eb',
+  'Parts ordered': '#eab308',
+}
+
+function titleCase(s: string) {
+  return s
+    .toLowerCase()
+    .split(/(\s+|\/)/)
+    .map(part => /^\s+$|^\/$/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1))
+    .join('')
+}
+
+function sentenceCase(s: string): string {
+  const trimmed = s.trim()
+  if (!trimmed) return trimmed
+  const lower = trimmed.toLowerCase()
+  return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
 
 export default function VehicleCard({
-  id, stockNumber, year, make, model, color,
-  status, stageStatus, stageDetail, stageScope, assigneeName, timeInStage, partsLabel, returnQueue, onClick,
+  stockNumber, year, make, model, color,
+  status, stageStatus, stageDetail, stageScope, assigneeName, timeInStage, partsLabel, returnQueue, pauseReason, onClick,
 }: VehicleCardProps) {
-  const partsStyle = partsLabel ? PARTS_COLORS[partsLabel] || { bg: '#f3f4f6', color: '#6b7280' } : null
-  const nextReturn = returnQueue && returnQueue.length > 0 ? returnQueue[0] : null
+  const isCompleted = status === 'completed'
+  const nextReturn = !isCompleted && returnQueue && returnQueue.length > 0 ? returnQueue[0] : null
   const isSold = stageScope === 'Sold Delivery'
+  const isNewInventory = stageScope === 'New Inventory'
+
+  const accentColor = isSold ? '#f59e0b'
+    : nextReturn ? '#f59e0b'
+    : isNewInventory ? '#3b82f6'
+    : null
+
+  let alertLabel: string | null = null
+  let alertColor: string | null = null
+  if (nextReturn) {
+    alertLabel = `Returns to ${titleCase(nextReturn.stage)}`
+    alertColor = '#92400e'
+  } else if (partsLabel) {
+    alertLabel = partsLabel
+    alertColor = PARTS_COLORS[partsLabel] || '#6b7280'
+  }
+
+  const title = [year, titleCase(make), titleCase(model)].filter(Boolean).join(' ')
+  const colorLabel = color ? titleCase(color) : null
 
   return (
     <div
       onClick={onClick}
-      className="card"
+      className="vehicle-card-modern"
       style={{
         cursor: onClick ? 'pointer' : undefined,
-        ...(isSold ? { border: '2px solid #f59e0b', boxShadow: '0 0 0 1px #fef3c7' } : {}),
+        position: 'relative',
+        background: '#ffffff',
+        borderRadius: 14,
+        padding: '16px 18px',
+        paddingLeft: accentColor ? 18 : 18,
+        border: '1px solid rgba(0,0,0,0.04)',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)',
+        overflow: 'hidden',
+        transition: 'transform 0.14s ease, box-shadow 0.14s ease',
       }}
     >
-        <div className="flex items-center justify-between gap-3 mb-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-semibold tracking-tight">#{stockNumber}</p>
-            {isSold && (
-              <span style={{
-                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
-                background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
-                textTransform: 'uppercase', letterSpacing: '0.04em',
-              }}>
-                Sold
-              </span>
-            )}
-          </div>
-          {stageStatus && <StatusBadge status={stageStatus} detail={stageDetail} />}
-        </div>
-        <p className="text-xs mb-3" style={{
-          color: 'var(--text-muted)',
-          whiteSpace: 'normal',
-          overflowWrap: 'anywhere',
-          wordBreak: 'break-word',
-          lineHeight: 1.35,
+      {accentColor && (
+        <div style={{
+          position: 'absolute', top: 0, bottom: 0, left: 0, width: 3,
+          background: accentColor,
+          opacity: 0.85,
+        }} />
+      )}
+
+      {/* Title row */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+        <p style={{
+          fontSize: 14, fontWeight: 600, lineHeight: 1.3,
+          color: '#1a1a1a', letterSpacing: '-0.01em',
+          wordBreak: 'break-word', flex: 1, minWidth: 0,
         }}>
-          {year} {make} {model}
-          {color && <span className="ml-1">· {color}</span>}
+          {title}
         </p>
+        {stageStatus && <StatusBadge status={stageStatus} detail={stageDetail} />}
+      </div>
 
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {assigneeName && (
-              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                {assigneeName}
-              </span>
-            )}
-          </div>
-          {timeInStage && (
-            <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
-              {timeInStage}
-            </span>
-          )}
-        </div>
-
-        {nextReturn && (
-          <div
-            title={nextReturn.reason || `Returns to ${nextReturn.stage}`}
-            style={{
-              marginTop: '8px', padding: '4px 8px', borderRadius: '6px',
-              background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
-              fontSize: '11px', fontWeight: 600, textAlign: 'center',
-            }}
-          >
-            Returns to {nextReturn.stage.charAt(0).toUpperCase() + nextReturn.stage.slice(1)}
-          </div>
+      {/* Sub-row: stock # · color · scope tag */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 14 }}>
+        <span style={{
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+          fontSize: 10.5, fontWeight: 600,
+          color: '#9a9a96',
+          letterSpacing: '0.01em',
+        }}>
+          #{stockNumber}
+        </span>
+        {colorLabel && (
+          <>
+            <span style={{ fontSize: 10.5, color: '#cfcfca' }}>·</span>
+            <span style={{ fontSize: 10.5, color: '#9a9a96' }}>{colorLabel}</span>
+          </>
         )}
-
-        {partsLabel && partsStyle && (
-          <div style={{
-            marginTop: '8px',
-            padding: '4px 8px',
-            borderRadius: '6px',
-            background: partsStyle.bg,
-            color: partsStyle.color,
-            fontSize: '11px',
-            fontWeight: 600,
-            textAlign: 'center',
+        {isSold && (
+          <span style={{
+            marginLeft: 'auto',
+            fontSize: 9, fontWeight: 700,
+            padding: '3px 8px', borderRadius: 100,
+            background: '#fef3c7',
+            color: '#92400e',
+            textTransform: 'uppercase', letterSpacing: '0.06em',
           }}>
-            {partsLabel}
-          </div>
+            Sold
+          </span>
         )}
       </div>
+
+      {/* Meta row: assignee · time */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, lineHeight: 1.2 }}>
+        <span style={{
+          fontSize: 12,
+          color: assigneeName ? '#3a3a3a' : '#a8a8a4',
+          fontWeight: 500,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          minWidth: 0,
+        }}>
+          {assigneeName || 'Unassigned'}
+        </span>
+        {timeInStage && (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            color: '#737373',
+            fontSize: 12, fontWeight: 500,
+            fontVariantNumeric: 'tabular-nums',
+            flexShrink: 0,
+          }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+              <circle cx="12" cy="12" r="9" />
+              <polyline points="12 7 12 12 15.5 13.5" />
+            </svg>
+            {timeInStage}
+          </span>
+        )}
+      </div>
+
+      {/* Alert row: parts or returns */}
+      {alertLabel && alertColor && (
+        <div
+          title={nextReturn?.reason}
+          style={{
+            marginTop: 12, paddingTop: 10,
+            borderTop: '1px solid #f0f0ec',
+            display: 'flex', alignItems: 'center', gap: 8,
+            fontSize: 11, fontWeight: 600,
+            color: alertColor,
+          }}
+        >
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: alertColor, flexShrink: 0,
+          }} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {alertLabel}
+          </span>
+        </div>
+      )}
+
+      {/* Pause reason */}
+      {pauseReason && (
+        <div style={{
+          marginTop: alertLabel ? 6 : 12,
+          paddingTop: alertLabel ? 0 : 10,
+          borderTop: alertLabel ? 'none' : '1px solid #f0f0ec',
+          display: 'flex', alignItems: 'flex-start', gap: 8,
+          fontSize: 10.5, fontWeight: 600,
+          color: '#b45309',
+          textTransform: 'none',
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: '#ea580c', flexShrink: 0,
+            marginTop: 5,
+          }} />
+          <span style={{
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            lineHeight: 1.35,
+            textTransform: 'none',
+          }}>
+            <span style={{ color: '#9a3412' }}>Paused:</span> <span>{sentenceCase(pauseReason)}</span>
+          </span>
+        </div>
+      )}
+
+      {/* New Inspection footer */}
+      {isNewInventory && (
+        <div style={{
+          marginTop: alertLabel ? 6 : 12,
+          paddingTop: alertLabel ? 0 : 10,
+          borderTop: alertLabel ? 'none' : '1px solid #f0f0ec',
+          display: 'flex', alignItems: 'center', gap: 8,
+          fontSize: 11, fontWeight: 600,
+          color: '#1d4ed8',
+        }}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: '#1d4ed8', flexShrink: 0,
+          }} />
+          <span>New Inspection</span>
+        </div>
+      )}
+    </div>
   )
 }

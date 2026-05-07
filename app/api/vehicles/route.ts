@@ -31,7 +31,7 @@ export async function GET(request: Request) {
         select: {
           id: true, status: true, startedAt: true, totalBlockedSeconds: true,
           priority: true, estimatedHours: true, checklist: true, scopeName: true,
-          awaitingParts: true, awaitingPartsName: true, pauseReason: true,
+          awaitingParts: true, awaitingPartsName: true, pauseReason: true, pauseDetail: true,
           timerStartedAt: true, autoPaused: true,
           assignee: { select: { id: true, name: true } },
         },
