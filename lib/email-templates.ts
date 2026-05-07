@@ -325,6 +325,30 @@ ${ctaButton(`${BASE_URL}/vehicles/${vehicleId}`, 'View Vehicle')}
   return { subject, html }
 }
 
+export function vehicleStageAssignedEmail({
+  vehicleDesc,
+  assigneeName,
+  stage,
+  vehicleId,
+  reason,
+}: {
+  vehicleDesc: string
+  assigneeName: string
+  stage: string
+  vehicleId: string
+  reason?: string | null
+}) {
+  const subject = `${stage} ready: ${vehicleDesc}`
+  const html = layout(`
+<h1 style="margin:0 0 8px;font-size:22px;color:#1d1d1f">Vehicle Routed to ${stage}</h1>
+<p style="margin:0 0 16px;font-size:15px;color:#86868b">Hi ${assigneeName}, this vehicle is now in your <strong>${stage}</strong> queue.</p>
+${vehicleBox(vehicleDesc)}
+${reason ? `<p style="margin:16px 0 0;font-size:13px;color:#86868b"><em>Note: ${reason}</em></p>` : ''}
+${ctaButton(`${BASE_URL}/vehicles/${vehicleId}`, 'View Vehicle')}
+`)
+  return { subject, html }
+}
+
 export function partsRequestEmail({
   vehicleDesc,
   partName,

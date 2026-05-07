@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
-import { DEFAULT_CHECKLISTS } from '@/lib/constants'
+import { DEFAULT_CHECKLISTS, STAGE_LABELS } from '@/lib/constants'
 import type { Stage } from '@/lib/constants'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
+import { sendNotificationEmail } from '@/lib/email'
+import { vehicleStageAssignedEmail } from '@/lib/email-templates'
 
 const VALID_NEXT = ['mechanic', 'detailing', 'content', 'publish', 'completed'] as const
 type NextStage = typeof VALID_NEXT[number]
@@ -44,7 +46,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const vehicle = await prisma.vehicle.findUnique({
     where: { id },
-    select: { id: true, stockNumber: true, status: true },
+    select: { id: true, stockNumber: true, status: true, year: true, make: true, model: true },
   })
   if (!vehicle) return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 })
 
@@ -86,6 +88,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     : baseTasks
   const checklist = tasks.map((item: string) => ({ item, done: false, note: '' }))
 
+  const newAssigneeId = config?.defaultAssigneeId || null
+
   await prisma.$transaction(async (tx) => {
     const maxPriority = await tx.vehicleStage.aggregate({
       where: { stage: nextStage, status: { notIn: ['done', 'skipped'] } },
@@ -97,7 +101,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         vehicleId: id,
         stage: nextStage,
         status: 'pending',
-        assigneeId: config?.defaultAssigneeId || null,
+        assigneeId: newAssigneeId,
         checklist,
         priority: (maxPriority._max.priority ?? -1) + 1,
         estimatedHours,
@@ -110,7 +114,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       data: {
         status: nextStage,
         currentStageId: newStage.id,
-        currentAssigneeId: config?.defaultAssigneeId || null,
+        currentAssigneeId: newAssigneeId,
       },
     })
 
@@ -126,6 +130,38 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   })
 
   await recomputeInventoryStatus(vehicle.stockNumber).catch(() => {})
+
+  // Notify the new stage's assignee (email + in-app) — fire-and-forget so a slow
+  // Resend response doesn't block the routing response.
+  if (newAssigneeId) {
+    const stageLabel = STAGE_LABELS[nextStage as keyof typeof STAGE_LABELS] || nextStage
+    const vehicleDesc = `${vehicle.year ?? ''} ${vehicle.make} ${vehicle.model} (#${vehicle.stockNumber})`.trim()
+    prisma.user.findUnique({
+      where: { id: newAssigneeId },
+      select: { id: true, name: true, email: true },
+    }).then(assignee => {
+      if (!assignee) return
+      const { subject, html } = vehicleStageAssignedEmail({
+        vehicleDesc,
+        assigneeName: assignee.name,
+        stage: stageLabel,
+        vehicleId: id,
+        reason,
+      })
+      sendNotificationEmail({ to: assignee.email, subject, html })
+        .catch(e => console.error('[route-stage email]', e))
+      prisma.notification.create({
+        data: {
+          userId: assignee.id,
+          type: 'stage_routed',
+          title: subject,
+          message: `${vehicleDesc} routed to ${stageLabel}${reason ? ` — ${reason}` : ''}`,
+          entityType: 'vehicle',
+          entityId: id,
+        },
+      }).catch(() => {})
+    }).catch(() => {})
+  }
 
   return NextResponse.json({ success: true, nextStage })
 }

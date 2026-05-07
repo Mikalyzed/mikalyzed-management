@@ -7,17 +7,29 @@ export async function POST(req: NextRequest) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { to, body, contactId } = await req.json()
+  const { to, body, contactId, mediaUrls } = await req.json()
 
-  if (!to || !body) {
-    return NextResponse.json({ error: 'to and body are required' }, { status: 400 })
+  if (!to || (!body && (!mediaUrls || mediaUrls.length === 0))) {
+    return NextResponse.json({ error: 'to and body (or mediaUrls) are required' }, { status: 400 })
   }
 
-  // Clean phone number
+  // Clean phone number to E.164
   let cleanNumber = to.replace(/[^0-9+]/g, '')
   if (!cleanNumber.startsWith('+')) {
     cleanNumber = cleanNumber.startsWith('1') ? `+${cleanNumber}` : `+1${cleanNumber}`
   }
+
+  // Resolve sender's Twilio number — required for per-rep routing
+  const sender = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { id: true, name: true, twilioNumber: true },
+  })
+  if (!sender?.twilioNumber && !process.env.TWILIO_PHONE_NUMBER) {
+    return NextResponse.json({
+      error: 'No Twilio number assigned to your account. Ask an admin to assign one in Settings → Sales → Team.',
+    }, { status: 400 })
+  }
+  const fromNumber = sender?.twilioNumber || process.env.TWILIO_PHONE_NUMBER!
 
   // Find or resolve contact
   let resolvedContactId = contactId
@@ -29,7 +41,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const message = await sendSMS(cleanNumber, body)
+    const message = await sendSMS({
+      to: cleanNumber,
+      body: body || '',
+      from: fromNumber,
+      mediaUrls: Array.isArray(mediaUrls) ? mediaUrls : undefined,
+    })
 
     // Save to database if we have a contact
     if (resolvedContactId) {
@@ -38,7 +55,8 @@ export async function POST(req: NextRequest) {
           contactId: resolvedContactId,
           direction: 'outbound',
           channel: 'sms',
-          body,
+          body: body || '',
+          mediaUrl: Array.isArray(mediaUrls) && mediaUrls.length > 0 ? mediaUrls[0] : null,
           status: message.status || 'sent',
           externalId: message.sid,
           senderId: user.id,
@@ -52,11 +70,9 @@ export async function POST(req: NextRequest) {
       status: message.status,
       to: message.to,
     })
-  } catch (error: any) {
-    console.error('SMS send error:', error.message)
-    return NextResponse.json(
-      { error: error.message || 'Failed to send SMS' },
-      { status: 500 }
-    )
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Failed to send SMS'
+    console.error('SMS send error:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

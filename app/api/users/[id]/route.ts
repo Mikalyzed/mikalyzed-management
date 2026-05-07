@@ -17,11 +17,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.email) data.email = body.email
   if (body.password) data.password = body.password
   if (body.isActive !== undefined) data.isActive = body.isActive
+  if (body.twilioNumber !== undefined) {
+    let n = (body.twilioNumber as string | null) || null
+    if (n) {
+      // Normalize to E.164
+      n = n.replace(/[^0-9+]/g, '')
+      if (!n.startsWith('+')) n = n.startsWith('1') ? `+${n}` : `+1${n}`
+    }
+    data.twilioNumber = n
+  }
 
-  const updated = await prisma.user.update({
-    where: { id },
-    data,
-  })
-
-  return NextResponse.json({ user: updated })
+  try {
+    const updated = await prisma.user.update({
+      where: { id },
+      data,
+    })
+    return NextResponse.json({ user: updated })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : ''
+    if (msg.includes('Unique constraint') && msg.includes('twilio')) {
+      return NextResponse.json({ error: 'That Twilio number is already assigned to another user' }, { status: 409 })
+    }
+    throw e
+  }
 }

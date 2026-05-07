@@ -8,6 +8,7 @@ type User = {
   email: string
   role: string
   isActive: boolean
+  twilioNumber: string | null
   createdAt: string
 }
 
@@ -39,6 +40,7 @@ export default function TeamPage() {
   const [editEmail, setEditEmail] = useState('')
   const [editPassword, setEditPassword] = useState('')
   const [editRole, setEditRole] = useState('')
+  const [editTwilio, setEditTwilio] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
 
@@ -58,6 +60,7 @@ export default function TeamPage() {
     setEditEmail(u.email)
     setEditPassword('')
     setEditRole(u.role)
+    setEditTwilio(u.twilioNumber || '')
     setEditError('')
   }
 
@@ -89,8 +92,10 @@ export default function TeamPage() {
     setEditSaving(true)
     setEditError('')
     try {
-      const body: Record<string, string> = { name: editName, email: editEmail, role: editRole }
+      const body: Record<string, string | null> = { name: editName, email: editEmail, role: editRole }
       if (editPassword.trim()) body.password = editPassword
+      // Always send twilioNumber so admin can clear it (empty string → null in API)
+      body.twilioNumber = editTwilio.trim() ? editTwilio.trim() : null
       const res = await fetch(`/api/users/${editUser.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -212,6 +217,11 @@ export default function TeamPage() {
               <div style={{ minWidth: 0, flex: 1 }}>
                 <p style={{ fontSize: 15, fontWeight: 600 }}>{u.name}</p>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{u.email}</p>
+                {u.twilioNumber && (
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+                    📱 {u.twilioNumber}
+                  </p>
+                )}
               </div>
               <span style={{
                 fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6,
@@ -283,6 +293,14 @@ export default function TeamPage() {
                     </label>
                   ))}
                 </div>
+              </div>
+              <div>
+                <label className="form-label">Twilio Number <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional — for SMS)</span></label>
+                <input className="input" value={editTwilio} onChange={e => setEditTwilio(e.target.value)}
+                  placeholder="+1 555 123 4567" />
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Inbound SMS to this number will be tagged as received by this rep. Outbound SMS sent by this rep will go from this number.
+                </p>
               </div>
               {editError && (
                 <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--danger-bg)', color: 'var(--danger)', fontSize: 13 }}>

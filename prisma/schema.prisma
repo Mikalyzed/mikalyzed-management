@@ -15,6 +15,7 @@ model User {
   role      String   @default("sales")
   password  String   @default("")
   isActive  Boolean  @default(true) @map("is_active")
+  twilioNumber String? @unique @map("twilio_number") // E.164 format, owns inbound + outbound SMS for this rep
   createdAt DateTime @default(now()) @map("created_at")
 
   assignedVehicles Vehicle[]         @relation("CurrentAssignee")
