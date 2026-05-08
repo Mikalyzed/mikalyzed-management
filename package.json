@@ -23,6 +23,8 @@
   "homepage": "https://github.com/Mikalyzed/mikalyzed-management#readme",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.86.1",
+    "@aws-sdk/client-s3": "^3.1045.0",
+    "@aws-sdk/s3-request-presigner": "^3.1045.0",
     "@prisma/client": "^6.19.2",
     "@supabase/supabase-js": "^2.102.1",
     "@tailwindcss/postcss": "^4.2.1",
@@ -31,6 +33,7 @@
     "@xenova/transformers": "^2.17.2",
     "canvas": "^3.2.3",
     "cheerio": "^1.2.0",
+    "cloudinary": "^2.10.0",
     "dotenv": "^17.3.1",
     "next": "^15.5.13",
     "postcss": "^8.5.8",

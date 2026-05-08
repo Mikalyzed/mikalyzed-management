@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { isCloudinaryConfigured, uploadBufferToCloudinary } from '@/lib/cloudinary'
 
 /**
  * Twilio webhook for inbound SMS/MMS.
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Save inbound message
-  await prisma.message.create({
+  const savedMessage = await prisma.message.create({
     data: {
       contactId: contact.id,
       direction: 'inbound',
@@ -78,6 +79,42 @@ export async function POST(req: NextRequest) {
       externalId: messageSid,
     },
   })
+
+  // If there's media + Cloudinary is configured, upload async (don't block webhook response).
+  // Cloudinary auto-converts video formats to browser-friendly mp4 on delivery.
+  if (mediaUrl && isCloudinaryConfigured()) {
+    ;(async () => {
+      try {
+        const accountSid = process.env.TWILIO_ACCOUNT_SID
+        const authToken = process.env.TWILIO_AUTH_TOKEN
+        if (!accountSid || !authToken) return
+        const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64')
+        const upstream = await fetch(mediaUrl, {
+          headers: { Authorization: `Basic ${auth}` },
+          redirect: 'follow',
+        })
+        if (!upstream.ok) {
+          console.error('[sms-webhook] Cloudinary upstream fetch failed', upstream.status, mediaUrl)
+          return
+        }
+        const ct = upstream.headers.get('content-type') || mediaContentType || 'application/octet-stream'
+        const buf = Buffer.from(await upstream.arrayBuffer())
+        const result = await uploadBufferToCloudinary(buf, ct, `sms/${contact!.id}`)
+        await prisma.message.update({
+          where: { id: savedMessage.id },
+          data: {
+            cloudinaryPublicId: result.publicId,
+            cloudinaryResourceType: result.resourceType,
+            // Backfill content type if Twilio didn't include it
+            ...(mediaContentType ? {} : { mediaContentType: ct }),
+          },
+        })
+        console.log('[sms-webhook] Uploaded to Cloudinary', result.publicId, result.resourceType)
+      } catch (e) {
+        console.error('[sms-webhook] Cloudinary upload failed', e)
+      }
+    })()
+  }
 
   // Notify: receiving rep + all sales managers + all admins (deduped)
   const notifyUserIds = new Set<string>()

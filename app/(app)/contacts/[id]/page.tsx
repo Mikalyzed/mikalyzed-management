@@ -21,7 +21,7 @@ type ContactDetail = {
 }
 
 type Message = {
-  id: string; direction: string; channel: string; body: string; mediaUrl: string | null; mediaContentType?: string | null
+  id: string; direction: string; channel: string; body: string; mediaUrl: string | null; mediaContentType?: string | null; mediaPublicUrl?: string | null
   status: string; createdAt: string; sender: { id: string; name: string } | null
 }
 
@@ -506,7 +506,7 @@ export default function ContactDetailPage() {
                       borderBottomLeftRadius: msg.direction === 'inbound' ? 4 : 16,
                     }}>
                       {msg.mediaUrl && (() => {
-                        const proxyUrl = `/api/sms/media/${msg.id}`
+                        const proxyUrl = msg.mediaPublicUrl || `/api/sms/media/${msg.id}`
                         const ct = msg.mediaContentType || ''
                         const isVideo = ct.startsWith('video')
                         const isAudio = ct.startsWith('audio')
@@ -516,7 +516,7 @@ export default function ContactDetailPage() {
                           <div style={{ marginBottom: msg.body ? 6 : 0 }}>
                             {isVideo && (
                               <video src={proxyUrl} controls playsInline preload="metadata"
-                                style={{ display: 'block', maxWidth: '100%', maxHeight: 240, borderRadius: 8 }} />
+                                style={{ display: 'block', maxWidth: '100%', maxHeight: 420, borderRadius: 8, background: '#000' }} />
                             )}
                             {isAudio && (
                               <audio src={proxyUrl} controls preload="metadata" style={{ display: 'block', maxWidth: '100%' }} />

@@ -14,7 +14,7 @@ type Conversation = {
 }
 
 type Message = {
-  id: string; direction: string; channel: string; body: string; mediaUrl: string | null; mediaContentType?: string | null
+  id: string; direction: string; channel: string; body: string; mediaUrl: string | null; mediaContentType?: string | null; mediaPublicUrl?: string | null
   status: string; createdAt: string; sender: { id: string; name: string } | null
 }
 
@@ -42,6 +42,7 @@ export default function ConversationsPage() {
   const [contactInfo, setContactInfo] = useState<ContactInfo | null>(null)
   const [msgText, setMsgText] = useState('')
   const [sending, setSending] = useState(false)
+  const [sendingUploadLink, setSendingUploadLink] = useState(false)
   const [msgTab, setMsgTab] = useState<'sms' | 'internal'>('sms')
   const [search, setSearch] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -77,6 +78,44 @@ export default function ConversationsPage() {
     const interval = setInterval(() => loadMessages(selectedId), 10000)
     return () => clearInterval(interval)
   }, [selectedId])
+
+  async function sendUploadLink() {
+    if (!selectedId) return
+    const conv = conversations.find(c => c.contactId === selectedId)
+    if (!conv?.phone) {
+      alert('No phone number on file for this contact.')
+      return
+    }
+    setSendingUploadLink(true)
+    try {
+      const linkRes = await fetch('/api/upload-links', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contactId: selectedId }),
+      })
+      if (!linkRes.ok) { alert('Could not generate link'); return }
+      const { token } = await linkRes.json()
+      const url = `${window.location.origin}/u/${token}`
+      const body = `For full-quality photos & videos, upload here: ${url}`
+      const smsRes = await fetch('/api/sms/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: conv.phone, body, contactId: selectedId }),
+      })
+      if (smsRes.ok) {
+        loadMessages(selectedId)
+        loadConversations()
+      } else {
+        const err = await smsRes.json().catch(() => ({}))
+        alert(`Link generated but SMS failed: ${err.error || smsRes.status}\n\nLink: ${url}`)
+      }
+    } catch (e) {
+      console.error(e)
+      alert('Something went wrong')
+    } finally {
+      setSendingUploadLink(false)
+    }
+  }
 
   async function sendMessage() {
     if (!msgText.trim() || !selectedId) return
@@ -250,7 +289,7 @@ export default function ConversationsPage() {
                           borderBottomLeftRadius: msg.direction === 'inbound' ? 4 : 16,
                         }}>
                           {msg.mediaUrl && (() => {
-                            const proxyUrl = `/api/sms/media/${msg.id}`
+                            const proxyUrl = msg.mediaPublicUrl || `/api/sms/media/${msg.id}`
                             const ct = msg.mediaContentType || ''
                             const isVideo = ct.startsWith('video')
                             const isAudio = ct.startsWith('audio')
@@ -260,7 +299,7 @@ export default function ConversationsPage() {
                               <div style={{ marginBottom: msg.body ? 6 : 0 }}>
                                 {isVideo && (
                                   <video src={proxyUrl} controls playsInline preload="metadata"
-                                    style={{ display: 'block', maxWidth: '100%', maxHeight: 280, borderRadius: 8 }} />
+                                    style={{ display: 'block', maxWidth: '100%', maxHeight: 420, borderRadius: 8, background: '#000' }} />
                                 )}
                                 {isAudio && (
                                   <audio src={proxyUrl} controls preload="metadata" style={{ display: 'block', maxWidth: '100%' }} />
@@ -318,13 +357,30 @@ export default function ConversationsPage() {
                   rows={2}
                   style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, outline: 'none', resize: 'none', fontFamily: 'inherit' }}
                 />
-                <button onClick={sendMessage} disabled={sending || !msgText.trim()} style={{
-                  padding: '10px 20px', borderRadius: 10, border: 'none',
-                  background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 600,
-                  cursor: 'pointer', opacity: sending || !msgText.trim() ? 0.5 : 1, whiteSpace: 'nowrap',
-                }}>
-                  {sending ? '...' : 'Send'}
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {msgTab === 'sms' && (
+                    <button
+                      onClick={sendUploadLink}
+                      disabled={sendingUploadLink}
+                      title="Generate a high-quality upload link and text it to this contact"
+                      style={{
+                        padding: '8px 14px', borderRadius: 10, border: '1px solid var(--border)',
+                        background: '#fff', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600,
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                        opacity: sendingUploadLink ? 0.5 : 1,
+                      }}
+                    >
+                      {sendingUploadLink ? '...' : '📎 Send upload link'}
+                    </button>
+                  )}
+                  <button onClick={sendMessage} disabled={sending || !msgText.trim()} style={{
+                    padding: '10px 20px', borderRadius: 10, border: 'none',
+                    background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 600,
+                    cursor: 'pointer', opacity: sending || !msgText.trim() ? 0.5 : 1, whiteSpace: 'nowrap',
+                  }}>
+                    {sending ? '...' : 'Send'}
+                  </button>
+                </div>
               </div>
             </div>
           </>

@@ -1,6 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
+import { cloudinaryDeliveryUrl, isCloudinaryConfigured } from '@/lib/cloudinary'
+import { isR2Configured, presignGet } from '@/lib/r2'
+
+async function buildMediaUrl(msg: {
+  id: string
+  cloudinaryPublicId?: string | null
+  cloudinaryResourceType?: string | null
+  mediaUrl?: string | null
+  r2Key?: string | null
+}): Promise<string | null> {
+  // R2 first — used for direct customer uploads (any size)
+  if (msg.r2Key && isR2Configured()) {
+    return await presignGet(msg.r2Key, 60 * 60)
+  }
+  if (!msg.mediaUrl) return null
+  if (msg.cloudinaryPublicId && msg.cloudinaryResourceType && isCloudinaryConfigured()) {
+    return cloudinaryDeliveryUrl(msg.cloudinaryPublicId, msg.cloudinaryResourceType)
+  }
+  return `/api/sms/media/${msg.id}`
+}
 
 // Get messages for a contact
 export async function GET(req: NextRequest) {
@@ -14,7 +34,7 @@ export async function GET(req: NextRequest) {
     // Return all conversations (grouped by contact, latest message)
     const conversations = await prisma.$queryRaw`
       SELECT DISTINCT ON (m.contact_id)
-        m.id, m.contact_id, m.direction, m.channel, m.body, m.media_url, m.media_content_type,
+        m.id, m.contact_id, m.direction, m.channel, m.body, m.media_url, m.media_content_type, m.r2_key,
         m.status, m.read_at, m.created_at,
         c.first_name, c.last_name, c.phone
       FROM messages m
@@ -35,11 +55,11 @@ export async function GET(req: NextRequest) {
     }
 
     const result = conversations.map((c: any) => {
-      const hasMedia = !!c.media_url
+      const hasMedia = !!c.media_url || !!c.r2_key
       const mediaKind = c.media_content_type?.startsWith('video') ? 'Video'
         : c.media_content_type?.startsWith('image') ? 'Photo'
         : c.media_content_type?.startsWith('audio') ? 'Audio'
-        : 'Media'
+        : 'File'
       const preview = c.body?.trim()
         ? c.body
         : hasMedia ? `📎 ${mediaKind}` : ''
@@ -72,5 +92,10 @@ export async function GET(req: NextRequest) {
     data: { readAt: new Date() },
   })
 
-  return NextResponse.json({ messages })
+  // Decorate each message with a ready-to-render mediaPublicUrl (R2 signed URL → Cloudinary → proxy fallback)
+  const decorated = await Promise.all(
+    messages.map(async m => ({ ...m, mediaPublicUrl: await buildMediaUrl(m) }))
+  )
+
+  return NextResponse.json({ messages: decorated })
 }
