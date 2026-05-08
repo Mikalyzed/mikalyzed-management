@@ -508,23 +508,32 @@ export default function ContactDetailPage() {
                       {msg.mediaUrl && (() => {
                         const proxyUrl = `/api/sms/media/${msg.id}`
                         const ct = msg.mediaContentType || ''
-                        if (ct.startsWith('video')) {
-                          return (
-                            <video src={proxyUrl} controls preload="metadata"
-                              style={{ display: 'block', maxWidth: '100%', maxHeight: 240, borderRadius: 8, marginBottom: msg.body ? 6 : 0 }} />
-                          )
-                        }
-                        if (ct.startsWith('audio')) {
-                          return (
-                            <audio src={proxyUrl} controls preload="metadata"
-                              style={{ display: 'block', maxWidth: '100%', marginBottom: msg.body ? 6 : 0 }} />
-                          )
-                        }
+                        const isVideo = ct.startsWith('video')
+                        const isAudio = ct.startsWith('audio')
+                        const isImage = ct.startsWith('image') || (!isVideo && !isAudio)
+                        const linkColor = msg.direction === 'outbound' ? '#dffd6e' : '#3b82f6'
                         return (
-                          <a href={proxyUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={proxyUrl} alt="Media"
-                              style={{ display: 'block', maxWidth: '100%', maxHeight: 240, borderRadius: 8, marginBottom: msg.body ? 6 : 0 }} />
-                          </a>
+                          <div style={{ marginBottom: msg.body ? 6 : 0 }}>
+                            {isVideo && (
+                              <video src={proxyUrl} controls playsInline preload="metadata"
+                                style={{ display: 'block', maxWidth: '100%', maxHeight: 240, borderRadius: 8 }} />
+                            )}
+                            {isAudio && (
+                              <audio src={proxyUrl} controls preload="metadata" style={{ display: 'block', maxWidth: '100%' }} />
+                            )}
+                            {isImage && !isVideo && !isAudio && (
+                              <a href={proxyUrl} target="_blank" rel="noopener noreferrer">
+                                <img src={proxyUrl} alt="Media"
+                                  style={{ display: 'block', maxWidth: '100%', maxHeight: 240, borderRadius: 8 }} />
+                              </a>
+                            )}
+                            {(isVideo || isAudio) && (
+                              <a href={proxyUrl} target="_blank" rel="noopener noreferrer"
+                                style={{ fontSize: 11, color: linkColor, textDecoration: 'underline', marginTop: 4, display: 'inline-block' }}>
+                                Open / Download
+                              </a>
+                            )}
+                          </div>
                         )
                       })()}
                       {msg.body && (

@@ -40,7 +40,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     redirect: 'follow',
   })
 
-  if (!upstream.ok || !upstream.body) {
+  if (!upstream.ok) {
+    console.error('[sms-media] upstream', upstream.status, message.mediaUrl)
     return NextResponse.json({ error: `Twilio media fetch failed (${upstream.status})` }, { status: 502 })
   }
 
@@ -56,9 +57,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     }).catch(() => {})
   }
 
-  return new NextResponse(upstream.body, {
+  // Buffer the whole response — streaming body through NextResponse can be flaky
+  // across edge/node runtimes and causes empty responses in browsers. MMS is
+  // capped well under any reasonable buffer size.
+  const buffer = await upstream.arrayBuffer()
+
+  return new NextResponse(buffer, {
     headers: {
       'Content-Type': contentType,
+      'Content-Length': String(buffer.byteLength),
+      'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, max-age=3600',
     },
   })
