@@ -21,7 +21,7 @@ type ContactDetail = {
 }
 
 type Message = {
-  id: string; direction: string; channel: string; body: string; mediaUrl: string | null; mediaContentType?: string | null; mediaPublicUrl?: string | null
+  id: string; direction: string; channel: string; body: string; mediaUrl: string | null; mediaContentType?: string | null; mediaPublicUrl?: string | null; r2Key?: string | null
   status: string; createdAt: string; sender: { id: string; name: string } | null
 }
 
@@ -505,7 +505,7 @@ export default function ContactDetailPage() {
                       borderBottomRightRadius: msg.direction === 'outbound' ? 4 : 16,
                       borderBottomLeftRadius: msg.direction === 'inbound' ? 4 : 16,
                     }}>
-                      {msg.mediaUrl && (() => {
+                      {(msg.mediaUrl || msg.r2Key) && (() => {
                         const proxyUrl = msg.mediaPublicUrl || `/api/sms/media/${msg.id}`
                         const ct = msg.mediaContentType || ''
                         const isVideo = ct.startsWith('video')
