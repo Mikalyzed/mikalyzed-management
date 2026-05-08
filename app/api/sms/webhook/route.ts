@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
   console.log('[sms-webhook] Incoming SMS:', JSON.stringify({ from, to, body: body.slice(0, 100), messageSid }))
 
   const mediaUrl: string | null = numMedia > 0 ? (formData.get('MediaUrl0') as string) : null
+  const mediaContentType: string | null = numMedia > 0 ? ((formData.get('MediaContentType0') as string) || null) : null
 
   // Look up the rep who owns this Twilio number (the "receiver")
   const receivingRep = to
@@ -72,6 +73,7 @@ export async function POST(req: NextRequest) {
       channel: 'sms',
       body,
       mediaUrl,
+      mediaContentType,
       status: 'received',
       externalId: messageSid,
     },

@@ -588,7 +588,8 @@ model Message {
   direction   String    // inbound, outbound
   channel     String    @default("sms") // sms, email, instagram, whatsapp
   body        String
-  mediaUrl    String?   @map("media_url") // for MMS/images/videos
+  mediaUrl    String?   @map("media_url") // for MMS/images/videos (Twilio URL requires auth — proxy through /api/sms/media/[id])
+  mediaContentType String? @map("media_content_type") // e.g. image/jpeg, video/mp4
   status      String    @default("sent") // sent, delivered, failed, received
   externalId  String?   @map("external_id") // Twilio SID or external message ID
   senderId    String?   @map("sender_id") // user who sent (null for inbound)

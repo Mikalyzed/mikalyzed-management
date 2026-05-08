@@ -21,7 +21,7 @@ type ContactDetail = {
 }
 
 type Message = {
-  id: string; direction: string; channel: string; body: string; mediaUrl: string | null
+  id: string; direction: string; channel: string; body: string; mediaUrl: string | null; mediaContentType?: string | null
   status: string; createdAt: string; sender: { id: string; name: string } | null
 }
 
@@ -505,12 +505,31 @@ export default function ContactDetailPage() {
                       borderBottomRightRadius: msg.direction === 'outbound' ? 4 : 16,
                       borderBottomLeftRadius: msg.direction === 'inbound' ? 4 : 16,
                     }}>
-                      {msg.mediaUrl && (
-                        <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer">
-                          <img src={msg.mediaUrl} alt="Media" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, marginBottom: 4 }} />
-                        </a>
+                      {msg.mediaUrl && (() => {
+                        const proxyUrl = `/api/sms/media/${msg.id}`
+                        const ct = msg.mediaContentType || ''
+                        if (ct.startsWith('video')) {
+                          return (
+                            <video src={proxyUrl} controls preload="metadata"
+                              style={{ display: 'block', maxWidth: '100%', maxHeight: 240, borderRadius: 8, marginBottom: msg.body ? 6 : 0 }} />
+                          )
+                        }
+                        if (ct.startsWith('audio')) {
+                          return (
+                            <audio src={proxyUrl} controls preload="metadata"
+                              style={{ display: 'block', maxWidth: '100%', marginBottom: msg.body ? 6 : 0 }} />
+                          )
+                        }
+                        return (
+                          <a href={proxyUrl} target="_blank" rel="noopener noreferrer">
+                            <img src={proxyUrl} alt="Media"
+                              style={{ display: 'block', maxWidth: '100%', maxHeight: 240, borderRadius: 8, marginBottom: msg.body ? 6 : 0 }} />
+                          </a>
+                        )
+                      })()}
+                      {msg.body && (
+                        <p style={{ fontSize: 14, lineHeight: 1.4, margin: 0, wordBreak: 'break-word' }}>{msg.body}</p>
                       )}
-                      <p style={{ fontSize: 14, lineHeight: 1.4, margin: 0, wordBreak: 'break-word' }}>{msg.body}</p>
                       <p style={{ fontSize: 10, margin: '4px 0 0', opacity: 0.5 }}>
                         {new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                         {msg.sender && ` · ${msg.sender.name}`}

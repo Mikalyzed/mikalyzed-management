@@ -14,7 +14,8 @@ export async function GET(req: NextRequest) {
     // Return all conversations (grouped by contact, latest message)
     const conversations = await prisma.$queryRaw`
       SELECT DISTINCT ON (m.contact_id)
-        m.id, m.contact_id, m.direction, m.channel, m.body, m.status, m.read_at, m.created_at,
+        m.id, m.contact_id, m.direction, m.channel, m.body, m.media_url, m.media_content_type,
+        m.status, m.read_at, m.created_at,
         c.first_name, c.last_name, c.phone
       FROM messages m
       JOIN contacts c ON c.id = m.contact_id
@@ -33,15 +34,25 @@ export async function GET(req: NextRequest) {
       unreadMap[u.contactId] = u._count
     }
 
-    const result = conversations.map((c: any) => ({
-      contactId: c.contact_id,
-      contactName: `${c.first_name} ${c.last_name}`,
-      phone: c.phone,
-      lastMessage: c.body,
-      lastDirection: c.direction,
-      lastAt: c.created_at,
-      unread: unreadMap[c.contact_id] || 0,
-    })).sort((a: any, b: any) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime())
+    const result = conversations.map((c: any) => {
+      const hasMedia = !!c.media_url
+      const mediaKind = c.media_content_type?.startsWith('video') ? 'Video'
+        : c.media_content_type?.startsWith('image') ? 'Photo'
+        : c.media_content_type?.startsWith('audio') ? 'Audio'
+        : 'Media'
+      const preview = c.body?.trim()
+        ? c.body
+        : hasMedia ? `📎 ${mediaKind}` : ''
+      return {
+        contactId: c.contact_id,
+        contactName: `${c.first_name} ${c.last_name}`,
+        phone: c.phone,
+        lastMessage: preview,
+        lastDirection: c.direction,
+        lastAt: c.created_at,
+        unread: unreadMap[c.contact_id] || 0,
+      }
+    }).sort((a: any, b: any) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime())
 
     return NextResponse.json({ conversations: result })
   }
