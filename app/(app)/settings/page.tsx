@@ -402,7 +402,7 @@ type DispositionRule = {
   moveToStage: { id: string; name: string; type: string }
 }
 
-type SalesSubTab = 'dispositions' | 'logic' | 'distribution' | 'sources'
+type SalesSubTab = 'dispositions' | 'logic' | 'distribution' | 'sources' | 'email'
 
 function SalesSettings() {
   const [pipelines, setPipelines] = useState<Pipeline[]>([])
@@ -615,6 +615,7 @@ function SalesSettings() {
     { key: 'logic', label: 'Stage Logic', sublabel: 'Auto-move rules' },
     { key: 'distribution', label: 'Lead Distribution', sublabel: 'Round-robin weights' },
     { key: 'sources', label: 'Lead Sources', sublabel: 'Where leads come from' },
+    { key: 'email', label: 'Email Mirror', sublabel: 'Sync Outlook to CRM' },
   ]
 
   return (
@@ -917,6 +918,106 @@ function SalesSettings() {
           </div>
         </section>
       )}
+
+      {subTab === 'email' && <EmailMirrorTab />}
     </div>
+  )
+}
+
+function EmailMirrorTab() {
+  type Sub = {
+    id: string
+    userEmail: string
+    subscriptionId: string
+    expiresAt: string
+    user: { id: string; name: string; email: string }
+  }
+  const [subs, setSubs] = useState<Sub[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activating, setActivating] = useState(false)
+  const [message, setMessage] = useState<string>('')
+
+  function load() {
+    setLoading(true)
+    fetch('/api/email/subscriptions')
+      .then(r => r.json())
+      .then(d => setSubs(d.subscriptions || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function activate() {
+    setActivating(true)
+    setMessage('')
+    const res = await fetch('/api/email/subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ all: true }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setMessage(`Error: ${data.error || res.status}`)
+    } else {
+      const ok = (data.results || []).filter((r: { ok: boolean }) => r.ok).length
+      const fail = (data.results || []).filter((r: { ok: boolean }) => !r.ok).length
+      setMessage(`Activated ${ok} mailbox${ok === 1 ? '' : 'es'}${fail ? `, ${fail} failed` : ''}.`)
+      load()
+    }
+    setActivating(false)
+  }
+
+  return (
+    <section>
+      <div style={{ marginBottom: 20 }}>
+        <h3 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em', marginBottom: 4 }}>Email Mirror</h3>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          When active, every email sent or received in your reps&apos; Outlook mailboxes is mirrored onto the contact&apos;s CRM thread —
+          but <strong>only if the sender or recipient is already a Contact</strong>. Random/personal/vendor emails stay private.
+          Click activate once; subscriptions auto-renew daily.
+        </p>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <button onClick={activate} disabled={activating} className="btn btn-primary" style={{ fontSize: 13, opacity: activating ? 0.6 : 1 }}>
+          {activating ? 'Activating…' : subs.length === 0 ? 'Activate email mirror for all reps' : 'Re-activate / refresh subscriptions'}
+        </button>
+        {message && <span style={{ marginLeft: 12, fontSize: 13, color: 'var(--text-muted)' }}>{message}</span>}
+      </div>
+
+      <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 8 }}>
+        Active subscriptions
+      </p>
+      {loading ? (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>
+      ) : subs.length === 0 ? (
+        <div className="card" style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+          No mailboxes are being mirrored yet. Click the button above to activate.
+        </div>
+      ) : (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+          {subs.map((s, i) => {
+            const expires = new Date(s.expiresAt)
+            const hours = Math.max(0, Math.round((expires.getTime() - Date.now()) / (1000 * 60 * 60)))
+            return (
+              <div key={s.id} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '12px 18px',
+                borderBottom: i < subs.length - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 600 }}>{s.user.name}</p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{s.userEmail}</p>
+                </div>
+                <span style={{ fontSize: 12, color: hours < 24 ? '#d97706' : 'var(--text-muted)' }}>
+                  Renews in {hours}h
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </section>
   )
 }

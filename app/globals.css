@@ -100,12 +100,13 @@ html, body {
   background: var(--bg-primary);
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Helvetica Neue', sans-serif;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-button, a { min-height: 44px; }
-input, select, textarea { font-size: 16px; font-family: inherit; }
+button, a { min-height: 44px; font-size: 14px; }
+input, select, textarea { font-size: 14px; font-family: inherit; }
 
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -139,6 +140,32 @@ input, select, textarea { font-size: 16px; font-family: inherit; }
 .lead-card:active {
   cursor: grabbing !important;
 }
+
+/* Hover tooltip — apply data-tip="..." to any inline-flex element */
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 9px;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  border-radius: 6px;
+  max-width: 180px;
+  width: max-content;
+  white-space: normal;
+  text-align: center;
+  pointer-events: none;
+  z-index: 1000;
+  opacity: 0;
+  animation: tip-fade 0.12s ease 0.3s forwards;
+}
+@keyframes tip-fade { to { opacity: 1; } }
 .card-flat {
   background: var(--bg-card);
   border: 1px solid var(--border);

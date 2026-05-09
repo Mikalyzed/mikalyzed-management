@@ -12,7 +12,9 @@ export function middleware(request: NextRequest) {
     pathname === '/api/tv-board' ||
     pathname.startsWith('/u/') ||
     pathname.match(/^\/api\/upload-links\/[^/]+(\/(sign|complete|multipart\/(start|sign-part|complete)))?$/) ||
-    pathname === '/api/sms/webhook'
+    pathname === '/api/sms/webhook' ||
+    pathname === '/api/email/webhook' ||
+    pathname === '/api/email/subscriptions/renew'
   ) {
     return NextResponse.next()
   }

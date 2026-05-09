@@ -67,20 +67,24 @@ function NavIcon({ name, size = 20 }: { name: string; size?: number }) {
 const NAV_ITEMS: Record<string, NavEntry[]> = {
   admin: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-    { href: '/vehicles', label: 'Recon Board', icon: 'board' },
+    {
+      label: 'Recon', icon: 'board', children: [
+        { href: '/vehicles', label: 'Recon Board', icon: 'board' },
+        { href: '/parts', label: 'Parts', icon: 'external' },
+        { href: '/external', label: 'External Repairs', icon: 'external' },
+      ],
+    },
     { href: '/transport', label: 'Transport', icon: 'transport' },
     {
       label: 'Sales', icon: 'sales', children: [
-        { href: '/leads', label: 'Leads', icon: 'leads' },
+        { href: '/leads', label: 'Opportunities', icon: 'leads' },
         { href: '/conversations', label: 'Conversations', icon: 'board' },
         { href: '/contacts', label: 'Contacts', icon: 'contacts' },
         { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
       ],
     },
     { href: '/content-schedule', label: 'Content Board', icon: 'tasks' },
-    { href: '/mechanic-schedule', label: 'Mechanic Schedule', icon: 'calendar' },
-    { href: '/external', label: 'External Repairs', icon: 'external' },
-    { href: '/parts', label: 'Parts', icon: 'external' },
+    { href: '/mechanic-schedule', label: 'Mechanic Board', icon: 'calendar' },
     { href: '/inventory', label: 'Inventory', icon: 'board' },
     { href: '/porter', label: 'Porter', icon: 'tasks' },
     { href: '/calendar', label: 'Calendar', icon: 'calendar' },
@@ -109,14 +113,14 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
   ],
   sales: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-    { href: '/leads', label: 'Leads', icon: 'leads' },
+    { href: '/leads', label: 'Opportunities', icon: 'leads' },
     { href: '/conversations', label: 'Conversations', icon: 'board' },
     { href: '/contacts', label: 'Contacts', icon: 'contacts' },
     { href: '/transport/new', label: 'New Request', icon: 'newrequest' },
   ],
   sales_manager: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-    { href: '/leads', label: 'Leads', icon: 'leads' },
+    { href: '/leads', label: 'Opportunities', icon: 'leads' },
     { href: '/conversations', label: 'Conversations', icon: 'board' },
     { href: '/contacts', label: 'Contacts', icon: 'contacts' },
     { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
@@ -219,11 +223,11 @@ export default function Nav({ role, userName }: { role: string; userName: string
     <>
       {/* Desktop sidebar */}
       <aside className="desktop-sidebar" style={{
-        position: 'fixed', left: 0, top: 0, bottom: 0, width: 260,
+        position: 'fixed', left: 0, top: 0, bottom: 0, width: 220,
         background: '#141414', flexDirection: 'column', zIndex: 40,
         display: 'none',
       }}>
-        <div style={{ padding: '28px 24px 20px' }}>
+        <div style={{ padding: '24px 18px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{

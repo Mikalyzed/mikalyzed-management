@@ -43,7 +43,24 @@ export default function ConversationsPage() {
   const [msgText, setMsgText] = useState('')
   const [sending, setSending] = useState(false)
   const [sendingUploadLink, setSendingUploadLink] = useState(false)
-  const [msgTab, setMsgTab] = useState<'sms' | 'internal'>('sms')
+  const [emailSubject, setEmailSubject] = useState('')
+  const [me, setMe] = useState<{ id: string; name: string; email: string; twilioNumber: string | null } | null>(null)
+  const [msgTab, setMsgTab] = useState<'sms' | 'email' | 'internal'>('sms')
+  const [channel, setChannel] = useState<'sms' | 'email' | 'internal'>('sms')
+  const [showChannelMenu, setShowChannelMenu] = useState(false)
+  const [composeMinimized, setComposeMinimized] = useState(false)
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const internalMode = channel === 'internal'
+  // Sync msgTab from channel so the existing sendMessage logic still works
+  useEffect(() => { setMsgTab(channel) }, [channel])
+
+  const iconBtn: React.CSSProperties = {
+    width: 26, height: 26, borderRadius: 6, border: 'none', background: 'none',
+    color: 'var(--text-muted)', cursor: 'pointer',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 14, lineHeight: 1, padding: 0,
+  }
   const [search, setSearch] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -56,6 +73,7 @@ export default function ConversationsPage() {
 
   useEffect(() => {
     loadConversations()
+    fetch('/api/auth/me').then(r => r.json()).then(d => { if (d.user) setMe(d.user) }).catch(() => {})
     const interval = setInterval(loadConversations, 30000)
     return () => clearInterval(interval)
   }, [])
@@ -71,6 +89,13 @@ export default function ConversationsPage() {
     setSelectedId(contactId)
     setContactInfo({ id: contactId, firstName: name.split(' ')[0], lastName: name.split(' ').slice(1).join(' '), phone, email: null })
     loadMessages(contactId)
+    // Fetch full contact info for email + other fields
+    fetch(`/api/contacts/${contactId}`)
+      .then(r => r.json())
+      .then(c => {
+        if (c?.id) setContactInfo({ id: c.id, firstName: c.firstName, lastName: c.lastName, phone: c.phone, email: c.email })
+      })
+      .catch(() => {})
   }
 
   useEffect(() => {
@@ -128,6 +153,35 @@ export default function ConversationsPage() {
           body: JSON.stringify({ contactId: selectedId, body: msgText }),
         })
         if (res.ok) { setMsgText(''); loadMessages(selectedId) }
+      } else if (msgTab === 'email') {
+        if (!contactInfo?.email) {
+          alert('No email on file for this contact.')
+          setSending(false)
+          return
+        }
+        if (!emailSubject.trim()) {
+          alert('Subject required.')
+          setSending(false)
+          return
+        }
+        const res = await fetch('/api/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contactId: selectedId,
+            to: contactInfo.email,
+            subject: emailSubject,
+            bodyText: msgText,
+          }),
+        })
+        if (res.ok) {
+          setMsgText('')
+          setEmailSubject('')
+          loadMessages(selectedId)
+        } else {
+          const err = await res.json().catch(() => ({}))
+          alert(`Email failed: ${err.error || res.status}`)
+        }
       } else {
         const conv = conversations.find(c => c.contactId === selectedId)
         if (!conv?.phone) return
@@ -150,7 +204,7 @@ export default function ConversationsPage() {
   return (
     <div style={{ height: '100vh', display: 'flex', margin: '-40px -32px -40px -32px' }}>
       {/* Left: Conversation list */}
-      <div style={{ width: 340, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+      <div style={{ width: 280, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', background: '#fff' }}>
         {/* Header */}
         <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 10 }}>Conversations</h1>
@@ -335,57 +389,279 @@ export default function ConversationsPage() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Compose */}
-            <div style={{ borderTop: '1px solid var(--border)', background: '#fff' }}>
-              <div style={{ display: 'flex', padding: '0 20px', borderBottom: '1px solid var(--border)' }}>
-                {[
-                  { key: 'sms' as const, label: 'SMS' },
-                  { key: 'internal' as const, label: 'Internal Note' },
-                ].map(tab => (
-                  <button key={tab.key} onClick={() => setMsgTab(tab.key)} style={{
-                    padding: '10px 16px', fontSize: 13, fontWeight: 600, border: 'none', background: 'none', cursor: 'pointer',
-                    borderBottom: msgTab === tab.key ? '2px solid #2563eb' : '2px solid transparent',
-                    color: msgTab === tab.key ? '#2563eb' : 'var(--text-muted)',
-                  }}>{tab.label}</button>
-                ))}
-              </div>
-              <div style={{ padding: '12px 20px', display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-                <textarea
-                  value={msgText} onChange={e => setMsgText(e.target.value)}
-                  placeholder={msgTab === 'internal' ? 'Add an internal note...' : 'Type a message...'}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
-                  rows={2}
-                  style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, outline: 'none', resize: 'none', fontFamily: 'inherit' }}
-                />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {msgTab === 'sms' && (
-                    <button
-                      onClick={sendUploadLink}
-                      disabled={sendingUploadLink}
-                      title="Generate a high-quality upload link and text it to this contact"
-                      style={{
-                        padding: '8px 14px', borderRadius: 10, border: '1px solid var(--border)',
-                        background: '#fff', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600,
-                        cursor: 'pointer', whiteSpace: 'nowrap',
-                        opacity: sendingUploadLink ? 0.5 : 1,
-                      }}
-                    >
-                      {sendingUploadLink ? '...' : '📎 Send upload link'}
-                    </button>
-                  )}
-                  <button onClick={sendMessage} disabled={sending || !msgText.trim()} style={{
-                    padding: '10px 20px', borderRadius: 10, border: 'none',
-                    background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 600,
-                    cursor: 'pointer', opacity: sending || !msgText.trim() ? 0.5 : 1, whiteSpace: 'nowrap',
+            {/* Compose — slim card matching contact-detail style */}
+            <div style={{ borderTop: '1px solid var(--border)', background: 'transparent', padding: '8px 12px 10px' }}>
+              <div style={{
+                border: '1px solid var(--border)', borderRadius: 10,
+                background: internalMode ? '#fefce8' : '#fff',
+                overflow: 'visible',
+              }}>
+                {/* Top row: channel dropdown + minimize (only when expanded) */}
+                {!composeMinimized && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '3px 8px', background: internalMode ? '#fefce8' : '#f5f7fb',
+                    fontSize: 13, minHeight: 30,
+                    borderTopLeftRadius: 9, borderTopRightRadius: 9,
                   }}>
-                    {sending ? '...' : 'Send'}
-                  </button>
-                </div>
+                    <ConvChannelDropdown
+                      channel={channel} setChannel={setChannel}
+                      open={showChannelMenu} setOpen={setShowChannelMenu}
+                    />
+                    <button data-tip="Minimize" onClick={() => setComposeMinimized(true)} style={iconBtn}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                    </button>
+                  </div>
+                )}
+
+                {/* From/To row */}
+                {!internalMode && !composeMinimized && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', padding: '7px 14px',
+                    fontSize: 12.5, flexWrap: 'wrap', gap: 0,
+                  }}>
+                    <span style={{ color: 'var(--text-muted)', marginRight: 8, fontWeight: 600 }}>From:</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 600, marginRight: 16 }}>
+                      {channel === 'sms'
+                        ? (me?.twilioNumber || '—')
+                        : (me?.email || '—')}
+                    </span>
+                    <span style={{ width: 1, height: 14, background: 'var(--border)', marginRight: 16 }} />
+                    <span style={{ color: 'var(--text-muted)', marginRight: 8, fontWeight: 600 }}>To:</span>
+                    <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                      {channel === 'sms'
+                        ? (contactInfo?.phone || '—')
+                        : (contactInfo?.email || '—')}
+                    </span>
+                  </div>
+                )}
+
+                {/* Subject row (email only) */}
+                {!internalMode && !composeMinimized && channel === 'email' && (
+                  <div style={{ display: 'flex', alignItems: 'center', padding: '6px 14px', borderBottom: '1px solid var(--border-light)', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Subject:</span>
+                    <input
+                      value={emailSubject}
+                      onChange={e => setEmailSubject(e.target.value)}
+                      placeholder="Enter subject"
+                      style={{ flex: 1, border: 'none', outline: 'none', fontSize: 13, fontWeight: 500, background: 'transparent', padding: '4px 0' }}
+                    />
+                  </div>
+                )}
+
+                {/* Attached files chips */}
+                {!composeMinimized && attachedFiles.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '6px 14px 0' }}>
+                    {attachedFiles.map((f, i) => (
+                      <span key={i} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                        padding: '4px 8px 4px 10px', borderRadius: 100,
+                        background: '#f0f4ff', color: '#1d4ed8', fontSize: 12, fontWeight: 500,
+                      }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
+                        <span style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                        <button onClick={() => setAttachedFiles(prev => prev.filter((_, j) => j !== i))} style={{
+                          border: 'none', background: 'none', color: '#1d4ed8', cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: 14,
+                        }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Body */}
+                {!composeMinimized && (
+                  <textarea
+                    value={msgText}
+                    onChange={e => setMsgText(e.target.value)}
+                    placeholder={internalMode ? 'Add an internal note...' : 'Type a message...'}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && channel === 'sms' && !internalMode) { e.preventDefault(); sendMessage() } }}
+                    rows={3}
+                    style={{
+                      width: '100%', border: 'none', outline: 'none', resize: 'none',
+                      padding: '4px 14px 10px', fontSize: 13, lineHeight: 1.45,
+                      background: 'transparent', fontFamily: 'inherit',
+                    }}
+                  />
+                )}
+
+                {/* Footer: action icons + send (expanded) */}
+                {!composeMinimized && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '6px 8px 6px 12px', background: '#fafafa',
+                    borderBottomLeftRadius: 9, borderBottomRightRadius: 9,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)' }}>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        style={{ display: 'none' }}
+                        onChange={e => {
+                          const files = Array.from(e.target.files || [])
+                          if (files.length > 0) setAttachedFiles(prev => [...prev, ...files])
+                          e.target.value = ''
+                        }}
+                      />
+                      <button data-tip="Attach a file" onClick={() => fileInputRef.current?.click()} style={iconBtn}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
+                      </button>
+                      <button data-tip="Send upload link via SMS"
+                        onClick={sendUploadLink}
+                        disabled={sendingUploadLink}
+                        style={{ ...iconBtn, opacity: sendingUploadLink ? 0.5 : 1 }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.72" />
+                          <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.72-1.72" />
+                        </svg>
+                      </button>
+                      <button data-tip="Insert from linked vehicle" style={iconBtn}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 16H9m10 0h1.5a.5.5 0 00.5-.5V13a3 3 0 00-2.4-2.94l-1.5-3A2 2 0 0015.2 6H8.8a2 2 0 00-1.9 1.06l-1.5 3A3 3 0 003 13v2.5a.5.5 0 00.5.5H5" />
+                          <circle cx="7" cy="16" r="2" />
+                          <circle cx="17" cy="16" r="2" />
+                        </svg>
+                      </button>
+                      <button data-tip="Erase composer"
+                        onClick={() => { setMsgText(''); setAttachedFiles([]); setEmailSubject('') }}
+                        style={iconBtn}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {channel === 'sms' && !internalMode && (
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          Chars: {msgText.length} | Segs: {Math.max(1, Math.ceil(msgText.length / 160))}
+                        </span>
+                      )}
+                      <button
+                        onClick={sendMessage}
+                        disabled={sending || !msgText.trim()}
+                        data-tip="Send"
+                        style={{
+                          width: 28, height: 28, borderRadius: 6, border: 'none',
+                          background: sending || !msgText.trim() ? '#e7efff' : '#cfdcff',
+                          color: sending || !msgText.trim() ? '#94a3b8' : '#2563eb',
+                          cursor: sending || !msgText.trim() ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                        }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: 'rotate(-15deg)' }}>
+                          <line x1="22" y1="2" x2="11" y2="13" />
+                          <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Minimized layout */}
+                {composeMinimized && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px' }}>
+                    <ConvChannelDropdown
+                      channel={channel} setChannel={setChannel}
+                      open={showChannelMenu} setOpen={setShowChannelMenu}
+                      popUp
+                    />
+                    <input
+                      value={msgText}
+                      onChange={e => setMsgText(e.target.value)}
+                      onFocus={() => setComposeMinimized(false)}
+                      placeholder={internalMode ? 'Add an internal note...' : 'Type a message...'}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
+                      style={{
+                        flex: 1, border: 'none', outline: 'none', background: 'transparent',
+                        fontSize: 14, padding: '6px 8px', fontFamily: 'inherit',
+                      }}
+                    />
+                    <button data-tip="Expand" onClick={() => setComposeMinimized(false)} style={iconBtn}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
+                    </button>
+                    <button
+                      onClick={sendMessage}
+                      disabled={sending || !msgText.trim()}
+                      data-tip="Send"
+                      style={{
+                        width: 28, height: 28, borderRadius: 6, border: 'none',
+                        background: sending || !msgText.trim() ? '#e7efff' : '#cfdcff',
+                        color: sending || !msgText.trim() ? '#94a3b8' : '#2563eb',
+                        cursor: sending || !msgText.trim() ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+                      }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: 'rotate(-15deg)' }}>
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+type ConvChannel = 'sms' | 'email' | 'internal'
+
+function ConvChannelDropdown({
+  channel, setChannel, open, setOpen, popUp,
+}: {
+  channel: ConvChannel
+  setChannel: (c: ConvChannel) => void
+  open: boolean
+  setOpen: (next: boolean | ((prev: boolean) => boolean)) => void
+  popUp?: boolean
+}) {
+  const labels: Record<ConvChannel, string> = { sms: 'SMS', email: 'Email', internal: 'Internal Comment' }
+  const isInternal = channel === 'internal'
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(s => !s)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          background: isInternal ? '#fef3c7' : '#e7efff',
+          border: 'none', padding: '5px 12px', borderRadius: 8,
+          fontSize: 13, fontWeight: 600,
+          color: isInternal ? '#92400e' : '#2563eb',
+          cursor: 'pointer',
+        }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          {channel === 'sms' && <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />}
+          {channel === 'email' && <><path d="M4 4h16v16H4z" /><path d="M22 6L12 13 2 6" /></>}
+          {channel === 'internal' && <><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>}
+        </svg>
+        {labels[channel]}
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 4.5l3 3 3-3" /></svg>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute',
+          ...(popUp ? { bottom: '100%', marginBottom: 6 } : { top: '100%', marginTop: 4 }),
+          left: 0,
+          background: '#fff', border: '1px solid var(--border)', borderRadius: 10,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 180, zIndex: 30, overflow: 'hidden',
+        }}>
+          {(['sms', 'email', 'internal'] as ConvChannel[]).map(opt => (
+            <button key={opt} onClick={() => { setChannel(opt); setOpen(false) }}
+              style={{
+                width: '100%', textAlign: 'left', padding: '9px 12px',
+                border: 'none', background: channel === opt ? '#f5f5f3' : '#fff',
+                fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+              {labels[opt]}
+              {channel === opt && <span style={{ color: '#2563eb' }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
