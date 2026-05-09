@@ -31,38 +31,61 @@ export default function VoicePhone() {
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startedRef = useRef<number | null>(null)
 
-  // Boot device on mount
+  // Boot device on mount + auto-refresh tokens before expiration
   useEffect(() => {
     let cancelled = false
-    async function boot() {
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null
+
+    async function fetchToken(): Promise<string | null> {
       try {
         const r = await fetch('/api/voice/token')
-        if (!r.ok) return
+        if (!r.ok) return null
         const { token } = await r.json()
-        if (cancelled) return
-        const device = new Device(token, {
-          logLevel: 1,
-          codecPreferences: [TwilioCall.Codec.Opus, TwilioCall.Codec.PCMU],
-        })
-        device.on('error', e => console.warn('[voice] device error', e?.message))
-        device.on('incoming', incoming => {
-          activeCallRef.current = incoming
-          setRemoteLabel(incoming.parameters.From || 'Unknown')
-          setState('incoming')
-          incoming.on('accept', () => { setState('in-call'); startTick() })
-          incoming.on('disconnect', () => { resetCall() })
-          incoming.on('cancel', () => { resetCall() })
-          incoming.on('reject', () => { resetCall() })
-        })
-        await device.register()
-        deviceRef.current = device
-      } catch (e) {
-        console.warn('[voice] boot failed', e)
-      }
+        return token
+      } catch { return null }
+    }
+
+    function scheduleRefresh() {
+      // Tokens have 1 hour TTL; refresh every 50 minutes for safety
+      if (refreshTimer) clearTimeout(refreshTimer)
+      refreshTimer = setTimeout(async () => {
+        const fresh = await fetchToken()
+        if (fresh && deviceRef.current) {
+          deviceRef.current.updateToken(fresh)
+          scheduleRefresh()
+        }
+      }, 50 * 60 * 1000)
+    }
+
+    async function boot() {
+      const token = await fetchToken()
+      if (!token || cancelled) return
+      const device = new Device(token, {
+        logLevel: 1,
+        codecPreferences: [TwilioCall.Codec.Opus, TwilioCall.Codec.PCMU],
+      })
+      device.on('error', e => console.warn('[voice] device error', e?.message))
+      device.on('tokenWillExpire', async () => {
+        const fresh = await fetchToken()
+        if (fresh && deviceRef.current) deviceRef.current.updateToken(fresh)
+      })
+      device.on('incoming', incoming => {
+        activeCallRef.current = incoming
+        setRemoteLabel(incoming.parameters.From || 'Unknown')
+        setState('incoming')
+        incoming.on('accept', () => { setState('in-call'); startTick() })
+        incoming.on('disconnect', () => { resetCall() })
+        incoming.on('cancel', () => { resetCall() })
+        incoming.on('reject', () => { resetCall() })
+      })
+      await device.register()
+      deviceRef.current = device
+      scheduleRefresh()
     }
     boot()
     return () => {
       cancelled = true
+      if (refreshTimer) clearTimeout(refreshTimer)
       activeCallRef.current?.disconnect()
       deviceRef.current?.destroy()
       stopTick()

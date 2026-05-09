@@ -51,6 +51,7 @@ export default function ContactDetailPage() {
   const [loading, setLoading] = useState(true)
   const [messages, setMessages] = useState<Message[]>([])
   const [calls, setCalls] = useState<CallEntry[]>([])
+  const [expandedCalls, setExpandedCalls] = useState<Set<string>>(new Set())
   const [msgText, setMsgText] = useState('')
   const [sending, setSending] = useState(false)
   // msgTab kept for backwards compat with existing render code; reflects effective send mode
@@ -106,7 +107,7 @@ export default function ContactDetailPage() {
 
   useEffect(() => {
     loadMessages()
-    const interval = setInterval(loadMessages, 15000)
+    const interval = setInterval(loadMessages, 30000)
     return () => clearInterval(interval)
   }, [id])
 
@@ -569,7 +570,7 @@ export default function ContactDetailPage() {
                   const minSec = `${Math.floor(dur / 60)}:${(dur % 60).toString().padStart(2, '0')}`
                   const isInbound = item.direction === 'inbound'
                   const isVoicemail = item.voicemail
-                  const label = isVoicemail ? 'Voicemail' : isInbound ? 'Inbound call' : 'Outbound call'
+                  const label = isVoicemail ? 'Voicemail' : isInbound ? 'Inbound' : 'Outbound'
                   const accent = isVoicemail ? '#a855f7' : isInbound ? '#16a34a' : '#2563eb'
                   return (
                     <div key={item.id}>
@@ -578,38 +579,59 @@ export default function ContactDetailPage() {
                           {new Date(item.createdAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                         </div>
                       )}
-                      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: isInbound ? 'flex-start' : 'flex-end', marginBottom: 6 }}>
+                        {isInbound && (
+                          <div style={{
+                            width: 28, height: 28, borderRadius: '50%', background: '#e2e8f0', color: '#64748b',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 10, fontWeight: 700, marginRight: 8, flexShrink: 0, marginTop: 2,
+                          }}>
+                            {contact.firstName.charAt(0)}{contact.lastName.charAt(0)}
+                          </div>
+                        )}
                         <div style={{
-                          maxWidth: '85%', width: '100%',
-                          padding: '12px 14px', borderRadius: 10,
-                          background: '#fff', border: `1px solid var(--border)`,
-                          borderLeft: `3px solid ${accent}`,
+                          maxWidth: expandedCalls.has(item.id) ? 520 : 360,
+                          width: expandedCalls.has(item.id) ? '65%' : 'auto',
+                          padding: '8px 10px', borderRadius: 8,
+                          background: '#fff', border: '1px solid var(--border)',
+                          borderLeft: `2px solid ${accent}`,
+                          transition: 'max-width 0.55s cubic-bezier(0.4, 0, 0.2, 1), width 0.55s cubic-bezier(0.4, 0, 0.2, 1)',
                         }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: item.recordingUrl ? 4 : 0 }}>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
                             </svg>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
-                            {dur > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {minSec}</span>}
+                            <span style={{ fontSize: 11, fontWeight: 700, color: accent, letterSpacing: '0.02em' }}>{label}</span>
+                            {dur > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>· {minSec}</span>}
                             {item.status && item.status !== 'completed' && !isVoicemail && (
                               <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'capitalize' }}>· {item.status.replace('-', ' ')}</span>
                             )}
+                            <span style={{ flex: 1 }} />
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                              {new Date(item.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                              {item.owner && ` · ${item.owner.name}`}
+                            </span>
                           </div>
                           {item.recordingUrl && (
                             <audio controls preload="none" src={item.recordingUrl}
-                              style={{ display: 'block', width: '100%', height: 32, marginBottom: 6 }} />
+                              onPlay={() => setExpandedCalls(prev => { const next = new Set(prev); next.add(item.id); return next })}
+                              onPause={() => setExpandedCalls(prev => { const next = new Set(prev); next.delete(item.id); return next })}
+                              onEnded={() => setExpandedCalls(prev => { const next = new Set(prev); next.delete(item.id); return next })}
+                              style={{ display: 'block', width: '100%', height: 28 }} />
                           )}
                           {item.transcription && (
-                            <p style={{ fontSize: 13, lineHeight: 1.45, margin: 0, whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>{item.transcription}</p>
+                            <p style={{ fontSize: 12, lineHeight: 1.4, margin: '6px 0 0', whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>{item.transcription}</p>
                           )}
-                          {!item.transcription && item.transcriptionStatus === 'pending' && (
-                            <p style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>Transcription processing…</p>
-                          )}
-                          <p style={{ fontSize: 10, margin: '6px 0 0', color: 'var(--text-muted)' }}>
-                            {new Date(item.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                            {item.owner && ` · ${item.owner.name}`}
-                          </p>
                         </div>
+                        {!isInbound && item.owner && (
+                          <div style={{
+                            width: 28, height: 28, borderRadius: '50%', background: '#1a1a1a', color: '#dffd6e',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 10, fontWeight: 700, marginLeft: 8, flexShrink: 0, marginTop: 2,
+                          }}>
+                            {item.owner.name.split(' ').map(n => n[0]).join('')}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
@@ -702,6 +724,9 @@ export default function ContactDetailPage() {
                       )}
                       <p style={{ fontSize: 10, margin: '4px 0 0', opacity: 0.5 }}>
                         {new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                        {msg.channel === 'email' && ' · Email'}
+                        {msg.channel === 'sms' && ' · SMS'}
+                        {msg.channel === 'upload' && ' · Upload'}
                         {msg.sender && ` · ${msg.sender.name}`}
                         {msg.status === 'failed' && ' · Failed'}
                       </p>

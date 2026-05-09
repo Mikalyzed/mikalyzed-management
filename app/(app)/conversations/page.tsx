@@ -100,7 +100,7 @@ export default function ConversationsPage() {
 
   useEffect(() => {
     if (!selectedId) return
-    const interval = setInterval(() => loadMessages(selectedId), 10000)
+    const interval = setInterval(() => loadMessages(selectedId), 30000)
     return () => clearInterval(interval)
   }, [selectedId])
 
@@ -378,6 +378,9 @@ export default function ConversationsPage() {
                           )}
                           <p style={{ fontSize: 10, margin: '4px 0 0', opacity: 0.5 }}>
                             {new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                            {msg.channel === 'email' && ' · Email'}
+                            {msg.channel === 'sms' && ' · SMS'}
+                            {msg.channel === 'upload' && ' · Upload'}
                             {msg.sender && ` · ${msg.sender.name}`}
                           </p>
                         </div>
