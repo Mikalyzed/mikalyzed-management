@@ -91,10 +91,22 @@ export async function POST(request: Request) {
         continue
       }
 
-      // Save the message
-      const bodyText = msg.body?.contentType === 'html'
-        ? stripHtml(msg.body.content)
-        : (msg.body?.content || msg.bodyPreview || '')
+      // Save the message — prefer uniqueBody (just new content, no quoted reply chain)
+      const source = msg.uniqueBody || msg.body
+      const rawContent = source?.content || msg.bodyPreview || ''
+      let bodyText = source?.contentType === 'html' ? stripHtml(rawContent) : rawContent.trim()
+
+      // Strip the rep's configured signature if it appears in the body (outbound only —
+      // their own messages will include the signature; inbound messages from the lead won't).
+      if (isOutbound) {
+        const repUser = await prisma.user.findUnique({
+          where: { id: sub.userId },
+          select: { emailSignature: true },
+        })
+        if (repUser?.emailSignature) {
+          bodyText = stripSignature(bodyText, repUser.emailSignature)
+        }
+      }
 
       await prisma.message.create({
         data: {
@@ -133,15 +145,47 @@ export async function POST(request: Request) {
   return new Response(null, { status: 202 })
 }
 
+/**
+ * Removes a known signature block from the end of an email body. Tries an exact
+ * match first, then a fuzzy match by collapsing whitespace.
+ */
+function stripSignature(body: string, signature: string): string {
+  if (!signature?.trim()) return body
+  const sigPlain = signature.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+  if (!sigPlain) return body
+
+  // Exact substring (with whitespace tolerance via collapse + reindex)
+  const collapsed = body.replace(/\s+/g, ' ').trim()
+  const idx = collapsed.toLowerCase().indexOf(sigPlain.toLowerCase())
+  if (idx === -1) return body
+
+  // Find the same start in the original body (rough — first signature line)
+  const firstLine = sigPlain.split(' ').slice(0, 3).join(' ')
+  const realIdx = body.toLowerCase().indexOf(firstLine.toLowerCase())
+  if (realIdx > 0) {
+    return body.slice(0, realIdx).replace(/\s+$/, '')
+  }
+  return body
+}
+
 function stripHtml(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<[^>]*>/g, ' ')
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6]|tr|blockquote)\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
-    .replace(/\s+/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim()
 }

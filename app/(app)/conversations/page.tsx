@@ -374,7 +374,7 @@ export default function ConversationsPage() {
                             )
                           })()}
                           {msg.body && (
-                            <p style={{ fontSize: 14, lineHeight: 1.4, margin: 0, wordBreak: 'break-word' }}>{msg.body}</p>
+                            <p style={{ fontSize: 14, lineHeight: 1.4, margin: 0, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{msg.body}</p>
                           )}
                           <p style={{ fontSize: 10, margin: '4px 0 0', opacity: 0.5 }}>
                             {new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}

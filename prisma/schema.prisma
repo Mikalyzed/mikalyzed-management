@@ -16,6 +16,7 @@ model User {
   password  String   @default("")
   isActive  Boolean  @default(true) @map("is_active")
   twilioNumber String? @unique @map("twilio_number") // E.164 format, owns inbound + outbound SMS for this rep
+  emailSignature String? @map("email_signature") // user's outlook signature — stripped from mirrored emails
   createdAt DateTime @default(now()) @map("created_at")
 
   assignedVehicles Vehicle[]         @relation("CurrentAssignee")

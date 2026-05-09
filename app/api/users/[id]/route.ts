@@ -17,6 +17,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.email) data.email = body.email
   if (body.password) data.password = body.password
   if (body.isActive !== undefined) data.isActive = body.isActive
+  if (body.emailSignature !== undefined) {
+    data.emailSignature = (body.emailSignature as string | null)?.trim() || null
+  }
   if (body.twilioNumber !== undefined) {
     let n = (body.twilioNumber as string | null) || null
     if (n) {

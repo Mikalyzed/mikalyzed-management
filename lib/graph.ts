@@ -99,6 +99,7 @@ export type GraphMessage = {
   subject: string
   bodyPreview: string
   body?: { contentType: string; content: string }
+  uniqueBody?: { contentType: string; content: string } // body MINUS quoted reply chain
   from?: { emailAddress: { address: string; name: string } }
   toRecipients: { emailAddress: { address: string; name?: string } }[]
   ccRecipients: { emailAddress: { address: string; name?: string } }[]
@@ -108,7 +109,7 @@ export type GraphMessage = {
 }
 
 export async function getMessage(userEmail: string, messageId: string): Promise<GraphMessage | null> {
-  const path = `/users/${encodeURIComponent(userEmail)}/messages/${encodeURIComponent(messageId)}?$select=id,subject,bodyPreview,body,from,toRecipients,ccRecipients,receivedDateTime,conversationId,internetMessageId`
+  const path = `/users/${encodeURIComponent(userEmail)}/messages/${encodeURIComponent(messageId)}?$select=id,subject,bodyPreview,body,uniqueBody,from,toRecipients,ccRecipients,receivedDateTime,conversationId,internetMessageId`
   const res = await graphFetch(path)
   if (!res.ok) {
     if (res.status === 404) return null

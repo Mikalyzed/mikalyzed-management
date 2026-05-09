@@ -9,6 +9,7 @@ type User = {
   role: string
   isActive: boolean
   twilioNumber: string | null
+  emailSignature: string | null
   createdAt: string
 }
 
@@ -41,6 +42,7 @@ export default function TeamPage() {
   const [editPassword, setEditPassword] = useState('')
   const [editRole, setEditRole] = useState('')
   const [editTwilio, setEditTwilio] = useState('')
+  const [editSignature, setEditSignature] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
 
@@ -61,6 +63,7 @@ export default function TeamPage() {
     setEditPassword('')
     setEditRole(u.role)
     setEditTwilio(u.twilioNumber || '')
+    setEditSignature(u.emailSignature || '')
     setEditError('')
   }
 
@@ -94,8 +97,9 @@ export default function TeamPage() {
     try {
       const body: Record<string, string | null> = { name: editName, email: editEmail, role: editRole }
       if (editPassword.trim()) body.password = editPassword
-      // Always send twilioNumber so admin can clear it (empty string → null in API)
+      // Always send twilioNumber + signature so admin can clear them
       body.twilioNumber = editTwilio.trim() ? editTwilio.trim() : null
+      body.emailSignature = editSignature.trim() ? editSignature : null
       const res = await fetch(`/api/users/${editUser.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -300,6 +304,17 @@ export default function TeamPage() {
                   placeholder="+1 555 123 4567" />
                 <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
                   Inbound SMS to this number will be tagged as received by this rep. Outbound SMS sent by this rep will go from this number.
+                </p>
+              </div>
+              <div>
+                <label className="form-label">Email Signature <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(optional — gets stripped from mirrored emails)</span></label>
+                <textarea className="input" value={editSignature} onChange={e => setEditSignature(e.target.value)}
+                  rows={4}
+                  placeholder={'Paste your full Outlook signature here.\n\nExample:\nFernando Balladares | Head of Marketing\nMikalyzed\n305-315-8063\nIT@mikalyzed.com'}
+                  style={{ fontFamily: 'inherit', resize: 'vertical' }}
+                />
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                  When this rep&apos;s outbound emails get mirrored into the CRM, this signature is removed so the contact thread stays clean.
                 </p>
               </div>
               {editError && (
