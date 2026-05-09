@@ -77,14 +77,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ conversations: result })
   }
 
-  // Get messages for a specific contact
-  const messages = await prisma.message.findMany({
-    where: { contactId },
-    orderBy: { createdAt: 'asc' },
-    include: {
-      sender: { select: { id: true, name: true } },
-    },
-  })
+  // Get messages + calls for a specific contact, interleaved
+  const [messages, calls] = await Promise.all([
+    prisma.message.findMany({
+      where: { contactId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        sender: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.call.findMany({
+      where: { contactId },
+      orderBy: { startedAt: 'asc' },
+      include: {
+        owner: { select: { id: true, name: true } },
+      },
+    }),
+  ])
 
   // Mark inbound messages as read
   await prisma.message.updateMany({
@@ -93,9 +102,17 @@ export async function GET(req: NextRequest) {
   })
 
   // Decorate each message with a ready-to-render mediaPublicUrl (R2 signed URL → Cloudinary → proxy fallback)
-  const decorated = await Promise.all(
-    messages.map(async m => ({ ...m, mediaPublicUrl: await buildMediaUrl(m) }))
+  const decoratedMessages = await Promise.all(
+    messages.map(async m => ({ ...m, kind: 'message' as const, mediaPublicUrl: await buildMediaUrl(m) }))
   )
 
-  return NextResponse.json({ messages: decorated })
+  const decoratedCalls = calls.map(c => ({
+    ...c,
+    kind: 'call' as const,
+    // Hide raw recordingUrl from the client; route playback through the proxy
+    recordingUrl: c.recordingUrl ? `/api/voice/recording/${c.id}` : null,
+    createdAt: c.startedAt, // unify timestamp field with messages for sorting client-side
+  }))
+
+  return NextResponse.json({ messages: decoratedMessages, calls: decoratedCalls })
 }

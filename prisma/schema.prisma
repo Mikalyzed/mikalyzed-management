@@ -50,6 +50,7 @@ model User {
   porterTasksCreated  PorterTask[]   @relation("PorterTaskCreator")
   uploadLinksCreated  UploadLink[]   @relation("UploadLinkCreator")
   emailSubscriptions  EmailSubscription[]
+  calls               Call[]
 
   @@map("users")
 }
@@ -380,6 +381,7 @@ model Contact {
   vehicleInterests VehicleInterest[]
   messages        Message[]
   uploadLinks     UploadLink[]
+  calls           Call[]
 
   @@index([email])
   @@index([phone])
@@ -402,6 +404,36 @@ model EmailSubscription {
   @@index([userEmail])
   @@index([expiresAt])
   @@map("email_subscriptions")
+}
+
+model Call {
+  id              String    @id @default(uuid())
+  contactId       String?   @map("contact_id")
+  direction       String    // outbound, inbound
+  fromNumber      String    @map("from_number") // E.164
+  toNumber        String    @map("to_number")   // E.164
+  twilioCallSid   String    @unique @map("twilio_call_sid")
+  status          String    @default("initiated") // initiated, ringing, in-progress, completed, busy, failed, no-answer, canceled, voicemail
+  startedAt       DateTime  @default(now()) @map("started_at")
+  answeredAt      DateTime? @map("answered_at")
+  endedAt         DateTime? @map("ended_at")
+  durationSeconds Int?      @map("duration_seconds")
+  recordingSid    String?   @map("recording_sid")
+  recordingUrl    String?   @map("recording_url")
+  recordingDurationSeconds Int? @map("recording_duration_seconds")
+  transcription   String?   // Full transcript (when ready)
+  transcriptionStatus String? @map("transcription_status") // pending, completed, failed
+  voicemail       Boolean   @default(false) // true if call went to voicemail
+  ownerId         String?   @map("owner_id") // rep who placed/received the call
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  owner   User?    @relation(fields: [ownerId], references: [id])
+
+  @@index([contactId, startedAt])
+  @@index([twilioCallSid])
+  @@map("calls")
 }
 
 model UploadLink {

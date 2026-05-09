@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
+import { getVoicePhoneAPI } from '@/components/VoicePhone'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
@@ -23,16 +24,33 @@ type ContactDetail = {
 type Message = {
   id: string; direction: string; channel: string; body: string; mediaUrl: string | null; mediaContentType?: string | null; mediaPublicUrl?: string | null; r2Key?: string | null
   status: string; createdAt: string; sender: { id: string; name: string } | null
+  kind?: 'message'
 }
 
+type CallEntry = {
+  id: string; kind: 'call'; direction: string; status: string
+  fromNumber: string; toNumber: string
+  startedAt: string; durationSeconds: number | null
+  recordingUrl: string | null
+  recordingDurationSeconds: number | null
+  transcription: string | null; transcriptionStatus: string | null
+  voicemail: boolean
+  owner: { id: string; name: string } | null
+  createdAt: string
+}
+
+type ThreadItem = Message | CallEntry
+
 export default function ContactDetailPage() {
-  const { id } = useParams()
+  const params = useParams()
+  const id = Array.isArray(params.id) ? params.id[0] : (params.id as string)
   const router = useRouter()
   const searchParams = useSearchParams()
   const backTo = searchParams.get('from') || '/contacts'
   const [contact, setContact] = useState<ContactDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [messages, setMessages] = useState<Message[]>([])
+  const [calls, setCalls] = useState<CallEntry[]>([])
   const [msgText, setMsgText] = useState('')
   const [sending, setSending] = useState(false)
   // msgTab kept for backwards compat with existing render code; reflects effective send mode
@@ -81,6 +99,7 @@ export default function ContactDetailPage() {
   function loadMessages() {
     fetch(`/api/messages?contactId=${id}`).then(r => r.json()).then(d => {
       setMessages(d.messages || [])
+      setCalls(d.calls || [])
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
     })
   }
@@ -357,14 +376,28 @@ export default function ContactDetailPage() {
         {/* Action icons */}
         <div style={{ display: 'flex', gap: 6 }}>
           {contact.phone && (
-            <a href={`tel:${contact.phone}`} style={{
-              width: 36, height: 36, borderRadius: 8, border: '1px solid var(--border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', textDecoration: 'none',
-            }}>
+            <button
+              data-tip="Call from browser"
+              onClick={() => {
+                const api = getVoicePhoneAPI()
+                if (!api) { alert('Voice device still initializing — try again in a moment.'); return }
+                if (!me?.twilioNumber) { alert('No Twilio number assigned to your account. Set one in /team.'); return }
+                api.callContact({
+                  to: contact.phone!,
+                  contactId: id,
+                  ownerId: me.id,
+                  fromNumber: me.twilioNumber,
+                })
+              }}
+              style={{
+                width: 36, height: 36, borderRadius: 8, border: '1px solid var(--border)',
+                background: '#fff', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)',
+              }}>
               <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
               </svg>
-            </a>
+            </button>
           )}
           {contact.email && (
             <a href={`mailto:${contact.email}`} style={{
@@ -522,10 +555,69 @@ export default function ContactDetailPage() {
                 <p style={{ fontSize: 13, marginTop: 4 }}>Start a conversation below</p>
               </div>
             )}
-            {messages.map((msg, i) => {
-              const prevMsg = messages[i - 1]
-              const showDate = !prevMsg || new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString()
-              return (
+            {(() => {
+              // Interleave messages + calls by createdAt
+              const items: ThreadItem[] = [
+                ...messages.map(m => ({ ...m, kind: 'message' as const })),
+                ...calls,
+              ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+              return items.map((item, i) => {
+                if (item.kind === 'call') {
+                  const prev = items[i - 1]
+                  const showDate = !prev || new Date(item.createdAt).toDateString() !== new Date(prev.createdAt).toDateString()
+                  const dur = item.recordingDurationSeconds || item.durationSeconds || 0
+                  const minSec = `${Math.floor(dur / 60)}:${(dur % 60).toString().padStart(2, '0')}`
+                  const isInbound = item.direction === 'inbound'
+                  const isVoicemail = item.voicemail
+                  const label = isVoicemail ? 'Voicemail' : isInbound ? 'Inbound call' : 'Outbound call'
+                  const accent = isVoicemail ? '#a855f7' : isInbound ? '#16a34a' : '#2563eb'
+                  return (
+                    <div key={item.id}>
+                      {showDate && (
+                        <div style={{ textAlign: 'center', margin: '16px 0 12px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>
+                          {new Date(item.createdAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+                        <div style={{
+                          maxWidth: '85%', width: '100%',
+                          padding: '12px 14px', borderRadius: 10,
+                          background: '#fff', border: `1px solid var(--border)`,
+                          borderLeft: `3px solid ${accent}`,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z" />
+                            </svg>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: accent, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+                            {dur > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {minSec}</span>}
+                            {item.status && item.status !== 'completed' && !isVoicemail && (
+                              <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'capitalize' }}>· {item.status.replace('-', ' ')}</span>
+                            )}
+                          </div>
+                          {item.recordingUrl && (
+                            <audio controls preload="none" src={item.recordingUrl}
+                              style={{ display: 'block', width: '100%', height: 32, marginBottom: 6 }} />
+                          )}
+                          {item.transcription && (
+                            <p style={{ fontSize: 13, lineHeight: 1.45, margin: 0, whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>{item.transcription}</p>
+                          )}
+                          {!item.transcription && item.transcriptionStatus === 'pending' && (
+                            <p style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>Transcription processing…</p>
+                          )}
+                          <p style={{ fontSize: 10, margin: '6px 0 0', color: 'var(--text-muted)' }}>
+                            {new Date(item.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                            {item.owner && ` · ${item.owner.name}`}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
+                const msg = item
+                const prev = items[i - 1]
+                const showDate = !prev || new Date(msg.createdAt).toDateString() !== new Date(prev.createdAt).toDateString()
+                return (
                 <div key={msg.id}>
                   {showDate && (
                     <div style={{ textAlign: 'center', margin: '16px 0 12px', fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>
@@ -627,7 +719,8 @@ export default function ContactDetailPage() {
                   )}
                 </div>
               )
-            })}
+              })
+            })()}
             <div ref={messagesEndRef} />
           </div>
 

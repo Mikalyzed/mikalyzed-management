@@ -14,7 +14,13 @@ export function middleware(request: NextRequest) {
     pathname.match(/^\/api\/upload-links\/[^/]+(\/(sign|complete|multipart\/(start|sign-part|complete)))?$/) ||
     pathname === '/api/sms/webhook' ||
     pathname === '/api/email/webhook' ||
-    pathname === '/api/email/subscriptions/renew'
+    pathname === '/api/email/subscriptions/renew' ||
+    pathname === '/api/voice/twiml' ||
+    pathname === '/api/voice/incoming' ||
+    pathname === '/api/voice/call-status' ||
+    pathname === '/api/voice/recording-status' ||
+    pathname === '/api/voice/transcription' ||
+    pathname === '/api/voice/voicemail'
   ) {
     return NextResponse.next()
   }
