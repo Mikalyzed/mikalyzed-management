@@ -76,19 +76,34 @@ async function handleMessageEvent(evt: IGEvent) {
   const existing = await prisma.message.findFirst({ where: { externalId: messageId }, select: { id: true } })
   if (existing) return
 
-  const ourIgId = process.env.META_IG_BUSINESS_ID
   const isOutbound = !!evt.message.is_echo // Meta marks our own outbound DMs with is_echo=true
   const counterpartyIgId = isOutbound ? evt.recipient.id : evt.sender.id
 
-  // Find existing contact by Instagram-scoped ID stored as a tag.
-  // We don't auto-create — only mirror if we already track this person.
-  const contact = await prisma.contact.findFirst({
+  // Find existing contact by Instagram-scoped ID stored as a tag
+  let contact = await prisma.contact.findFirst({
     where: { tags: { has: `ig:${counterpartyIgId}` } },
   })
+
+  // Auto-create if unknown — Instagram DMs are mostly leads, mirror them all
   if (!contact) {
-    // Skip — same rule as email mirror. Manual conversion via "Convert IG DM to lead" later.
-    console.log('[ig-webhook] no contact for ig:', counterpartyIgId)
-    return
+    const profile = await fetchIgProfile(counterpartyIgId)
+    const username = profile?.username || counterpartyIgId
+    const fullName = profile?.name || `@${username}`
+    const [firstName, ...rest] = fullName.split(/\s+/)
+    const lastName = rest.join(' ') || `(@${username})`
+
+    const adminId = await firstAdminId()
+    contact = await prisma.contact.create({
+      data: {
+        firstName: firstName || 'Unknown',
+        lastName,
+        source: 'instagram',
+        tags: [`ig:${counterpartyIgId}`, `ig_handle:${username}`],
+        notes: `Auto-created from Instagram DM on ${new Date().toLocaleString()}`,
+        createdById: adminId,
+      },
+    })
+    console.log('[ig-webhook] Auto-created contact', contact.id, 'for ig:', counterpartyIgId, '@', username)
   }
 
   const text = evt.message.text || ''
@@ -106,4 +121,42 @@ async function handleMessageEvent(evt: IGEvent) {
       externalId: messageId,
     },
   })
+
+  // Notify admins/sales managers of inbound only
+  if (!isOutbound) {
+    const notifyUsers = await prisma.user.findMany({
+      where: { isActive: true, role: { in: ['admin', 'sales_manager'] } },
+      select: { id: true },
+    })
+    const preview = text.slice(0, 60) || (attachment ? '(media)' : '(empty)')
+    await prisma.notification.createMany({
+      data: notifyUsers.map(u => ({
+        userId: u.id,
+        type: 'instagram_received',
+        title: `IG DM from ${contact!.firstName} ${contact!.lastName}: ${preview}`,
+        entityType: 'contact',
+        entityId: contact!.id,
+      })),
+    }).catch(() => {})
+  }
+}
+
+async function fetchIgProfile(igUserId: string): Promise<{ username?: string; name?: string } | null> {
+  const token = process.env.META_PAGE_ACCESS_TOKEN
+  if (!token) return null
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v18.0/${igUserId}?fields=username,name&access_token=${token}`,
+    )
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+async function firstAdminId(): Promise<string> {
+  const admin = await prisma.user.findFirst({ where: { role: 'admin', isActive: true }, select: { id: true } })
+  if (!admin) throw new Error('No admin user found in system')
+  return admin.id
 }
