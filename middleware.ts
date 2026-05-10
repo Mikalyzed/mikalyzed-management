@@ -20,7 +20,8 @@ export function middleware(request: NextRequest) {
     pathname === '/api/voice/call-status' ||
     pathname === '/api/voice/recording-status' ||
     pathname === '/api/voice/transcription' ||
-    pathname === '/api/voice/voicemail'
+    pathname === '/api/voice/voicemail' ||
+    pathname === '/api/instagram/webhook'
   ) {
     return NextResponse.next()
   }
