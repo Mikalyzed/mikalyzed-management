@@ -13,7 +13,12 @@ export async function GET(req: NextRequest) {
   const offset = parseInt(searchParams.get('offset') || '0')
 
   const where: any = { isActive: true }
-  if (status && status !== 'all') where.status = status
+  if (status && status !== 'all') {
+    where.status = status
+  } else {
+    // "All" tab should exclude sold/removed — those live in their own tabs
+    where.status = { notIn: ['sold', 'removed'] }
+  }
 
   if (search) {
     const q = search.trim()
@@ -48,7 +53,7 @@ export async function GET(req: NextRequest) {
   let allCount = 0
   for (const c of counts) {
     countsByStatus[c.status] = c._count
-    allCount += c._count
+    if (c.status !== 'sold' && c.status !== 'removed') allCount += c._count
   }
   countsByStatus.all = allCount
 
