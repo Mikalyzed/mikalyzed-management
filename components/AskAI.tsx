@@ -47,7 +47,7 @@ export default function AskAI() {
           title="Ask AI"
           style={{
             position: 'fixed',
-            bottom: 12, right: 0,
+            bottom: 12, right: 6,
             zIndex: 200,
             width: 44, height: 44,
             background: '#1a1a1a', color: '#dffd6e',
