@@ -14,6 +14,7 @@ export default function NewCalendarItem() {
   const [title, setTitle] = useState('')
   const [type, setType] = useState('errand')
   const [date, setDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const [time, setTime] = useState('')
   const [endTime, setEndTime] = useState('')
   const [allDay, setAllDay] = useState(false)
@@ -22,6 +23,17 @@ export default function NewCalendarItem() {
   const [assigneeIds, setAssigneeIds] = useState<string[]>([])
   const [vehicleId, setVehicleId] = useState('')
   const [eventId, setEventId] = useState('')
+
+  const isPTO = type === 'pto'
+
+  // When switching to PTO: force all-day and clear vehicle/event links
+  useEffect(() => {
+    if (isPTO) {
+      setAllDay(true)
+      setVehicleId('')
+      setEventId('')
+    }
+  }, [isPTO])
 
   useEffect(() => {
     fetch('/api/users').then(r => r.json()).then(d => setUsers((d.users || d).filter((x: { isActive: boolean }) => x.isActive)))
@@ -32,6 +44,10 @@ export default function NewCalendarItem() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!title || !date) return
+    if (isPTO && assigneeIds.length === 0) {
+      alert('Please pick who the time off is for.')
+      return
+    }
     setSaving(true)
 
     // Append local timezone offset so the server stores the correct absolute time
@@ -44,7 +60,9 @@ export default function NewCalendarItem() {
       return `${sign}${h}:${m}`
     })()
     const dateStr = allDay ? `${date}T00:00:00` : `${date}T${time || '09:00'}:00${tzSuffix}`
-    const endDateStr = !allDay && endTime ? `${date}T${endTime}:00${tzSuffix}` : null
+    const endDateStr = allDay
+      ? (endDate ? `${endDate}T23:59:59` : null)
+      : (endTime ? `${date}T${endTime}:00${tzSuffix}` : null)
 
     const res = await fetch('/api/calendar', {
       method: 'POST',
@@ -63,6 +81,9 @@ export default function NewCalendarItem() {
   function toggleAssignee(id: string) {
     setAssigneeIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
+
+  const availableUsers = users.filter(u => !assigneeIds.includes(u.id))
+  const selectedUsers = users.filter(u => assigneeIds.includes(u.id))
 
   return (
     <div style={{ maxWidth: 600 }}>
@@ -89,10 +110,15 @@ export default function NewCalendarItem() {
           {/* Date & Time */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 140 }}>
-              <label className="form-label">Date</label>
+              <label className="form-label">{allDay ? 'Start Date' : 'Date'}</label>
               <input className="input" type="date" value={date} onChange={e => setDate(e.target.value)} required />
             </div>
-            {!allDay && (
+            {allDay ? (
+              <div style={{ flex: 1, minWidth: 140 }}>
+                <label className="form-label">End Date {isPTO ? '' : '(optional)'}</label>
+                <input className="input" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} min={date || undefined} />
+              </div>
+            ) : (
               <>
                 <div style={{ flex: 1, minWidth: 120 }}>
                   <label className="form-label">Start Time</label>
@@ -121,39 +147,71 @@ export default function NewCalendarItem() {
 
           {/* Assignees */}
           <div>
-            <label className="form-label">Assign To</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-              {users.map(u => (
-                <button key={u.id} type="button" onClick={() => toggleAssignee(u.id)} style={{
-                  padding: '8px 14px',
-                  borderRadius: 8,
-                  border: `1px solid ${assigneeIds.includes(u.id) ? '#1a1a1a' : 'var(--border)'}`,
-                  background: assigneeIds.includes(u.id) ? '#1a1a1a' : '#fff',
-                  color: assigneeIds.includes(u.id) ? '#dffd6e' : 'var(--text-secondary)',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  minHeight: 36,
-                }}>
-                  {u.name}
-                </button>
-              ))}
-            </div>
-          </div>
+            <label className="form-label">{isPTO ? 'Who is taking time off? *' : 'Assign To'}</label>
 
-          {/* Link Vehicle */}
-          <div>
-            <label className="form-label">Link Vehicle (optional)</label>
-            <select className="input" value={vehicleId} onChange={e => setVehicleId(e.target.value)}>
-              <option value="">None</option>
-              {vehicles.map(v => (
-                <option key={v.id} value={v.id}>{v.stockNumber} — {v.make} {v.model}</option>
+            {/* Selected chips */}
+            {selectedUsers.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {selectedUsers.map(u => (
+                  <span key={u.id} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '4px 4px 4px 10px', borderRadius: 999,
+                    background: '#1a1a1a', color: '#dffd6e',
+                    fontSize: 13, fontWeight: 600,
+                  }}>
+                    {u.name}
+                    <button
+                      type="button"
+                      onClick={() => toggleAssignee(u.id)}
+                      aria-label={`Remove ${u.name}`}
+                      style={{
+                        background: 'rgba(255,255,255,0.12)', border: 'none',
+                        color: '#dffd6e', cursor: 'pointer',
+                        width: 20, height: 20, borderRadius: '50%',
+                        fontSize: 14, lineHeight: 1,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Add dropdown */}
+            <select
+              className="input"
+              value=""
+              onChange={e => { if (e.target.value) toggleAssignee(e.target.value) }}
+              disabled={availableUsers.length === 0}
+            >
+              <option value="">
+                {availableUsers.length === 0
+                  ? 'All team members assigned'
+                  : selectedUsers.length === 0
+                    ? (isPTO ? 'Pick a team member…' : 'Add team member…')
+                    : 'Add another…'}
+              </option>
+              {availableUsers.map(u => (
+                <option key={u.id} value={u.id}>{u.name}</option>
               ))}
             </select>
           </div>
 
-          {/* Link Event */}
-          {events.length > 0 && (
+          {/* Link Vehicle — hidden for PTO */}
+          {!isPTO && (
+            <div>
+              <label className="form-label">Link Vehicle (optional)</label>
+              <select className="input" value={vehicleId} onChange={e => setVehicleId(e.target.value)}>
+                <option value="">None</option>
+                {vehicles.map(v => (
+                  <option key={v.id} value={v.id}>{v.stockNumber} — {v.make} {v.model}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Link Event — hidden for PTO */}
+          {!isPTO && events.length > 0 && (
             <div>
               <label className="form-label">Link Event (optional)</label>
               <select className="input" value={eventId} onChange={e => setEventId(e.target.value)}>

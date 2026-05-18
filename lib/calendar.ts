@@ -9,6 +9,7 @@ export const CALENDAR_TYPES = [
   'errand',
   'transport',
   'event',
+  'pto',
 ] as const
 export type CalendarType = (typeof CALENDAR_TYPES)[number]
 
@@ -23,6 +24,7 @@ export const CALENDAR_TYPE_LABELS: Record<CalendarType, string> = {
   errand: 'Errand',
   transport: 'Transport',
   event: 'Event',
+  pto: 'Time Off (PTO)',
 }
 
 export const CALENDAR_TYPE_COLORS: Record<CalendarType, string> = {
@@ -36,6 +38,7 @@ export const CALENDAR_TYPE_COLORS: Record<CalendarType, string> = {
   errand: '#6b7280',
   transport: '#0d9488',
   event: '#db2777',
+  pto: '#f59e0b',
 }
 
 export const CALENDAR_STATUSES = [

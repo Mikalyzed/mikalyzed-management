@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import VehicleSearch from '@/components/VehicleSearch'
 import VendorSearch, { VendorResult } from '@/components/VendorSearch'
+import AddPartModal from '@/components/AddPartModal'
 
 type InventoryPick = {
   stockNumber: string; vin: string | null
@@ -82,6 +83,7 @@ export default function ExternalRepairsPage() {
   const [addAsPending, setAddAsPending] = useState(false)
   const [addVendor, setAddVendor] = useState<VendorResult | null>(null)
   const [addAtDealership, setAddAtDealership] = useState(false)
+  const [addPartFor, setAddPartFor] = useState<{ stockNumber: string; vehicleDesc: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [scheduleModal, setScheduleModal] = useState<ExternalRepair | null>(null)
   const [scheduleSentDate, setScheduleSentDate] = useState('')
@@ -705,6 +707,25 @@ export default function ExternalRepairsPage() {
                       }}
                     >
                       View Vehicle
+                    </button>
+                    <button
+                      onClick={() => setAddPartFor({
+                        stockNumber: r.stockNumber,
+                        vehicleDesc: `${r.year || ''} ${r.make} ${r.model}`.trim(),
+                      })}
+                      style={{
+                        padding: '12px 16px',
+                        background: '#f3e8ff',
+                        border: 'none',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        color: '#7c3aed',
+                        minHeight: '44px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      + Add Part
                     </button>
                     {r.status === 'pending' && (
                       <button
@@ -1438,6 +1459,15 @@ export default function ExternalRepairsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Add Part Modal */}
+      {addPartFor && (
+        <AddPartModal
+          stockNumber={addPartFor.stockNumber}
+          vehicleDesc={addPartFor.vehicleDesc}
+          onClose={() => setAddPartFor(null)}
+        />
       )}
 
       {/* Schedule Modal */}
