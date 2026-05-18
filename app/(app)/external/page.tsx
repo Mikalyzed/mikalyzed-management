@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import VehicleSearch from '@/components/VehicleSearch'
+import VendorSearch, { VendorResult } from '@/components/VendorSearch'
 
 type InventoryPick = {
   stockNumber: string; vin: string | null
@@ -15,11 +17,13 @@ type ExternalRepair = {
   make: string
   model: string
   color: string | null
+  vendorId: string | null
   shopName: string
   shopPhone: string | null
+  atDealership: boolean
   repairDescription: string
   estimatedDays: number | null
-  sentDate: string
+  sentDate: string | null
   expectedReturn: string | null
   status: string
   notes: string | null
@@ -27,6 +31,7 @@ type ExternalRepair = {
 }
 
 const STATUS_LABELS: Record<string, string> = {
+  pending: 'Pending Schedule',
   sent: 'Awaiting Pickup',
   in_progress: 'In Progress',
   ready: 'Ready for Pickup',
@@ -52,14 +57,38 @@ const DEFAULT_INSPECTION = [
 ]
 
 export default function ExternalRepairsPage() {
+  const router = useRouter()
   const [repairs, setRepairs] = useState<ExternalRepair[]>([])
+  const [resolving, setResolving] = useState<string | null>(null)
+
+  async function openVehicleDetail(stockNumber: string) {
+    if (resolving) return
+    setResolving(stockNumber)
+    try {
+      const res = await fetch('/api/vehicles/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stockNumber }),
+      })
+      const data = await res.json()
+      if (data.vehicleId) router.push(`/vehicles/${data.vehicleId}`)
+    } catch {}
+    setResolving(null)
+  }
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [selectedInv, setSelectedInv] = useState<InventoryPick | null>(null)
+  const [addAsPending, setAddAsPending] = useState(false)
+  const [addVendor, setAddVendor] = useState<VendorResult | null>(null)
+  const [addAtDealership, setAddAtDealership] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [scheduleModal, setScheduleModal] = useState<ExternalRepair | null>(null)
+  const [scheduleSentDate, setScheduleSentDate] = useState('')
+  const [scheduleEstDays, setScheduleEstDays] = useState('')
+  const [scheduleSaving, setScheduleSaving] = useState(false)
   const [error, setError] = useState('')
-  const [filter, setFilter] = useState('active')
+  const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [editId, setEditId] = useState<string | null>(null)
   const [reconModal, setReconModal] = useState<ExternalRepair | null>(null)
@@ -91,6 +120,8 @@ export default function ExternalRepairsPage() {
   const [expandedFollowUps, setExpandedFollowUps] = useState<string | null>(null)
   const [editRepairModal, setEditRepairModal] = useState<ExternalRepair | null>(null)
   const [editRepairSaving, setEditRepairSaving] = useState(false)
+  const [editStatus, setEditStatus] = useState('')
+  const [editReason, setEditReason] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; stock: string; vehicle: string } | null>(null)
   const [deleteDeleting, setDeleteDeleting] = useState(false)
 
@@ -114,7 +145,7 @@ export default function ExternalRepairsPage() {
 
   const filtered = (() => {
     const q = search.toLowerCase().trim()
-    let list = filter === 'active'
+    let list = filter === 'all'
       ? repairs.filter((r) => r.status !== 'returned')
       : repairs.filter((r) => r.status === filter)
     if (q) {
@@ -131,18 +162,22 @@ export default function ExternalRepairsPage() {
     setSaving(true)
     setError('')
     const form = new FormData(e.currentTarget)
+    if (!addVendor) { setError('Pick or add a vendor'); setSaving(false); return }
     const data = {
       stockNumber: form.get('stockNumber'),
       year: form.get('year') ? Number(form.get('year')) : null,
       make: form.get('make'),
       model: form.get('model'),
       color: form.get('color'),
-      shopName: form.get('shopName'),
-      shopPhone: form.get('shopPhone'),
+      vendorId: addVendor.id,
+      shopName: addVendor.name,
+      shopPhone: addVendor.phone,
+      atDealership: addAtDealership,
       repairDescription: form.get('repairDescription'),
-      estimatedDays: form.get('estimatedDays') ? Number(form.get('estimatedDays')) : null,
-      sentDate: form.get('sentDate'),
+      estimatedDays: addAsPending ? null : (form.get('estimatedDays') ? Number(form.get('estimatedDays')) : null),
+      sentDate: addAsPending ? null : form.get('sentDate'),
       notes: form.get('notes'),
+      status: addAsPending ? 'pending' : 'sent',
     }
     try {
       const res = await fetch('/api/external', {
@@ -153,6 +188,9 @@ export default function ExternalRepairsPage() {
       if (!res.ok) { const d = await res.json(); setError(d.error); return }
       setShowAdd(false)
       setSelectedInv(null)
+      setAddAsPending(false)
+      setAddVendor(null)
+      setAddAtDealership(false)
       load()
     } catch { setError('Network error') }
     finally { setSaving(false) }
@@ -177,7 +215,8 @@ export default function ExternalRepairsPage() {
     setEditId(null)
   }
 
-  function getDaysOut(sentDate: string) {
+  function getDaysOut(sentDate: string | null) {
+    if (!sentDate) return null
     return Math.floor((Date.now() - new Date(sentDate).getTime()) / 86400000)
   }
 
@@ -291,14 +330,15 @@ export default function ExternalRepairsPage() {
       }}>
         {(() => {
           const TABS = [
-            { key: 'active', label: 'Active' },
+            { key: 'all', label: 'All Vehicles' },
+            { key: 'pending', label: 'Pending' },
             { key: 'sent', label: 'Awaiting Pickup' },
             { key: 'in_progress', label: 'In Progress' },
             { key: 'ready', label: 'Ready' },
             { key: 'returned', label: 'Returned' },
           ]
           return TABS.map((tab, i) => {
-            const count = tab.key === 'active'
+            const count = tab.key === 'all'
               ? repairs.filter(r => r.status !== 'returned').length
               : repairs.filter(r => r.status === tab.key).length
             const active = filter === tab.key
@@ -390,37 +430,85 @@ export default function ExternalRepairsPage() {
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Color</label>
               <input name="color" className="input" placeholder="Optional" defaultValue={selectedInv?.color || ''} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Shop Name *</label>
-                <input name="shopName" required className="input" placeholder="Joe's Auto Body" />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Shop Phone</label>
-                <input name="shopPhone" type="tel" className="input" placeholder="(305) 555-1234" />
-              </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Vendor *</label>
+              <VendorSearch
+                onSelect={v => setAddVendor(v)}
+                placeholder="Search vendors or type to add new..."
+              />
+              {addVendor && (
+                <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>
+                    <strong>{addVendor.name}</strong>
+                    {addVendor.phone && <span style={{ marginLeft: 8, color: 'var(--text-muted)' }}>· {addVendor.phone}</span>}
+                  </span>
+                  <button type="button" onClick={() => setAddVendor(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a', fontSize: 13, fontWeight: 600 }}>Clear</button>
+                </div>
+              )}
             </div>
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 14px', borderRadius: 10,
+              background: addAtDealership ? '#dbeafe' : '#f9fafb',
+              border: `1px solid ${addAtDealership ? '#93c5fd' : 'var(--border)'}`,
+              cursor: 'pointer', fontSize: 14,
+            }}>
+              <input
+                type="checkbox"
+                checked={addAtDealership}
+                onChange={e => setAddAtDealership(e.target.checked)}
+                style={{ width: 18, height: 18, cursor: 'pointer' }}
+              />
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Vendor working at our dealership</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Vehicle stays on-site — vendor comes to us. (Not actually sent out.)
+                </div>
+              </div>
+            </label>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>What&apos;s Being Done *</label>
               <textarea name="repairDescription" required className="input" rows={2} style={{ resize: 'vertical', minHeight: '60px' }} placeholder="Paint front bumper, fix dent on driver door..." />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 14px', borderRadius: 10,
+              background: addAsPending ? '#fef3c7' : '#f9fafb',
+              border: `1px solid ${addAsPending ? '#fcd34d' : 'var(--border)'}`,
+              cursor: 'pointer', fontSize: 14,
+            }}>
+              <input
+                type="checkbox"
+                checked={addAsPending}
+                onChange={e => setAddAsPending(e.target.checked)}
+                style={{ width: 18, height: 18, cursor: 'pointer' }}
+              />
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Date Sent *</label>
-                <input name="sentDate" type="date" required className="input" defaultValue={new Date().toISOString().split('T')[0]} />
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Not scheduled yet</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  Track this vehicle as pending — fill in the date and estimated days later.
+                </div>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Estimated Days *</label>
-                <input name="estimatedDays" type="number" required className="input" placeholder="e.g. 5" />
+            </label>
+            {!addAsPending && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Date Sent *</label>
+                  <input name="sentDate" type="date" required={!addAsPending} className="input" defaultValue={new Date().toISOString().split('T')[0]} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Estimated Days *</label>
+                  <input name="estimatedDays" type="number" required={!addAsPending} className="input" placeholder="e.g. 5" />
+                </div>
               </div>
-            </div>
+            )}
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Notes</label>
               <textarea name="notes" className="input" rows={2} style={{ resize: 'vertical', minHeight: '60px' }} placeholder="Any additional notes..." />
             </div>
             {error && <div style={{ padding: '12px 16px', borderRadius: '12px', fontSize: '14px', background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-border)' }}>{error}</div>}
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="button" onClick={() => { setShowAdd(false); setSelectedInv(null) }} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--border)', background: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px' }}>Cancel</button>
+              <button type="button" onClick={() => { setShowAdd(false); setSelectedInv(null); setAddAsPending(false); setAddVendor(null); setAddAtDealership(false) }} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: '1px solid var(--border)', background: '#fff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px' }}>Cancel</button>
               <button type="submit" disabled={saving} style={{ flex: 1, padding: '12px', borderRadius: '12px', border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px', opacity: saving ? 0.5 : 1 }}>
                 {saving ? 'Adding...' : 'Add Repair'}
               </button>
@@ -439,8 +527,9 @@ export default function ExternalRepairsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {filtered.map((r) => {
             const daysOut = getDaysOut(r.sentDate)
+            const isPending = r.status === 'pending'
             const hasFollowUp = (r as any).followUps && (r as any).followUps.length > 0
-            const overdue = !!(r.estimatedDays && daysOut > r.estimatedDays && r.status !== 'returned' && !hasFollowUp)
+            const overdue = !!(daysOut !== null && r.estimatedDays && daysOut > r.estimatedDays && r.status !== 'returned' && !hasFollowUp)
 
             return (
               <div key={r.id} style={{
@@ -451,7 +540,7 @@ export default function ExternalRepairsPage() {
                 boxShadow: 'var(--shadow-sm)',
               }}>
                 {/* Header - Clickable for admin */}
-                <div className="ext-card-padding" style={{ cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && setEditRepairModal(r)}>
+                <div className="ext-card-padding" style={{ cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && (setEditRepairModal(r), setEditStatus(r.status), setEditReason(''))}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', gap: '12px' }}>
                     <div style={{ minWidth: 0 }}>
                       <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
@@ -464,6 +553,12 @@ export default function ExternalRepairsPage() {
                     </div>
                     <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {overdue && <span className="badge badge-blocked">Overdue</span>}
+                      {r.atDealership && (
+                        <span style={{
+                          fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
+                          background: '#dbeafe', color: '#1d4ed8', whiteSpace: 'nowrap',
+                        }}>In-House</span>
+                      )}
                       <span className={`badge ${r.status === 'returned' ? 'badge-done' : r.status === 'ready' ? 'badge-content' : r.status === 'in_progress' ? 'badge-in-progress' : 'badge-pending'}`}>
                         {STATUS_LABELS[r.status]}
                       </span>
@@ -478,7 +573,7 @@ export default function ExternalRepairsPage() {
                     background: overdue ? 'rgba(255,255,255,0.6)' : 'var(--bg-primary)',
                     borderRadius: '12px',
                     cursor: isAdmin ? 'pointer' : 'default',
-                  }} onClick={() => isAdmin && setEditRepairModal(r)}>
+                  }} onClick={() => isAdmin && (setEditRepairModal(r), setEditStatus(r.status), setEditReason(''))}>
                     <div>
                       <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Shop</p>
                       <p style={{ fontSize: '14px', fontWeight: 600 }}>{r.shopName}</p>
@@ -491,26 +586,31 @@ export default function ExternalRepairsPage() {
                     <div>
                       <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Timeline</p>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {/* Total Days Out */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                          <span style={{ color: 'var(--text-secondary)' }}>Total out:</span>
-                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{daysOut}d</span>
-                        </div>
-                        
-                        {/* Original Estimate */}
-                        {r.estimatedDays && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                            <span style={{ color: 'var(--text-secondary)' }}>Original est:</span>
-                            <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{r.estimatedDays}d</span>
+                        {isPending ? (
+                          <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                            Not yet scheduled — use the Schedule button when ready.
                           </div>
-                        )}
-                        
-                        {/* Original Overdue */}
-                        {r.estimatedDays && daysOut > r.estimatedDays && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
-                            <span style={{ color: 'var(--danger)' }}>Overdue by:</span>
-                            <span style={{ fontWeight: 600, color: 'var(--danger)' }}>{daysOut - r.estimatedDays}d</span>
-                          </div>
+                        ) : (
+                          <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                              <span style={{ color: 'var(--text-secondary)' }}>Total out:</span>
+                              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{daysOut}d</span>
+                            </div>
+
+                            {r.estimatedDays && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                <span style={{ color: 'var(--text-secondary)' }}>Original est:</span>
+                                <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}>{r.estimatedDays}d</span>
+                              </div>
+                            )}
+
+                            {daysOut !== null && r.estimatedDays && daysOut > r.estimatedDays && (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                <span style={{ color: 'var(--danger)' }}>Overdue by:</span>
+                                <span style={{ fontWeight: 600, color: 'var(--danger)' }}>{daysOut - r.estimatedDays}d</span>
+                              </div>
+                            )}
+                          </>
                         )}
                         
                         {/* Latest ETA from Follow-up */}
@@ -537,7 +637,7 @@ export default function ExternalRepairsPage() {
 
                 {/* Follow-up History - Clickable for admin */}
                 {(r as any).followUps && Array.isArray((r as any).followUps) && (r as any).followUps.length > 0 && (
-                  <div className="ext-notes-area" style={{ padding: '12px 14px', cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && setEditRepairModal(r)}>
+                  <div className="ext-notes-area" style={{ padding: '12px 14px', cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && (setEditRepairModal(r), setEditStatus(r.status), setEditReason(''))}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
@@ -588,12 +688,47 @@ export default function ExternalRepairsPage() {
                     borderRadius: '12px',
                     overflow: 'hidden',
                   }}>
-                    {r.status !== 'returned' && (
+                    <button
+                      onClick={() => openVehicleDetail(r.stockNumber)}
+                      disabled={resolving === r.stockNumber}
+                      style={{
+                        padding: '12px 16px',
+                        background: '#eff6ff',
+                        border: 'none',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        cursor: resolving === r.stockNumber ? 'wait' : 'pointer',
+                        color: '#1d4ed8',
+                        minHeight: '44px',
+                        whiteSpace: 'nowrap',
+                        opacity: resolving === r.stockNumber ? 0.6 : 1,
+                      }}
+                    >
+                      View Vehicle
+                    </button>
+                    {r.status === 'pending' && (
                       <button
-                        onClick={() => setFollowUpModal({ 
-                          repairId: r.id, 
-                          stockNumber: r.stockNumber, 
-                          vehicleDesc: `${r.year} ${r.make} ${r.model}` 
+                        onClick={() => {
+                          setScheduleModal(r)
+                          setScheduleSentDate(new Date().toISOString().split('T')[0])
+                          setScheduleEstDays(r.estimatedDays ? String(r.estimatedDays) : '')
+                        }}
+                        style={{
+                          flex: 1, padding: '12px 20px',
+                          background: '#fffbeb', border: 'none',
+                          fontSize: '14px', fontWeight: 700, cursor: 'pointer',
+                          color: '#b45309', minHeight: '44px',
+                        }}
+                      >
+                        Schedule
+                      </button>
+                    )}
+                    {r.status !== 'pending' && (
+                      <button
+                        onClick={() => setFollowUpModal({
+                          repairId: r.id,
+                          stockNumber: r.stockNumber,
+                          vehicleDesc: `${r.year} ${r.make} ${r.model}`
                         })}
                         style={{
                           padding: '12px 20px',
@@ -1203,8 +1338,36 @@ export default function ExternalRepairsPage() {
             boxShadow: '0 20px 60px rgba(0,0,0,0.15)', padding: 24,
           }}>
             <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Edit Repair</h2>
-            
+
             <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Status</label>
+                <select value={editStatus} onChange={e => setEditStatus(e.target.value)} id="edit-status" className="input">
+                  <option value="pending">Pending Schedule</option>
+                  <option value="sent">Awaiting Pickup</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="ready">Ready for Pickup</option>
+                  <option value="returned">Returned</option>
+                </select>
+              </div>
+              {editStatus !== editRepairModal.status && (
+                <div style={{ padding: '12px 14px', borderRadius: 10, background: '#fffbeb', border: '1px solid #fcd34d' }}>
+                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#92400e', marginBottom: 6 }}>
+                    Reason for status change *
+                  </label>
+                  <p style={{ fontSize: 12, color: '#92400e', marginBottom: 8, lineHeight: 1.4 }}>
+                    You're overriding the normal flow ({STATUS_LABELS[editRepairModal.status]} → {STATUS_LABELS[editStatus]}). This will be logged.
+                  </p>
+                  <textarea
+                    value={editReason}
+                    onChange={e => setEditReason(e.target.value)}
+                    className="input"
+                    rows={2}
+                    placeholder="e.g. Marked as In Progress by accident — moving back to Pending."
+                    style={{ resize: 'vertical', minHeight: 60, background: '#fff' }}
+                  />
+                </div>
+              )}
               <div>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Shop Name</label>
                 <input defaultValue={editRepairModal.shopName} id="edit-shop-name" className="input" />
@@ -1225,28 +1388,36 @@ export default function ExternalRepairsPage() {
 
             <div style={{ display: 'flex', gap: 10, marginTop: 20, flexDirection: 'column' }}>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setEditRepairModal(null)} disabled={editRepairSaving} style={{
+                <button onClick={() => { setEditRepairModal(null); setEditReason('') }} disabled={editRepairSaving} style={{
                   flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
                   background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
                 }}>Cancel</button>
                 <button onClick={async () => {
+                  const statusChanged = editStatus !== editRepairModal.status
+                  if (statusChanged && !editReason.trim()) return
                   setEditRepairSaving(true)
                   try {
                     await fetch(`/api/external/${editRepairModal.id}`, {
                       method: 'PATCH',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
+                        status: editStatus,
                         shopName: (document.getElementById('edit-shop-name') as HTMLInputElement).value,
                         shopPhone: (document.getElementById('edit-shop-phone') as HTMLInputElement).value,
                         repairDescription: (document.getElementById('edit-repair-desc') as HTMLTextAreaElement).value,
                         estimatedDays: Number((document.getElementById('edit-est-days') as HTMLInputElement).value) || null,
+                        ...(statusChanged ? {
+                          statusChangeReason: editReason.trim(),
+                          fromStatus: editRepairModal.status,
+                        } : {}),
                       })
                     })
                     setEditRepairModal(null)
+                    setEditReason('')
                     load()
                   } catch {}
                   setEditRepairSaving(false)
-                }} disabled={editRepairSaving} style={{
+                }} disabled={editRepairSaving || (editStatus !== editRepairModal.status && !editReason.trim())} style={{
                   flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
                   background: editRepairSaving ? '#e5e5e5' : '#1a1a1a', color: '#dffd6e',
                   fontSize: 14, fontWeight: 700, cursor: 'pointer',
@@ -1264,6 +1435,101 @@ export default function ExternalRepairsPage() {
                 background: '#fef2f2', fontSize: 14, fontWeight: 600, cursor: 'pointer',
                 color: '#dc2626',
               }}>Delete Repair</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Modal */}
+      {scheduleModal && (
+        <div
+          onClick={() => !scheduleSaving && setScheduleModal(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: 20,
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 16, width: '100%', maxWidth: 440,
+              padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+            }}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Schedule Pickup</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20 }}>
+              #{scheduleModal.stockNumber} — {scheduleModal.year} {scheduleModal.make} {scheduleModal.model}
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Date Sent *
+                </label>
+                <input
+                  type="date"
+                  className="input"
+                  value={scheduleSentDate}
+                  onChange={e => setScheduleSentDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                  Estimated Days *
+                </label>
+                <input
+                  type="number"
+                  className="input"
+                  placeholder="e.g. 5"
+                  value={scheduleEstDays}
+                  onChange={e => setScheduleEstDays(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setScheduleModal(null)}
+                disabled={scheduleSaving}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
+                  background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!scheduleSentDate || !scheduleEstDays.trim()) return
+                  setScheduleSaving(true)
+                  try {
+                    await fetch(`/api/external/${scheduleModal.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        sentDate: scheduleSentDate,
+                        estimatedDays: Number(scheduleEstDays),
+                        status: 'sent',
+                      }),
+                    })
+                    setScheduleModal(null)
+                    setScheduleSentDate('')
+                    setScheduleEstDays('')
+                    load()
+                  } catch {}
+                  setScheduleSaving(false)
+                }}
+                disabled={scheduleSaving || !scheduleSentDate || !scheduleEstDays.trim()}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+                  background: '#1a1a1a', color: '#dffd6e',
+                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                  opacity: (scheduleSaving || !scheduleSentDate || !scheduleEstDays.trim()) ? 0.5 : 1,
+                }}
+              >
+                {scheduleSaving ? 'Saving...' : 'Schedule'}
+              </button>
             </div>
           </div>
         </div>

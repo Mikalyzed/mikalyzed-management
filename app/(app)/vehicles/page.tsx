@@ -7,6 +7,7 @@ import VehicleCard from '@/components/VehicleCard'
 import KanbanScrollbar from '@/components/KanbanScrollbar'
 import { STAGE_LABELS } from '@/lib/constants'
 import OrderPartModal from '@/components/OrderPartModal'
+import VendorSearch, { VendorResult } from '@/components/VendorSearch'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
 
@@ -125,6 +126,9 @@ export default function VehiclesPage() {
   const [deleting, setDeleting] = useState(false)
   const [externalModal, setExternalModal] = useState<{ vehicleId: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null; stageId: string | null } | null>(null)
   const [externalSubmitting, setExternalSubmitting] = useState(false)
+  const [externalPending, setExternalPending] = useState(false)
+  const [externalVendor, setExternalVendor] = useState<VendorResult | null>(null)
+  const [externalAtDealership, setExternalAtDealership] = useState(false)
   const [skipping, setSkipping] = useState(false)
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null)
   const didDrag = useRef(false)
@@ -1390,7 +1394,7 @@ export default function VehiclesPage() {
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1200,
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-        }} onClick={() => setExternalModal(null)}>
+        }} onClick={() => { setExternalModal(null); setExternalPending(false); setExternalVendor(null); setExternalAtDealership(false) }}>
           <div onClick={e => e.stopPropagation()} style={{
             background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 480,
             boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '90vh', overflowY: 'auto',
@@ -1405,6 +1409,7 @@ export default function VehiclesPage() {
               e.preventDefault()
               setExternalSubmitting(true)
               const form = new FormData(e.currentTarget)
+              if (!externalVendor) { setExternalSubmitting(false); return }
               try {
                 const res = await fetch('/api/external', {
                   method: 'POST',
@@ -1415,12 +1420,15 @@ export default function VehiclesPage() {
                     make: externalModal.make,
                     model: externalModal.model,
                     color: externalModal.color || null,
-                    shopName: form.get('shopName'),
-                    shopPhone: form.get('shopPhone') || null,
+                    vendorId: externalVendor.id,
+                    shopName: externalVendor.name,
+                    shopPhone: externalVendor.phone,
+                    atDealership: externalAtDealership,
                     repairDescription: form.get('repairDescription'),
-                    estimatedDays: form.get('estimatedDays') ? Number(form.get('estimatedDays')) : null,
-                    sentDate: form.get('sentDate'),
+                    estimatedDays: externalPending ? null : (form.get('estimatedDays') ? Number(form.get('estimatedDays')) : null),
+                    sentDate: externalPending ? null : form.get('sentDate'),
                     notes: form.get('notes') || null,
+                    status: externalPending ? 'pending' : 'sent',
                   }),
                 })
                 if (res.ok) {
@@ -1438,7 +1446,7 @@ export default function VehiclesPage() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: 'external' }),
                   })
-                  setExternalModal(null)
+                  setExternalModal(null); setExternalPending(false); setExternalVendor(null); setExternalAtDealership(false);
                   const vRes = await fetch('/api/vehicles')
                   const vData = await vRes.json()
                   setVehicles(vData.vehicles || [])
@@ -1446,36 +1454,84 @@ export default function VehiclesPage() {
               } catch { /* ignore */ }
               setExternalSubmitting(false)
             }} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Shop Name *</label>
-                  <input name="shopName" required style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }} placeholder="Joe's Auto Body" />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Shop Phone</label>
-                  <input name="shopPhone" type="tel" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }} placeholder="(305) 555-1234" />
-                </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Vendor *</label>
+                <VendorSearch
+                  onSelect={v => setExternalVendor(v)}
+                  placeholder="Search vendors or type to add new..."
+                />
+                {externalVendor && (
+                  <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>
+                      <strong>{externalVendor.name}</strong>
+                      {externalVendor.phone && <span style={{ marginLeft: 8, color: 'var(--text-muted)' }}>· {externalVendor.phone}</span>}
+                    </span>
+                    <button type="button" onClick={() => setExternalVendor(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a', fontSize: 13, fontWeight: 600 }}>Clear</button>
+                  </div>
+                )}
               </div>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 14px', borderRadius: 10,
+                background: externalAtDealership ? '#dbeafe' : '#f9fafb',
+                border: `1px solid ${externalAtDealership ? '#93c5fd' : '#e2e5ea'}`,
+                cursor: 'pointer', fontSize: 14,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={externalAtDealership}
+                  onChange={e => setExternalAtDealership(e.target.checked)}
+                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                />
+                <div>
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Vendor working at our dealership</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Vehicle stays on-site — vendor comes to us.
+                  </div>
+                </div>
+              </label>
               <div>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>What&apos;s Being Done *</label>
                 <textarea name="repairDescription" required style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', minHeight: 70, resize: 'vertical' }} placeholder="Paint front bumper, fix dent on driver door..." />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '10px 14px', borderRadius: 10,
+                background: externalPending ? '#fef3c7' : '#f9fafb',
+                border: `1px solid ${externalPending ? '#fcd34d' : '#e2e5ea'}`,
+                cursor: 'pointer', fontSize: 14,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={externalPending}
+                  onChange={e => setExternalPending(e.target.checked)}
+                  style={{ width: 18, height: 18, cursor: 'pointer' }}
+                />
                 <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Date Sent *</label>
-                  <input name="sentDate" type="date" required style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }} defaultValue={new Date().toISOString().split('T')[0]} />
+                  <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Not scheduled yet</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Track this vehicle as pending — fill in the date and estimated days later.
+                  </div>
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Estimated Days</label>
-                  <input name="estimatedDays" type="number" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }} placeholder="e.g. 5" />
+              </label>
+              {!externalPending && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Date Sent *</label>
+                    <input name="sentDate" type="date" required={!externalPending} style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }} defaultValue={new Date().toISOString().split('T')[0]} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Estimated Days</label>
+                    <input name="estimatedDays" type="number" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }} placeholder="e.g. 5" />
+                  </div>
                 </div>
-              </div>
+              )}
               <div>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>Notes</label>
                 <textarea name="notes" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', minHeight: 60, resize: 'vertical' }} placeholder="Any additional notes..." />
               </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-                <button type="button" onClick={() => setExternalModal(null)} style={{
+                <button type="button" onClick={() => { setExternalModal(null); setExternalPending(false); setExternalVendor(null); setExternalAtDealership(false) }} style={{
                   flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid #e2e5ea',
                   background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
                 }}>Cancel</button>

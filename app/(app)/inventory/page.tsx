@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 type Vehicle = {
   id: string; stockNumber: string; vin: string | null; vehicleInfo: string
@@ -61,10 +62,10 @@ const STATUS_TABS: { key: string; label: string }[] = [
   { key: 'removed', label: 'Removed' },
 ]
 
-type AskTurn = { q: string; a: string | null }
-
 export default function InventoryPage() {
+  const router = useRouter()
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [resolving, setResolving] = useState<string | null>(null)
   const [total, setTotal] = useState(0)
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -73,38 +74,20 @@ export default function InventoryPage() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<string | null>(null)
-  const [askOpen, setAskOpen] = useState(false)
-  const [askInput, setAskInput] = useState('')
-  const [askTurns, setAskTurns] = useState<AskTurn[]>([])
-  const [asking, setAsking] = useState(false)
 
-  async function handleAsk() {
-    const q = askInput.trim()
-    if (!q || asking) return
-    setAsking(true)
-    // Build history from completed prior turns (skip in-flight one)
-    const history = askTurns
-      .filter(t => t.a !== null)
-      .flatMap(t => [
-        { role: 'user' as const, content: t.q },
-        { role: 'assistant' as const, content: t.a! },
-      ])
-    setAskTurns(t => [...t, { q, a: null }])
-    setAskInput('')
+  async function openVehicleDetail(stockNumber: string) {
+    if (resolving) return
+    setResolving(stockNumber)
     try {
-      const res = await fetch('/api/inventory/ask', {
+      const res = await fetch('/api/vehicles/resolve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q, history }),
+        body: JSON.stringify({ stockNumber }),
       })
       const data = await res.json()
-      const answer = data.answer || data.error || 'No response.'
-      setAskTurns(t => t.map((turn, i) => i === t.length - 1 ? { ...turn, a: answer } : turn))
-    } catch (e: any) {
-      setAskTurns(t => t.map((turn, i) => i === t.length - 1 ? { ...turn, a: `Error: ${e.message}` } : turn))
-    } finally {
-      setAsking(false)
-    }
+      if (data.vehicleId) router.push(`/vehicles/${data.vehicleId}`)
+    } catch {}
+    setResolving(null)
   }
 
   useEffect(() => {
@@ -255,10 +238,19 @@ export default function InventoryPage() {
               : { bg: '#f3f4f6', fg: '#6b7280' }
 
             return (
-              <div key={v.id} style={{
-                display: 'grid', gridTemplateColumns: '100px 2fr 160px 90px 90px 120px 130px',
-                borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center',
-              }}>
+              <div
+                key={v.id}
+                onClick={() => openVehicleDetail(v.stockNumber)}
+                style={{
+                  display: 'grid', gridTemplateColumns: '100px 2fr 160px 90px 90px 120px 130px',
+                  borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center',
+                  cursor: resolving === v.stockNumber ? 'wait' : 'pointer',
+                  opacity: resolving === v.stockNumber ? 0.6 : 1,
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
+                onMouseLeave={e => (e.currentTarget.style.background = '')}
+              >
                 <span style={{ padding: '8px 12px', fontWeight: 600 }}>{v.stockNumber}</span>
                 <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)' }}>
                   {v.year ? `${v.year} ` : ''}{v.make} {v.model}
@@ -290,128 +282,6 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* Ask AI floating button + panel */}
-      {!askOpen && (
-        <button
-          onClick={() => setAskOpen(true)}
-          aria-label="Ask AI about inventory"
-          style={{
-            position: 'fixed', bottom: 24, right: 24, zIndex: 50,
-            background: '#1a1a1a', color: '#dffd6e',
-            border: 'none', borderRadius: 999,
-            padding: '12px 18px', fontSize: 14, fontWeight: 600,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-            boxShadow: '0 6px 20px rgba(0,0,0,0.18)',
-          }}
-        >
-          <span style={{ fontSize: 16 }}>✦</span> Ask AI
-        </button>
-      )}
-
-      {askOpen && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 50,
-          width: 380, maxHeight: 'calc(100vh - 48px)',
-          background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
-          boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        }}>
-          <div style={{
-            padding: '12px 16px', borderBottom: '1px solid var(--border)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            background: '#1a1a1a', color: '#fff',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600 }}>
-              <span style={{ color: '#dffd6e' }}>✦</span> Ask AI about inventory
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              {askTurns.length > 0 && (
-                <button
-                  onClick={() => setAskTurns([])}
-                  aria-label="New chat"
-                  title="New chat"
-                  style={{
-                    background: 'none', border: 'none', color: '#dffd6e',
-                    cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                    padding: '4px 8px', borderRadius: 6,
-                  }}
-                >New chat</button>
-              )}
-              <button
-                onClick={() => setAskOpen(false)}
-                aria-label="Close"
-                style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 4px' }}
-              >×</button>
-            </div>
-          </div>
-
-          <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12, minHeight: 200, maxHeight: 420 }}>
-            {askTurns.length === 0 && (
-              <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                Try:
-                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {[
-                    'How many flooring vehicles are in external repair or recon?',
-                    'List all consignment vehicles in stock.',
-                    'What is the average mileage of in-stock vehicles?',
-                    'Which vehicles have been in stock the longest?',
-                  ].map(s => (
-                    <button
-                      key={s}
-                      onClick={() => setAskInput(s)}
-                      style={{
-                        textAlign: 'left', background: '#f9fafb', border: '1px solid var(--border)',
-                        borderRadius: 6, padding: '6px 10px', fontSize: 12, cursor: 'pointer',
-                        color: 'var(--text-secondary)',
-                      }}
-                    >{s}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {askTurns.map((turn, i) => (
-              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{
-                  alignSelf: 'flex-end', maxWidth: '85%',
-                  background: '#1a1a1a', color: '#fff',
-                  padding: '8px 12px', borderRadius: 12, borderBottomRightRadius: 4,
-                  fontSize: 13, lineHeight: 1.45,
-                }}>{turn.q}</div>
-                <div style={{
-                  alignSelf: 'flex-start', maxWidth: '92%',
-                  background: '#f3f4f6', color: 'var(--text-primary)',
-                  padding: '8px 12px', borderRadius: 12, borderBottomLeftRadius: 4,
-                  fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap',
-                }}>{turn.a === null ? <span style={{ color: 'var(--text-muted)' }}>Thinking…</span> : turn.a}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ padding: 12, borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
-            <input
-              value={askInput}
-              onChange={e => setAskInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAsk() } }}
-              placeholder="Ask about your inventory…"
-              disabled={asking}
-              style={{
-                flex: 1, padding: '8px 12px', borderRadius: 8,
-                border: '1px solid var(--border)', fontSize: 13,
-              }}
-            />
-            <button
-              onClick={handleAsk}
-              disabled={asking || !askInput.trim()}
-              style={{
-                background: '#1a1a1a', color: '#dffd6e', border: 'none',
-                borderRadius: 8, padding: '8px 14px', fontSize: 13, fontWeight: 600,
-                cursor: asking || !askInput.trim() ? 'not-allowed' : 'pointer',
-                opacity: asking || !askInput.trim() ? 0.6 : 1,
-              }}
-            >{asking ? '…' : 'Send'}</button>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

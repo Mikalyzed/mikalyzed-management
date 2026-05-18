@@ -132,19 +132,65 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   // Add external repair events
   externalRepairs.forEach(repair => {
-    events.push({
-      type: 'external',
-      date: repair.sentDate,
-      title: `Sent to External Repair`,
-      status: 'sent',
-      details: {
-        shopName: repair.shopName,
-        repairDescription: repair.repairDescription,
-        estimatedDays: repair.estimatedDays,
-        currentStatus: repair.status
+    // Initial event — "Sent" if there's a sentDate, "Pending" if not yet scheduled
+    if (repair.sentDate) {
+      events.push({
+        type: 'external',
+        date: repair.sentDate,
+        title: `Sent to External Repair`,
+        status: 'sent',
+        details: {
+          shopName: repair.shopName,
+          repairDescription: repair.repairDescription,
+          estimatedDays: repair.estimatedDays,
+          currentStatus: repair.status,
+        },
+      })
+    } else {
+      events.push({
+        type: 'external',
+        date: repair.createdAt,
+        title: `Marked Pending External Repair`,
+        status: 'pending',
+        details: {
+          shopName: repair.shopName,
+          repairDescription: repair.repairDescription,
+          currentStatus: repair.status,
+        },
+      })
+    }
+
+    // Pull status overrides + follow-ups from the followUps JSON
+    const followUps = (repair.followUps as any[]) || []
+    followUps.forEach((f: any) => {
+      if (f?.type === 'status_override') {
+        events.push({
+          type: 'external_override',
+          date: f.date,
+          title: `Status Override: ${f.fromStatus} → ${f.toStatus}`,
+          status: 'override',
+          details: {
+            shopName: repair.shopName,
+            fromStatus: f.fromStatus,
+            toStatus: f.toStatus,
+            reason: f.note?.split('Reason: ')[1] || f.note,
+          },
+        })
+      } else if (f?.note) {
+        events.push({
+          type: 'external_followup',
+          date: f.date,
+          title: `External Repair Follow-up`,
+          status: 'followup',
+          details: {
+            shopName: repair.shopName,
+            note: f.note,
+            etaDays: f.etaDays || null,
+          },
+        })
       }
     })
-    
+
     if (repair.status === 'returned' && repair.updatedAt !== repair.createdAt) {
       events.push({
         type: 'external',
@@ -153,8 +199,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         status: 'returned',
         details: {
           shopName: repair.shopName,
-          repairDescription: repair.repairDescription
-        }
+          repairDescription: repair.repairDescription,
+        },
       })
     }
   })

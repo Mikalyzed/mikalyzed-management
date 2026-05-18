@@ -51,10 +51,8 @@ export const DEFAULT_CHECKLISTS: Record<Stage, string[]> = {
     'Odor check',
   ],
   content: [
-    'Exterior photos (8+)',
-    'Interior photos (6+)',
-    'Feature highlights',
-    'Video walkaround',
+    'Turntable photos',
+    'Turntable Video',
   ],
   publish: [
     'Listing created',

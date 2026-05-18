@@ -8,16 +8,45 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const data: Record<string, unknown> = {}
   if (body.status) data.status = body.status
+
+  // Admin status override: append a follow-up entry as audit trail
+  if (body.statusChangeReason && body.status && body.fromStatus && body.status !== body.fromStatus) {
+    const existing = await prisma.externalRepair.findUnique({ where: { id }, select: { followUps: true } })
+    const current = (existing?.followUps as any[]) || []
+    const overrideEntry = {
+      date: new Date().toISOString(),
+      type: 'status_override',
+      fromStatus: body.fromStatus,
+      toStatus: body.status,
+      note: `Status changed: ${body.fromStatus} → ${body.status}. Reason: ${body.statusChangeReason}`,
+    }
+    data.followUps = [...current, overrideEntry]
+  }
   if (body.notes !== undefined) data.notes = body.notes
   if (body.shopName !== undefined) data.shopName = body.shopName
   if (body.shopPhone !== undefined) data.shopPhone = body.shopPhone
   if (body.repairDescription !== undefined) data.repairDescription = body.repairDescription
-  if (body.estimatedDays) {
-    data.estimatedDays = body.estimatedDays
-    const repair = await prisma.externalRepair.findUnique({ where: { id } })
-    if (repair) {
-      data.expectedReturn = new Date(repair.sentDate.getTime() + body.estimatedDays * 86400000)
+
+  // Schedule action: pending repair gets a date + estimated days, optionally flips status to "sent"
+  if (body.sentDate !== undefined) {
+    const sent = body.sentDate ? new Date(body.sentDate) : null
+    data.sentDate = sent
+    if (sent && body.estimatedDays) {
+      data.expectedReturn = new Date(sent.getTime() + body.estimatedDays * 86400000)
+    } else if (!sent) {
+      data.expectedReturn = null
     }
+  }
+  if (body.estimatedDays !== undefined && body.sentDate === undefined) {
+    data.estimatedDays = body.estimatedDays || null
+    const repair = await prisma.externalRepair.findUnique({ where: { id } })
+    if (repair?.sentDate && body.estimatedDays) {
+      data.expectedReturn = new Date(repair.sentDate.getTime() + body.estimatedDays * 86400000)
+    } else if (!body.estimatedDays) {
+      data.expectedReturn = null
+    }
+  } else if (body.sentDate !== undefined && body.estimatedDays !== undefined) {
+    data.estimatedDays = body.estimatedDays || null
   }
 
   // Handle follow-ups

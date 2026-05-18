@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Nav from '@/components/Nav'
 import VoicePhone from '@/components/VoicePhone'
+import AskAI from '@/components/AskAI'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState('admin')
@@ -38,6 +39,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <VoicePhone />
+      <AskAI />
     </div>
   )
 }

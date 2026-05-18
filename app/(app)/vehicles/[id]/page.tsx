@@ -925,6 +925,10 @@ function VehicleHistorySection({ history, loading }: {
         return status === 'received' ? '📦' : '🔧'
       case 'external':
         return status === 'returned' ? '🏠' : '🏪'
+      case 'external_override':
+        return '⚠️'
+      case 'external_followup':
+        return '📞'
       case 'activity':
         return '📋'
       case 'queued_return':
@@ -943,6 +947,10 @@ function VehicleHistorySection({ history, loading }: {
         return status === 'received' ? '#16a34a' : '#2563eb'
       case 'external':
         return status === 'returned' ? '#16a34a' : '#f59e0b'
+      case 'external_override':
+        return '#b45309'
+      case 'external_followup':
+        return '#8b5cf6'
       case 'activity':
         return '#6b7280'
       case 'queued_return':
@@ -1151,6 +1159,36 @@ function VehicleHistorySection({ history, loading }: {
                         {event.details.estimatedDays && (
                           <p style={{ margin: '4px 0 0 0' }}>
                             Estimated: {event.details.estimatedDays} days
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {event.type === 'external_override' && (
+                      <div>
+                        <p style={{ margin: '0 0 4px 0' }}>
+                          Shop: {event.details.shopName}
+                        </p>
+                        <p style={{ margin: '4px 0 0 0' }}>
+                          <strong>{event.details.fromStatus}</strong> → <strong>{event.details.toStatus}</strong>
+                        </p>
+                        {event.details.reason && (
+                          <p style={{ margin: '4px 0 0 0' }}>
+                            Reason: <strong>{event.details.reason}</strong>
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {event.type === 'external_followup' && (
+                      <div>
+                        <p style={{ margin: '0 0 4px 0' }}>
+                          Shop: {event.details.shopName}
+                        </p>
+                        <p style={{ margin: '4px 0 0 0' }}>{event.details.note}</p>
+                        {event.details.etaDays && (
+                          <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+                            New ETA: +{event.details.etaDays} days
                           </p>
                         )}
                       </div>

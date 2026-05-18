@@ -231,13 +231,16 @@ model ExternalRepair {
   make              String
   model             String
   color             String?
+  vendorId          String?   @map("vendor_id")
+  vendor            Vendor?   @relation(fields: [vendorId], references: [id])
   shopName          String    @map("shop_name")
   shopPhone         String?   @map("shop_phone")
+  atDealership      Boolean   @default(false) @map("at_dealership")
   repairDescription String    @map("repair_description")
   estimatedDays     Int?      @map("estimated_days")
-  sentDate          DateTime  @map("sent_date")
+  sentDate          DateTime? @map("sent_date")
   expectedReturn    DateTime? @map("expected_return")
-  status            String    @default("sent") // sent, in_progress, ready, returned
+  status            String    @default("sent") // pending, sent, in_progress, ready, returned
   notes             String?
   followUps         Json      @default("[]") @map("follow_ups")
   createdById       String?   @map("created_by")
@@ -246,6 +249,19 @@ model ExternalRepair {
 
   @@index([status])
   @@map("external_repairs")
+}
+
+model Vendor {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  phone           String?
+  notes           String?
+  isActive        Boolean          @default(true) @map("is_active")
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  externalRepairs ExternalRepair[]
+
+  @@map("vendors")
 }
 
 model StageConfig {

@@ -15,14 +15,19 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { stockNumber, year, make, model, color, shopName, shopPhone, repairDescription, estimatedDays, sentDate, notes } = body
+  const { stockNumber, year, make, model, color, vendorId, shopName, shopPhone, atDealership, repairDescription, estimatedDays, sentDate, notes, status } = body
 
-  if (!stockNumber || !make || !model || !shopName || !repairDescription || !sentDate) {
+  if (!stockNumber || !make || !model || !shopName || !repairDescription) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  const sent = new Date(sentDate)
-  const expectedReturn = estimatedDays
+  const isPending = status === 'pending' || !sentDate
+  if (!isPending && !sentDate) {
+    return NextResponse.json({ error: 'sentDate required unless status is pending' }, { status: 400 })
+  }
+
+  const sent = sentDate ? new Date(sentDate) : null
+  const expectedReturn = sent && estimatedDays
     ? new Date(sent.getTime() + estimatedDays * 86400000)
     : null
 
@@ -33,12 +38,15 @@ export async function POST(request: Request) {
       make,
       model,
       color: color || null,
+      vendorId: vendorId || null,
       shopName,
       shopPhone: shopPhone || null,
+      atDealership: !!atDealership,
       repairDescription,
       estimatedDays: estimatedDays || null,
       sentDate: sent,
       expectedReturn,
+      status: isPending ? 'pending' : 'sent',
       notes: notes || null,
       createdById: user.id,
     },
