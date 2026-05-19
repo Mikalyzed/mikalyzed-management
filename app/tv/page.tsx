@@ -104,63 +104,98 @@ function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
 }
 
 function CompletedTicker({ items }: { items: CompletedItem[] }) {
-  const scrollRef = useRef<HTMLDivElement>(null)
+  // Slide carousel — paginate ~4 completed cards per slide, auto-advance.
+  const PER_PAGE = 4
+  const SLIDE_MS = 5000
 
-  // Auto-scroll horizontally
+  const pages: CompletedItem[][] = []
+  for (let i = 0; i < items.length; i += PER_PAGE) {
+    pages.push(items.slice(i, i + PER_PAGE))
+  }
+  const [page, setPage] = useState(0)
+  const [paused, setPaused] = useState(false)
+
   useEffect(() => {
-    const el = scrollRef.current
-    if (!el || items.length <= 4) return
-    let scrollPos = 0
-    const speed = 0.5 // px per frame
-    let animId: number
+    if (pages.length <= 1 || paused) return
+    const interval = setInterval(() => {
+      setPage(p => (p + 1) % pages.length)
+    }, SLIDE_MS)
+    return () => clearInterval(interval)
+  }, [pages.length, paused])
 
-    const tick = () => {
-      scrollPos += speed
-      if (scrollPos >= el.scrollWidth - el.clientWidth) {
-        scrollPos = 0
-      }
-      el.scrollLeft = scrollPos
-      animId = requestAnimationFrame(tick)
-    }
-    animId = requestAnimationFrame(tick)
-
-    // Pause on hover
-    const pause = () => cancelAnimationFrame(animId)
-    const resume = () => { animId = requestAnimationFrame(tick) }
-    el.addEventListener('mouseenter', pause)
-    el.addEventListener('mouseleave', resume)
-
-    return () => {
-      cancelAnimationFrame(animId)
-      el.removeEventListener('mouseenter', pause)
-      el.removeEventListener('mouseleave', resume)
-    }
-  }, [items.length])
+  // Reset page if items shrink below current page
+  useEffect(() => {
+    if (page >= pages.length) setPage(0)
+  }, [page, pages.length])
 
   return (
-    <div style={{ background: '#111', borderRadius: 12, padding: '14px 20px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: '#888' }}>Completed Today</span>
-        <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>{items.length}</span>
+    <div
+      style={{ background: '#111', borderRadius: 12, padding: '14px 20px', position: 'relative' }}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#888' }}>Completed Today</span>
+          <span style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>{items.length}</span>
+        </div>
+        {pages.length > 1 && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            {pages.map((_, i) => (
+              <span
+                key={i}
+                style={{
+                  width: i === page ? 22 : 6, height: 6, borderRadius: 999,
+                  background: i === page ? '#22c55e' : '#333',
+                  transition: 'all 0.4s ease',
+                }}
+              />
+            ))}
+          </div>
+        )}
       </div>
-      <div ref={scrollRef} style={{ display: 'flex', gap: 12, overflow: 'hidden' }}>
-        {items.map((item, i) => (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
-            background: '#1a1a1a', borderRadius: 10, flexShrink: 0, minWidth: 220,
-            borderLeft: `3px solid ${STAGE_COLORS[item.stage] || '#666'}`,
-          }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.vehicle}</p>
-              <p style={{ fontSize: 11, color: '#666', margin: '2px 0 0', whiteSpace: 'nowrap' }}>
-                #{item.stockNumber} · {STAGE_LABELS[item.stage] || item.stage}{item.assignee ? ` — ${item.assignee}` : ''}
-              </p>
-            </div>
-            {item.completedAt && (
-              <span style={{ fontSize: 11, color: '#444', flexShrink: 0 }}>
-                {new Date(item.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}
-              </span>
-            )}
+
+      {/* Slide viewport */}
+      <div style={{ position: 'relative', minHeight: 64 }}>
+        {pages.map((slide, pIdx) => (
+          <div
+            key={pIdx}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${PER_PAGE}, 1fr)`,
+              gap: 12,
+              position: pIdx === page ? 'relative' : 'absolute',
+              inset: pIdx === page ? undefined : 0,
+              opacity: pIdx === page ? 1 : 0,
+              transform: pIdx === page ? 'translateX(0)' : pIdx > page ? 'translateX(20px)' : 'translateX(-20px)',
+              transition: 'opacity 0.5s ease, transform 0.5s ease',
+              pointerEvents: pIdx === page ? 'auto' : 'none',
+            }}
+          >
+            {slide.map((item, i) => (
+              <div key={`${pIdx}-${i}`} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
+                background: '#1a1a1a', borderRadius: 10,
+                borderLeft: `3px solid ${STAGE_COLORS[item.stage] || '#666'}`,
+                minHeight: 64,
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.vehicle}</p>
+                  <p style={{ fontSize: 11, color: '#666', margin: '2px 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    #{item.stockNumber} · {STAGE_LABELS[item.stage] || item.stage}{item.assignee ? ` — ${item.assignee}` : ''}
+                  </p>
+                </div>
+                {item.completedAt && (
+                  <span style={{ fontSize: 11, color: '#444', flexShrink: 0 }}>
+                    {new Date(item.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}
+                  </span>
+                )}
+              </div>
+            ))}
+            {/* Pad empty slots so the last slide doesn't stretch its cards */}
+            {Array.from({ length: PER_PAGE - slide.length }).map((_, i) => (
+              <div key={`pad-${pIdx}-${i}`} />
+            ))}
           </div>
         ))}
       </div>

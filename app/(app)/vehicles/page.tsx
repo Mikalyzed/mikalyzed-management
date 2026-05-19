@@ -8,8 +8,17 @@ import KanbanScrollbar from '@/components/KanbanScrollbar'
 import { STAGE_LABELS } from '@/lib/constants'
 import OrderPartModal from '@/components/OrderPartModal'
 import VendorSearch, { VendorResult } from '@/components/VendorSearch'
+import RichTypeReadout from '@/components/RichTypeReadout'
 
-type ChecklistItem = { item: string; done: boolean; note: string }
+type ChecklistItem = {
+  item: string; done: boolean; note: string
+  type?: string
+  data?: Record<string, unknown>
+  fields?: { key: string; label: string }[]
+  addedByMechanic?: boolean
+  approved?: string
+  estimatedHours?: number
+}
 
 type VehicleWithStage = {
   id: string
@@ -30,6 +39,9 @@ type VehicleWithStage = {
       addedByMechanic?: boolean
       approved?: string
       estimatedHours?: number
+      type?: string
+      data?: Record<string, unknown>
+      fields?: { key: string; label: string }[]
     }[]
     scopeName: string | null
     assignee: { id: string; name: string } | null
@@ -116,11 +128,13 @@ export default function VehiclesPage() {
     vehicleId: string
     fromStage: string
     toStage: string
-    tasks: { item: string; selected: boolean }[]
+    tasks: { item: string; selected: boolean; type?: string; fields?: { key: string; label: string }[] }[]
     assigneeId: string | null
     teamMembers: { id: string; name: string }[]
     returnAfterComplete: boolean
     saving: boolean
+    templates: { id: string; name: string; isDefault: boolean; items: { item: string; type?: string; fields?: { key: string; label: string }[] }[] }[]
+    selectedTemplateId: string
   } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; stockNumber: string; desc: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -279,24 +293,39 @@ export default function VehiclesPage() {
 
         // Fetch stage config defaults + team members
         try {
-          const [configRes, teamRes] = await Promise.all([
+          const [configRes, teamRes, tmplRes] = await Promise.all([
             fetch('/api/settings/stages'),
             fetch('/api/users'),
+            fetch(`/api/checklist-templates?stage=${column}`),
           ])
           const configData = await configRes.json()
           const teamData = await teamRes.json()
+          const tmplData = await tmplRes.json().catch(() => ({ templates: [] }))
           const stageConfig = configData.stages?.find((s: { stage: string }) => s.stage === column)
           const defaultAssignee: string | null = stageConfig?.defaultAssigneeId || null
+          const templates = (tmplData.templates || []) as { id: string; name: string; isDefault: boolean; items: { item: string; type?: string; fields?: { key: string; label: string }[] }[] }[]
+          const defaultTpl = templates.find(t => t.isDefault)
+
+          // Auto-select default template's items
+          const initialTasks = defaultTpl
+            ? defaultTpl.items.map(it => ({
+                item: it.item, selected: true,
+                ...(it.type ? { type: it.type } : {}),
+                ...(it.fields ? { fields: it.fields } : {}),
+              }))
+            : []
 
           setMoveModal({
             vehicleId,
             fromStage,
             toStage: column,
-            tasks: [],
+            tasks: initialTasks,
             assigneeId: defaultAssignee,
             teamMembers: (teamData.users || []).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })),
-            returnAfterComplete: false, // Don't auto-check — admin opts in if they want a return
+            returnAfterComplete: false,
             saving: false,
+            templates,
+            selectedTemplateId: defaultTpl?.id || '',
           })
         } catch {
           // Fallback — just open with empty tasks
@@ -307,8 +336,10 @@ export default function VehiclesPage() {
             tasks: [],
             assigneeId: null,
             teamMembers: [],
-            returnAfterComplete: false, // Don't auto-check — admin opts in if they want a return
+            returnAfterComplete: false,
             saving: false,
+            templates: [],
+            selectedTemplateId: '',
           })
         }
         return
@@ -439,10 +470,14 @@ export default function VehiclesPage() {
     if (!moveModal) return
     setMoveModal(prev => prev ? { ...prev, saving: true } : null)
     try {
-      // Build custom checklist from selected tasks
+      // Build custom checklist from selected tasks (preserving structured types/fields)
       const checklist = moveModal.tasks
         .filter(t => t.selected)
-        .map(t => ({ item: t.item, done: false, note: '' }))
+        .map(t => ({
+          item: t.item, done: false, note: '',
+          ...(t.type ? { type: t.type } : {}),
+          ...(t.fields ? { fields: t.fields } : {}),
+        }))
 
       await fetch(`/api/vehicles/${moveModal.vehicleId}/move-stage`, {
         method: 'POST',
@@ -580,26 +615,39 @@ export default function VehiclesPage() {
                     const inspectionItems = last.checklist.filter(t => !t.addedByMechanic)
                     const addedTasks = last.checklist.filter(t => t.addedByMechanic && t.approved !== 'declined')
                     const renderRow = (t: typeof last.checklist[number], i: number) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-                        <span style={{
-                          width: 14, height: 14, borderRadius: 4, flexShrink: 0,
-                          border: t.done ? 'none' : '1.5px solid #d4d4d4',
-                          background: t.done ? '#16a34a' : 'transparent',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          color: '#fff', fontSize: 10, fontWeight: 700,
-                        }}>
-                          {t.done ? '✓' : ''}
-                        </span>
-                        <span style={{
-                          flex: 1,
-                          color: t.done ? 'var(--text-muted)' : 'var(--text-primary)',
-                          textDecoration: t.done ? 'line-through' : 'none',
-                        }}>{t.item}</span>
-                        {t.estimatedHours != null && (
+                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 0, fontSize: 13 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{
-                            fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 100,
-                            background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
-                          }}>{t.estimatedHours}h</span>
+                            width: 14, height: 14, borderRadius: 4, flexShrink: 0,
+                            border: t.done ? 'none' : '1.5px solid #d4d4d4',
+                            background: t.done ? '#16a34a' : 'transparent',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: '#fff', fontSize: 10, fontWeight: 700,
+                          }}>
+                            {t.done ? '✓' : ''}
+                          </span>
+                          <span style={{
+                            flex: 1,
+                            color: t.done ? 'var(--text-muted)' : 'var(--text-primary)',
+                            textDecoration: t.done ? 'line-through' : 'none',
+                          }}>{t.item}</span>
+                          {t.type && (
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                              background: '#1a1a1a', color: '#dffd6e', textTransform: 'uppercase', letterSpacing: '0.03em',
+                            }}>✦</span>
+                          )}
+                          {t.estimatedHours != null && (
+                            <span style={{
+                              fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 100,
+                              background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+                            }}>{t.estimatedHours}h</span>
+                          )}
+                        </div>
+                        {t.type && t.data && Object.keys(t.data).length > 0 && (
+                          <div style={{ paddingLeft: 22 }}>
+                            <RichTypeReadout item={t} />
+                          </div>
                         )}
                       </div>
                     )
@@ -1271,6 +1319,8 @@ export default function VehiclesPage() {
                                       teamMembers: teamMembers,
                                       returnAfterComplete: false,
                                       saving: false,
+                                      templates: [],
+                                      selectedTemplateId: '',
                                     })
                                     closeModal()
                                   }}
@@ -1571,6 +1621,44 @@ export default function VehiclesPage() {
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
               Select tasks and assignee for this stage
             </p>
+
+            {/* Template picker */}
+            {moveModal.templates.length > 0 && (
+              <>
+                <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'block' }}>
+                  Checklist Template
+                </label>
+                <select
+                  value={moveModal.selectedTemplateId}
+                  onChange={(e) => {
+                    const tplId = e.target.value
+                    setMoveModal(prev => {
+                      if (!prev) return null
+                      const tpl = prev.templates.find(t => t.id === tplId)
+                      const tasks = tpl
+                        ? tpl.items.map(it => ({
+                            item: it.item, selected: true,
+                            ...(it.type ? { type: it.type } : {}),
+                            ...(it.fields ? { fields: it.fields } : {}),
+                          }))
+                        : []
+                      return { ...prev, selectedTemplateId: tplId, tasks }
+                    })
+                  }}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e5e5',
+                    fontSize: 14, marginBottom: 20, background: '#f8f8f6',
+                  }}
+                >
+                  <option value="">— Start blank (no template) —</option>
+                  {moveModal.templates.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}{t.isDefault ? ' (default)' : ''} — {t.items.length} item{t.items.length === 1 ? '' : 's'}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
 
             {/* Assignee */}
             <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'block' }}>Assignee</label>

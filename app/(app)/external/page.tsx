@@ -33,7 +33,7 @@ type ExternalRepair = {
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending Schedule',
-  sent: 'Awaiting Pickup',
+  sent: 'Scheduled for service',
   in_progress: 'In Progress',
   ready: 'Ready for Pickup',
   returned: 'Returned',
@@ -334,7 +334,7 @@ export default function ExternalRepairsPage() {
           const TABS = [
             { key: 'all', label: 'All Vehicles' },
             { key: 'pending', label: 'Pending' },
-            { key: 'sent', label: 'Awaiting Pickup' },
+            { key: 'sent', label: 'Scheduled for service' },
             { key: 'in_progress', label: 'In Progress' },
             { key: 'ready', label: 'Ready' },
             { key: 'returned', label: 'Returned' },
@@ -1365,7 +1365,7 @@ export default function ExternalRepairsPage() {
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Status</label>
                 <select value={editStatus} onChange={e => setEditStatus(e.target.value)} id="edit-status" className="input">
                   <option value="pending">Pending Schedule</option>
-                  <option value="sent">Awaiting Pickup</option>
+                  <option value="sent">Scheduled for service</option>
                   <option value="in_progress">In Progress</option>
                   <option value="ready">Ready for Pickup</option>
                   <option value="returned">Returned</option>
