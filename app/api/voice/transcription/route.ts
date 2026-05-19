@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { verifyTwilioRequest, parseFormBody } from '@/lib/twilio-validate'
 
 /**
  * Fired when Twilio finishes transcribing a recording. Saves the text on the
  * matching Call record by RecordingSid.
  */
 export async function POST(req: NextRequest) {
-  const fd = await req.formData()
-  const recordingSid = (fd.get('RecordingSid') as string) || ''
-  const transcriptionText = (fd.get('TranscriptionText') as string) || ''
-  const transcriptionStatus = (fd.get('TranscriptionStatus') as string) || 'completed'
+  const rawBody = await req.text()
+  const fd = parseFormBody(rawBody)
+  const forbid = await verifyTwilioRequest(req, rawBody, fd)
+  if (forbid) return forbid
+
+  const recordingSid = fd['RecordingSid'] || ''
+  const transcriptionText = fd['TranscriptionText'] || ''
+  const transcriptionStatus = fd['TranscriptionStatus'] || 'completed'
 
   if (!recordingSid) return new NextResponse(null, { status: 200 })
 

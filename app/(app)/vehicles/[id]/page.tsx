@@ -24,7 +24,7 @@ type ScopeTemplate = {
   id: string
   stage: string
   name: string
-  checklist: { item: string; done: boolean; note: string }[]
+  items: { item: string; type?: string; fields?: { key: string; label: string }[] }[]
 }
 
 type Part = {
@@ -748,9 +748,9 @@ export default function VehicleDetailPage() {
                             refresh()
                             return
                           }
-                          const tmplRes = await fetch(`/api/stage-templates?stage=${next}`)
-                          const tmpls = await tmplRes.json()
-                          setScopeTemplates(tmpls)
+                          const tmplRes = await fetch(`/api/checklist-templates?stage=${next}`)
+                          const tmplData = await tmplRes.json().catch(() => ({ templates: [] }))
+                          setScopeTemplates(tmplData.templates || [])
                           setSelectedScope('')
                           setAdvanceDueDate('')
                           setAdvanceEstHours('')
@@ -855,7 +855,13 @@ export default function VehicleDetailPage() {
                   {scopeTemplates.map(t => (
                     <button key={t.id} type="button" onClick={() => {
                       setSelectedScope(t.name)
-                      setAdvanceChecklist((t.checklist as { item: string }[]).map(c => ({ item: c.item, done: false, note: '' })))
+                      setAdvanceChecklist(t.items.map(c => ({
+                        item: c.item,
+                        done: false,
+                        note: '',
+                        ...(c.type ? { type: c.type } : {}),
+                        ...(c.fields ? { fields: c.fields } : {}),
+                      })))
                     }}
                       style={{
                         padding: '10px 14px', borderRadius: 10, border: `2px solid ${selectedScope === t.name ? '#1a1a1a' : 'var(--border)'}`,
@@ -864,7 +870,7 @@ export default function VehicleDetailPage() {
                       }}>
                       {t.name}
                       <span style={{ display: 'block', fontSize: 11, fontWeight: 400, marginTop: 2, color: selectedScope === t.name ? '#b0b0b0' : 'var(--text-muted)' }}>
-                        {(t.checklist as { item: string }[]).map(c => c.item).join(', ')}
+                        {t.items.map(c => c.item).join(', ')}
                       </span>
                     </button>
                   ))}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { verifyTwilioRequest, parseFormBody } from '@/lib/twilio-validate'
 
 /**
  * Fired when a call recording finishes processing. Saves the recording URL
@@ -8,12 +9,16 @@ import { prisma } from '@/lib/db'
  * separate flow gives better quality + lets us swap providers later).
  */
 export async function POST(req: NextRequest) {
-  const fd = await req.formData()
-  const recordingSid = (fd.get('RecordingSid') as string) || ''
-  const recordingUrl = (fd.get('RecordingUrl') as string) || ''
-  const recordingDuration = parseInt((fd.get('RecordingDuration') as string) || '0') || null
-  const callSid = (fd.get('CallSid') as string) || ''
-  const parentSid = (fd.get('ParentCallSid') as string) || ''
+  const rawBody = await req.text()
+  const fd = parseFormBody(rawBody)
+  const forbid = await verifyTwilioRequest(req, rawBody, fd)
+  if (forbid) return forbid
+
+  const recordingSid = fd['RecordingSid'] || ''
+  const recordingUrl = fd['RecordingUrl'] || ''
+  const recordingDuration = parseInt(fd['RecordingDuration'] || '0') || null
+  const callSid = fd['CallSid'] || ''
+  const parentSid = fd['ParentCallSid'] || ''
 
   const targetSid = parentSid || callSid
   if (!targetSid || !recordingSid) return new NextResponse(null, { status: 200 })

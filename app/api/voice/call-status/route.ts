@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { verifyTwilioRequest, parseFormBody } from '@/lib/twilio-validate'
 
 /**
  * Twilio fires this for every state transition on a call leg.
  * We use it to track answered/completed times and final duration.
  */
 export async function POST(req: NextRequest) {
-  const fd = await req.formData()
-  const callSid = (fd.get('CallSid') as string) || ''
-  const parentSid = (fd.get('ParentCallSid') as string) || ''
-  const status = (fd.get('CallStatus') as string) || ''
-  const callDuration = parseInt((fd.get('CallDuration') as string) || '0') || null
-  const timestamp = (fd.get('Timestamp') as string) || new Date().toISOString()
+  const rawBody = await req.text()
+  const fd = parseFormBody(rawBody)
+  const forbid = await verifyTwilioRequest(req, rawBody, fd)
+  if (forbid) return forbid
+
+  const callSid = fd['CallSid'] || ''
+  const parentSid = fd['ParentCallSid'] || ''
+  const status = fd['CallStatus'] || ''
+  const callDuration = parseInt(fd['CallDuration'] || '0') || null
+  const timestamp = fd['Timestamp'] || new Date().toISOString()
 
   // The parent SID is the call we created in /twiml. Child legs share that as ParentCallSid.
   const targetSid = parentSid || callSid

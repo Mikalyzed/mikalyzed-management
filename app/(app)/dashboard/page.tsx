@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { CALENDAR_TYPE_LABELS, CALENDAR_TYPE_COLORS } from '@/lib/calendar'
+import ReconTaskCard from '@/components/ReconTaskCard'
 
 type DashboardData = {
   user: { name: string; role: string; id: string }
@@ -13,6 +14,13 @@ type DashboardData = {
   }>
   myReconTasks: Array<{
     id: string; stage: string; status: string; priority: number
+    checklist: any[]
+    activeSeconds: number
+    timerStartedAt: string | null
+    pauseReason: string | null
+    pauseDetail: string | null
+    startedAt: string | null
+    estimatedHours: number | null
     vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string }
   }>
   myEventTasks: Array<{
@@ -57,7 +65,7 @@ const STAGE_LABELS: Record<string, string> = {
 }
 
 // ─── My Assignments Component ───
-function MyAssignments({ data }: { data: DashboardData }) {
+function MyAssignments({ data, refresh }: { data: DashboardData; refresh: () => void }) {
   const hasRecon = data.myReconTasks.length > 0
   const hasEvents = data.myEventTasks.length > 0
   const hasCalendar = data.myCalendarItems.length > 0
@@ -214,22 +222,7 @@ function MyAssignments({ data }: { data: DashboardData }) {
               <div className="section-label" style={{ marginTop: 4 }}>Recon Board</div>
             )}
             {data.myReconTasks.map(task => (
-              <Link key={task.id} href={`/vehicles/${task.vehicle.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                <div className="card" style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 14, borderLeft: '4px solid #9333ea' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>
-                      {task.vehicle.year} {task.vehicle.make} {task.vehicle.model}
-                      <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 8, fontSize: 12 }}>#{task.vehicle.stockNumber}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                      {STAGE_LABELS[task.stage] || task.stage} — {task.status === 'in_progress' ? 'In Progress' : task.status === 'pending' ? 'Pending' : task.status}
-                    </div>
-                  </div>
-                  <span className={`badge badge-${task.stage}`} style={{ fontSize: 11 }}>
-                    {STAGE_LABELS[task.stage] || task.stage}
-                  </span>
-                </div>
-              </Link>
+              <ReconTaskCard key={task.id} task={task as any} onChange={refresh} />
             ))}
           </>
         )}
@@ -501,7 +494,10 @@ export default function DashboardPage() {
       )}
 
       {/* ═══ My Assignments — between pipeline and approvals so personal items aren't buried ═══ */}
-      {hasAssignments && <MyAssignments data={data} />}
+      {hasAssignments && <MyAssignments data={data} refresh={async () => {
+        const fresh = await fetch('/api/dashboard').then(r => r.json())
+        setData(fresh)
+      }} />}
 
       {!hasAssignments && !isAdmin && (
         <div className="card" style={{ textAlign: 'center', padding: 40, marginBottom: 32, color: 'var(--text-muted)' }}>

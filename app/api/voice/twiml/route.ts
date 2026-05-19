@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { verifyTwilioRequest, parseFormBody } from '@/lib/twilio-validate'
 
 /**
  * TwiML endpoint hit when a rep places an outbound call from the browser.
@@ -12,12 +13,16 @@ import { prisma } from '@/lib/db'
  *   3. Record the call (dual-channel) and request transcription
  */
 export async function POST(req: NextRequest) {
-  const formData = await req.formData()
-  const to = (formData.get('To') as string) || ''
-  const callSid = (formData.get('CallSid') as string) || ''
-  const ownerId = (formData.get('ownerId') as string) || ''
-  const fromNumber = (formData.get('fromNumber') as string) || process.env.TWILIO_PHONE_NUMBER || ''
-  const contactId = (formData.get('contactId') as string) || ''
+  const rawBody = await req.text()
+  const params = parseFormBody(rawBody)
+  const forbid = await verifyTwilioRequest(req, rawBody, params)
+  if (forbid) return forbid
+
+  const to = params['To'] || ''
+  const callSid = params['CallSid'] || ''
+  const ownerId = params['ownerId'] || ''
+  const fromNumber = params['fromNumber'] || process.env.TWILIO_PHONE_NUMBER || ''
+  const contactId = params['contactId'] || ''
 
   // Persist initial call record so status callbacks have something to update
   if (callSid) {

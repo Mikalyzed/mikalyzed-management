@@ -54,7 +54,7 @@ export default function VoicePhone() {
           deviceRef.current.updateToken(fresh)
           scheduleRefresh()
         }
-      }, 50 * 60 * 1000)
+      }, 45 * 60 * 1000) // Refresh 15 min before the default 60-min TTL expires
     }
 
     async function boot() {
@@ -64,10 +64,29 @@ export default function VoicePhone() {
         logLevel: 1,
         codecPreferences: [TwilioCall.Codec.Opus, TwilioCall.Codec.PCMU],
       })
-      device.on('error', e => console.warn('[voice] device error', e?.message))
+      device.on('error', e => {
+        // Suppress noisy 1006 WebSocket-close errors — the SDK auto-reconnects.
+        // Real errors (auth/registration/connection) still surface.
+        const msg = e?.message || ''
+        const code = (e as any)?.code
+        if (msg.includes('1006') || msg.includes('WSTransport') || code === 31005) return
+        console.warn('[voice] device error', msg, code)
+      })
       device.on('tokenWillExpire', async () => {
         const fresh = await fetchToken()
         if (fresh && deviceRef.current) deviceRef.current.updateToken(fresh)
+      })
+      // When the device becomes unregistered (e.g., after a WebSocket drop),
+      // fetch a fresh token and re-register so the rep stays reachable.
+      device.on('unregistered', async () => {
+        if (cancelled) return
+        try {
+          const fresh = await fetchToken()
+          if (fresh && deviceRef.current && !cancelled) {
+            deviceRef.current.updateToken(fresh)
+            await deviceRef.current.register().catch(() => {})
+          }
+        } catch { /* ignore */ }
       })
       device.on('incoming', incoming => {
         activeCallRef.current = incoming

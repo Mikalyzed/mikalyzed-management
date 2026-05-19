@@ -53,17 +53,29 @@ export async function GET(request: Request) {
 
   // ─── My Assignments (all roles) ───
 
-  // Recon tasks assigned to me
+  // Recon tasks assigned to me — sorted by priority (matches recon board order),
+  // includes checklist + timer state so the dashboard card can drive the timer/checklist UI.
   const myReconTasks = await prisma.vehicleStage.findMany({
     where: {
       assigneeId: user.id,
       status: { notIn: ['done', 'skipped'] },
     },
-    include: {
+    select: {
+      id: true,
+      stage: true,
+      status: true,
+      priority: true,
+      checklist: true,
+      activeSeconds: true,
+      timerStartedAt: true,
+      pauseReason: true,
+      pauseDetail: true,
+      startedAt: true,
+      estimatedHours: true,
       vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
     },
-    orderBy: { createdAt: 'desc' },
-    take: 10,
+    orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+    take: 20,
   })
 
   // Event tasks assigned to me

@@ -274,6 +274,22 @@ model StageConfig {
   @@map("stage_config")
 }
 
+model ChecklistTemplate {
+  id         String   @id @default(uuid())
+  stage      String
+  name       String
+  items      Json     @default("[]") // [{ item: string, type?: string }, ...]
+  isDefault  Boolean  @default(false) @map("is_default")
+  isActive   Boolean  @default(true)  @map("is_active")
+  sortOrder  Int      @default(0)     @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt      @map("updated_at")
+
+  @@unique([stage, name])
+  @@index([stage])
+  @@map("checklist_templates")
+}
+
 model TaskApproval {
   id              String    @id @default(uuid())
   vehicleStageId  String    @map("vehicle_stage_id")

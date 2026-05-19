@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import VehicleSearch from '@/components/VehicleSearch'
 
@@ -23,6 +23,14 @@ const DEFAULT_INSPECTION: { item: string; type?: string }[] = [
   { item: 'Body assessment' },
 ]
 
+type Template = {
+  id: string
+  stage: string
+  name: string
+  items: { item: string; type?: string }[]
+  isDefault: boolean
+}
+
 export default function AddVehiclePage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
@@ -36,6 +44,30 @@ export default function AddVehiclePage() {
   const [newPartUrl, setNewPartUrl] = useState('')
   const [selectedInv, setSelectedInv] = useState<InventoryPick | null>(null)
   const [soldDelivery, setSoldDelivery] = useState(false)
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([])
+
+  // Load templates for the starting stage and pre-check default (if any)
+  useEffect(() => {
+    fetch(`/api/checklist-templates?stage=${startingStage}`)
+      .then(async r => {
+        if (!r.ok) return { templates: [] }
+        const text = await r.text()
+        if (!text) return { templates: [] }
+        try { return JSON.parse(text) } catch { return { templates: [] } }
+      })
+      .then(d => {
+        const list: Template[] = d.templates || []
+        setTemplates(list)
+        const def = list.find(t => t.isDefault)
+        setSelectedTemplateIds(def ? [def.id] : [])
+      })
+      .catch(() => setTemplates([]))
+  }, [startingStage])
+
+  function toggleTemplate(id: string) {
+    setSelectedTemplateIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
 
   function addTask() {
     const task = newTask.trim()
@@ -56,8 +88,22 @@ export default function AddVehiclePage() {
     const form = new FormData(e.currentTarget)
 
     type ChecklistInput = string | { item: string; type?: string }
+    const selectedTemplates = templates.filter(t => selectedTemplateIds.includes(t.id))
     let mechanicChecklist: ChecklistInput[] = []
-    if (soldDelivery) {
+    if (selectedTemplates.length > 0) {
+      // Combine items from all selected templates (in template order, deduping by item name)
+      const seen = new Set<string>()
+      const combined: ChecklistInput[] = []
+      for (const tpl of selectedTemplates) {
+        for (const it of tpl.items) {
+          const key = it.item.trim().toLowerCase()
+          if (seen.has(key)) continue
+          seen.add(key)
+          combined.push(it)
+        }
+      }
+      mechanicChecklist = [...combined, ...customTasks]
+    } else if (soldDelivery) {
       mechanicChecklist = customTasks
     } else if (fullInspection) {
       mechanicChecklist = [...DEFAULT_INSPECTION, ...customTasks]
@@ -283,8 +329,49 @@ export default function AddVehiclePage() {
             {startingStage === 'mechanic' ? 'Mechanic' : startingStage === 'detailing' ? 'Detailing' : startingStage === 'content' ? 'Content' : 'Publish'} Tasks
           </p>
 
-          {/* General Inspection Toggle (mechanic only) */}
-          {startingStage === 'mechanic' && (
+          {/* Checklist Template Picker — multi-select */}
+          {templates.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <label className="form-label">Checklists</label>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                Check the inspection(s) needed for this vehicle. Manage templates in <a href="/settings" style={{ color: 'var(--text-secondary)', textDecoration: 'underline' }}>Settings → Recon</a>.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {templates.map(t => {
+                  const checked = selectedTemplateIds.includes(t.id)
+                  return (
+                    <label
+                      key={t.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '10px 14px', borderRadius: 10,
+                        border: checked ? '2px solid #1a1a1a' : '1px solid var(--border)',
+                        background: checked ? '#fafaf8' : '#fff',
+                        cursor: 'pointer', transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleTemplate(t.id)}
+                        style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#1a1a1a' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{t.name}</p>
+                        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {t.items.length} item{t.items.length === 1 ? '' : 's'}
+                          {t.items.some(i => i.type) && ` · includes structured inputs`}
+                        </p>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* General Inspection Toggle (mechanic only, hidden if any template selected) */}
+          {startingStage === 'mechanic' && selectedTemplateIds.length === 0 && (
             <label style={{
               display: 'flex', alignItems: 'center', gap: '14px',
               padding: '14px 16px', borderRadius: '12px',

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { isCloudinaryConfigured, uploadBufferToCloudinary } from '@/lib/cloudinary'
+import { verifyTwilioRequest, parseFormBody } from '@/lib/twilio-validate'
 
 /**
  * Twilio webhook for inbound SMS/MMS.
@@ -9,18 +10,21 @@ import { isCloudinaryConfigured, uploadBufferToCloudinary } from '@/lib/cloudina
  * - Notifies: receiving rep + all sales managers + all admins.
  */
 export async function POST(req: NextRequest) {
-  const formData = await req.formData()
+  const rawBody = await req.text()
+  const params = parseFormBody(rawBody)
+  const forbid = await verifyTwilioRequest(req, rawBody, params)
+  if (forbid) return forbid
 
-  const from = formData.get('From') as string
-  const to = formData.get('To') as string // The Twilio number that received the message
-  const body = (formData.get('Body') as string) || ''
-  const messageSid = formData.get('MessageSid') as string
-  const numMedia = parseInt((formData.get('NumMedia') as string) || '0')
+  const from = params['From'] || ''
+  const to = params['To'] || '' // The Twilio number that received the message
+  const body = params['Body'] || ''
+  const messageSid = params['MessageSid'] || ''
+  const numMedia = parseInt(params['NumMedia'] || '0')
 
   console.log('[sms-webhook] Incoming SMS:', JSON.stringify({ from, to, body: body.slice(0, 100), messageSid }))
 
-  const mediaUrl: string | null = numMedia > 0 ? (formData.get('MediaUrl0') as string) : null
-  const mediaContentType: string | null = numMedia > 0 ? ((formData.get('MediaContentType0') as string) || null) : null
+  const mediaUrl: string | null = numMedia > 0 ? (params['MediaUrl0'] || null) : null
+  const mediaContentType: string | null = numMedia > 0 ? (params['MediaContentType0'] || null) : null
 
   // Look up the rep who owns this Twilio number (the "receiver")
   const receivingRep = to

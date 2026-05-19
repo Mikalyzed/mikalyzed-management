@@ -181,7 +181,147 @@ const SUMMARY_TOOL: Anthropic.Tool = {
   name: 'inventory_summary',
   description: 'Get aggregate statistics across the inventory: counts by status, counts by purchase type, totals, averages of mileage/price/cost. Use this for "how many X in total" or "what is the average Y" style questions when no filtering is needed beyond status/type breakdown.',
   input_schema: { type: 'object', properties: {} },
+}
+
+const STAGE_HISTORY_TOOL: Anthropic.Tool = {
+  name: 'query_stage_history',
+  description:
+    'Query the recon stage history (VehicleStage records). Use this for ANY question about per-employee productivity, completion counts, time-per-vehicle, who-worked-on-what, or stage timing. Filter by stage (mechanic/detailing/content/publish), assignee name, status (done/in_progress/pending/skipped), and date ranges. Returns count, duration statistics (avg/median/min/max in ACTIVE WORK HOURS — start/pause/resume tracked, NOT wall-clock elapsed), per-assignee breakdown, and an optional list of records. Each list record also includes `elapsed_hours` (wall-clock) for comparison.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      stages: {
+        type: 'array', items: { type: 'string', enum: ['mechanic', 'detailing', 'content', 'publish'] },
+        description: 'Which recon stages to include. Default: all.',
+      },
+      assignee_names: {
+        type: 'array', items: { type: 'string' },
+        description: 'Case-insensitive substring match against the assignee user name (e.g. ["Karla"]). Use null/empty to include any assignee.',
+      },
+      statuses: {
+        type: 'array', items: { type: 'string', enum: ['pending', 'in_progress', 'done', 'skipped'] },
+        description: 'Which stage statuses. For "completed work" use ["done"].',
+      },
+      completed_after: { type: 'string', description: 'ISO date (YYYY-MM-DD). Only stages completed on/after this date.' },
+      completed_before: { type: 'string', description: 'ISO date (YYYY-MM-DD). Only stages completed on/before this date.' },
+      started_after: { type: 'string', description: 'ISO date. Only stages started on/after.' },
+      started_before: { type: 'string', description: 'ISO date. Only stages started on/before.' },
+      limit: { type: 'number', description: 'Max records to return in the list (default 30). Count and stats are always exact.' },
+      return_mode: {
+        type: 'string',
+        enum: ['count_only', 'summary', 'list', 'count_and_summary', 'full'],
+        description: 'summary = stats only; list = records only; count_and_summary (default) = count + stats; full = everything.',
+      },
+    },
+  },
   cache_control: { type: 'ephemeral' },
+}
+
+type StageHistoryFilter = {
+  stages?: string[]
+  assignee_names?: string[]
+  statuses?: string[]
+  completed_after?: string
+  completed_before?: string
+  started_after?: string
+  started_before?: string
+  limit?: number
+  return_mode?: 'count_only' | 'summary' | 'list' | 'count_and_summary' | 'full'
+}
+
+async function queryStageHistory(f: StageHistoryFilter) {
+  const where: any = {}
+  if (f.stages?.length) where.stage = { in: f.stages }
+  if (f.statuses?.length) where.status = { in: f.statuses }
+  if (f.completed_after || f.completed_before) {
+    where.completedAt = {}
+    if (f.completed_after) where.completedAt.gte = new Date(f.completed_after)
+    if (f.completed_before) where.completedAt.lte = new Date(`${f.completed_before}T23:59:59.999Z`)
+  }
+  if (f.started_after || f.started_before) {
+    where.startedAt = {}
+    if (f.started_after) where.startedAt.gte = new Date(f.started_after)
+    if (f.started_before) where.startedAt.lte = new Date(`${f.started_before}T23:59:59.999Z`)
+  }
+  if (f.assignee_names?.length) {
+    where.assignee = {
+      OR: f.assignee_names.map(name => ({ name: { contains: name.trim(), mode: 'insensitive' } })),
+    }
+  }
+
+  const stages = await prisma.vehicleStage.findMany({
+    where,
+    include: {
+      assignee: { select: { id: true, name: true } },
+      vehicle: { select: { stockNumber: true, year: true, make: true, model: true } },
+    },
+    orderBy: { completedAt: 'desc' },
+  })
+
+  const now = Date.now()
+  // activeSeconds is accumulated work time (start/pause/resume tracked).
+  // If timerStartedAt is set, the timer is currently running — add that delta too.
+  function computeActiveHours(s: typeof stages[number]): number {
+    let secs = s.activeSeconds || 0
+    if (s.timerStartedAt) {
+      secs += Math.max(0, Math.floor((now - s.timerStartedAt.getTime()) / 1000))
+    }
+    return secs / 3600
+  }
+
+  // Stats based on ACTIVE WORK TIME (not wall-clock elapsed)
+  const activeHours: number[] = []
+  const byAssignee: Record<string, number> = {}
+  const byStage: Record<string, number> = {}
+  for (const s of stages) {
+    const name = s.assignee?.name || '(unassigned)'
+    byAssignee[name] = (byAssignee[name] || 0) + 1
+    byStage[s.stage] = (byStage[s.stage] || 0) + 1
+    const active = computeActiveHours(s)
+    if (active > 0) activeHours.push(active)
+  }
+  activeHours.sort((a, b) => a - b)
+  const sum = activeHours.reduce((a, b) => a + b, 0)
+  const stats = activeHours.length === 0 ? null : {
+    avg_hours: Number((sum / activeHours.length).toFixed(2)),
+    median_hours: Number(activeHours[Math.floor(activeHours.length / 2)].toFixed(2)),
+    min_hours: Number(activeHours[0].toFixed(2)),
+    max_hours: Number(activeHours[activeHours.length - 1].toFixed(2)),
+    samples_with_active_time: activeHours.length,
+    note: 'Hours are ACTIVE work time (start/pause/resume tracked), not wall-clock elapsed.',
+  }
+
+  const limit = Math.min(f.limit ?? 30, 200)
+  const list = stages.slice(0, limit).map(s => {
+    const activeH = computeActiveHours(s)
+    const elapsedH = s.startedAt && s.completedAt
+      ? (s.completedAt.getTime() - s.startedAt.getTime()) / 3600000
+      : null
+    return {
+      stage: s.stage,
+      status: s.status,
+      assignee: s.assignee?.name || null,
+      stock: s.vehicle.stockNumber,
+      vehicle: `${s.vehicle.year || ''} ${s.vehicle.make} ${s.vehicle.model}`.trim(),
+      started: s.startedAt?.toISOString() || null,
+      completed: s.completedAt?.toISOString() || null,
+      active_hours: Number(activeH.toFixed(2)),
+      elapsed_hours: elapsedH != null ? Number(elapsedH.toFixed(2)) : null,
+    }
+  })
+
+  const mode = f.return_mode || 'count_and_summary'
+  const result: any = { count: stages.length }
+  if (mode === 'summary' || mode === 'count_and_summary' || mode === 'full') {
+    result.duration_stats = stats
+    result.by_assignee = byAssignee
+    result.by_stage = byStage
+  }
+  if (mode === 'list' || mode === 'full') {
+    result.list = list
+    result.truncated = stages.length > limit
+  }
+  return result
 }
 
 function summarize(vehicles: VehicleRow[]) {
@@ -227,16 +367,23 @@ export async function POST(req: NextRequest) {
     },
   })
 
-  const system = `You are an inventory analyst for a used car dealership. You answer questions about the current inventory.
+  const todayIso = new Date().toISOString().split('T')[0]
+  const system = `You are an analyst for a used car dealership. You answer questions about inventory AND recon stage history (who worked on what, how long, how many completed).
 
-Status values: in_stock, in_recon (in our own recon shop), external_repair (at an outside shop), sold, removed.
-Purchase type values: FLOORING (dealer owns outright), CONSIGNMENT (third-party owned), TRADE-IN.
+Today's date is ${todayIso}.
+
+Inventory:
+- Status values: in_stock, in_recon (in our own recon shop), external_repair (at an outside shop), sold, removed.
+- Purchase type values: FLOORING (dealer owns outright), CONSIGNMENT (third-party owned), TRADE-IN.
+
+Recon stages: mechanic → detailing → content → publish. Each stage is a VehicleStage record with assignee, startedAt, completedAt.
 
 RULES:
-1. For ANY question about counting, listing, or filtering vehicles, you MUST call query_inventory. Never count from memory — you will miss rows.
-2. For aggregate stats across all inventory (total count, averages, breakdowns), call inventory_summary.
-3. You may call multiple tools in sequence if needed to answer a multi-part question.
-4. After tools return, give a concise answer. State the number first, then optionally list stock numbers + vehicle descriptions. Don't pad with explanations the user didn't ask for.`
+1. For questions about vehicles in inventory (counts, lists, filters), call query_inventory or inventory_summary.
+2. For questions about employees' work output (e.g. "how many cars did Karla complete in the last 2 weeks", "average detailing time", "who has the longest mechanic time"), call query_stage_history with the appropriate filters (use statuses: ["done"] for completed work). Duration stats are based on ACTIVE WORK TIME (start/pause/resume tracked) — not wall-clock elapsed. State this clearly in the answer if asked about timing.
+3. For relative date phrases, convert to ISO dates relative to today: "last 2 weeks" = completed_after ${new Date(Date.now() - 14*86400000).toISOString().split('T')[0]}; "this month" = completed_after ${todayIso.slice(0,8)}01; etc.
+4. You may call multiple tools in sequence.
+5. Be concise. Lead with the number, then optionally list specifics. Don't pad with explanations.`
 
   // Cap history at last 8 turns (16 messages) to keep context lean
   const trimmedHistory = (history || []).slice(-16)
@@ -251,19 +398,21 @@ RULES:
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1500,
         system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-        tools: [QUERY_TOOL, SUMMARY_TOOL],
+        tools: [QUERY_TOOL, SUMMARY_TOOL, STAGE_HISTORY_TOOL],
         messages,
       })
 
       if (response.stop_reason === 'tool_use') {
         const toolUses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
         messages.push({ role: 'assistant', content: response.content })
-        const toolResults: Anthropic.ToolResultBlockParam[] = toolUses.map(tu => {
+        const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(toolUses.map(async tu => {
           let result: any
           if (tu.name === 'query_inventory') {
             result = applyFilter(vehicles, tu.input as Filter)
           } else if (tu.name === 'inventory_summary') {
             result = summarize(vehicles)
+          } else if (tu.name === 'query_stage_history') {
+            result = await queryStageHistory(tu.input as StageHistoryFilter)
           } else {
             result = { error: `Unknown tool: ${tu.name}` }
           }
@@ -272,7 +421,7 @@ RULES:
             tool_use_id: tu.id,
             content: JSON.stringify(result),
           }
-        })
+        }))
         messages.push({ role: 'user', content: toolResults })
         continue
       }

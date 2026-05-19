@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { verifyTwilioRequest, parseFormBody } from '@/lib/twilio-validate'
 
 /**
  * Hit by Twilio after a voicemail is recorded. Notifies the rep.
@@ -7,8 +8,12 @@ import { prisma } from '@/lib/db'
  * webhooks separately.
  */
 export async function POST(req: NextRequest) {
-  const fd = await req.formData()
-  const callSid = (fd.get('CallSid') as string) || ''
+  const rawBody = await req.text()
+  const fd = parseFormBody(rawBody)
+  const forbid = await verifyTwilioRequest(req, rawBody, fd)
+  if (forbid) return forbid
+
+  const callSid = fd['CallSid'] || ''
 
   if (callSid) {
     const call = await prisma.call.findUnique({

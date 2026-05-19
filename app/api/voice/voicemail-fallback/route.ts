@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { verifyTwilioRequest, parseFormBody } from '@/lib/twilio-validate'
 
 /**
  * Hit by Twilio when the inbound `<Dial>` ends. If no one answered, prompt the
  * caller to leave a voicemail.
  */
 export async function POST(req: NextRequest) {
-  const fd = await req.formData()
-  const dialCallStatus = (fd.get('DialCallStatus') as string) || ''
-  const callSid = (fd.get('CallSid') as string) || ''
+  const rawBody = await req.text()
+  const fd = parseFormBody(rawBody)
+  const forbid = await verifyTwilioRequest(req, rawBody, fd)
+  if (forbid) return forbid
+
+  const dialCallStatus = fd['DialCallStatus'] || ''
+  const callSid = fd['CallSid'] || ''
 
   const proto = req.headers.get('x-forwarded-proto') || 'https'
   const host = req.headers.get('host')

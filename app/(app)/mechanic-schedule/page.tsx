@@ -4,11 +4,13 @@ import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import ScheduleView from './ScheduleView'
 import PlanView from './PlanView'
 import OrderPartModal from '@/components/OrderPartModal'
+import { fieldsForItem } from '@/lib/checklist-fields'
 
 type ChecklistItem = {
   item: string; done: boolean; note: string
   type?: string
   data?: Record<string, unknown>
+  fields?: { key: string; label: string }[]
   addedByMechanic?: boolean
   approved?: 'pending' | 'approved' | 'declined'
   estimatedHours?: number
@@ -1050,12 +1052,7 @@ export default function MechanicBoard() {
                                   <div>
                                     <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Tire pressure (PSI)</p>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                                      {[
-                                        { key: 'fl', label: 'Front Left' },
-                                        { key: 'fr', label: 'Front Right' },
-                                        { key: 'rl', label: 'Rear Left' },
-                                        { key: 'rr', label: 'Rear Right' },
-                                      ].map(({ key, label }) => (
+                                      {fieldsForItem(item).map(({ key, label }) => (
                                         <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                                           <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</label>
                                           <input
@@ -1078,10 +1075,7 @@ export default function MechanicBoard() {
                                   <div>
                                     <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Brake pad thickness (mm)</p>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                                      {[
-                                        { key: 'frontMm', label: 'Front pads' },
-                                        { key: 'rearMm', label: 'Rear pads' },
-                                      ].map(({ key, label }) => (
+                                      {fieldsForItem(item).map(({ key, label }) => (
                                         <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                                           <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</label>
                                           <input
@@ -1104,13 +1098,7 @@ export default function MechanicBoard() {
                                   <div>
                                     <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Fluids check</p>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                      {[
-                                        { key: 'powerSteering', label: 'Power steering fluid' },
-                                        { key: 'brake', label: 'Brake fluid' },
-                                        { key: 'engineOil', label: 'Engine oil' },
-                                        { key: 'transmission', label: 'Transmission fluid' },
-                                        { key: 'antifreeze', label: 'Antifreeze' },
-                                      ].map(({ key, label }) => {
+                                      {fieldsForItem(item).map(({ key, label }) => {
                                         const status = getPillStatus(data[key])
                                         const subNote = getPillNote(data[key])
                                         return (
@@ -1225,21 +1213,7 @@ export default function MechanicBoard() {
                                       {item.type === 'engineCheck' ? 'Engine components' : 'Electrical systems'}
                                     </p>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                      {(item.type === 'engineCheck' ? [
-                                        { key: 'sparkPlug', label: 'Spark plug' },
-                                        { key: 'coil', label: 'Coil' },
-                                        { key: 'distributorCap', label: 'Distributor cap' },
-                                        { key: 'sparkPlugWires', label: 'Spark plug wires' },
-                                      ] : [
-                                        { key: 'regularBeam', label: 'Regular beam' },
-                                        { key: 'highBeam', label: 'High beam' },
-                                        { key: 'fogLights', label: 'Fog lights' },
-                                        { key: 'radio', label: 'Radio' },
-                                        { key: 'top', label: 'Top (if it has one)' },
-                                        { key: 'brakeLights', label: 'Brake lights' },
-                                        { key: 'reverseLights', label: 'Reverse lights' },
-                                        { key: 'turnSignals', label: 'Turn signals' },
-                                      ]).map(({ key, label }) => {
+                                      {fieldsForItem(item).map(({ key, label }) => {
                                         const status = getPillStatus(data[key])
                                         const subNote = getPillNote(data[key])
                                         return (
@@ -1354,12 +1328,7 @@ export default function MechanicBoard() {
                                       {item.type === 'steeringCheck' ? 'Steering' : 'Suspension'}
                                     </p>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                      {(item.type === 'steeringCheck' ? [
-                                        { key: 'play', label: 'Play in the steering' },
-                                      ] : [
-                                        { key: 'shaking', label: 'Shaking' },
-                                        { key: 'noises', label: 'Noises' },
-                                      ]).map(({ key, label }) => {
+                                      {fieldsForItem(item).map(({ key, label }) => {
                                         const status = getPillStatus(data[key])
                                         const subNote = getPillNote(data[key])
                                         return (

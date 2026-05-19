@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { verifyTwilioRequest, parseFormBody } from '@/lib/twilio-validate'
 
 /**
  * Twilio webhook for inbound voice calls. Routes to the rep that owns the
@@ -7,10 +8,14 @@ import { prisma } from '@/lib/db'
  * voicemail if they don't pick up in 25s.
  */
 export async function POST(req: NextRequest) {
-  const fd = await req.formData()
-  const from = (fd.get('From') as string) || ''
-  const to = (fd.get('To') as string) || ''
-  const callSid = (fd.get('CallSid') as string) || ''
+  const rawBody = await req.text()
+  const fd = parseFormBody(rawBody)
+  const forbid = await verifyTwilioRequest(req, rawBody, fd)
+  if (forbid) return forbid
+
+  const from = fd['From'] || ''
+  const to = fd['To'] || ''
+  const callSid = fd['CallSid'] || ''
 
   // Find the rep that owns this Twilio number
   const rep = to ? await prisma.user.findUnique({
