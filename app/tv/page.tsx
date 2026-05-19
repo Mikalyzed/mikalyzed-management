@@ -267,10 +267,12 @@ export default function TVBoard() {
                 </div>
               </div>
 
-              {/* Vehicle cards under this stage */}
+              {/* Vehicle cards under this stage — capped height so Completed ticker stays visible */}
               <div style={{
                 display: 'flex', flexDirection: 'column', gap: 8, flex: 1,
-                ...(stage === 'content' ? { maxHeight: 520, overflowY: 'auto' } : {}),
+                maxHeight: 'calc(100vh - 480px)',
+                overflowY: 'auto',
+                scrollbarWidth: 'thin',
               }}>
                 {vehicles.length > 0 ? vehicles.map((job, idx) => (
                   <VehicleCard key={job.stockNumber || `task-${idx}`} job={job} color={color} />
