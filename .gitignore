@@ -7,6 +7,10 @@ node_modules
 next-env.d.ts
 uploads/
 
+# macOS
+.DS_Store
+**/.DS_Store
+
 # Capacitor / iOS — track project but skip build artifacts
 ios/App/Pods/
 ios/App/App.xcworkspace/xcuserdata/
