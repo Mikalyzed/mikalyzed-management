@@ -82,6 +82,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       ? (stage.checklist as any[]).length 
       : 0
 
+    const durationHours = stage.completedAt
+      ? Math.floor((new Date(stage.completedAt).getTime() - new Date(stage.startedAt).getTime()) / 3600000)
+      : null
+
     events.push({
       type: 'stage',
       date: stage.startedAt,
@@ -89,11 +93,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       status: stage.status,
       details: {
         assignee: stage.assignee?.name || 'Unassigned',
-        duration: stage.completedAt ? 
-          Math.floor((new Date(stage.completedAt).getTime() - new Date(stage.startedAt).getTime()) / 3600000) : null,
+        duration: durationHours,
+        days: durationHours != null ? Math.floor(durationHours / 24) : null,
         completedTasks,
         totalTasks,
-        skipped: stage.status === 'skipped'
+        skipped: stage.status === 'skipped',
+        scopeName: stage.scopeName || null,
+        checklist: Array.isArray(stage.checklist) ? stage.checklist : [],
+        notes: stage.notes || null,
       }
     })
   })

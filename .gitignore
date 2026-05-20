@@ -6,3 +6,13 @@ node_modules
 *.tsbuildinfo
 next-env.d.ts
 uploads/
+
+# Capacitor / iOS — track project but skip build artifacts
+ios/App/Pods/
+ios/App/App.xcworkspace/xcuserdata/
+ios/App/App.xcodeproj/xcuserdata/
+ios/App/App.xcodeproj/project.xcworkspace/xcuserdata/
+ios/DerivedData/
+ios/build/
+*.xcuserstate
+*.ipa

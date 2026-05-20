@@ -268,25 +268,30 @@ export default function ExternalRepairsPage() {
     <div>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg) } }
-        .ext-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; gap: 12px; }
+        .ext-header { display: flex; flex-direction: column; align-items: stretch; margin-bottom: 24px; gap: 12px; }
         .ext-header h1 { font-size: 24px; }
+        .ext-add-btn { min-height: 38px !important; padding: 8px 14px !important; border-radius: 8px !important; }
         .ext-add-btn span { display: none; }
         .ext-card-padding { padding: 16px 16px 12px; }
         .ext-info-grid { grid-template-columns: 1fr !important; }
-        .ext-actions { margin: 0 16px 16px !important; flex-direction: column; }
-        .ext-actions button { border-right: none !important; border-bottom: 1px solid var(--border); }
-        .ext-actions button:last-child { border-bottom: none !important; }
+        .ext-actions { margin: 0 16px 16px !important; display: flex !important; flex-wrap: wrap; gap: 6px; }
+        .ext-actions button { border-radius: 8px !important; flex: 1 1 calc(50% - 3px); min-width: 0; }
+        /* Mobile: View Vehicle + Add Part live inside the card's modal, not on the card itself */
+        .ext-action-extra { display: none !important; }
         .ext-notes-area { margin: 0 16px 12px !important; }
         .ext-form-grid-4 { grid-template-columns: 1fr 1fr; }
 
         @media (min-width: 768px) {
+          .ext-header { flex-direction: row; align-items: flex-start; justify-content: space-between; }
           .ext-header h1 { font-size: 28px; }
+          .ext-add-btn { min-height: 44px !important; padding: 10px 20px !important; border-radius: 12px !important; }
           .ext-add-btn span { display: inline; }
           .ext-card-padding { padding: 20px 24px 16px; }
           .ext-info-grid { grid-template-columns: repeat(3, 1fr) !important; }
-          .ext-actions { margin: 0 24px 20px !important; flex-direction: row; }
-          .ext-actions button { border-bottom: none !important; border-right: 1px solid var(--border); }
-          .ext-actions button:last-child { border-right: none !important; }
+          .ext-actions { margin: 0 24px 20px !important; }
+          .ext-actions button { flex: 1 1 0 !important; }
+          /* Desktop: always show all action buttons */
+          .ext-action-extra { display: inline-flex !important; align-items: center; justify-content: center; }
           .ext-notes-area { margin: 0 24px 16px !important; }
           .ext-form-grid-4 { grid-template-columns: repeat(4, 1fr); }
         }
@@ -294,17 +299,12 @@ export default function ExternalRepairsPage() {
 
       {/* Header */}
       <div className="ext-header">
-        <div>
-          <h1 style={{ fontWeight: 700, letterSpacing: '-0.02em' }}>External Repairs</h1>
-          <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Track vehicles sent to outside shops
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <h1 className="page-h1-mobile-pad" style={{ fontWeight: 700, letterSpacing: '-0.02em' }}>External Repairs</h1>
+        <div className="ext-controls" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
           <input
             type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search vehicles..."
-            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, width: 200 }}
+            style={{ flex: 1, minWidth: 0, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}
           />
           <button
             onClick={() => setShowAdd(true)}
@@ -321,67 +321,45 @@ export default function ExternalRepairsPage() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div style={{
-        display: 'flex',
-        marginBottom: '24px',
-        border: '1px solid var(--border)',
-        borderRadius: '12px',
-        overflow: 'hidden',
-        background: '#ffffff',
-      }}>
+      {/* Filter tabs — horizontal scroll pill style (matches Parts page) */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '2px' }}>
         {(() => {
           const TABS = [
             { key: 'all', label: 'All Vehicles' },
             { key: 'pending', label: 'Pending' },
-            { key: 'sent', label: 'Scheduled for service' },
+            { key: 'sent', label: 'Scheduled' },
             { key: 'in_progress', label: 'In Progress' },
             { key: 'ready', label: 'Ready' },
             { key: 'returned', label: 'Returned' },
           ]
-          return TABS.map((tab, i) => {
+          return TABS.map(tab => {
             const count = tab.key === 'all'
               ? repairs.filter(r => r.status !== 'returned').length
               : repairs.filter(r => r.status === tab.key).length
             const active = filter === tab.key
             return (
-            <button
-              key={tab.key}
-              onClick={() => setFilter(tab.key)}
-              style={{
-                flex: 1,
-                padding: '12px 8px',
-                fontSize: '13px',
-                fontWeight: active ? 700 : 500,
-                cursor: 'pointer',
-                border: 'none',
-                borderRight: i < TABS.length - 1 ? '1px solid var(--border)' : 'none',
-                minHeight: 'auto',
-                transition: 'all 0.15s ease',
-                background: active ? 'var(--bg-primary)' : '#ffffff',
-                color: active ? 'var(--text-primary)' : 'var(--text-muted)',
-                textTransform: 'capitalize',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-              }}
-            >
-              {tab.label}
-              {count > 0 && (
-                <span style={{
-                  background: active ? '#1a1a1a' : '#e8e8e4',
-                  color: active ? '#dffd6e' : 'var(--text-muted)',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  padding: '2px 7px',
-                  borderRadius: '100px',
-                  lineHeight: '16px',
-                }}>
-                  {count}
-                </span>
-              )}
-            </button>
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                style={{
+                  padding: '8px 16px', borderRadius: '8px',
+                  border: `1px solid ${active ? '#1a1a1a' : 'var(--border)'}`,
+                  background: active ? '#1a1a1a' : '#fff',
+                  color: active ? '#dffd6e' : 'var(--text-secondary)',
+                  fontSize: '14px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  flexShrink: 0,
+                }}
+              >
+                {tab.label}
+                {count > 0 && (
+                  <span style={{
+                    background: active ? 'rgba(223,253,110,0.2)' : 'var(--border)',
+                    color: active ? '#dffd6e' : 'var(--text-muted)',
+                    fontSize: '12px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px',
+                  }}>{count}</span>
+                )}
+              </button>
             )
           })
         })()}
@@ -534,13 +512,21 @@ export default function ExternalRepairsPage() {
             const overdue = !!(daysOut !== null && r.estimatedDays && daysOut > r.estimatedDays && r.status !== 'returned' && !hasFollowUp)
 
             return (
-              <div key={r.id} style={{
-                background: overdue ? 'var(--danger-bg)' : '#ffffff',
-                border: `1px solid ${overdue ? 'var(--danger-border)' : 'var(--border)'}`,
-                borderRadius: '16px',
-                overflow: 'hidden',
-                boxShadow: 'var(--shadow-sm)',
-              }}>
+              <div
+                key={r.id}
+                onClick={(e) => {
+                  // Don't open modal if click landed on a button or interactive element
+                  if ((e.target as HTMLElement).closest('button, a, select, input, textarea')) return
+                  setEditRepairModal(r); setEditStatus(r.status); setEditReason('')
+                }}
+                style={{
+                  background: overdue ? 'var(--danger-bg)' : '#ffffff',
+                  border: `1px solid ${overdue ? 'var(--danger-border)' : 'var(--border)'}`,
+                  borderRadius: '16px',
+                  overflow: 'hidden',
+                  boxShadow: 'var(--shadow-sm)',
+                  cursor: 'pointer',
+                }}>
                 {/* Header - Clickable for admin */}
                 <div className="ext-card-padding" style={{ cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && (setEditRepairModal(r), setEditStatus(r.status), setEditReason(''))}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', gap: '12px' }}>
@@ -682,134 +668,80 @@ export default function ExternalRepairsPage() {
                   </div>
                 )}
 
-                {/* Actions */}
-                {r.status !== 'returned' && (
-                  <div className="ext-actions" style={{
-                    display: 'flex',
-                    border: '1px solid var(--border)',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                  }}>
-                    <button
-                      onClick={() => openVehicleDetail(r.stockNumber)}
-                      disabled={resolving === r.stockNumber}
-                      style={{
-                        padding: '12px 16px',
-                        background: '#eff6ff',
-                        border: 'none',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        cursor: resolving === r.stockNumber ? 'wait' : 'pointer',
-                        color: '#1d4ed8',
-                        minHeight: '44px',
-                        whiteSpace: 'nowrap',
-                        opacity: resolving === r.stockNumber ? 0.6 : 1,
-                      }}
-                    >
-                      View Vehicle
-                    </button>
-                    <button
-                      onClick={() => setAddPartFor({
-                        stockNumber: r.stockNumber,
-                        vehicleDesc: `${r.year || ''} ${r.make} ${r.model}`.trim(),
-                      })}
-                      style={{
-                        padding: '12px 16px',
-                        background: '#f3e8ff',
-                        border: 'none',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        color: '#7c3aed',
-                        minHeight: '44px',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      + Add Part
-                    </button>
-                    {r.status === 'pending' && (
+                {/* Actions — slim grid of action buttons */}
+                {r.status !== 'returned' && (() => {
+                  const actionBtn = (bg: string, color: string): React.CSSProperties => ({
+                    padding: '9px 10px',
+                    background: bg,
+                    border: `1px solid ${color}33`,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color,
+                    cursor: 'pointer',
+                    minHeight: 0,
+                    whiteSpace: 'nowrap',
+                  })
+                  return (
+                    <div className="ext-actions">
                       <button
-                        onClick={() => {
-                          setScheduleModal(r)
-                          setScheduleSentDate(new Date().toISOString().split('T')[0])
-                          setScheduleEstDays(r.estimatedDays ? String(r.estimatedDays) : '')
-                        }}
+                        className="ext-action-extra"
+                        onClick={() => openVehicleDetail(r.stockNumber)}
+                        disabled={resolving === r.stockNumber}
                         style={{
-                          flex: 1, padding: '12px 20px',
-                          background: '#fffbeb', border: 'none',
-                          fontSize: '14px', fontWeight: 700, cursor: 'pointer',
-                          color: '#b45309', minHeight: '44px',
+                          ...actionBtn('#eff6ff', '#1d4ed8'),
+                          cursor: resolving === r.stockNumber ? 'wait' : 'pointer',
+                          opacity: resolving === r.stockNumber ? 0.6 : 1,
                         }}
-                      >
-                        Schedule
-                      </button>
-                    )}
-                    {r.status !== 'pending' && (
+                      >View Vehicle</button>
                       <button
-                        onClick={() => setFollowUpModal({
-                          repairId: r.id,
+                        className="ext-action-extra"
+                        onClick={() => setAddPartFor({
                           stockNumber: r.stockNumber,
-                          vehicleDesc: `${r.year} ${r.make} ${r.model}`
+                          vehicleDesc: `${r.year || ''} ${r.make} ${r.model}`.trim(),
                         })}
-                        style={{
-                          padding: '12px 20px',
-                          background: '#fef2f2',
-                          border: 'none',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          color: '#ef4444',
-                          minHeight: '44px',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        Log Follow-up
-                      </button>
-                    )}
-                    {r.status === 'sent' && (
-                      <button
-                        onClick={() => updateStatus(r.id, 'in_progress')}
-                        style={{
-                          flex: 1, padding: '12px 20px',
-                          background: '#ffffff', border: 'none',
-                          fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                          color: 'var(--text-primary)', minHeight: '44px',
-                        }}
-                      >
-                        Mark In Progress
-                      </button>
-                    )}
-                    {r.status === 'in_progress' && (
-                      <button
-                        onClick={() => updateStatus(r.id, 'ready')}
-                        style={{
-                          flex: 1, padding: '12px 20px',
-                          background: '#ffffff', border: 'none',
-                          fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                          color: 'var(--text-primary)', minHeight: '44px',
-                        }}
-                      >
-                        Ready for Pickup
-                      </button>
-                    )}
-                    {r.status === 'ready' && (
-                      <button
-                        onClick={() => {
-                          setReconModal(r)
-                          setReconStage('mechanic')
-                        }}
-                        style={{
-                          flex: 1, padding: '12px 20px',
-                          background: '#ffffff', border: 'none',
-                          fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                          color: 'var(--text-primary)', minHeight: '44px',
-                        }}
-                      >
-                        Mark Returned
-                      </button>
-                    )}
-                  </div>
-                )}
+                        style={actionBtn('#f3e8ff', '#7c3aed')}
+                      >+ Add Part</button>
+                      {r.status === 'pending' && (
+                        <button
+                          onClick={() => {
+                            setScheduleModal(r)
+                            setScheduleSentDate(new Date().toISOString().split('T')[0])
+                            setScheduleEstDays(r.estimatedDays ? String(r.estimatedDays) : '')
+                          }}
+                          style={{ ...actionBtn('#fffbeb', '#b45309'), fontWeight: 700 }}
+                        >Schedule</button>
+                      )}
+                      {r.status !== 'pending' && (
+                        <button
+                          onClick={() => setFollowUpModal({
+                            repairId: r.id,
+                            stockNumber: r.stockNumber,
+                            vehicleDesc: `${r.year} ${r.make} ${r.model}`,
+                          })}
+                          style={actionBtn('#fef2f2', '#ef4444')}
+                        >Log Follow-up</button>
+                      )}
+                      {r.status === 'sent' && (
+                        <button
+                          onClick={() => updateStatus(r.id, 'in_progress')}
+                          style={actionBtn('#f9fafb', '#1a1a1a')}
+                        >Mark In Progress</button>
+                      )}
+                      {r.status === 'in_progress' && (
+                        <button
+                          onClick={() => updateStatus(r.id, 'ready')}
+                          style={actionBtn('#f9fafb', '#1a1a1a')}
+                        >Ready for Pickup</button>
+                      )}
+                      {r.status === 'ready' && (
+                        <button
+                          onClick={() => { setReconModal(r); setReconStage('mechanic') }}
+                          style={actionBtn('#f0fdf4', '#16a34a')}
+                        >Mark Returned</button>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
             )
           })}
@@ -819,6 +751,7 @@ export default function ExternalRepairsPage() {
       {reconModal && (
         <div
           onClick={() => { setReconModal(null); setReconError('') }}
+          className="modal-below-topbar"
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1099,6 +1032,7 @@ export default function ExternalRepairsPage() {
       {showAnotherShopForm && reconModal && (
         <div
           onClick={() => !sendingToShop && setShowAnotherShopForm(false)}
+          className="modal-below-topbar"
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1262,6 +1196,7 @@ export default function ExternalRepairsPage() {
       {followUpModal && (
         <div
           onClick={() => !followUpSaving && setFollowUpModal(null)}
+          className="modal-below-topbar"
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1348,7 +1283,7 @@ export default function ExternalRepairsPage() {
 
       {/* Edit Repair Modal */}
       {editRepairModal && (
-        <div onClick={() => setEditRepairModal(null)} style={{
+        <div onClick={() => setEditRepairModal(null)} className="modal-below-topbar" style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 1000, padding: 20,
@@ -1358,7 +1293,37 @@ export default function ExternalRepairsPage() {
             maxHeight: '85vh', display: 'flex', flexDirection: 'column',
             boxShadow: '0 20px 60px rgba(0,0,0,0.15)', padding: 24,
           }}>
-            <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Edit Repair</h2>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Edit Repair</h2>
+                <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  #{editRepairModal.stockNumber} — {editRepairModal.year} {editRepairModal.make} {editRepairModal.model}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { openVehicleDetail(editRepairModal.stockNumber); setEditRepairModal(null) }}
+                  disabled={resolving === editRepairModal.stockNumber}
+                  style={{
+                    marginTop: 4, padding: 0, background: 'transparent', border: 'none',
+                    color: '#2563eb', fontSize: 13, fontWeight: 600,
+                    cursor: resolving === editRepairModal.stockNumber ? 'wait' : 'pointer',
+                    opacity: resolving === editRepairModal.stockNumber ? 0.6 : 1,
+                    minHeight: 0,
+                  }}
+                >Vehicle details →</button>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setEditRepairModal(null); setEditReason('') }}
+                aria-label="Close"
+                style={{
+                  flexShrink: 0, width: 32, height: 32,
+                  background: 'transparent', border: 'none', color: 'var(--text-muted)',
+                  fontSize: 24, lineHeight: 1, cursor: 'pointer', padding: 0,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >×</button>
+            </div>
 
             <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
@@ -1407,55 +1372,54 @@ export default function ExternalRepairsPage() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 20, flexDirection: 'column' }}>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => { setEditRepairModal(null); setEditReason('') }} disabled={editRepairSaving} style={{
-                  flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
-                  background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                }}>Cancel</button>
-                <button onClick={async () => {
-                  const statusChanged = editStatus !== editRepairModal.status
-                  if (statusChanged && !editReason.trim()) return
-                  setEditRepairSaving(true)
-                  try {
-                    await fetch(`/api/external/${editRepairModal.id}`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        status: editStatus,
-                        shopName: (document.getElementById('edit-shop-name') as HTMLInputElement).value,
-                        shopPhone: (document.getElementById('edit-shop-phone') as HTMLInputElement).value,
-                        repairDescription: (document.getElementById('edit-repair-desc') as HTMLTextAreaElement).value,
-                        estimatedDays: Number((document.getElementById('edit-est-days') as HTMLInputElement).value) || null,
-                        ...(statusChanged ? {
-                          statusChangeReason: editReason.trim(),
-                          fromStatus: editRepairModal.status,
-                        } : {}),
-                      })
+            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <button onClick={async () => {
+                const statusChanged = editStatus !== editRepairModal.status
+                if (statusChanged && !editReason.trim()) return
+                setEditRepairSaving(true)
+                try {
+                  await fetch(`/api/external/${editRepairModal.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      status: editStatus,
+                      shopName: (document.getElementById('edit-shop-name') as HTMLInputElement).value,
+                      shopPhone: (document.getElementById('edit-shop-phone') as HTMLInputElement).value,
+                      repairDescription: (document.getElementById('edit-repair-desc') as HTMLTextAreaElement).value,
+                      estimatedDays: Number((document.getElementById('edit-est-days') as HTMLInputElement).value) || null,
+                      ...(statusChanged ? {
+                        statusChangeReason: editReason.trim(),
+                        fromStatus: editRepairModal.status,
+                      } : {}),
                     })
-                    setEditRepairModal(null)
-                    setEditReason('')
-                    load()
-                  } catch {}
-                  setEditRepairSaving(false)
-                }} disabled={editRepairSaving || (editStatus !== editRepairModal.status && !editReason.trim())} style={{
-                  flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
-                  background: editRepairSaving ? '#e5e5e5' : '#1a1a1a', color: '#dffd6e',
-                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
-                }}>{editRepairSaving ? 'Saving...' : 'Save'}</button>
-              </div>
+                  })
+                  setEditRepairModal(null)
+                  setEditReason('')
+                  load()
+                } catch {}
+                setEditRepairSaving(false)
+              }} disabled={editRepairSaving || (editStatus !== editRepairModal.status && !editReason.trim())} style={{
+                padding: '11px 14px', borderRadius: 10, border: 'none', minHeight: 0,
+                background: editRepairSaving ? '#e5e5e5' : '#1a1a1a', color: '#dffd6e',
+                fontSize: 14, fontWeight: 700, cursor: 'pointer',
+              }}>{editRepairSaving ? 'Saving…' : 'Save'}</button>
+
+              {/* Delete as slim text link — tapping opens a confirmation, never deletes directly */}
               <button onClick={() => {
                 setDeleteConfirm({
                   id: editRepairModal.id,
                   stock: editRepairModal.stockNumber,
-                  vehicle: `${editRepairModal.year} ${editRepairModal.make} ${editRepairModal.model}`
+                  vehicle: `${editRepairModal.year} ${editRepairModal.make} ${editRepairModal.model}`,
                 })
                 setEditRepairModal(null)
               }} style={{
-                width: '100%', padding: '12px 0', borderRadius: 10, border: '1px solid #fca5a5',
-                background: '#fef2f2', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                color: '#dc2626',
-              }}>Delete Repair</button>
+                alignSelf: 'center', padding: '6px 12px', borderRadius: 6,
+                background: 'transparent', border: 'none',
+                fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                color: '#9ca3af',
+                textDecoration: 'underline', textDecorationColor: '#fca5a5',
+                minHeight: 0,
+              }}>Delete this repair</button>
             </div>
           </div>
         </div>
@@ -1474,6 +1438,7 @@ export default function ExternalRepairsPage() {
       {scheduleModal && (
         <div
           onClick={() => !scheduleSaving && setScheduleModal(null)}
+          className="modal-below-topbar"
           style={{
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1567,7 +1532,7 @@ export default function ExternalRepairsPage() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div onClick={() => setDeleteConfirm(null)} style={{
+        <div onClick={() => setDeleteConfirm(null)} className="modal-below-topbar" style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 1000, padding: 20,

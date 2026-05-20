@@ -105,6 +105,21 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* iPhone safe-area: dark band behind the notch only.
+   The home indicator area inherits the page background (var(--bg-primary))
+   so the bottom blends with the rest of the content. */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: #141414;
+  z-index: 51;
+  pointer-events: none;
+}
+
 button, a { min-height: 44px; font-size: 14px; }
 input, select, textarea { font-size: 14px; font-family: inherit; }
 
@@ -502,16 +517,153 @@ input, select, textarea { font-size: 14px; font-family: inherit; }
   font-weight: 500;
 }
 
+/* Collapsible details: hide native marker, rotate our own chevron */
+details > summary::-webkit-details-marker { display: none; }
+details > summary::marker { display: none; }
+details[open] .parts-banner-chevron { transform: rotate(90deg); }
+
+/* Ask AI floating button */
+.ask-ai-fab {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  right: 6px;
+  z-index: 200;
+  width: 44px;
+  height: 44px;
+  background: #1a1a1a;
+  color: #dffd6e;
+  border: none;
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  line-height: 1;
+}
+.ask-ai-fab-icon {
+  display: inline-block;
+  line-height: 1;
+}
+@media (max-width: 767px) {
+  .ask-ai-fab {
+    bottom: calc(env(safe-area-inset-bottom, 0px) - 16px);
+    right: 24px;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    padding: 0;
+    aspect-ratio: 1 / 1;
+    font-size: 26px;
+  }
+  .ask-ai-fab-icon {
+    transform: translateY(-1px);
+  }
+}
+
 /* ═══ Mobile Polish ═══ */
 @media (max-width: 767px) {
   .card { padding: 20px; border-radius: 14px; }
   .stat-card { padding: 18px 16px; }
   .stat-value { font-size: 28px; }
   .badge { padding: 5px 14px; font-size: 12px; }
-  .btn { min-height: 48px; font-size: 15px; }
+  .btn { min-height: 36px; font-size: 14px; }
+  /* Uniform button height on mobile so action buttons match across the app. */
+  button { min-height: 36px; }
   .pipeline-chip { padding: 14px 10px; }
   .pipeline-chip-value { font-size: 20px; }
   .bottom-nav a { font-size: 11px; gap: 3px; }
-  .kanban-column { min-width: 280px; width: 280px; }
   .input { padding: 14px 16px; }
+
+  /* Kanban on mobile → swipeable carousel.
+     Each stage takes the full screen width and snaps when swiping.
+     This applies to recon board, sales pipeline, any kanban view. */
+  .kanban-board {
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    gap: 0;
+  }
+  .kanban-column {
+    min-width: 100%;
+    width: 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+  /* Drag handle is useless on mobile (touch drag doesn't really work) —
+     hide it so cards extend flush with the stage header. */
+  .kanban-drag-handle {
+    display: none !important;
+  }
+
+  /* Modal backdrops on mobile start below the topbar so the dark band stays visible */
+  .modal-below-topbar {
+    top: calc(env(safe-area-inset-top, 0px) + 56px) !important;
+  }
+
+  /* Parts page: stack the row vertically on mobile so the part name has room.
+     Status badge floats top-right; action buttons span the bottom as a slim row. */
+  .parts-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px 16px !important;
+    position: relative;
+  }
+  .parts-row .parts-vehicle {
+    width: auto !important;
+    flex: initial !important;
+    padding-right: 90px; /* leaves space for the absolute status badge */
+  }
+
+  /* Status badge → top-right corner */
+  .parts-status-badge {
+    position: absolute !important;
+    top: 14px;
+    right: 16px;
+    flex-direction: column;
+    align-items: flex-end !important;
+    gap: 4px !important;
+  }
+
+  .recon-add-btn {
+    min-height: 38px !important;
+    padding: 8px 14px !important;
+    border-radius: 8px !important;
+    flex-shrink: 0;
+  }
+
+  /* Pending Routing card → vehicle info stacked, Route button full-width at bottom */
+  .routing-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px !important;
+  }
+  .routing-route-btn {
+    width: 100% !important;
+    padding: 12px !important;
+    font-size: 14px !important;
+  }
+
+  /* Action buttons → full-width row at the bottom, slim modern style */
+  .parts-actions {
+    width: 100%;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+  }
+  .parts-actions button {
+    flex: 1 !important;
+    padding: 10px 8px !important;
+    font-size: 13px !important;
+    border-radius: 10px !important;
+    min-height: 0 !important;
+    white-space: nowrap;
+  }
+  /* Hide the desktop scrollbar — swipe is the indicator */
+  .kanban-scrollbar-track {
+    display: none;
+  }
 }

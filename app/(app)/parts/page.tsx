@@ -147,7 +147,7 @@ export default function PartsOverviewPage() {
 
   return (
     <div>
-      <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: '24px' }}>Parts Management</h1>
+      <h1 className="page-h1-mobile-pad" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: '24px' }}>Parts Management</h1>
 
       {/* Filter tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '2px' }}>
@@ -183,23 +183,51 @@ export default function PartsOverviewPage() {
         ))}
       </div>
 
-      {/* Arriving Today banner */}
+      {/* Arriving Today banner — collapsible */}
       {(() => {
         const today = new Date().toISOString().slice(0, 10)
         const arrivingToday = parts.filter(p => p.status === 'ordered' && p.expectedDelivery && p.expectedDelivery.slice(0, 10) <= today)
         if (arrivingToday.length === 0 || (filter !== 'ordered' && filter !== 'active')) return null
         return (
-          <div style={{
+          <details style={{
             background: '#fefce8', border: '1px solid #eab308', borderRadius: 10,
-            padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10,
+            marginBottom: 16, overflow: 'hidden',
           }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#92400e' }}>
+            <summary style={{
+              padding: '12px 16px',
+              display: 'flex', alignItems: 'center', gap: 8,
+              cursor: 'pointer', listStyle: 'none',
+              fontSize: 14, fontWeight: 600, color: '#92400e',
+              userSelect: 'none',
+            }}>
+              <span className="parts-banner-chevron" style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 20, height: 20, borderRadius: 5,
+                background: '#fde68a', color: '#92400e',
+                fontSize: 10, fontWeight: 700,
+                transition: 'transform 0.15s ease',
+              }}>▶</span>
               {arrivingToday.length} part{arrivingToday.length > 1 ? 's' : ''} expected today or overdue
-            </span>
-            <span style={{ fontSize: 12, color: '#a16207' }}>
-              {arrivingToday.map(p => p.name).join(', ')}
-            </span>
-          </div>
+            </summary>
+            <div style={{
+              padding: '0 16px 14px 44px',
+              display: 'flex', flexDirection: 'column', gap: 10,
+            }}>
+              {arrivingToday.map(p => {
+                const vehicleDesc = `${p.vehicle.year || ''} ${p.vehicle.make} ${p.vehicle.model}`.trim()
+                return (
+                  <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: '#92400e', opacity: 0.75, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      {vehicleDesc} · #{p.vehicle.stockNumber}
+                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#92400e' }}>
+                      {p.name}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </details>
         )
       })()}
 
@@ -217,7 +245,7 @@ export default function PartsOverviewPage() {
             const vehicleDesc = `${part.vehicle.year || ''} ${part.vehicle.make} ${part.vehicle.model}`.trim()
 
             return (
-              <div key={part.id} id={`part-${part.id}`} onClick={() => {
+              <div key={part.id} id={`part-${part.id}`} className="parts-row" onClick={() => {
                 if (isAdmin) {
                   setEditingPart(part); setEditTracking(part.tracking || ''); setEditDelivery(part.expectedDelivery ? part.expectedDelivery.slice(0, 10) : ''); setEditImage(part.orderImage || null)
                 }
@@ -227,7 +255,7 @@ export default function PartsOverviewPage() {
                 cursor: isAdmin ? 'pointer' : 'default',
               }}>
                 {/* Vehicle */}
-                <div style={{ width: '220px', flex: '0 0 220px' }}>
+                <div className="parts-vehicle" style={{ width: '220px', flex: '0 0 220px' }}>
                   <Link href={`/vehicles/${part.vehicle.id}`} style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', textDecoration: 'none' }}>
                     {vehicleDesc}
                   </Link>
@@ -278,7 +306,7 @@ export default function PartsOverviewPage() {
                 </div>
 
                 {/* Status badge */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                <div className="parts-status-badge" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                   <div style={{
                     background: ss.bg, color: ss.color, border: `1px solid ${ss.border}`,
                     padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600,
@@ -292,7 +320,7 @@ export default function PartsOverviewPage() {
                 </div>
 
                 {/* Actions */}
-                <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
+                <div className="parts-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
                   {part.status === 'requested' && !part.url && (
                     <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Add Link</button>
                   )}

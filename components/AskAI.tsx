@@ -45,25 +45,15 @@ export default function AskAI() {
           onClick={() => setAskOpen(true)}
           aria-label="Ask AI about inventory"
           title="Ask AI"
-          style={{
-            position: 'fixed',
-            bottom: 12, right: 6,
-            zIndex: 200,
-            width: 44, height: 44,
-            background: '#1a1a1a', color: '#dffd6e',
-            border: 'none', borderRadius: '50%',
-            fontSize: 20, fontWeight: 600,
-            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.18)',
-          }}
+          className="ask-ai-fab"
         >
-          ✦
+          <span className="ask-ai-fab-icon">✦</span>
         </button>
       )}
 
       {askOpen && (
         <div style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 200,
+          position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)', right: 24, zIndex: 200,
           width: 380, maxHeight: 'calc(100vh - 48px)',
           background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
           boxShadow: '0 12px 32px rgba(0,0,0,0.18)',

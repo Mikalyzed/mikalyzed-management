@@ -24,7 +24,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div>
       <Nav role={role} userName={name} />
-      <main className="main-content" style={{ padding: '20px 24px', paddingTop: '76px', paddingBottom: '40px' }}>
+      <main className="main-content" style={{ padding: '20px 24px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 96px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 40px)' }}>
         <style>{`
           @media (min-width: 768px) {
             .main-content {

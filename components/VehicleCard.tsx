@@ -50,7 +50,11 @@ export default function VehicleCard({
   status, stageStatus, stageDetail, stageScope, assigneeName, timeInStage, partsLabel, returnQueue, pauseReason, onClick,
 }: VehicleCardProps) {
   const isCompleted = status === 'completed'
-  const nextReturn = !isCompleted && returnQueue && returnQueue.length > 0 ? returnQueue[0] : null
+  // Skip queue entries whose target stage equals the vehicle's current stage —
+  // those are stale (e.g. admin manually routed back without consuming the queue).
+  const nextReturn = !isCompleted && returnQueue && returnQueue.length > 0
+    ? returnQueue.find(r => r.stage !== status) ?? null
+    : null
   const isSold = stageScope === 'Sold Delivery'
   const isNewInventory = stageScope === 'New Inventory'
 

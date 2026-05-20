@@ -91,6 +91,16 @@ type ModalData = {
 
 const COLUMNS = ['mechanic', 'detailing', 'content', 'publish', 'completed'] as const
 
+function partActionBtn(color: string, bg: string): React.CSSProperties {
+  return {
+    flex: 1, minHeight: 0,
+    padding: '7px 10px', borderRadius: 8,
+    border: `1px solid ${color}`, background: bg, color,
+    fontSize: 12, fontWeight: 600, cursor: 'pointer',
+    whiteSpace: 'nowrap',
+  }
+}
+
 export default function VehiclesPage() {
   const router = useRouter()
   const [vehicles, setVehicles] = useState<VehicleWithStage[]>([])
@@ -533,15 +543,16 @@ export default function VehiclesPage() {
 
   return (
     <div>
-      <div className="page-header" style={{ marginBottom: 24 }}>
+      <div className="page-header recon-page-header" style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Recon Board</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="recon-controls" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
           <input
             type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search vehicles..."
-            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, width: 200 }}
+            className="recon-search"
+            style={{ flex: 1, minWidth: 0, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}
           />
-          <Link href="/vehicles/new" className="btn btn-primary gap-2">
+          <Link href="/vehicles/new" className="btn btn-primary gap-2 recon-add-btn">
             <span style={{ fontSize: '18px', lineHeight: 1 }}>+</span>
             <span className="hidden sm:inline">Add Vehicle</span>
           </Link>
@@ -568,17 +579,21 @@ export default function VehiclesPage() {
                   background: '#fff', borderRadius: 10, border: '1px solid #fde68a', overflow: 'hidden',
                 }}>
                   <div
+                    className="routing-row"
                     onClick={() => setExpandedRoutingId(expanded ? null : v.id)}
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: '10px 14px', cursor: 'pointer',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <div className="routing-info" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
                       <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{expanded ? '▾' : '▸'}</span>
-                      <div>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
+                          #{v.stockNumber}
+                        </p>
                         <p style={{ fontSize: 14, fontWeight: 700 }}>
-                          #{v.stockNumber} — {v.year} {v.make} {v.model}
+                          {v.year} {v.make} {v.model}
                         </p>
                         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                           {v.lastCompletedStage
@@ -590,6 +605,7 @@ export default function VehiclesPage() {
                       </div>
                     </div>
                     <button
+                      className="routing-route-btn"
                       onClick={(e) => {
                         e.stopPropagation()
                         setRoutingVehicle(v)
@@ -731,6 +747,7 @@ export default function VehiclesPage() {
                     >
                       {isAdmin && (
                         <div
+                          className="kanban-drag-handle"
                           style={{
                             display: 'flex',
                             alignItems: 'center',
@@ -1935,12 +1952,17 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
           <div key={part.id} style={{
             padding: '12px 14px', marginBottom: 10, borderRadius: 10,
             background: '#f8f9fa', border: '1px solid #e5e7eb',
-            display: 'flex', flexDirection: 'column', gap: 8,
+            display: 'flex', flexDirection: 'column', gap: 4,
           }}>
             {/* Top row: name + status */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-              <span style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.35 }}>{part.name}</span>
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: ss.bg, color: ss.color, border: `1px solid ${ss.border}`, whiteSpace: 'nowrap', flexShrink: 0 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, lineHeight: 1.35 }}>{part.name}</span>
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+                background: ss.bg, color: ss.color, border: `1px solid ${ss.border}`,
+                textTransform: 'uppercase', letterSpacing: '0.04em',
+                whiteSpace: 'nowrap', flexShrink: 0,
+              }}>
                 {statusLabels[part.status]}
               </span>
             </div>
@@ -1968,26 +1990,26 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
               )}
             </div>
 
-            {/* Bottom row: action buttons */}
+            {/* Bottom row: action buttons (primary actions stretch, trash icon stays small on the right) */}
             {hasActions && (
               <div style={{
-                display: 'flex', gap: 6, flexWrap: 'wrap',
-                paddingTop: 8, borderTop: '1px solid #e5e7eb',
+                display: 'flex', gap: 6, alignItems: 'center',
+                marginTop: 4, paddingTop: 8, borderTop: '1px solid #e5e7eb',
               }}>
                 {part.status === 'requested' && !part.url && (
-                  <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Add Link</button>
+                  <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} style={partActionBtn('#2563eb', '#eff6ff')}>Add Link</button>
                 )}
                 {part.status === 'sourced' && isAdmin && (
                   <>
-                    <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✓ Approve</button>
-                    <button onClick={() => updatePart(part.id, { status: 'requested', url: null })} disabled={saving} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✗ Decline</button>
+                    <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving} style={partActionBtn('#16a34a', '#f0fdf4')}>✓ Approve</button>
+                    <button onClick={() => updatePart(part.id, { status: 'requested', url: null })} disabled={saving} style={partActionBtn('#ef4444', '#fef2f2')}>✗ Decline</button>
                   </>
                 )}
                 {part.status === 'ready_to_order' && isAdmin && (
-                  <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Mark Ordered</button>
+                  <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} style={partActionBtn('#a16207', '#fefce8')}>Mark Ordered</button>
                 )}
                 {part.status === 'ordered' && isAdmin && (
-                  <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Received</button>
+                  <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving} style={partActionBtn('#16a34a', '#f0fdf4')}>Mark Received</button>
                 )}
                 {['sourced', 'ready_to_order', 'ordered', 'received'].includes(part.status) && (
                   <button
@@ -1996,7 +2018,7 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
                       await updatePart(part.id, { status: 'requested', url: null, tracking: null, expectedDelivery: null, orderImage: null })
                     }}
                     disabled={saving}
-                    style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #f59e0b', background: '#fffbeb', color: '#b45309', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                    style={partActionBtn('#b45309', '#fffbeb')}
                   >
                     Wrong Part
                   </button>
@@ -2005,10 +2027,20 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
                   <button
                     onClick={async () => { if (!confirm('Delete this part?')) return; setSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'DELETE' }); setSaving(false); onPartsChange() }}
                     disabled={saving}
-                    style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #fca5a5', background: '#fef2f2', color: '#ef4444', fontSize: 12, cursor: 'pointer', marginLeft: 'auto' }}
                     title="Delete part"
+                    style={{
+                      width: 32, height: 32, padding: 0, flexShrink: 0,
+                      borderRadius: 8, border: '1px solid var(--border)',
+                      background: '#fff', color: 'var(--text-muted)', cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    }}
                   >
-                    🗑
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+                      <path d="M10 11v6M14 11v6" />
+                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                    </svg>
                   </button>
                 )}
               </div>

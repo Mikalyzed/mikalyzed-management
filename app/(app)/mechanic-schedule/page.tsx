@@ -39,7 +39,9 @@ type ReturnQueueEntry = { stage: string; fromStage?: string; reason?: string }
 
 function ReturnBadge({ returnQueue }: { returnQueue?: ReturnQueueEntry[] }) {
   if (!returnQueue || returnQueue.length === 0) return null
-  const next = returnQueue[0]
+  // Skip stale entries pointing at the mechanic stage (vehicle is already here).
+  const next = returnQueue.find(r => r.stage !== 'mechanic')
+  if (!next) return null
   const label = next.stage.charAt(0).toUpperCase() + next.stage.slice(1)
   return (
     <span title={next.reason || `Returns to ${label}`} style={{
@@ -538,7 +540,9 @@ export default function MechanicBoard() {
         {(job.pauseReason || job.awaitingParts || job.autoPaused) && !job.timerRunning && job.pausedAt && (() => {
           const mins = Math.floor((Date.now() - new Date(job.pausedAt).getTime()) / 60000)
           const label = mins < 1 ? 'just now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`
-          return <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>⏸ Paused {label}</p>
+          return (
+            <p style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{label}</p>
+          )
         })()}
 
         {/* Request More Time — when overdue */}
@@ -557,7 +561,7 @@ export default function MechanicBoard() {
 
         {/* Quick actions */}
         {showActions && (
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+          <div className="mech-actions" style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
             {job.status === 'pending' && (
               <ActionBtn label="Start" color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('start', job.id)} />
             )}
@@ -570,11 +574,11 @@ export default function MechanicBoard() {
             {!job.timerRunning && job.status === 'in_progress' && (
               <ActionBtn label="Resume" color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('resume', job.id)} />
             )}
-            {isOver && (
-              <ActionBtn label="Request More Time" color="#ef4444" disabled={acting} onClick={() => setTimeExtJob(job)} />
-            )}
             {job.status === 'in_progress' && (
               <ActionBtn label="Add Task" color="#8b5cf6" disabled={acting} onClick={() => setAddTaskJob(job)} />
+            )}
+            {isOver && (
+              <ActionBtn className="mech-action-full" label="Request More Time" color="#ef4444" disabled={acting} onClick={() => setTimeExtJob(job)} />
             )}
           </div>
         )}
@@ -584,18 +588,43 @@ export default function MechanicBoard() {
 
   return (
     <div>
-      <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
+      <style>{`
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .msch-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+        .msch-title { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+        .msch-owh { margin-left: auto; }
+        .msch-tabs { display: flex; background: #f1f3f5; border-radius: 10px; padding: 3px; }
+        @media (max-width: 767px) {
+          .msch-header {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            column-gap: 12px;
+            row-gap: 12px;
+            align-items: center;
+          }
+          .msch-title { grid-row: 1; grid-column: 1; }
+          .msch-owh { grid-row: 1; grid-column: 2; margin-left: 0; justify-self: end; }
+          .msch-tabs { grid-row: 2; grid-column: 1 / -1; justify-self: end; }
+          /* When OWH isn't present, tabs still go on row 2 right side */
+          .msch-header.no-owh .msch-tabs { grid-row: 1; grid-column: 2; }
+          /* Quick actions: buttons share the row evenly; Request More Time wraps to its own row */
+          .mech-actions { gap: 6px !important; }
+          .mech-actions > button { flex: 1 1 0; min-width: 0; padding: 8px 10px !important; font-size: 13px !important; min-height: 36px; }
+          .mech-actions > button.mech-action-full { flex: 1 0 100%; }
+        }
+      `}</style>
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>
+      <div className={`msch-header ${data.isWorkHours ? 'no-owh' : ''}`}>
+        <h1 className="msch-title">
           {isAdmin ? 'Mechanic Schedule' : 'My Schedule'}
         </h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {!data.isWorkHours && <Badge text="Outside Working Hours" color="#a855f7" />}
-          <div style={{
-            display: 'flex', background: '#f1f3f5', borderRadius: 10, padding: 3,
-          }}>
+        {!data.isWorkHours && (
+          <span className="msch-owh">
+            <Badge text="Outside Working Hours" color="#a855f7" />
+          </span>
+        )}
+        <div className="msch-tabs">
             <button
               onClick={() => setViewMode('board')}
               style={{
@@ -634,7 +663,6 @@ export default function MechanicBoard() {
                 Plan
               </button>
             )}
-          </div>
         </div>
       </div>
 
@@ -2083,9 +2111,9 @@ function CardGrid({ children }: { children: React.ReactNode }) {
   return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>{children}</div>
 }
 
-function ActionBtn({ label, color, disabled, onClick }: { label: string; color: string; disabled?: boolean; onClick: () => void }) {
+function ActionBtn({ label, color, disabled, onClick, className }: { label: string; color: string; disabled?: boolean; onClick: () => void; className?: string }) {
   return (
-    <button onClick={onClick} disabled={disabled} style={{
+    <button onClick={onClick} disabled={disabled} className={className} style={{
       padding: '8px 16px', borderRadius: 10, border: 'none',
       background: disabled ? '#e5e5e5' : color, color: disabled ? '#999' : '#fff',
       fontSize: 13, fontWeight: 700, cursor: disabled ? 'default' : 'pointer',

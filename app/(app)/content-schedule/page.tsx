@@ -20,7 +20,9 @@ function SoldBadge({ scope }: { scope?: string | null }) {
 
 function ReturnBadge({ vehicle }: { vehicle: Vehicle }) {
   if (!vehicle.returnQueue || vehicle.returnQueue.length === 0) return null
-  const next = vehicle.returnQueue[0]
+  // Skip stale entries pointing at the content stage (vehicle is already here).
+  const next = vehicle.returnQueue.find(r => r.stage !== 'content')
+  if (!next) return null
   const label = next.stage.charAt(0).toUpperCase() + next.stage.slice(1)
   return (
     <span title={next.reason || `Returns to ${label}`} style={{
@@ -95,7 +97,7 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
   const borderColor = isSold ? '#f59e0b' : isActive ? '#f59e0b' : '#3b82f6'
 
   return (
-    <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `2px solid ${borderColor}`, flex: '1 1 340px', maxWidth: 420 }}>
+    <div className="active-card" style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `2px solid ${borderColor}`, flex: '1 1 340px', maxWidth: 420 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -133,7 +135,7 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
           ))}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div className="active-card-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         {job.status === 'in_progress' && (
           <button onClick={() => onComplete(job.id)} disabled={!allDone} style={{
             padding: '9px 22px', borderRadius: 8, border: 'none',
@@ -167,7 +169,7 @@ function ActiveTaskCard({ task, onComplete, onToggleSubtask, onEdit, adminAction
   const progress = subtasks.length > 0 ? doneCount / subtasks.length : 0
 
   return (
-    <div style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `2px solid ${borderColor}`, flex: '1 1 340px', maxWidth: 420 }}>
+    <div className="active-card" style={{ background: '#fff', borderRadius: 14, padding: '18px 20px', border: `2px solid ${borderColor}`, flex: '1 1 340px', maxWidth: 420 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -233,7 +235,7 @@ function ActiveTaskCard({ task, onComplete, onToggleSubtask, onEdit, adminAction
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div className="active-card-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         {task.status === 'in_progress' && (
           <button onClick={() => onComplete(task.id)} disabled={subtasks.length > 0 && !allDone} style={{
             padding: '9px 22px', borderRadius: 8, border: 'none',
@@ -262,30 +264,32 @@ function QueueVehicleCard({ job, onStart, isAdmin, onSchedule, index }: {
   const doneCount = job.checklist.filter(c => c.done).length
   const isSold = job.scopeName === 'Sold Delivery'
   return (
-    <div style={{
+    <div className="queue-card" style={{
       background: '#fff', borderRadius: 12, padding: '14px 18px',
       border: isSold ? '2px solid #f59e0b' : '1px solid #e8e8e8',
       display: 'flex', alignItems: 'center', gap: 12,
     }}>
-      {isAdmin && (
-        <div style={{ cursor: 'grab', color: '#ccc', flexShrink: 0 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+      <div className="queue-card-info" style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+        {isAdmin && (
+          <div style={{ cursor: 'grab', color: '#ccc', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+          </div>
+        )}
+        {index !== undefined && (
+          <span style={{ fontSize: 14, fontWeight: 800, color: '#d1d5db', minWidth: 20, textAlign: 'center', flexShrink: 0 }}>{index + 1}</span>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>#{v.stockNumber} — {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}</p>
+            <SoldBadge scope={job.scopeName} />
+            <ReturnBadge vehicle={v} />
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+            {job.assignee?.name || 'Unassigned'} · {doneCount}/{job.checklist.length} tasks
+          </p>
         </div>
-      )}
-      {index !== undefined && (
-        <span style={{ fontSize: 14, fontWeight: 800, color: '#d1d5db', minWidth: 20, textAlign: 'center', flexShrink: 0 }}>{index + 1}</span>
-      )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>#{v.stockNumber} — {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}</p>
-          <SoldBadge scope={job.scopeName} />
-          <ReturnBadge vehicle={v} />
-        </div>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-          {job.assignee?.name || 'Unassigned'} · {doneCount}/{job.checklist.length} tasks
-        </p>
       </div>
-      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+      <div className="queue-card-actions" style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
         <button onClick={() => onStart(job.id)} style={{
           padding: '7px 16px', borderRadius: 8, border: 'none',
           background: '#3b82f6', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
@@ -308,40 +312,42 @@ function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete, onEdit, i
   onEdit?: (task: ContentTask) => void; index?: number
 }) {
   return (
-    <div onClick={() => onEdit?.(task)} style={{
+    <div className="queue-card" onClick={() => onEdit?.(task)} style={{
       background: '#fff', borderRadius: 12, padding: '14px 18px',
       border: '1px solid #e8e8e8', display: 'flex', alignItems: 'center', gap: 12,
       cursor: 'pointer',
     }}>
-      {isAdmin && (
-        <div style={{ cursor: 'grab', color: '#ccc', flexShrink: 0 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+      <div className="queue-card-info" style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+        {isAdmin && (
+          <div style={{ cursor: 'grab', color: '#ccc', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+          </div>
+        )}
+        {index !== undefined && (
+          <span style={{ fontSize: 14, fontWeight: 800, color: '#d1d5db', minWidth: 20, textAlign: 'center', flexShrink: 0 }}>{index + 1}</span>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{task.title}</p>
+            {task.stockNumbers && task.stockNumbers.map(sn => (
+              <span key={sn} style={{ fontSize: 10, color: '#0d9488', fontWeight: 700, background: '#ccfbf1', padding: '2px 8px', borderRadius: 6, border: '1px solid #99f6e4' }}>
+                #{sn}
+              </span>
+            ))}
+            {(task.subtasks?.length || 0) > 0 ? (
+              <span style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 600, background: '#faf5ff', padding: '2px 8px', borderRadius: 6 }}>
+                {task.subtasks!.filter(s => s.done).length}/{task.subtasks!.length} subtasks
+              </span>
+            ) : (
+              <span style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 600, background: '#faf5ff', padding: '2px 8px', borderRadius: 6 }}>Reel</span>
+            )}
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+            {task.assignee?.name || 'Unassigned'}
+          </p>
         </div>
-      )}
-      {index !== undefined && (
-        <span style={{ fontSize: 14, fontWeight: 800, color: '#d1d5db', minWidth: 20, textAlign: 'center', flexShrink: 0 }}>{index + 1}</span>
-      )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <p style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{task.title}</p>
-          {task.stockNumbers && task.stockNumbers.map(sn => (
-            <span key={sn} style={{ fontSize: 10, color: '#0d9488', fontWeight: 700, background: '#ccfbf1', padding: '2px 8px', borderRadius: 6, border: '1px solid #99f6e4' }}>
-              #{sn}
-            </span>
-          ))}
-          {(task.subtasks?.length || 0) > 0 ? (
-            <span style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 600, background: '#faf5ff', padding: '2px 8px', borderRadius: 6 }}>
-              {task.subtasks!.filter(s => s.done).length}/{task.subtasks!.length} subtasks
-            </span>
-          ) : (
-            <span style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 600, background: '#faf5ff', padding: '2px 8px', borderRadius: 6 }}>Reel</span>
-          )}
-        </div>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-          {task.assignee?.name || 'Unassigned'}
-        </p>
       </div>
-      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+      <div className="queue-card-actions" style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
         <button onClick={() => onStart(task.id)} style={{
           padding: '7px 16px', borderRadius: 8, border: 'none',
           background: '#8b5cf6', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer',
@@ -353,9 +359,10 @@ function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete, onEdit, i
           }}>Schedule</button>
         )}
         {isAdmin && onDelete && (
-          <button onClick={() => { if (confirm('Remove this task?')) onDelete(task.id) }} style={{
+          <button className="queue-icon-btn" onClick={() => { if (confirm('Remove this task?')) onDelete(task.id) }} style={{
             padding: '7px 10px', borderRadius: 8, border: '1px solid #fecaca',
             background: '#fff', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
@@ -383,9 +390,9 @@ function ScheduleModal({ onConfirm, onCancel }: {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+    <div className="content-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={onCancel}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: '24px', width: '100%', maxWidth: 360 }}
+      <div className="content-modal-card" style={{ background: '#fff', borderRadius: 16, padding: '24px', width: '100%', maxWidth: 360 }}
         onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>Schedule for</h3>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
@@ -451,9 +458,9 @@ function AddTaskModal({ users, onConfirm, onCancel }: {
   const validSubtasks = subtasks.filter(s => s.trim())
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+    <div className="content-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={onCancel}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}
+      <div className="content-modal-card" style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>Add Content Task</h3>
         <div style={{ marginBottom: 12 }}>
@@ -602,9 +609,9 @@ function EditTaskModal({ task, onSave, onCancel }: {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+    <div className="content-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
       onClick={onCancel}>
-      <div style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}
+      <div className="content-modal-card" style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}
         onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>{task.title}</h3>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 0 16px' }}>
@@ -868,6 +875,61 @@ export default function ContentBoard() {
 
   return (
     <div>
+      <style>{`
+        @keyframes content-modal-in {
+          from { opacity: 0; transform: scale(0.96) translateY(8px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        @keyframes content-overlay-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @media (max-width: 767px) {
+          .content-stat-active { display: none !important; }
+          .queue-card,
+          .active-card {
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            -webkit-tap-highlight-color: transparent;
+          }
+          .queue-card:active,
+          .active-card:active {
+            transform: scale(0.985);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
+          }
+          .queue-card { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
+          .queue-card-info { width: 100%; }
+          .queue-card-actions {
+            width: 100%;
+            display: flex !important;
+            gap: 6px !important;
+            padding-top: 8px;
+            border-top: 1px solid #f0f0ec;
+          }
+          .queue-card-actions > button {
+            flex: 1 1 0;
+            padding: 6px 12px !important;
+            font-size: 12.5px !important;
+            border-radius: 7px !important;
+            min-height: 36px;
+          }
+          .queue-card-actions > button.queue-icon-btn { flex: 0 0 36px; min-height: 36px; }
+          .active-card-actions {
+            width: 100%;
+            display: flex !important;
+            gap: 6px !important;
+            margin-top: 4px;
+          }
+          .active-card-actions > button {
+            flex: 1 1 0;
+            padding: 6px 12px !important;
+            font-size: 12.5px !important;
+            border-radius: 7px !important;
+            min-height: 36px;
+          }
+          .content-modal-overlay { animation: content-overlay-in 0.18s ease both; }
+          .content-modal-card { animation: content-modal-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+        }
+      `}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Content Board</h1>
         <input
@@ -883,7 +945,9 @@ export default function ContentBoard() {
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 28, flexWrap: 'wrap' }}>
         <StatBox label="Total" value={data.stats.total} />
-        <StatBox label="Active" value={data.stats.activeCount} color="#f59e0b" />
+        <div className="content-stat-active" style={{ display: 'contents' }}>
+          <StatBox label="Active" value={data.stats.activeCount} color="#f59e0b" />
+        </div>
         <StatBox label="Today" value={data.stats.todayCount} color="#3b82f6" />
         <StatBox label="Done Today" value={data.stats.completedToday} color="#22c55e" />
         <StatBox label="Done This Week" value={data.stats.completedThisWeek} color="#8b5cf6"

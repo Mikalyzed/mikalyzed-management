@@ -149,22 +149,21 @@ export default function TransportPage() {
   return (
     <div>
       <style>{`
+        .transport-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 24px; }
         @media (max-width: 767px) {
           .transport-card { padding: 18px !important; }
           .transport-locations { flex-direction: column !important; gap: 4px !important; }
           .transport-locations .loc-arrow { display: none; }
           .transport-filter-tabs button { padding: 10px 12px !important; font-size: 12px !important; }
+          .transport-new-btn { min-height: 38px !important; padding: 8px 12px !important; border-radius: 8px !important; font-size: 13px !important; }
+          .transport-new-label { display: none; }
         }
       `}</style>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Transport</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-            Manage vehicle transport requests
-          </p>
-        </div>
-        <Link href="/transport/new" className="btn btn-primary">
-          + New Request
+      <div className="transport-header">
+        <h1 className="text-3xl font-bold tracking-tight">Transport</h1>
+        <Link href="/transport/new" className="btn btn-primary transport-new-btn">
+          <span style={{ fontSize: 16, lineHeight: 1, marginRight: 4 }}>+</span>
+          <span className="transport-new-label">New Request</span>
         </Link>
       </div>
 

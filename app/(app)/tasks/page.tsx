@@ -54,7 +54,7 @@ export default function MyTasksPage() {
           {tasks.map((t, idx) => {
             const elapsed = (Date.now() - new Date(t.startedAt).getTime()) / 1000 - t.totalBlockedSeconds
             const hours = Math.floor(elapsed / 3600)
-            const timeStr = hours < 1 ? `${Math.floor(elapsed / 60)}m` : hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`
+            const timeStr = hours < 1 ? `${Math.floor(elapsed / 60)}m` : hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d ${hours % 24}h`
 
             return (
               <div key={t.id} className="task-item-wrapper" style={{ position: 'relative' }}>

@@ -459,24 +459,28 @@ export default function VehicleDetailPage() {
         </div>
       </div>
 
-      {/* Return queue banner */}
-      {vehicle.returnQueue && vehicle.returnQueue.length > 0 && (
-        <div style={{
-          background: '#fef3c7', border: '1px solid #fcd34d', borderLeft: '4px solid #f59e0b',
-          borderRadius: '12px', padding: '14px 18px', marginBottom: '16px',
-        }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Queued Return{vehicle.returnQueue.length > 1 ? 's' : ''}
-          </p>
-          {vehicle.returnQueue.map((r, i) => (
-            <p key={i} style={{ fontSize: 13, color: '#78350f', marginTop: i > 0 ? 4 : 0 }}>
-              After <strong>{STAGE_LABELS[r.fromStage || ''] || r.fromStage || 'current stage'}</strong>,
-              returns to <strong>{STAGE_LABELS[r.stage] || r.stage}</strong>
-              {r.reason && ` — ${r.reason}`}
+      {/* Return queue banner — filter out stale entries that point at the current stage */}
+      {(() => {
+        const visibleReturns = (vehicle.returnQueue || []).filter(r => r.stage !== vehicle.status)
+        if (visibleReturns.length === 0) return null
+        return (
+          <div style={{
+            background: '#fef3c7', border: '1px solid #fcd34d', borderLeft: '4px solid #f59e0b',
+            borderRadius: '12px', padding: '14px 18px', marginBottom: '16px',
+          }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Queued Return{visibleReturns.length > 1 ? 's' : ''}
             </p>
-          ))}
-        </div>
-      )}
+            {visibleReturns.map((r, i) => (
+              <p key={i} style={{ fontSize: 13, color: '#78350f', marginTop: i > 0 ? 4 : 0 }}>
+                After <strong>{STAGE_LABELS[r.fromStage || ''] || r.fromStage || 'current stage'}</strong>,
+                returns to <strong>{STAGE_LABELS[r.stage] || r.stage}</strong>
+                {r.reason && ` — ${r.reason}`}
+              </p>
+            ))}
+          </div>
+        )
+      })()}
 
       {/* Notes */}
       {vehicle.notes && (
@@ -922,6 +926,15 @@ function VehicleHistorySection({ history, loading }: {
   history: any[]
   loading: boolean
 }) {
+  const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set())
+  const toggleStage = (idx: number) => {
+    setExpandedStages(prev => {
+      const next = new Set(prev)
+      if (next.has(idx)) next.delete(idx); else next.add(idx)
+      return next
+    })
+  }
+
   const getEventIcon = (type: string, status?: string) => {
     switch (type) {
       case 'stage':
@@ -1105,28 +1118,87 @@ function VehicleHistorySection({ history, loading }: {
 
                   {/* Event details */}
                   <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                    {event.type === 'stage' && (
-                      <div>
-                        <p style={{ margin: '0 0 4px 0' }}>
-                          Assigned to: {event.details.assignee}
-                          {event.details.duration && (
-                            <span style={{ marginLeft: '12px' }}>
-                              Duration: {event.details.duration < 24 ? `${event.details.duration}h` : `${Math.floor(event.details.duration / 24)}d`}
-                            </span>
-                          )}
-                        </p>
-                        {event.details.totalTasks > 0 && (
-                          <p style={{ margin: '4px 0 0 0' }}>
-                            Tasks completed: {event.details.completedTasks}/{event.details.totalTasks}
-                            {event.details.skipped && event.details.completedTasks < event.details.totalTasks && (
-                              <span style={{ color: '#f59e0b', fontWeight: 600, marginLeft: '8px' }}>
-                                ({event.details.totalTasks - event.details.completedTasks} tasks remaining)
+                    {event.type === 'stage' && (() => {
+                      const isExpanded = expandedStages.has(index)
+                      const checklist: Array<{ item: string; done: boolean; note?: string; addedByMechanic?: boolean; approved?: string }> = Array.isArray(event.details.checklist) ? event.details.checklist : []
+                      const days = event.details.days
+                      const hasDetails = checklist.length > 0 || event.details.notes
+                      return (
+                        <div>
+                          <p style={{ margin: '0 0 4px 0' }}>
+                            Assigned to: {event.details.assignee}
+                            {event.details.duration != null && (
+                              <span style={{ marginLeft: '12px' }}>
+                                Duration: {event.details.duration < 24
+                                  ? `${event.details.duration}h`
+                                  : `${days}d ${event.details.duration % 24}h`}
                               </span>
                             )}
                           </p>
-                        )}
-                      </div>
-                    )}
+                          {event.details.totalTasks > 0 && (
+                            <p style={{ margin: '4px 0 0 0' }}>
+                              Tasks completed: {event.details.completedTasks}/{event.details.totalTasks}
+                              {event.details.skipped && event.details.completedTasks < event.details.totalTasks && (
+                                <span style={{ color: '#f59e0b', fontWeight: 600, marginLeft: '8px' }}>
+                                  ({event.details.totalTasks - event.details.completedTasks} tasks remaining)
+                                </span>
+                              )}
+                            </p>
+                          )}
+                          {hasDetails && (
+                            <button
+                              onClick={() => toggleStage(index)}
+                              style={{
+                                marginTop: 8, padding: '4px 10px', borderRadius: 6,
+                                border: '1px solid var(--border)', background: '#fff',
+                                color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600,
+                                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+                              }}
+                            >
+                              <span style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', display: 'inline-block' }}>▸</span>
+                              {isExpanded ? 'Hide tasks' : 'View tasks'}
+                            </button>
+                          )}
+                          {isExpanded && hasDetails && (
+                            <div style={{ marginTop: 10, padding: '10px 12px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8 }}>
+                              {event.details.notes && (
+                                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px', fontStyle: 'italic' }}>{event.details.notes}</p>
+                              )}
+                              {checklist.length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  {checklist.map((t, i) => (
+                                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
+                                      <span style={{
+                                        width: 14, height: 14, borderRadius: 4, flexShrink: 0, marginTop: 2,
+                                        border: t.done ? 'none' : '1.5px solid #d4d4d4',
+                                        background: t.done ? '#16a34a' : 'transparent',
+                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                        color: '#fff', fontSize: 10, fontWeight: 700,
+                                      }}>{t.done ? '✓' : ''}</span>
+                                      <span style={{
+                                        flex: 1,
+                                        color: t.done ? 'var(--text-muted)' : 'var(--text-primary)',
+                                        textDecoration: t.done ? 'line-through' : 'none',
+                                      }}>
+                                        {t.item}
+                                        {t.addedByMechanic && (
+                                          <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#ede9fe', color: '#5b21b6', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                                            Added{t.approved ? ` · ${t.approved}` : ''}
+                                          </span>
+                                        )}
+                                        {t.note && (
+                                          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t.note}</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {event.type === 'part' && (
                       <div>
@@ -1236,6 +1308,15 @@ function VehicleHistorySection({ history, loading }: {
       </div>
     </div>
   )
+}
+
+function slimPartBtn(color: string, bg: string): React.CSSProperties {
+  return {
+    padding: '7px 12px', borderRadius: 8,
+    border: `1px solid ${color}`, background: bg, color,
+    fontSize: 12, fontWeight: 600, cursor: 'pointer',
+    whiteSpace: 'nowrap', minHeight: 0,
+  }
 }
 
 function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
@@ -1384,67 +1465,84 @@ function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
             const statusStyle = statusColors[part.status] || statusColors.requested
 
             return (
-              <div key={part.id} style={{ padding: '16px 24px', borderBottom: index < parts.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                      <h4 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>{part.name}</h4>
-                      <div style={{ background: statusStyle.bg, color: statusStyle.color, padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, border: `1px solid ${statusStyle.border}` }}>
-                        {statusLabels[part.status]}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                      Requested by {part.requestedBy.name}
-                      {part.assignedTo && ` • Assigned to ${part.assignedTo.name}`}
-                      {part.price && ` • ${part.price}`}
-                      {part.tracking && ` • Tracking: ${part.tracking}`}
-                    </div>
-                    {part.url && (
-                      <a href={part.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '13px', color: '#2563eb', textDecoration: 'none', display: 'block', marginTop: '4px', wordBreak: 'break-all' }}>
-                        {part.url.length > 60 ? part.url.slice(0, 60) + '...' : part.url} →
-                      </a>
-                    )}
-                    {part.notes && (
-                      <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0 0', fontStyle: 'italic' }}>{part.notes}</p>
-                    )}
-                  </div>
+              <div key={part.id} style={{
+                padding: '14px 18px',
+                borderBottom: index < parts.length - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                {/* Top row: name + status pill */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
+                  <h4 style={{ fontSize: 15, fontWeight: 700, margin: 0, lineHeight: 1.3, flex: 1, minWidth: 0 }}>{part.name}</h4>
+                  <span style={{
+                    background: statusStyle.bg, color: statusStyle.color,
+                    padding: '3px 10px', borderRadius: 999,
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+                    border: `1px solid ${statusStyle.border}`,
+                    textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0,
+                  }}>{statusLabels[part.status]}</span>
+                </div>
+                {part.url && (
+                  <a href={part.url} target="_blank" rel="noopener noreferrer" style={{
+                    fontSize: 12, color: '#2563eb', textDecoration: 'none',
+                    display: 'block', marginBottom: 4, wordBreak: 'break-all',
+                  }}>
+                    {part.url.length > 60 ? part.url.slice(0, 60) + '…' : part.url}
+                  </a>
+                )}
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
+                  {part.assignedTo ? `Assigned to ${part.assignedTo.name}` : 'Unassigned'}
+                  {part.price && ` · ${part.price}`}
+                  {part.tracking && ` · Tracking ${part.tracking}`}
+                  <span style={{ opacity: 0.7 }}> · by {part.requestedBy.name}</span>
+                </p>
+                {part.notes && (
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0 0', fontStyle: 'italic' }}>{part.notes}</p>
+                )}
 
-                  {/* Action buttons based on status */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
-                    {/* Requested: show "Add Link" button */}
+                {/* Slim action row */}
+                {(isAdmin || (part.status === 'requested' && !part.url)) && (
+                  <div style={{
+                    marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)',
+                    display: 'flex', gap: 6,
+                  }}>
                     {part.status === 'requested' && !part.url && (
-                      <button onClick={() => { setAddingUrl(part.id); setUrlInput('') }} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        Add Link
-                      </button>
+                      <button onClick={() => { setAddingUrl(part.id); setUrlInput('') }} style={slimPartBtn('#2563eb', '#eff6ff')}>Add Link</button>
                     )}
-                    {/* Sourced: admin approve/decline */}
                     {part.status === 'sourced' && isAdmin && (
                       <>
-                        <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          ✓ Approve
-                        </button>
-                        <button onClick={() => updatePart(part.id, { status: 'requested', url: null })} disabled={saving} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                          ✗ Decline
-                        </button>
+                        <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving} style={slimPartBtn('#16a34a', '#f0fdf4')}>✓ Approve</button>
+                        <button onClick={() => updatePart(part.id, { status: 'requested', url: null })} disabled={saving} style={slimPartBtn('#ef4444', '#fef2f2')}>✗ Decline</button>
                       </>
                     )}
-                    {/* Ready to order: admin mark ordered */}
                     {part.status === 'ready_to_order' && isAdmin && (
-                      <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        Mark Ordered
-                      </button>
+                      <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} style={slimPartBtn('#a16207', '#fefce8')}>Mark Ordered</button>
                     )}
-                    {/* Ordered: admin mark received */}
                     {part.status === 'ordered' && isAdmin && (
-                      <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                        Mark Received
-                      </button>
+                      <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving} style={slimPartBtn('#16a34a', '#f0fdf4')}>Mark Received</button>
                     )}
                     {isAdmin && (
-                      <button onClick={async () => { if (!confirm('Delete this part?')) return; setSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'DELETE' }); setSaving(false); onPartsChange() }} disabled={saving} style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fef2f2', color: '#ef4444', fontSize: '12px', cursor: 'pointer', lineHeight: 1 }} title="Delete part">🗑</button>
+                      <button
+                        onClick={async () => { if (!confirm('Delete this part?')) return; setSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'DELETE' }); setSaving(false); onPartsChange() }}
+                        disabled={saving}
+                        title="Delete part"
+                        style={{
+                          marginLeft: 'auto',
+                          width: 32, height: 32, padding: 0,
+                          borderRadius: 8, border: '1px solid var(--border)',
+                          background: '#fff', color: 'var(--text-muted)',
+                          cursor: 'pointer',
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
+                          <path d="M10 11v6M14 11v6" />
+                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                        </svg>
+                      </button>
                     )}
                   </div>
-                </div>
+                )}
 
                 {/* URL input form (inline, shows when "Add Link" is clicked) */}
                 {addingUrl === part.id && (

@@ -20,7 +20,7 @@ export default function NewTransportPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [selectedVehicles, setSelectedVehicles] = useState<VehicleEntry[]>([])
-  const [purpose, setPurpose] = useState<'event' | 'ship_to_client' | 'other'>('event')
+  const [purpose, setPurpose] = useState<'ship_to_client' | 'repair' | 'other'>('ship_to_client')
   const [purposeNote, setPurposeNote] = useState('')
   const [estimatedPrice, setEstimatedPrice] = useState('')
   const [showManualForm, setShowManualForm] = useState(false)
@@ -146,8 +146,8 @@ export default function NewTransportPage() {
           <label className="form-label">Purpose *</label>
           <div className="grid grid-cols-3 gap-3">
             {([
-              { v: 'event', label: 'Event' },
               { v: 'ship_to_client', label: 'Ship to Client' },
+              { v: 'repair', label: 'Repair' },
               { v: 'other', label: 'Other' },
             ] as const).map(opt => {
               const active = purpose === opt.v
@@ -310,8 +310,13 @@ export default function NewTransportPage() {
         {/* Already scheduled? */}
         <div>
           <label className="form-label">Scheduled Date <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: 12 }}>(optional — fill if already scheduled with carrier)</span></label>
-          <input name="scheduledDate" type="date" className="input" />
-          <input name="carrierInfo" className="input mt-2" placeholder="Carrier / Driver (if scheduled)" />
+          <input
+            name="scheduledDate"
+            type="date"
+            className="input"
+            style={{ display: 'block', width: '100%', maxWidth: '100%', minWidth: 0, marginBottom: 12 }}
+          />
+          <input name="carrierInfo" className="input" placeholder="Carrier / Driver (if scheduled)" />
         </div>
 
         {/* Urgency */}

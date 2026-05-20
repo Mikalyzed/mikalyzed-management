@@ -269,7 +269,8 @@ export default function Nav({ role, userName }: { role: string; userName: string
       {!mobileOpen && (
         <div className="mobile-topbar" style={{
           position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
-          background: '#141414', padding: '14px 16px',
+          background: '#141414',
+          padding: 'calc(env(safe-area-inset-top, 0px) + 14px) 16px 14px',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
