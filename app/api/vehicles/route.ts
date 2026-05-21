@@ -143,8 +143,11 @@ export async function POST(request: Request) {
   // Check for duplicate stock number
   const existing = await prisma.vehicle.findUnique({ where: { stockNumber } })
   if (existing) {
-    if (existing.status === 'external') {
-      // Vehicle returning from external repair — re-enter recon
+    // 'archived' = placeholder Vehicle created when adding a part to a non-recon vehicle
+    // (see /api/vehicles/resolve). Treat the same as 'external' so it can be promoted
+    // into active recon when sent in.
+    if (existing.status === 'external' || existing.status === 'archived') {
+      // Vehicle returning from external repair / promoted from placeholder — re-enter recon
       let stageAssignee = assigneeId
       if (!stageAssignee) {
         const config = await prisma.stageConfig.findUnique({ where: { stage: startingStage } })
@@ -205,6 +208,7 @@ export async function POST(request: Request) {
             status: startingStage,
             currentStageId: stage.id,
             currentAssigneeId: stageAssignee,
+            completedAt: null,
           },
         })
 
@@ -212,7 +216,7 @@ export async function POST(request: Request) {
           data: {
             entityType: 'vehicle',
             entityId: existing.id,
-            action: 'returned_from_external',
+            action: existing.status === 'archived' ? 'promoted_from_placeholder' : 'returned_from_external',
             actorId: user.id,
             details: { stockNumber, stage: startingStage },
           },

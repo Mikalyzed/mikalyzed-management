@@ -24,21 +24,46 @@ export async function POST(req: NextRequest) {
   })
   if (existing) return NextResponse.json({ vehicleId: existing.id, created: false })
 
-  // No Vehicle record — derive basic info from InventoryVehicle and create a placeholder
+  // No Vehicle record — try InventoryVehicle first, fall back to ExternalRepair
+  // (a vehicle may exist only in external repairs without ever being added to inventory)
   const inv = await prisma.inventoryVehicle.findUnique({
     where: { stockNumber: stock },
     select: { year: true, make: true, model: true, color: true, vin: true },
   })
-  if (!inv) return NextResponse.json({ error: 'No inventory record for this stock number' }, { status: 404 })
+
+  let year: number | null = null
+  let make = ''
+  let model = ''
+  let color: string | null = null
+  let vin: string | null = null
+
+  if (inv) {
+    year = inv.year
+    make = inv.make || ''
+    model = inv.model || ''
+    color = inv.color
+    vin = inv.vin
+  } else {
+    const ext = await prisma.externalRepair.findFirst({
+      where: { stockNumber: stock },
+      orderBy: { createdAt: 'desc' },
+      select: { year: true, make: true, model: true, color: true },
+    })
+    if (!ext) return NextResponse.json({ error: 'No inventory or external repair record for this stock number' }, { status: 404 })
+    year = ext.year
+    make = ext.make
+    model = ext.model
+    color = ext.color
+  }
 
   const placeholder = await prisma.vehicle.create({
     data: {
       stockNumber: stock,
-      vin: inv.vin,
-      year: inv.year,
-      make: inv.make || 'Unknown',
-      model: inv.model || 'Unknown',
-      color: inv.color,
+      vin,
+      year,
+      make: make || 'Unknown',
+      model: model || 'Unknown',
+      color,
       status: 'archived',
       completedAt: new Date(),
       createdById: user.id,

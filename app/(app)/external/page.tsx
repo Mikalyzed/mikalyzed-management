@@ -165,8 +165,29 @@ export default function ExternalRepairsPage() {
     setError('')
     const form = new FormData(e.currentTarget)
     if (!addVendor) { setError('Pick or add a vendor'); setSaving(false); return }
+
+    const stockNumber = String(form.get('stockNumber') || '').trim()
+    // Warn if stock # doesn't match any InventoryVehicle — catches typos like N201130 ↔ N201310.
+    if (stockNumber) {
+      try {
+        const invRes = await fetch(`/api/inventory?search=${encodeURIComponent(stockNumber)}&limit=10`)
+        const invData = await invRes.json()
+        const exact = (invData.vehicles || []).find((v: { stockNumber: string }) =>
+          v.stockNumber.toLowerCase() === stockNumber.toLowerCase()
+        )
+        if (!exact) {
+          const proceed = window.confirm(
+            `Stock #"${stockNumber}" isn't in inventory. This is usually a typo — double check the digits.\n\nContinue saving anyway?`
+          )
+          if (!proceed) { setSaving(false); return }
+        }
+      } catch {
+        // Network failure shouldn't block the save — fall through.
+      }
+    }
+
     const data = {
-      stockNumber: form.get('stockNumber'),
+      stockNumber,
       year: form.get('year') ? Number(form.get('year')) : null,
       make: form.get('make'),
       model: form.get('model'),
