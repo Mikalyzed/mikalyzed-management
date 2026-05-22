@@ -25,30 +25,32 @@ export async function GET() {
     })
 
     // Build pipeline counts and vehicle lists from the single query
-    const pipeline: Record<string, { total: number; inProgress: number; pending: number; done: number }> = {}
+    const pipeline: Record<string, { total: number; inProgress: number; paused: number; pending: number; done: number }> = {}
     const stageVehicles: Record<string, ReturnType<typeof formatJob>[]> = {}
 
     for (const stage of stageList) {
       const stageItems = allStages.filter(s => s.stage === stage)
-      const inProgress = stageItems.filter(s => s.status === 'in_progress' && !s.awaitingParts)
+      // A stage is actually "in progress" only when the timer is running.
+      // status='in_progress' with timerStartedAt=null + pauseReason set = paused.
+      const active = stageItems.filter(s => s.status === 'in_progress' && !s.awaitingParts && s.timerStartedAt)
+      const paused = stageItems.filter(s => s.status === 'in_progress' && !s.awaitingParts && !s.timerStartedAt)
       const pending = stageItems.filter(s => s.status === 'pending')
       const done = stageItems.filter(s => s.status === 'done')
 
       pipeline[stage] = {
-        total: inProgress.length + pending.length,
-        inProgress: inProgress.length,
+        total: active.length + paused.length + pending.length,
+        inProgress: active.length,
+        paused: paused.length,
         pending: pending.length,
         done: done.length,
       }
 
-      // For mechanic: timer-running items show first within in_progress (paused fall behind)
-      const sortedInProgress = stage === 'mechanic'
-        ? [...inProgress].sort((a, b) => {
-            const aRunning = a.timerStartedAt ? 0 : 1
-            const bRunning = b.timerStartedAt ? 0 : 1
-            return aRunning - bRunning
-          })
-        : inProgress
+      // All in_progress (active + paused) — used for the vehicle list display.
+      // Mechanic sorts running first, then paused; other stages keep the natural order.
+      const inProgressItems = stage === 'mechanic'
+        ? [...active, ...paused]
+        : [...stageItems.filter(s => s.status === 'in_progress' && !s.awaitingParts)]
+      const sortedInProgress = inProgressItems
 
       if (stage === 'content') {
         const ordered = [...sortedInProgress, ...pending]

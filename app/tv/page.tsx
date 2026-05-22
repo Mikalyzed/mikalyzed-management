@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 
-type PipelineStage = { total: number; inProgress: number; pending: number; done: number }
+type PipelineStage = { total: number; inProgress: number; paused: number; pending: number; done: number }
 type StageVehicle = {
   stockNumber: string; vehicle: string; color: string | null; assignee: string
   estimatedHours: number | null; activeSeconds: number; timerRunning: boolean
@@ -65,9 +65,10 @@ function LiveTimer({ job, color }: { job: StageVehicle; color: string }) {
 
 function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
   const isMechanic = job.stage === 'mechanic'
-  // Mechanic uses timer system; other stages just use status field
-  const isActive = isMechanic ? job.timerRunning : job.status === 'in_progress'
-  const isPaused = isMechanic ? (!job.timerRunning && job.status === 'in_progress') : false
+  // All stages use the same paused-vs-active rule:
+  // in_progress with timer running = active, in_progress without timer = paused.
+  const isActive = job.status === 'in_progress' && job.timerRunning
+  const isPaused = job.status === 'in_progress' && !job.timerRunning
   const isQueued = job.status === 'pending'
 
   return (
@@ -263,7 +264,7 @@ export default function TVBoard() {
           { label: 'Completed Today', value: data.completedToday, color: '#22c55e' },
           { label: 'Awaiting Parts', value: data.awaitingParts, color: '#eab308' },
           { label: 'External Repairs', value: data.externalRepairs, color: '#f97316' },
-          { label: 'Active Now', value: allActive.filter(j => j.timerRunning || j.status === 'in_progress').length, color: '#06b6d4' },
+          { label: 'Active Now', value: allActive.filter(j => j.status === 'in_progress' && j.timerRunning).length, color: '#06b6d4' },
           { label: 'Total Vehicles', value: data.totalInventory, color: '#8b5cf6' },
         ].map(stat => (
           <div key={stat.label} style={{
@@ -279,7 +280,7 @@ export default function TVBoard() {
       {/* Pipeline Cards + Vehicle Columns */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20, alignItems: 'stretch' }}>
         {stageOrder.map(stage => {
-          const p = data.pipeline[stage] || { total: 0, inProgress: 0, pending: 0, done: 0 }
+          const p = data.pipeline[stage] || { total: 0, inProgress: 0, paused: 0, pending: 0, done: 0 }
           const color = STAGE_COLORS[stage]
           const vehicles = data.stageVehicles[stage] || []
 
@@ -295,8 +296,11 @@ export default function TVBoard() {
                   <span style={{ fontSize: 15, fontWeight: 700 }}>{STAGE_LABELS[stage]}</span>
                   <span style={{ fontSize: 26, fontWeight: 800, color }}>{p.total}</span>
                 </div>
-                <div style={{ display: 'flex', gap: 10, fontSize: 12, color: '#888' }}>
+                <div style={{ display: 'flex', gap: 10, fontSize: 12, color: '#888', flexWrap: 'wrap' }}>
                   <span><span style={{ color, fontWeight: 700 }}>{p.inProgress}</span> active</span>
+                  {p.paused > 0 && (
+                    <span><span style={{ color: '#f59e0b', fontWeight: 700 }}>{p.paused}</span> paused</span>
+                  )}
                   <span><span style={{ color: '#666', fontWeight: 700 }}>{p.pending}</span> queued</span>
                   <span><span style={{ color: '#22c55e', fontWeight: 700 }}>{p.done}</span> done</span>
                 </div>

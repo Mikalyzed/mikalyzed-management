@@ -85,6 +85,10 @@ type ModalData = {
       totalBlockedSeconds: number
       checklist: ChecklistItem[]
       assignee: { id: string; name: string } | null
+      awaitingParts?: boolean
+      autoPaused?: boolean
+      timerStartedAt?: string | null
+      pauseReason?: string | null
     }>
   }
 }
@@ -791,7 +795,9 @@ export default function VehiclesPage() {
                           stageStatus={v.stages[0]?.status}
                           stageDetail={
                             v.stages[0]?.awaitingParts ? 'awaiting_parts'
-                            : v.stages[0]?.autoPaused ? 'auto_paused'
+                            // auto_paused only triggers in mechanic (outside-of-work-hours auto pause).
+                            // Other stages should never show auto_paused.
+                            : (v.status === 'mechanic' && v.stages[0]?.autoPaused) ? 'auto_paused'
                             : (v.stages[0]?.status === 'in_progress' && !v.stages[0]?.timerStartedAt && v.stages[0]?.pauseReason) ? 'paused'
                             : undefined
                           }
@@ -1129,16 +1135,24 @@ export default function VehiclesPage() {
                         {vehicleDesc}{v.color ? ` · ${v.color}` : ''}
                       </p>
                       <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        {currentStage && (
-                          <span style={{
-                            fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
-                            background: '#dffd6e40', color: '#555',
-                            textTransform: 'uppercase', letterSpacing: '0.04em',
-                          }}>
-                            {STAGE_LABELS[currentStage.stage as keyof typeof STAGE_LABELS] || currentStage.stage}
-                            {currentStage.status !== 'done' ? ` · ${currentStage.status.replace('_', ' ')}` : ''}
-                          </span>
-                        )}
+                        {currentStage && (() => {
+                          // Match the card top-right badge logic so the modal shows the same display state.
+                          const displayStatus =
+                            currentStage.awaitingParts ? 'awaiting parts'
+                            : (currentStage.stage === 'mechanic' && currentStage.autoPaused) ? 'auto paused'
+                            : (currentStage.status === 'in_progress' && !currentStage.timerStartedAt && currentStage.pauseReason) ? 'paused'
+                            : currentStage.status.replace('_', ' ')
+                          return (
+                            <span style={{
+                              fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
+                              background: '#dffd6e40', color: '#555',
+                              textTransform: 'uppercase', letterSpacing: '0.04em',
+                            }}>
+                              {STAGE_LABELS[currentStage.stage as keyof typeof STAGE_LABELS] || currentStage.stage}
+                              {currentStage.status !== 'done' ? ` · ${displayStatus}` : ''}
+                            </span>
+                          )
+                        })()}
                       </div>
                       <Link
                         href={`/vehicles/${v.id}`}
