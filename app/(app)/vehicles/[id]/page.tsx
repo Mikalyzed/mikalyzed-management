@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import OrderPartModal from '@/components/OrderPartModal'
+import RichTypeReadout from '@/components/RichTypeReadout'
 
 type ChecklistItem = { item: string; done: boolean; note: string }
 
@@ -1120,7 +1121,17 @@ function VehicleHistorySection({ history, loading }: {
                   <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                     {event.type === 'stage' && (() => {
                       const isExpanded = expandedStages.has(index)
-                      const checklist: Array<{ item: string; done: boolean; note?: string; addedByMechanic?: boolean; approved?: string }> = Array.isArray(event.details.checklist) ? event.details.checklist : []
+                      type RichChecklistItem = {
+                        item: string
+                        done: boolean
+                        note?: string
+                        addedByMechanic?: boolean
+                        approved?: string
+                        type?: string
+                        data?: Record<string, unknown>
+                        fields?: { key: string; label: string }[]
+                      }
+                      const checklist: RichChecklistItem[] = Array.isArray(event.details.checklist) ? event.details.checklist : []
                       const days = event.details.days
                       const hasDetails = checklist.length > 0 || event.details.notes
                       return (
@@ -1165,33 +1176,40 @@ function VehicleHistorySection({ history, loading }: {
                                 <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px', fontStyle: 'italic' }}>{event.details.notes}</p>
                               )}
                               {checklist.length > 0 && (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                  {checklist.map((t, i) => (
-                                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
-                                      <span style={{
-                                        width: 14, height: 14, borderRadius: 4, flexShrink: 0, marginTop: 2,
-                                        border: t.done ? 'none' : '1.5px solid #d4d4d4',
-                                        background: t.done ? '#16a34a' : 'transparent',
-                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                        color: '#fff', fontSize: 10, fontWeight: 700,
-                                      }}>{t.done ? '✓' : ''}</span>
-                                      <span style={{
-                                        flex: 1,
-                                        color: t.done ? 'var(--text-muted)' : 'var(--text-primary)',
-                                        textDecoration: t.done ? 'line-through' : 'none',
-                                      }}>
-                                        {t.item}
-                                        {t.addedByMechanic && (
-                                          <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#ede9fe', color: '#5b21b6', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                                            Added{t.approved ? ` · ${t.approved}` : ''}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                  {checklist.map((t, i) => {
+                                    const hasRichData = t.type && t.data && Object.keys(t.data).length > 0
+                                    return (
+                                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
+                                        <span style={{
+                                          width: 14, height: 14, borderRadius: 4, flexShrink: 0, marginTop: 2,
+                                          border: t.done ? 'none' : '1.5px solid #d4d4d4',
+                                          background: t.done ? '#16a34a' : 'transparent',
+                                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                          color: '#fff', fontSize: 10, fontWeight: 700,
+                                        }}>{t.done ? '✓' : ''}</span>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <span style={{
+                                            color: t.done ? 'var(--text-muted)' : 'var(--text-primary)',
+                                            textDecoration: t.done ? 'line-through' : 'none',
+                                          }}>
+                                            {t.item}
                                           </span>
-                                        )}
-                                        {t.note && (
-                                          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{t.note}</span>
-                                        )}
-                                      </span>
-                                    </div>
-                                  ))}
+                                          {t.addedByMechanic && (
+                                            <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#ede9fe', color: '#5b21b6', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                                              Added{t.approved ? ` · ${t.approved}` : ''}
+                                            </span>
+                                          )}
+                                          {hasRichData && <RichTypeReadout item={t} />}
+                                          {t.note && (
+                                            <p style={{ fontSize: 12, color: '#4b5563', margin: '4px 0 0', lineHeight: 1.4, fontStyle: 'italic' }}>
+                                              {t.note}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               )}
                             </div>

@@ -370,6 +370,40 @@ export default function PartsOverviewPage() {
               }}>{STATUS_LABELS[editingPart.status]}</span>
             </div>
 
+            {/* Admin: move part to any other status (recover from mistaken clicks) */}
+            {isAdmin && (
+              <div style={{ marginBottom: 20, padding: '12px 14px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 10 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>
+                  Move to status (admin)
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {(['requested', 'sourced', 'ready_to_order', 'ordered', 'received'] as const).map(s => {
+                    const isCurrent = s === editingPart.status
+                    const c = STATUS_COLORS[s]
+                    return (
+                      <button
+                        key={s}
+                        disabled={isCurrent || saving === editingPart.id}
+                        onClick={async () => {
+                          if (!confirm(`Move "${editingPart.name.trim()}" to ${STATUS_LABELS[s]}?`)) return
+                          await updatePart(editingPart.id, { status: s })
+                          setEditingPart({ ...editingPart, status: s })
+                        }}
+                        style={{
+                          padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                          background: isCurrent ? c.bg : '#fff',
+                          color: isCurrent ? c.color : 'var(--text-secondary)',
+                          border: `1px solid ${isCurrent ? c.border : 'var(--border)'}`,
+                          cursor: isCurrent ? 'default' : 'pointer',
+                          opacity: isCurrent ? 0.6 : 1,
+                        }}
+                      >{STATUS_LABELS[s]}</button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {editingPart.url && (
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Link</label>
