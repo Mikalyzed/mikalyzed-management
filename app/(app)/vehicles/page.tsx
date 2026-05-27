@@ -9,6 +9,7 @@ import { STAGE_LABELS } from '@/lib/constants'
 import OrderPartModal from '@/components/OrderPartModal'
 import VendorSearch, { VendorResult } from '@/components/VendorSearch'
 import RichTypeReadout from '@/components/RichTypeReadout'
+import { summarizeReview, extractIssueFixTasks } from '@/lib/inspection-issues'
 
 type ChecklistItem = {
   item: string; done: boolean; note: string
@@ -32,6 +33,7 @@ type VehicleWithStage = {
   currentAssignee: { id: string; name: string } | null
   lastCompletedStage?: string | null
   lastCompleted?: {
+    id: string
     stage: string
     completedAt: string | null
     checklist: {
@@ -47,6 +49,8 @@ type VehicleWithStage = {
     assignee: { id: string; name: string } | null
   } | null
   inventoryStatus?: string | null
+  pendingInstalls?: { id: string; name: string; sourceItem?: string | null; sourceSubField?: string | null }[]
+  partsInPipeline?: { id: string; name: string; status: string; sourceItem?: string | null; sourceSubField?: string | null }[]
   returnQueue?: { stage: string; fromStage?: string; reason?: string }[]
   stages: Array<{
     id?: string
@@ -129,6 +133,9 @@ export default function VehiclesPage() {
   const [assigningUser, setAssigningUser] = useState(false)
   const [hoverColumn, setHoverColumn] = useState<string | null>(null)
   const [routingVehicle, setRoutingVehicle] = useState<VehicleWithStage | null>(null)
+  // Maps task name → part id, so we know which routingTasks correspond to "Install [part]"
+  // entries and can stamp those parts' installTaskCreatedAt on confirm.
+  const [routingInstallMap, setRoutingInstallMap] = useState<Record<string, string>>({})
   const [expandedRoutingId, setExpandedRoutingId] = useState<string | null>(null)
   const [routingNext, setRoutingNext] = useState<string>('detailing')
   const [routingReason, setRoutingReason] = useState('')
@@ -578,6 +585,14 @@ export default function VehiclesPage() {
               const last = v.lastCompleted
               const doneCount = last?.checklist?.filter(c => c.done).length ?? 0
               const totalCount = last?.checklist?.length ?? 0
+              const review = last?.checklist ? summarizeReview(last.checklist as any) : { issueCount: 0, addedTaskCount: 0, hasAnything: false }
+              const pendingInstalls = v.pendingInstalls || []
+              const partsInPipeline = v.partsInPipeline || []
+              const reviewChips: { label: string; bg: string; fg: string; border: string }[] = []
+              if (review.issueCount > 0) reviewChips.push({ label: `${review.issueCount} issue${review.issueCount === 1 ? '' : 's'}`, bg: '#fee2e2', fg: '#991b1b', border: '#fca5a5' })
+              if (review.addedTaskCount > 0) reviewChips.push({ label: `${review.addedTaskCount} added task${review.addedTaskCount === 1 ? '' : 's'}`, bg: '#ede9fe', fg: '#5b21b6', border: '#c4b5fd' })
+              if (pendingInstalls.length > 0) reviewChips.push({ label: `🔧 ${pendingInstalls.length} part${pendingInstalls.length === 1 ? '' : 's'} to install`, bg: '#dbeafe', fg: '#1d4ed8', border: '#93c5fd' })
+              if (partsInPipeline.length > 0) reviewChips.push({ label: `${partsInPipeline.length} part${partsInPipeline.length === 1 ? '' : 's'} in pipeline`, bg: '#fef3c7', fg: '#92400e', border: '#fcd34d' })
               return (
                 <div key={v.id} style={{
                   background: '#fff', borderRadius: 10, border: '1px solid #fde68a', overflow: 'hidden',
@@ -606,6 +621,17 @@ export default function VehiclesPage() {
                           {last?.scopeName && ` · ${last.scopeName}`}
                           {last?.assignee && ` · ${last.assignee.name}`}
                         </p>
+                        {reviewChips.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                            {reviewChips.map((c, ci) => (
+                              <span key={ci} style={{
+                                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                                background: c.bg, color: c.fg, border: `1px solid ${c.border}`,
+                                textTransform: 'uppercase', letterSpacing: '0.04em',
+                              }}>{c.label}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <button
@@ -613,12 +639,28 @@ export default function VehiclesPage() {
                       onClick={(e) => {
                         e.stopPropagation()
                         setRoutingVehicle(v)
-                        setRoutingNext('detailing')
+                        const checklist = (v.lastCompleted?.checklist || []) as any[]
+                        const fixes = extractIssueFixTasks(checklist)
+                        const installs = v.pendingInstalls || []
+                        const shouldGoToMechanic = fixes.length > 0 || installs.length > 0
+                        // Pre-select mechanic if there's anything to fix or install; otherwise default to detailing
+                        setRoutingNext(shouldGoToMechanic ? 'mechanic' : 'detailing')
                         setRoutingReason('')
-                        setRoutingTasks([])
-                        const addedTasks = (v.lastCompleted?.checklist || [])
-                          .filter(t => t.addedByMechanic && t.approved !== 'declined')
-                        setRoutingCarry(new Set(addedTasks.map((_, i) => i)))
+                        // Pre-fill the new checklist with Fix tasks + Install tasks
+                        const prefilledTasks = [
+                          ...fixes.map(f => f.item),
+                          ...installs.map(p => `Install: ${p.name}`),
+                        ]
+                        setRoutingTasks(prefilledTasks)
+                        // Track which task names correspond to which part IDs so we can stamp them on confirm
+                        const installMap: Record<string, string> = {}
+                        for (const p of installs) installMap[`Install: ${p.name}`] = p.id
+                        setRoutingInstallMap(installMap)
+                        // Pre-check all (still-actionable) added tasks for carryover
+                        const addedTasks = checklist
+                          .map((t, i) => ({ t, i }))
+                          .filter(({ t }) => t.addedByMechanic && t.approved !== 'declined')
+                        setRoutingCarry(new Set(addedTasks.map(({ i }) => i)))
                         setRoutingNewTask('')
                         setRoutingEstHours('')
                         setRoutingSoldDelivery(false)
@@ -634,7 +676,33 @@ export default function VehiclesPage() {
                   {expanded && last?.checklist && last.checklist.length > 0 && (() => {
                     const inspectionItems = last.checklist.filter(t => !t.addedByMechanic)
                     const addedTasks = last.checklist.filter(t => t.addedByMechanic && t.approved !== 'declined')
-                    const renderRow = (t: typeof last.checklist[number], i: number) => (
+                    // Group parts (in pipeline + pending install) by sourceItem for inline display
+                    const allParts = [
+                      ...(v.pendingInstalls || []).map(p => ({ ...p, status: 'received' })),
+                      ...(v.partsInPipeline || []),
+                    ]
+                    const partsByItem: Record<string, typeof allParts> = {}
+                    for (const p of allParts) {
+                      if (!p.sourceItem) continue
+                      if (!partsByItem[p.sourceItem]) partsByItem[p.sourceItem] = []
+                      partsByItem[p.sourceItem].push(p)
+                    }
+                    // Tasks added by mechanic, grouped by sourceItem
+                    const tasksByItem: Record<string, typeof addedTasks> = {}
+                    for (const t of addedTasks) {
+                      const src = (t as any).sourceItem
+                      if (!src) continue
+                      if (!tasksByItem[src]) tasksByItem[src] = []
+                      tasksByItem[src].push(t)
+                    }
+                    const PART_LABELS: Record<string, string> = {
+                      requested: 'Requested', sourced: 'Pending approval', ready_to_order: 'Ready to order',
+                      ordered: 'Ordered', received: 'Received',
+                    }
+                    const renderRow = (t: typeof last.checklist[number], i: number) => {
+                      const inlineParts = partsByItem[t.item] || []
+                      const inlineTasks = tasksByItem[t.item] || []
+                      return (
                       <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 0, fontSize: 13 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{
@@ -651,12 +719,6 @@ export default function VehiclesPage() {
                             color: t.done ? 'var(--text-muted)' : 'var(--text-primary)',
                             textDecoration: t.done ? 'line-through' : 'none',
                           }}>{t.item}</span>
-                          {t.type && (
-                            <span style={{
-                              fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
-                              background: '#1a1a1a', color: '#dffd6e', textTransform: 'uppercase', letterSpacing: '0.03em',
-                            }}>✦</span>
-                          )}
                           {t.estimatedHours != null && (
                             <span style={{
                               fontSize: 11, fontWeight: 700, padding: '1px 8px', borderRadius: 100,
@@ -669,8 +731,31 @@ export default function VehiclesPage() {
                             <RichTypeReadout item={t} />
                           </div>
                         )}
+                        {/* Inline tasks added from this inspection item */}
+                        {inlineTasks.map((it, ii) => (
+                          <div key={`it-${ii}`} style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 22, marginTop: 4, fontSize: 12 }}>
+                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#7c3aed', flexShrink: 0 }} />
+                            <span style={{ flex: 1, color: '#5b21b6' }}>
+                              {it.item}
+                              {(it as any).sourceSubField && <span style={{ color: '#9ca3af' }}> · {(it as any).sourceSubField}</span>}
+                            </span>
+                            <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6', textTransform: 'uppercase' }}>Task</span>
+                          </div>
+                        ))}
+                        {/* Inline parts added from this inspection item */}
+                        {inlineParts.map((p, pi) => (
+                          <div key={`pp-${pi}`} style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 22, marginTop: 4, fontSize: 12 }}>
+                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#2563eb', flexShrink: 0 }} />
+                            <span style={{ flex: 1, color: '#1d4ed8' }}>
+                              {p.name}
+                              {p.sourceSubField && <span style={{ color: '#9ca3af' }}> · {p.sourceSubField}</span>}
+                            </span>
+                            <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: '#dbeafe', color: '#1d4ed8', textTransform: 'uppercase' }}>Part · {PART_LABELS[p.status] || p.status}</span>
+                          </div>
+                        ))}
                       </div>
-                    )
+                      )
+                    }
                     return (
                       <div style={{ borderTop: '1px solid #fde68a', background: '#fffbeb', padding: '10px 14px 12px 36px' }}>
                         <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
@@ -681,14 +766,68 @@ export default function VehiclesPage() {
                         </div>
                         {addedTasks.length > 0 && (
                           <>
-                            <p style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 14, marginBottom: 8 }}>
-                              Tasks added during inspection ({addedTasks.length})
+                            <p style={{ fontSize: 11, fontWeight: 700, color: '#5b21b6', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 14, marginBottom: 8 }}>
+                              Tasks added by mechanic ({addedTasks.length})
                             </p>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                              {addedTasks.map((t, i) => renderRow(t, i))}
+                              {addedTasks.map((t, i) => {
+                                const approval = (t.approved || 'pending').toLowerCase()
+                                const TASK_LABELS: Record<string, string> = { pending: 'Pending approval', approved: 'Approved', declined: 'Declined' }
+                                const colors = approval === 'approved'
+                                  ? { bg: '#dcfce7', fg: '#15803d', border: '#bbf7d0' }
+                                  : approval === 'declined'
+                                  ? { bg: '#fee2e2', fg: '#991b1b', border: '#fca5a5' }
+                                  : { bg: '#ede9fe', fg: '#5b21b6', border: '#c4b5fd' }
+                                return (
+                                  <div key={`added-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#7c3aed', flexShrink: 0 }} />
+                                    <span style={{ flex: 1, color: 'var(--text-primary)' }}>
+                                      {t.item}
+                                      {t.estimatedHours != null && (
+                                        <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>· {t.estimatedHours}h</span>
+                                      )}
+                                    </span>
+                                    <span style={{
+                                      fontSize: 10, fontWeight: 700, padding: '1px 8px', borderRadius: 4,
+                                      background: colors.bg, color: colors.fg, border: `1px solid ${colors.border}`,
+                                      textTransform: 'uppercase', letterSpacing: '0.04em',
+                                    }}>{TASK_LABELS[approval] || approval}</span>
+                                  </div>
+                                )
+                              })}
                             </div>
                           </>
                         )}
+                        {(() => {
+                          const allParts = [...(v.pendingInstalls || []).map(p => ({ id: p.id, name: p.name, status: 'received' as string })), ...(v.partsInPipeline || [])]
+                          if (allParts.length === 0) return null
+                          const PART_LABELS: Record<string, string> = {
+                            requested: 'Requested', sourced: 'Pending approval', ready_to_order: 'Ready to order',
+                            ordered: 'Ordered', received: 'Received',
+                          }
+                          return (
+                            <>
+                              <p style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: 14, marginBottom: 8 }}>
+                                Parts requested ({allParts.length})
+                              </p>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                {allParts.map((p, i) => (
+                                  <div key={`part-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb', flexShrink: 0 }} />
+                                    <span style={{ flex: 1, color: 'var(--text-primary)' }}>{p.name}</span>
+                                    <span style={{
+                                      fontSize: 10, fontWeight: 700, padding: '1px 8px', borderRadius: 4,
+                                      background: p.status === 'received' ? '#dcfce7' : '#fef3c7',
+                                      color: p.status === 'received' ? '#15803d' : '#92400e',
+                                      border: `1px solid ${p.status === 'received' ? '#bbf7d0' : '#fde68a'}`,
+                                      textTransform: 'uppercase', letterSpacing: '0.04em',
+                                    }}>{PART_LABELS[p.status] || p.status}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )
+                        })()}
                       </div>
                     )
                   })()}
@@ -855,6 +994,40 @@ export default function VehiclesPage() {
                 Just completed: <strong>{STAGE_LABELS[routingVehicle.lastCompletedStage as keyof typeof STAGE_LABELS] || routingVehicle.lastCompletedStage}</strong>
               </p>
             )}
+
+            {/* Smart review banner: shows what was flagged + suggests mechanic when needed */}
+            {(() => {
+              const fixes = extractIssueFixTasks((routingVehicle.lastCompleted?.checklist || []) as any)
+              const installs = routingVehicle.pendingInstalls || []
+              const reviewSummary = summarizeReview((routingVehicle.lastCompleted?.checklist || []) as any)
+              if (fixes.length === 0 && installs.length === 0 && reviewSummary.addedTaskCount === 0) return null
+              return (
+                <div style={{
+                  background: '#fffbeb', border: '1px solid #fcd34d', borderLeft: '4px solid #f59e0b',
+                  borderRadius: 10, padding: '12px 14px', marginBottom: 16,
+                }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                    Needs review
+                  </p>
+                  <ul style={{ fontSize: 13, color: '#78350f', margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
+                    {fixes.length > 0 && (
+                      <li><strong>{fixes.length} issue{fixes.length === 1 ? '' : 's'}</strong> flagged by mechanic — pre-filled as Fix tasks below</li>
+                    )}
+                    {installs.length > 0 && (
+                      <li><strong>{installs.length} part{installs.length === 1 ? '' : 's'}</strong> received and ready to install — pre-filled as Install tasks below</li>
+                    )}
+                    {reviewSummary.addedTaskCount > 0 && (
+                      <li><strong>{reviewSummary.addedTaskCount} task{reviewSummary.addedTaskCount === 1 ? '' : 's'}</strong> added by mechanic — review the carry-forward checkboxes below</li>
+                    )}
+                  </ul>
+                  {(fixes.length > 0 || installs.length > 0) && (
+                    <p style={{ fontSize: 12, color: '#92400e', marginTop: 8, marginBottom: 0 }}>
+                      <strong>Suggested:</strong> route to Mechanic (you can override below).
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
 
             {(() => {
               const addedTasks = (routingVehicle.lastCompleted?.checklist || [])
@@ -1055,12 +1228,26 @@ export default function VehiclesPage() {
                 onClick={async () => {
                   if (!routingVehicle) return
                   setRoutingSaving(true)
-                  const addedTasks = (routingVehicle.lastCompleted?.checklist || [])
-                    .filter(t => t.addedByMechanic && t.approved !== 'declined')
-                  const carriedNames = addedTasks
-                    .map((t, i) => routingCarry.has(i) ? t.item : null)
-                    .filter((s): s is string => !!s)
+                  const fullChecklist = (routingVehicle.lastCompleted?.checklist || [])
+                  // Compute carried added tasks by ORIGINAL index against the full checklist (Set keys are full-checklist indices)
+                  const carriedNames: string[] = []
+                  fullChecklist.forEach((t, i) => {
+                    if (t.addedByMechanic && t.approved !== 'declined' && routingCarry.has(i)) {
+                      carriedNames.push(t.item)
+                    }
+                  })
                   const mergedTasks = [...carriedNames, ...routingTasks]
+                  // Which install part IDs are still in the task list (admin may have un-checked some)
+                  const installPartIds = routingTasks
+                    .map(t => routingInstallMap[t])
+                    .filter((id): id is string => !!id)
+                  // Indices of addedByMechanic tasks the admin approved (kept in carry); others get auto-declined
+                  const approvedAddedIndices: number[] = []
+                  fullChecklist.forEach((t, i) => {
+                    if (t.addedByMechanic && t.approved !== 'declined' && routingCarry.has(i)) {
+                      approvedAddedIndices.push(i)
+                    }
+                  })
                   await fetch(`/api/vehicles/${routingVehicle.id}/route-stage`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1070,6 +1257,9 @@ export default function VehiclesPage() {
                       tasks: mergedTasks,
                       estimatedHours: routingEstHours || null,
                       soldDelivery: routingNext === 'detailing' ? routingSoldDelivery : false,
+                      installPartIds,
+                      previousStageId: routingVehicle.lastCompleted?.id || null,
+                      approvedAddedIndices,
                     }),
                   })
                   const res = await fetch('/api/vehicles')

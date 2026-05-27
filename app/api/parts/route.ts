@@ -62,16 +62,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  try {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { vehicleId, name, url, notes, assignedToId } = await req.json()
+  const { vehicleId, name, url, notes, assignedToId, sourceItem, sourceSubField } = await req.json()
 
   if (!vehicleId || !name) {
     return NextResponse.json({ error: 'vehicleId and name are required' }, { status: 400 })
   }
 
-  // Verify vehicle exists
+  // Verify vehicle exists + grab current stage so we can stamp sourceStageId
   const vehicle = await prisma.vehicle.findUnique({
     where: { id: vehicleId },
     select: {
@@ -80,7 +81,8 @@ export async function POST(req: NextRequest) {
       year: true,
       make: true,
       model: true,
-      color: true
+      color: true,
+      currentStageId: true,
     }
   })
 
@@ -99,7 +101,12 @@ export async function POST(req: NextRequest) {
       status: initialStatus,
       requestedById: user.id,
       assignedToId: assignedToId || null,
-      notes: notes || null
+      notes: notes || null,
+      // Remember which stage was active when the part was requested — used to
+      // group parts under their originating stage in the vehicle history dropdown.
+      sourceStageId: vehicle.currentStageId,
+      sourceItem: sourceItem || null,
+      sourceSubField: sourceSubField || null,
     },
     include: {
       vehicle: {
@@ -154,6 +161,14 @@ export async function POST(req: NextRequest) {
   })
 
   return NextResponse.json({ part })
+  } catch (e: any) {
+    console.error('[POST /api/parts] error:', e)
+    return NextResponse.json({
+      error: e?.message || 'Unknown error',
+      code: e?.code || null,
+      meta: e?.meta || null,
+    }, { status: 500 })
+  }
 }
 
 // Helper function to update vehicle awaitingParts status

@@ -4,11 +4,13 @@
 .desktop-sidebar { display: none !important; }
 .mobile-topbar { display: flex !important; }
 .mobile-only { display: block !important; }
+.desktop-only { display: none !important; }
 
 @media (min-width: 768px) {
   .desktop-sidebar { display: flex !important; }
   .mobile-topbar { display: none !important; }
   .mobile-only { display: none !important; }
+  .desktop-only { display: block !important; }
 }
 
 /* Mobile form rows — stack on small screens */
@@ -665,5 +667,69 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
   /* Hide the desktop scrollbar — swipe is the indicator */
   .kanban-scrollbar-track {
     display: none;
+  }
+
+  /* Settings (Recon tab): stack sidebar above content, sidebar becomes a horizontal pill strip */
+  .settings-recon-layout {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  .settings-sidebar {
+    position: static !important;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .settings-sidebar::-webkit-scrollbar { display: none; }
+  /* Hide section labels (STAGES / OTHER) — too cramped */
+  .settings-sidebar > p { display: none; }
+  .settings-sidebar nav {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 6px;
+    margin-bottom: 0 !important;
+  }
+  .settings-sidebar nav a {
+    flex-shrink: 0;
+    white-space: nowrap;
+    padding: 7px 14px !important;
+    border-radius: 100px !important;
+    background: #f5f5f3;
+    font-size: 12px !important;
+  }
+
+  /* Team page: action buttons split 50/50 full-width on mobile */
+  .team-card-actions {
+    justify-content: stretch !important;
+  }
+  .team-card-actions button {
+    flex: 1 !important;
+  }
+
+  /* Inventory page: stack header on mobile, full-width search */
+  .inventory-header-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .inventory-controls {
+    width: 100%;
+  }
+  .inventory-search {
+    flex: 1 !important;
+    width: auto !important;
+  }
+  .inventory-tabs {
+    white-space: nowrap;
+    scrollbar-width: none;
+  }
+  .inventory-tabs::-webkit-scrollbar { display: none; }
+  .inventory-tabs button {
+    flex-shrink: 0;
   }
 }

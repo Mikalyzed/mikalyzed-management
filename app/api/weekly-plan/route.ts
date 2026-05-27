@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 
 const WORK_START = 9
-const WORK_END = 19
+const WORK_END = 21
 const HOURS_PER_DAY = WORK_END - WORK_START
 const TZ = 'America/New_York'
 

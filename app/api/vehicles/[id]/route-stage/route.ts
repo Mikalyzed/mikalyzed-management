@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
 import { DEFAULT_CHECKLISTS, STAGE_LABELS } from '@/lib/constants'
@@ -32,6 +33,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ? parseFloat(String(body.estimatedHours))
     : null
   const soldDelivery = !!body.soldDelivery && nextStage === 'detailing'
+  // NEW: parts to mark as install-task-created (admin generated install tasks for them in this routing)
+  const installPartIds = Array.isArray(body.installPartIds)
+    ? (body.installPartIds as unknown[]).filter((x): x is string => typeof x === 'string')
+    : []
+  // NEW: source stage + which added-by-mechanic tasks were approved (others get declined)
+  const previousStageId = typeof body.previousStageId === 'string' ? body.previousStageId : null
+  const approvedAddedIndices: number[] = Array.isArray(body.approvedAddedIndices)
+    ? (body.approvedAddedIndices as unknown[]).filter((x): x is number => typeof x === 'number')
+    : []
 
   const SOLD_DELIVERY_TASKS = [
     'Floor mats placed in vehicle',
@@ -127,6 +137,37 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         details: { to: nextStage, reason },
       },
     }).catch(() => {})
+
+    // Stamp parts whose install task was just generated so they don't get re-suggested
+    // in future routing cycles.
+    if (installPartIds.length > 0) {
+      await tx.part.updateMany({
+        where: { id: { in: installPartIds }, vehicleId: id },
+        data: { installTaskCreatedAt: new Date() },
+      })
+    }
+
+    // Persist approve/decline decisions on the previous stage's added-by-mechanic tasks.
+    // Tasks at indices in approvedAddedIndices → approved; other addedByMechanic tasks → declined.
+    if (previousStageId) {
+      const prevStage = await tx.vehicleStage.findUnique({
+        where: { id: previousStageId },
+        select: { checklist: true },
+      })
+      if (prevStage && Array.isArray(prevStage.checklist)) {
+        const approvedSet = new Set(approvedAddedIndices)
+        const updatedChecklist = (prevStage.checklist as Array<Record<string, unknown>>).map((item, idx) => {
+          if (!item.addedByMechanic) return item
+          // Skip if already decided (don't overwrite a prior decision)
+          if (item.approved === 'approved' || item.approved === 'declined') return item
+          return { ...item, approved: approvedSet.has(idx) ? 'approved' : 'declined' }
+        })
+        await tx.vehicleStage.update({
+          where: { id: previousStageId },
+          data: { checklist: updatedChecklist as Prisma.InputJsonValue },
+        })
+      }
+    }
   })
 
   await recomputeInventoryStatus(vehicle.stockNumber).catch(() => {})

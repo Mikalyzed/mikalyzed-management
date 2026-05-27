@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
 import { sendNotificationEmail } from '@/lib/email'
 import { partsRequestEmail } from '@/lib/email-templates'
+import { notifyPartReceived } from '@/lib/part-notifications'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
@@ -84,6 +85,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   await updateVehiclePartsStatus(part.vehicleId)
+
+  // Notify admins + active assignee when a part is freshly marked as received.
+  // Skip if it was already received (no change) or if we're moving it OUT of received
+  // (e.g. admin status-override from received back to ordered shouldn't re-notify).
+  if (data.status === 'received' && part.status !== 'received') {
+    notifyPartReceived({
+      partId: id,
+      partName: part.name,
+      vehicleId: part.vehicle.id,
+      vehicleStockNumber: part.vehicle.stockNumber,
+      vehicleDesc: `${part.vehicle.year ?? ''} ${part.vehicle.make} ${part.vehicle.model}`.trim(),
+      triggeredByUserId: user.id,
+    })
+  }
 
   if (!statusChangeLogged) {
     await prisma.activityLog.create({

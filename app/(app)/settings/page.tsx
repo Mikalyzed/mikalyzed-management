@@ -130,9 +130,9 @@ export default function SettingsPage() {
       {tab === 'sales' && <SalesSettings />}
 
       {tab === 'recon' && <>
-      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 28, alignItems: 'start' }}>
+      <div className="settings-recon-layout" style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 28, alignItems: 'start' }}>
         {/* Sticky sidebar nav */}
-        <aside style={{ position: 'sticky', top: 84, alignSelf: 'start' }}>
+        <aside className="settings-sidebar" style={{ position: 'sticky', top: 84, alignSelf: 'start' }}>
           <p style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: 10, paddingLeft: 12 }}>
             Stages
           </p>

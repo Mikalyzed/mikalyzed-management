@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, Fragment } from 'react'
 import ScheduleView from './ScheduleView'
 import PlanView from './PlanView'
 import OrderPartModal from '@/components/OrderPartModal'
+import AddPartModal from '@/components/AddPartModal'
 import { fieldsForItem } from '@/lib/checklist-fields'
 
 type ChecklistItem = {
@@ -13,7 +14,9 @@ type ChecklistItem = {
   fields?: { key: string; label: string }[]
   addedByMechanic?: boolean
   approved?: 'pending' | 'approved' | 'declined'
-  estimatedHours?: number
+  estimatedHours?: number | null
+  sourceItem?: string
+  sourceSubField?: string
 }
 
 // Status pills can store either a plain string (legacy) or { status, note } (new)
@@ -115,8 +118,10 @@ export default function MechanicBoard() {
     if (!selectedJob) return
     const key = `${parentIdx}-${subKey}`
     const name = (issueTaskDrafts[key] || label).trim()
-    const hours = parseFloat(issueTaskHourDrafts[key] || '')
-    if (!name || !(hours > 0)) return
+    if (!name) return
+    const hoursRaw = parseFloat(issueTaskHourDrafts[key] || '')
+    const hours = isFinite(hoursRaw) && hoursRaw > 0 ? hoursRaw : null
+    const sourceItem = modalChecklist[parentIdx]?.item
     const updated = [...modalChecklist, {
       item: name,
       done: false,
@@ -124,6 +129,8 @@ export default function MechanicBoard() {
       addedByMechanic: true,
       approved: 'pending' as const,
       estimatedHours: hours,
+      sourceItem,  // remember which inspection item this task was added from
+      sourceSubField: label,  // and which sub-field within it (for sub-field issue path)
     }]
     setModalChecklist(updated)
     setIssueTaskDrafts(prev => ({ ...prev, [key]: undefined }))
@@ -155,6 +162,22 @@ export default function MechanicBoard() {
   const [timeExtHours, setTimeExtHours] = useState('')
   const [timeExtNote, setTimeExtNote] = useState('')
   const [timeExtSubmitting, setTimeExtSubmitting] = useState(false)
+  // When set, opens AddPartModal pre-filled with the name. Also remembers source for inline confirmation.
+  const [addPartFromTask, setAddPartFromTask] = useState<{ name: string; sourceItem: string; sourceSubField?: string } | null>(null)
+  // Inline "Add part" drafts keyed by item index (simple sections) or `${parentIdx}-${subKey}` (sub-field issues)
+  const [partDrafts, setPartDrafts] = useState<Record<string, string>>({})
+  // Item indices where mechanic tried to mark complete but some sub-fields were empty.
+  // Triggers a red ! next to each empty sub-field label.
+  const [completionAttempts, setCompletionAttempts] = useState<Set<number>>(new Set())
+  // Modal for collecting estimated hours when adding any task. Drives both simple-section and sub-field paths.
+  type EstimateModal =
+    | { kind: 'simple'; itemIdx: number; taskName: string }
+    | { kind: 'subfield'; parentIdx: number; subKey: string; label: string; taskName: string }
+  const [estimateModal, setEstimateModal] = useState<EstimateModal | null>(null)
+  const [estimateHoursInput, setEstimateHoursInput] = useState('')
+  // Cache of parts created during this session so we can show "added from here" inline confirmation.
+  // Each entry: { name, sourceItem, sourceSubField? }
+  const [sessionAddedParts, setSessionAddedParts] = useState<{ id: string; name: string; sourceItem: string; sourceSubField?: string }[]>([])
   const [addTaskJob, setAddTaskJob] = useState<JobCard | null>(null)
   const [addTaskItems, setAddTaskItems] = useState<{ name: string; hours: string; note: string }[]>([{ name: '', hours: '', note: '' }])
   const [addTaskSubmitting, setAddTaskSubmitting] = useState(false)
@@ -209,11 +232,94 @@ export default function MechanicBoard() {
     setActing(false)
   }
 
+  // Modal handlers: when mechanic clicks "Add task", we open estimateModal first to collect hours,
+  // then trigger the appropriate add* helper with the entered hours.
+  const openSimpleEstimateModal = (itemIdx: number) => {
+    const taskName = (followupDrafts[itemIdx] || '').trim()
+    if (!taskName) return
+    setEstimateModal({ kind: 'simple', itemIdx, taskName })
+    setEstimateHoursInput('')
+  }
+  const openSubFieldEstimateModal = (parentIdx: number, subKey: string, label: string) => {
+    const key = `${parentIdx}-${subKey}`
+    const draft = issueTaskDrafts[key]
+    const subNote = (() => {
+      const data = (modalChecklist[parentIdx]?.data || {}) as Record<string, unknown>
+      const v = data[subKey]
+      if (v && typeof v === 'object' && 'note' in v) return String((v as { note?: string }).note || '').trim()
+      return ''
+    })()
+    const taskName = (draft !== undefined ? draft : subNote).trim()
+    if (!taskName) return
+    setEstimateModal({ kind: 'subfield', parentIdx, subKey, label, taskName })
+    setEstimateHoursInput('')
+  }
+  const confirmEstimate = async () => {
+    if (!estimateModal) return
+    const hours = parseFloat(estimateHoursInput)
+    if (!isFinite(hours) || hours <= 0) return
+    if (estimateModal.kind === 'simple') {
+      // Stash the hours into the draft so addFollowupTask picks it up
+      setFollowupHourDrafts(prev => ({ ...prev, [estimateModal.itemIdx]: String(hours) }))
+      // We need to wait for state to flush, so just inline the create logic here
+      const sourceItem = modalChecklist[estimateModal.itemIdx]?.item
+      const updated = [...modalChecklist, {
+        item: estimateModal.taskName,
+        done: false,
+        note: '',
+        addedByMechanic: true,
+        approved: 'pending' as const,
+        estimatedHours: hours,
+        sourceItem,
+      }]
+      setModalChecklist(updated)
+      setFollowupDrafts(prev => ({ ...prev, [estimateModal.itemIdx]: '' }))
+      setFollowupHourDrafts(prev => ({ ...prev, [estimateModal.itemIdx]: '' }))
+      setSaving(true)
+      try {
+        await fetch(`/api/stages/${selectedJob!.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ checklist: updated }),
+        })
+      } catch { /* ignore */ }
+      setSaving(false)
+    } else {
+      const key = `${estimateModal.parentIdx}-${estimateModal.subKey}`
+      const parentItem = modalChecklist[estimateModal.parentIdx]?.item
+      const updated = [...modalChecklist, {
+        item: estimateModal.taskName,
+        done: false,
+        note: '',
+        addedByMechanic: true,
+        approved: 'pending' as const,
+        estimatedHours: hours,
+        sourceItem: parentItem,
+        sourceSubField: estimateModal.label,
+      }]
+      setModalChecklist(updated)
+      setIssueTaskDrafts(prev => ({ ...prev, [key]: undefined }))
+      setIssueTaskHourDrafts(prev => ({ ...prev, [key]: '' }))
+      setSaving(true)
+      try {
+        await fetch(`/api/stages/${selectedJob!.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ checklist: updated }),
+        })
+      } catch { /* ignore */ }
+      setSaving(false)
+    }
+    setEstimateModal(null)
+    setEstimateHoursInput('')
+  }
+
   const addFollowupTask = async (sourceIdx: number) => {
     if (!selectedJob) return
     const name = (followupDrafts[sourceIdx] || '').trim()
     const hours = parseFloat(followupHourDrafts[sourceIdx] || '')
     if (!name || !(hours > 0)) return
+    const sourceItem = modalChecklist[sourceIdx]?.item
     const updated = [...modalChecklist, {
       item: name,
       done: false,
@@ -221,6 +327,7 @@ export default function MechanicBoard() {
       addedByMechanic: true,
       approved: 'pending' as const,
       estimatedHours: hours,
+      sourceItem,  // remember which inspection item this task was added from
     }]
     setModalChecklist(updated)
     setFollowupDrafts(prev => ({ ...prev, [sourceIdx]: '' }))
@@ -299,6 +406,29 @@ export default function MechanicBoard() {
     return null
   }
 
+  // Small red ! pip shown next to empty sub-field labels after a failed completion attempt.
+  const WarnPip = () => (
+    <span
+      title="Fill this in before marking the task complete"
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 14, height: 14, borderRadius: '50%',
+        background: '#dc2626', color: '#fff',
+        fontSize: 10, fontWeight: 700,
+        marginLeft: 6, lineHeight: 1,
+      }}
+    >!</span>
+  )
+
+  // Whether a specific sub-field within an item is empty. Used for the red ! warnings.
+  const isSubFieldEmpty = (item: ChecklistItem, key: string): boolean => {
+    const d = (item.data || {}) as Record<string, unknown>
+    if (item.type === 'tirePsi' || item.type === 'brakePads') {
+      return typeof d[key] !== 'number'
+    }
+    return !getPillStatus(d[key])
+  }
+
   const isStructuredComplete = (item: ChecklistItem): boolean => {
     const d = (item.data || {}) as Record<string, unknown>
     if (item.type === 'tirePsi') {
@@ -334,10 +464,23 @@ export default function MechanicBoard() {
       setExpandedTaskIdx(index)
       return
     }
-    // Block check-on if structured fields aren't filled
+    // Block check-on if structured fields aren't filled — mark for red ! highlights
     if (!target.done && !isStructuredComplete(target)) {
       setExpandedTaskIdx(index)
+      setCompletionAttempts(prev => {
+        const next = new Set(prev)
+        next.add(index)
+        return next
+      })
       return
+    }
+    // Successful toggle clears any prior warning state for this item
+    if (completionAttempts.has(index)) {
+      setCompletionAttempts(prev => {
+        const next = new Set(prev)
+        next.delete(index)
+        return next
+      })
     }
     const updated = [...modalChecklist]
     updated[index] = { ...updated[index], done: !updated[index].done }
@@ -686,7 +829,7 @@ export default function MechanicBoard() {
           <p className="pipeline-chip-value" style={{ fontSize: 18 }}>{data.weeklyWorkedHours}h</p>
           <p className="pipeline-chip-label">Worked This Week</p>
           {data.weeklyEstimatedHours > 0 && (
-            <span style={{ fontSize: 10, fontWeight: 700, color: effColor, marginTop: 2, display: 'block' }}>
+            <span className="desktop-only" style={{ fontSize: 10, fontWeight: 700, color: effColor, marginTop: 2 }}>
               {effPct}% — {effLabel}
             </span>
           )}
@@ -1057,11 +1200,6 @@ export default function MechanicBoard() {
 
                             {isExpanded && (
                               <div style={{ padding: '0 12px 12px 46px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                {hasStructured && !isStructuredComplete(item) && (
-                                  <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', padding: '6px 10px', borderRadius: 6, margin: 0 }}>
-                                    Fill in all fields below before marking this task complete.
-                                  </p>
-                                )}
                                 {item.addedByMechanic && item.approved === 'pending' && (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
                                     {isAdmin ? (
@@ -1082,7 +1220,10 @@ export default function MechanicBoard() {
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                                       {fieldsForItem(item).map(({ key, label }) => (
                                         <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</label>
+                                          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                            {label}
+                                            {completionAttempts.has(i) && isSubFieldEmpty(item, key) && <WarnPip />}
+                                          </label>
                                           <input
                                             type="number" min="0" step="0.5" inputMode="decimal"
                                             value={data[key] ?? ''}
@@ -1105,7 +1246,10 @@ export default function MechanicBoard() {
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                                       {fieldsForItem(item).map(({ key, label }) => (
                                         <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</label>
+                                          <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                                            {label}
+                                            {completionAttempts.has(i) && isSubFieldEmpty(item, key) && <WarnPip />}
+                                          </label>
                                           <input
                                             type="number" min="0" step="0.5" inputMode="decimal"
                                             value={data[key] ?? ''}
@@ -1132,7 +1276,10 @@ export default function MechanicBoard() {
                                         return (
                                           <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                              <span style={{ fontSize: 13, flex: 1 }}>{label}</span>
+                                              <span style={{ fontSize: 13, flex: 1, display: 'inline-flex', alignItems: 'center' }}>
+                                                {label}
+                                                {completionAttempts.has(i) && isSubFieldEmpty(item, key) && <WarnPip />}
+                                              </span>
                                               <div style={{ display: 'flex', gap: 4 }}>
                                                 {(['ok', 'topped', 'issue'] as const).map(opt => {
                                                   const active = status === opt
@@ -1156,72 +1303,110 @@ export default function MechanicBoard() {
                                             </div>
                                             {status && ISSUE_STATUSES.has(status) && (() => {
                                               const taskKey = `${i}-${key}`
-                                              const taskDraft = issueTaskDrafts[taskKey]
-                                              const isAddingTask = taskDraft !== undefined
+                                              const taskDraftValue = issueTaskDrafts[taskKey]
+                                              const inputValue = taskDraftValue !== undefined ? taskDraftValue : subNote
+                                              const canAddTask = (inputValue || '').trim().length > 0
+                                              const partDraftKey = `sub-${taskKey}`
+                                              const partName = partDrafts[partDraftKey] || ''
+                                              const canAddPart = partName.trim().length > 0
+                                              const parentItemName = modalChecklist[i]?.item || ''
+                                              const addedTasksHere = modalChecklist.filter(t => t.addedByMechanic && (t as any).sourceSubField === label && (t as any).sourceItem === parentItemName)
+                                              const addedPartsHere = sessionAddedParts.filter(p => p.sourceSubField === label && p.sourceItem === parentItemName)
+                                              const persistIssueNote = (val: string) => {
+                                                if (val === subNote) return
+                                                const next = { ...data, [key]: { status, note: val } }
+                                                updateChecklistItem(i, { data: next })
+                                              }
+                                              const openPartModal = () => {
+                                                setAddPartFromTask({ name: partName, sourceItem: parentItemName, sourceSubField: label })
+                                                setPartDrafts(prev => ({ ...prev, [partDraftKey]: '' }))
+                                              }
                                               return (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                                  <input
-                                                    type="text"
-                                                    defaultValue={subNote}
-                                                    onBlur={(e) => {
-                                                      if (e.target.value === subNote) return
-                                                      const next = { ...data, [key]: { status, note: e.target.value } }
-                                                      updateChecklistItem(i, { data: next })
-                                                    }}
-                                                    placeholder={`What's the issue with ${label.toLowerCase()}?`}
-                                                    style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', fontSize: 12, width: '100%' }}
-                                                  />
-                                                  {!isAddingTask ? (
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => setIssueTaskDrafts(prev => ({
-                                                        ...prev,
-                                                        [taskKey]: subNote ? `${label}: ${subNote}` : `Fix ${label.toLowerCase()}`,
-                                                      }))}
-                                                      style={{
-                                                        alignSelf: 'flex-start', fontSize: 11, padding: '4px 10px', borderRadius: 6,
-                                                        border: '1px dashed #fca5a5', background: '#fff', color: '#dc2626',
-                                                        fontWeight: 600, cursor: 'pointer',
-                                                      }}
-                                                    >+ Add as task</button>
-                                                  ) : (
-                                                    <div style={{
-                                                      display: 'flex', flexDirection: 'column', gap: 6,
-                                                      padding: 8, borderRadius: 8, background: '#fff', border: '1px solid var(--border)',
-                                                    }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 10 }}>
+                                                  {/* Issue / task input + Add task button — slim, one row */}
+                                                  <div>
+                                                    <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                                                      What&apos;s the issue?
+                                                    </label>
+                                                    <div style={{ display: 'flex', gap: 6 }}>
                                                       <input
                                                         type="text"
-                                                        value={taskDraft}
+                                                        value={inputValue}
                                                         onChange={(e) => setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
-                                                        placeholder="Task name"
-                                                        autoFocus
-                                                        style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13 }}
+                                                        onBlur={(e) => persistIssueNote(e.target.value)}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter' && canAddTask) { e.preventDefault(); persistIssueNote(inputValue); openSubFieldEstimateModal(i, key, label) } }}
+                                                        placeholder={`What's the issue with ${label.toLowerCase()}?`}
+                                                        style={{ flex: 1, padding: '5px 8px', borderRadius: 6, border: '1px dashed #fca5a5', fontSize: 12, background: '#fef2f2' }}
                                                       />
-                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                        <input
-                                                          type="number" step="0.5" min="0"
-                                                          value={issueTaskHourDrafts[taskKey] || ''}
-                                                          onChange={(e) => setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
-                                                          onKeyDown={(e) => { if (e.key === 'Enter' && taskDraft.trim() && parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) { e.preventDefault(); addIssueTask(i, key, label) } }}
-                                                          placeholder="Hours"
-                                                          style={{ width: 90, padding: '7px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12 }}
-                                                        />
-                                                        <div style={{ flex: 1 }} />
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => { setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: undefined })); setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: '' })) }}
-                                                          style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)', background: '#fff', fontSize: 12, cursor: 'pointer' }}
-                                                        >Cancel</button>
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => addIssueTask(i, key, label)}
-                                                          disabled={!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving}
-                                                          style={{
-                                                            padding: '7px 14px', borderRadius: 6, border: 'none',
-                                                            background: '#1a1a1a', color: '#dffd6e', fontSize: 12, fontWeight: 600,
-                                                            cursor: 'pointer', opacity: (!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving) ? 0.5 : 1,
-                                                          }}
-                                                        >Add task</button>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => { persistIssueNote(inputValue); openSubFieldEstimateModal(i, key, label) }}
+                                                        disabled={!canAddTask || saving}
+                                                        style={{
+                                                          padding: '4px 12px', borderRadius: 6, border: 'none',
+                                                          background: '#dc2626', color: '#fff', fontSize: 12, fontWeight: 600,
+                                                          cursor: 'pointer', opacity: !canAddTask || saving ? 0.5 : 1,
+                                                          whiteSpace: 'nowrap', minHeight: 0, lineHeight: 1.2,
+                                                        }}
+                                                      >Add task</button>
+                                                    </div>
+                                                  </div>
+                                                  {/* Add a part — slim form; click opens modal pre-filled */}
+                                                  <div>
+                                                    <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                                                      Add a part
+                                                    </label>
+                                                    <div style={{ display: 'flex', gap: 6 }}>
+                                                      <input
+                                                        type="text"
+                                                        value={partName}
+                                                        onChange={(e) => setPartDrafts(prev => ({ ...prev, [partDraftKey]: e.target.value }))}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter' && canAddPart) { e.preventDefault(); openPartModal() } }}
+                                                        placeholder={`e.g. ${label}`}
+                                                        style={{ flex: 1, padding: '5px 8px', borderRadius: 6, border: '1px dashed #93c5fd', fontSize: 12, background: '#f0f9ff' }}
+                                                      />
+                                                      <button
+                                                        type="button"
+                                                        onClick={openPartModal}
+                                                        disabled={!canAddPart || saving}
+                                                        style={{
+                                                          padding: '4px 12px', borderRadius: 6, border: 'none',
+                                                          background: '#1d4ed8', color: '#fff', fontSize: 12, fontWeight: 600,
+                                                          cursor: 'pointer', opacity: !canAddPart || saving ? 0.5 : 1,
+                                                          whiteSpace: 'nowrap', minHeight: 0, lineHeight: 1.2,
+                                                        }}
+                                                      >Add part</button>
+                                                    </div>
+                                                  </div>
+                                                  {/* Inline confirmation — tasks added from this sub-field */}
+                                                  {addedTasksHere.length > 0 && (
+                                                    <div style={{ padding: '6px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6 }}>
+                                                      <p style={{ fontSize: 10, fontWeight: 700, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px' }}>
+                                                        Tasks added ({addedTasksHere.length})
+                                                      </p>
+                                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                                        {addedTasksHere.map((t, idx) => (
+                                                          <div key={idx} style={{ fontSize: 11, color: '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#dc2626' }} />
+                                                            <span>{t.item}</span>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                  {/* Inline confirmation — parts added from this sub-field */}
+                                                  {addedPartsHere.length > 0 && (
+                                                    <div style={{ padding: '6px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6 }}>
+                                                      <p style={{ fontSize: 10, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px' }}>
+                                                        Parts added ({addedPartsHere.length})
+                                                      </p>
+                                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                                        {addedPartsHere.map((p, idx) => (
+                                                          <div key={idx} style={{ fontSize: 11, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#2563eb' }} />
+                                                            <span>{p.name}</span>
+                                                          </div>
+                                                        ))}
                                                       </div>
                                                     </div>
                                                   )}
@@ -1247,7 +1432,10 @@ export default function MechanicBoard() {
                                         return (
                                           <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                              <span style={{ fontSize: 13, flex: 1 }}>{label}</span>
+                                              <span style={{ fontSize: 13, flex: 1, display: 'inline-flex', alignItems: 'center' }}>
+                                                {label}
+                                                {completionAttempts.has(i) && isSubFieldEmpty(item, key) && <WarnPip />}
+                                              </span>
                                               <div style={{ display: 'flex', gap: 4 }}>
                                                 {(['ok', 'issue'] as const).map(opt => {
                                                   const active = status === opt
@@ -1271,72 +1459,110 @@ export default function MechanicBoard() {
                                             </div>
                                             {status && ISSUE_STATUSES.has(status) && (() => {
                                               const taskKey = `${i}-${key}`
-                                              const taskDraft = issueTaskDrafts[taskKey]
-                                              const isAddingTask = taskDraft !== undefined
+                                              const taskDraftValue = issueTaskDrafts[taskKey]
+                                              const inputValue = taskDraftValue !== undefined ? taskDraftValue : subNote
+                                              const canAddTask = (inputValue || '').trim().length > 0
+                                              const partDraftKey = `sub-${taskKey}`
+                                              const partName = partDrafts[partDraftKey] || ''
+                                              const canAddPart = partName.trim().length > 0
+                                              const parentItemName = modalChecklist[i]?.item || ''
+                                              const addedTasksHere = modalChecklist.filter(t => t.addedByMechanic && (t as any).sourceSubField === label && (t as any).sourceItem === parentItemName)
+                                              const addedPartsHere = sessionAddedParts.filter(p => p.sourceSubField === label && p.sourceItem === parentItemName)
+                                              const persistIssueNote = (val: string) => {
+                                                if (val === subNote) return
+                                                const next = { ...data, [key]: { status, note: val } }
+                                                updateChecklistItem(i, { data: next })
+                                              }
+                                              const openPartModal = () => {
+                                                setAddPartFromTask({ name: partName, sourceItem: parentItemName, sourceSubField: label })
+                                                setPartDrafts(prev => ({ ...prev, [partDraftKey]: '' }))
+                                              }
                                               return (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                                  <input
-                                                    type="text"
-                                                    defaultValue={subNote}
-                                                    onBlur={(e) => {
-                                                      if (e.target.value === subNote) return
-                                                      const next = { ...data, [key]: { status, note: e.target.value } }
-                                                      updateChecklistItem(i, { data: next })
-                                                    }}
-                                                    placeholder={`What's the issue with ${label.toLowerCase()}?`}
-                                                    style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', fontSize: 12, width: '100%' }}
-                                                  />
-                                                  {!isAddingTask ? (
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => setIssueTaskDrafts(prev => ({
-                                                        ...prev,
-                                                        [taskKey]: subNote ? `${label}: ${subNote}` : `Fix ${label.toLowerCase()}`,
-                                                      }))}
-                                                      style={{
-                                                        alignSelf: 'flex-start', fontSize: 11, padding: '4px 10px', borderRadius: 6,
-                                                        border: '1px dashed #fca5a5', background: '#fff', color: '#dc2626',
-                                                        fontWeight: 600, cursor: 'pointer',
-                                                      }}
-                                                    >+ Add as task</button>
-                                                  ) : (
-                                                    <div style={{
-                                                      display: 'flex', flexDirection: 'column', gap: 6,
-                                                      padding: 8, borderRadius: 8, background: '#fff', border: '1px solid var(--border)',
-                                                    }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 10 }}>
+                                                  {/* Issue / task input + Add task button — slim, one row */}
+                                                  <div>
+                                                    <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                                                      What&apos;s the issue?
+                                                    </label>
+                                                    <div style={{ display: 'flex', gap: 6 }}>
                                                       <input
                                                         type="text"
-                                                        value={taskDraft}
+                                                        value={inputValue}
                                                         onChange={(e) => setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
-                                                        placeholder="Task name"
-                                                        autoFocus
-                                                        style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13 }}
+                                                        onBlur={(e) => persistIssueNote(e.target.value)}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter' && canAddTask) { e.preventDefault(); persistIssueNote(inputValue); openSubFieldEstimateModal(i, key, label) } }}
+                                                        placeholder={`What's the issue with ${label.toLowerCase()}?`}
+                                                        style={{ flex: 1, padding: '5px 8px', borderRadius: 6, border: '1px dashed #fca5a5', fontSize: 12, background: '#fef2f2' }}
                                                       />
-                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                        <input
-                                                          type="number" step="0.5" min="0"
-                                                          value={issueTaskHourDrafts[taskKey] || ''}
-                                                          onChange={(e) => setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
-                                                          onKeyDown={(e) => { if (e.key === 'Enter' && taskDraft.trim() && parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) { e.preventDefault(); addIssueTask(i, key, label) } }}
-                                                          placeholder="Hours"
-                                                          style={{ width: 90, padding: '7px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12 }}
-                                                        />
-                                                        <div style={{ flex: 1 }} />
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => { setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: undefined })); setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: '' })) }}
-                                                          style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)', background: '#fff', fontSize: 12, cursor: 'pointer' }}
-                                                        >Cancel</button>
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => addIssueTask(i, key, label)}
-                                                          disabled={!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving}
-                                                          style={{
-                                                            padding: '7px 14px', borderRadius: 6, border: 'none',
-                                                            background: '#1a1a1a', color: '#dffd6e', fontSize: 12, fontWeight: 600,
-                                                            cursor: 'pointer', opacity: (!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving) ? 0.5 : 1,
-                                                          }}
-                                                        >Add task</button>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => { persistIssueNote(inputValue); openSubFieldEstimateModal(i, key, label) }}
+                                                        disabled={!canAddTask || saving}
+                                                        style={{
+                                                          padding: '4px 12px', borderRadius: 6, border: 'none',
+                                                          background: '#dc2626', color: '#fff', fontSize: 12, fontWeight: 600,
+                                                          cursor: 'pointer', opacity: !canAddTask || saving ? 0.5 : 1,
+                                                          whiteSpace: 'nowrap', minHeight: 0, lineHeight: 1.2,
+                                                        }}
+                                                      >Add task</button>
+                                                    </div>
+                                                  </div>
+                                                  {/* Add a part — slim form; click opens modal pre-filled */}
+                                                  <div>
+                                                    <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                                                      Add a part
+                                                    </label>
+                                                    <div style={{ display: 'flex', gap: 6 }}>
+                                                      <input
+                                                        type="text"
+                                                        value={partName}
+                                                        onChange={(e) => setPartDrafts(prev => ({ ...prev, [partDraftKey]: e.target.value }))}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter' && canAddPart) { e.preventDefault(); openPartModal() } }}
+                                                        placeholder={`e.g. ${label}`}
+                                                        style={{ flex: 1, padding: '5px 8px', borderRadius: 6, border: '1px dashed #93c5fd', fontSize: 12, background: '#f0f9ff' }}
+                                                      />
+                                                      <button
+                                                        type="button"
+                                                        onClick={openPartModal}
+                                                        disabled={!canAddPart || saving}
+                                                        style={{
+                                                          padding: '4px 12px', borderRadius: 6, border: 'none',
+                                                          background: '#1d4ed8', color: '#fff', fontSize: 12, fontWeight: 600,
+                                                          cursor: 'pointer', opacity: !canAddPart || saving ? 0.5 : 1,
+                                                          whiteSpace: 'nowrap', minHeight: 0, lineHeight: 1.2,
+                                                        }}
+                                                      >Add part</button>
+                                                    </div>
+                                                  </div>
+                                                  {/* Inline confirmation — tasks added from this sub-field */}
+                                                  {addedTasksHere.length > 0 && (
+                                                    <div style={{ padding: '6px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6 }}>
+                                                      <p style={{ fontSize: 10, fontWeight: 700, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px' }}>
+                                                        Tasks added ({addedTasksHere.length})
+                                                      </p>
+                                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                                        {addedTasksHere.map((t, idx) => (
+                                                          <div key={idx} style={{ fontSize: 11, color: '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#dc2626' }} />
+                                                            <span>{t.item}</span>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                  {/* Inline confirmation — parts added from this sub-field */}
+                                                  {addedPartsHere.length > 0 && (
+                                                    <div style={{ padding: '6px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6 }}>
+                                                      <p style={{ fontSize: 10, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px' }}>
+                                                        Parts added ({addedPartsHere.length})
+                                                      </p>
+                                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                                        {addedPartsHere.map((p, idx) => (
+                                                          <div key={idx} style={{ fontSize: 11, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#2563eb' }} />
+                                                            <span>{p.name}</span>
+                                                          </div>
+                                                        ))}
                                                       </div>
                                                     </div>
                                                   )}
@@ -1362,7 +1588,10 @@ export default function MechanicBoard() {
                                         return (
                                           <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                              <span style={{ fontSize: 13, flex: 1 }}>{label}</span>
+                                              <span style={{ fontSize: 13, flex: 1, display: 'inline-flex', alignItems: 'center' }}>
+                                                {label}
+                                                {completionAttempts.has(i) && isSubFieldEmpty(item, key) && <WarnPip />}
+                                              </span>
                                               <div style={{ display: 'flex', gap: 4 }}>
                                                 {(['no', 'yes'] as const).map(opt => {
                                                   const active = status === opt
@@ -1386,72 +1615,110 @@ export default function MechanicBoard() {
                                             </div>
                                             {status && ISSUE_STATUSES.has(status) && (() => {
                                               const taskKey = `${i}-${key}`
-                                              const taskDraft = issueTaskDrafts[taskKey]
-                                              const isAddingTask = taskDraft !== undefined
+                                              const taskDraftValue = issueTaskDrafts[taskKey]
+                                              const inputValue = taskDraftValue !== undefined ? taskDraftValue : subNote
+                                              const canAddTask = (inputValue || '').trim().length > 0
+                                              const partDraftKey = `sub-${taskKey}`
+                                              const partName = partDrafts[partDraftKey] || ''
+                                              const canAddPart = partName.trim().length > 0
+                                              const parentItemName = modalChecklist[i]?.item || ''
+                                              const addedTasksHere = modalChecklist.filter(t => t.addedByMechanic && (t as any).sourceSubField === label && (t as any).sourceItem === parentItemName)
+                                              const addedPartsHere = sessionAddedParts.filter(p => p.sourceSubField === label && p.sourceItem === parentItemName)
+                                              const persistIssueNote = (val: string) => {
+                                                if (val === subNote) return
+                                                const next = { ...data, [key]: { status, note: val } }
+                                                updateChecklistItem(i, { data: next })
+                                              }
+                                              const openPartModal = () => {
+                                                setAddPartFromTask({ name: partName, sourceItem: parentItemName, sourceSubField: label })
+                                                setPartDrafts(prev => ({ ...prev, [partDraftKey]: '' }))
+                                              }
                                               return (
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                                  <input
-                                                    type="text"
-                                                    defaultValue={subNote}
-                                                    onBlur={(e) => {
-                                                      if (e.target.value === subNote) return
-                                                      const next = { ...data, [key]: { status, note: e.target.value } }
-                                                      updateChecklistItem(i, { data: next })
-                                                    }}
-                                                    placeholder={`What's the issue with ${label.toLowerCase()}?`}
-                                                    style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #fecaca', background: '#fef2f2', fontSize: 12, width: '100%' }}
-                                                  />
-                                                  {!isAddingTask ? (
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => setIssueTaskDrafts(prev => ({
-                                                        ...prev,
-                                                        [taskKey]: subNote ? `${label}: ${subNote}` : `Fix ${label.toLowerCase()}`,
-                                                      }))}
-                                                      style={{
-                                                        alignSelf: 'flex-start', fontSize: 11, padding: '4px 10px', borderRadius: 6,
-                                                        border: '1px dashed #fca5a5', background: '#fff', color: '#dc2626',
-                                                        fontWeight: 600, cursor: 'pointer',
-                                                      }}
-                                                    >+ Add as task</button>
-                                                  ) : (
-                                                    <div style={{
-                                                      display: 'flex', flexDirection: 'column', gap: 6,
-                                                      padding: 8, borderRadius: 8, background: '#fff', border: '1px solid var(--border)',
-                                                    }}>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 10 }}>
+                                                  {/* Issue / task input + Add task button — slim, one row */}
+                                                  <div>
+                                                    <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                                                      What&apos;s the issue?
+                                                    </label>
+                                                    <div style={{ display: 'flex', gap: 6 }}>
                                                       <input
                                                         type="text"
-                                                        value={taskDraft}
+                                                        value={inputValue}
                                                         onChange={(e) => setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
-                                                        placeholder="Task name"
-                                                        autoFocus
-                                                        style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 13 }}
+                                                        onBlur={(e) => persistIssueNote(e.target.value)}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter' && canAddTask) { e.preventDefault(); persistIssueNote(inputValue); openSubFieldEstimateModal(i, key, label) } }}
+                                                        placeholder={`What's the issue with ${label.toLowerCase()}?`}
+                                                        style={{ flex: 1, padding: '5px 8px', borderRadius: 6, border: '1px dashed #fca5a5', fontSize: 12, background: '#fef2f2' }}
                                                       />
-                                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                                        <input
-                                                          type="number" step="0.5" min="0"
-                                                          value={issueTaskHourDrafts[taskKey] || ''}
-                                                          onChange={(e) => setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: e.target.value }))}
-                                                          onKeyDown={(e) => { if (e.key === 'Enter' && taskDraft.trim() && parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) { e.preventDefault(); addIssueTask(i, key, label) } }}
-                                                          placeholder="Hours"
-                                                          style={{ width: 90, padding: '7px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 12 }}
-                                                        />
-                                                        <div style={{ flex: 1 }} />
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => { setIssueTaskDrafts(prev => ({ ...prev, [taskKey]: undefined })); setIssueTaskHourDrafts(prev => ({ ...prev, [taskKey]: '' })) }}
-                                                          style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid var(--border)', background: '#fff', fontSize: 12, cursor: 'pointer' }}
-                                                        >Cancel</button>
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => addIssueTask(i, key, label)}
-                                                          disabled={!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving}
-                                                          style={{
-                                                            padding: '7px 14px', borderRadius: 6, border: 'none',
-                                                            background: '#1a1a1a', color: '#dffd6e', fontSize: 12, fontWeight: 600,
-                                                            cursor: 'pointer', opacity: (!taskDraft.trim() || !(parseFloat(issueTaskHourDrafts[taskKey] || '') > 0) || saving) ? 0.5 : 1,
-                                                          }}
-                                                        >Add task</button>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => { persistIssueNote(inputValue); openSubFieldEstimateModal(i, key, label) }}
+                                                        disabled={!canAddTask || saving}
+                                                        style={{
+                                                          padding: '4px 12px', borderRadius: 6, border: 'none',
+                                                          background: '#dc2626', color: '#fff', fontSize: 12, fontWeight: 600,
+                                                          cursor: 'pointer', opacity: !canAddTask || saving ? 0.5 : 1,
+                                                          whiteSpace: 'nowrap', minHeight: 0, lineHeight: 1.2,
+                                                        }}
+                                                      >Add task</button>
+                                                    </div>
+                                                  </div>
+                                                  {/* Add a part — slim form; click opens modal pre-filled */}
+                                                  <div>
+                                                    <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                                                      Add a part
+                                                    </label>
+                                                    <div style={{ display: 'flex', gap: 6 }}>
+                                                      <input
+                                                        type="text"
+                                                        value={partName}
+                                                        onChange={(e) => setPartDrafts(prev => ({ ...prev, [partDraftKey]: e.target.value }))}
+                                                        onKeyDown={(e) => { if (e.key === 'Enter' && canAddPart) { e.preventDefault(); openPartModal() } }}
+                                                        placeholder={`e.g. ${label}`}
+                                                        style={{ flex: 1, padding: '5px 8px', borderRadius: 6, border: '1px dashed #93c5fd', fontSize: 12, background: '#f0f9ff' }}
+                                                      />
+                                                      <button
+                                                        type="button"
+                                                        onClick={openPartModal}
+                                                        disabled={!canAddPart || saving}
+                                                        style={{
+                                                          padding: '4px 12px', borderRadius: 6, border: 'none',
+                                                          background: '#1d4ed8', color: '#fff', fontSize: 12, fontWeight: 600,
+                                                          cursor: 'pointer', opacity: !canAddPart || saving ? 0.5 : 1,
+                                                          whiteSpace: 'nowrap', minHeight: 0, lineHeight: 1.2,
+                                                        }}
+                                                      >Add part</button>
+                                                    </div>
+                                                  </div>
+                                                  {/* Inline confirmation — tasks added from this sub-field */}
+                                                  {addedTasksHere.length > 0 && (
+                                                    <div style={{ padding: '6px 8px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6 }}>
+                                                      <p style={{ fontSize: 10, fontWeight: 700, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px' }}>
+                                                        Tasks added ({addedTasksHere.length})
+                                                      </p>
+                                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                                        {addedTasksHere.map((t, idx) => (
+                                                          <div key={idx} style={{ fontSize: 11, color: '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#dc2626' }} />
+                                                            <span>{t.item}</span>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                  {/* Inline confirmation — parts added from this sub-field */}
+                                                  {addedPartsHere.length > 0 && (
+                                                    <div style={{ padding: '6px 8px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6 }}>
+                                                      <p style={{ fontSize: 10, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px' }}>
+                                                        Parts added ({addedPartsHere.length})
+                                                      </p>
+                                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                                        {addedPartsHere.map((p, idx) => (
+                                                          <div key={idx} style={{ fontSize: 11, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                            <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#2563eb' }} />
+                                                            <span>{p.name}</span>
+                                                          </div>
+                                                        ))}
                                                       </div>
                                                     </div>
                                                   )}
@@ -1473,8 +1740,9 @@ export default function MechanicBoard() {
                                   {/* "+ Add task" — only on regular items, sent to admin for approval */}
                                   {!item.addedByMechanic && (() => {
                                     const taskName = followupDrafts[i] || ''
-                                    const taskHours = followupHourDrafts[i] || ''
-                                    const canAdd = taskName.trim() && parseFloat(taskHours) > 0
+                                    const canAdd = taskName.trim().length > 0
+                                    // Tasks added from THIS item (inline confirmation so user doesn't have to scroll)
+                                    const addedHere = modalChecklist.filter(c => c.addedByMechanic && (c as any).sourceItem === item.item)
                                     return (
                                       <div>
                                         <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
@@ -1485,28 +1753,99 @@ export default function MechanicBoard() {
                                             type="text"
                                             value={taskName}
                                             onChange={(e) => setFollowupDrafts(prev => ({ ...prev, [i]: e.target.value }))}
+                                            onKeyDown={(e) => { if (e.key === 'Enter' && canAdd) { e.preventDefault(); openSimpleEstimateModal(i) } }}
                                             placeholder="e.g. Replace front brake pads"
-                                            style={{ flex: 1, padding: '7px 10px', borderRadius: 6, border: '1px dashed var(--border)', fontSize: 13, background: '#fafafa' }}
-                                          />
-                                          <input
-                                            type="number" step="0.5" min="0"
-                                            value={taskHours}
-                                            onChange={(e) => setFollowupHourDrafts(prev => ({ ...prev, [i]: e.target.value }))}
-                                            onKeyDown={(e) => { if (e.key === 'Enter' && canAdd) { e.preventDefault(); addFollowupTask(i) } }}
-                                            placeholder="hrs"
-                                            style={{ width: 70, padding: '7px 10px', borderRadius: 6, border: '1px dashed var(--border)', fontSize: 13, background: '#fafafa' }}
+                                            style={{ flex: 1, padding: '5px 8px', borderRadius: 6, border: '1px dashed var(--border)', fontSize: 12, background: '#fafafa' }}
                                           />
                                           <button
                                             type="button"
-                                            onClick={() => addFollowupTask(i)}
+                                            onClick={() => openSimpleEstimateModal(i)}
                                             disabled={!canAdd || saving}
                                             style={{
-                                              padding: '7px 12px', borderRadius: 6, border: 'none',
+                                              padding: '4px 12px', borderRadius: 6, border: 'none',
                                               background: '#1a1a1a', color: '#dffd6e', fontSize: 12, fontWeight: 600,
                                               cursor: 'pointer', opacity: !canAdd || saving ? 0.5 : 1,
+                                              minHeight: 0, lineHeight: 1.2,
                                             }}
-                                          >Add</button>
+                                          >Add task</button>
                                         </div>
+                                        {/* "Add a part" — slim form; click opens the part modal with name pre-filled */}
+                                        {(() => {
+                                          const partDraftKey = `item-${i}`
+                                          const partName = partDrafts[partDraftKey] || ''
+                                          const canAddPart = partName.trim().length > 0
+                                          const openPartModal = () => {
+                                            setAddPartFromTask({ name: partName, sourceItem: item.item })
+                                            setPartDrafts(prev => ({ ...prev, [partDraftKey]: '' }))
+                                          }
+                                          return (
+                                            <div style={{ marginTop: 8 }}>
+                                              <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                                                Add a part
+                                              </label>
+                                              <div style={{ display: 'flex', gap: 6 }}>
+                                                <input
+                                                  type="text"
+                                                  value={partName}
+                                                  onChange={(e) => setPartDrafts(prev => ({ ...prev, [partDraftKey]: e.target.value }))}
+                                                  onKeyDown={(e) => { if (e.key === 'Enter' && canAddPart) { e.preventDefault(); openPartModal() } }}
+                                                  placeholder="e.g. Brake pad set"
+                                                  style={{ flex: 1, padding: '5px 8px', borderRadius: 6, border: '1px dashed #93c5fd', fontSize: 12, background: '#f0f9ff' }}
+                                                />
+                                                <button
+                                                  type="button"
+                                                  onClick={openPartModal}
+                                                  disabled={!canAddPart || saving}
+                                                  style={{
+                                                    padding: '4px 12px', borderRadius: 6, border: 'none',
+                                                    background: '#1d4ed8', color: '#fff', fontSize: 12, fontWeight: 600,
+                                                    cursor: 'pointer', opacity: !canAddPart || saving ? 0.5 : 1,
+                                                    whiteSpace: 'nowrap', minHeight: 0, lineHeight: 1.2,
+                                                  }}
+                                                >Add part</button>
+                                              </div>
+                                            </div>
+                                          )
+                                        })()}
+                                        {/* Inline confirmation: tasks added from this item appear right here */}
+                                        {addedHere.length > 0 && (
+                                          <div style={{ marginTop: 8, padding: '8px 10px', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 6 }}>
+                                            <p style={{ fontSize: 10, fontWeight: 700, color: '#5b21b6', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px' }}>
+                                              Added from this task ({addedHere.length})
+                                            </p>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                              {addedHere.map((t, idx) => (
+                                                <div key={idx} style={{ fontSize: 12, color: '#5b21b6', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                  <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#7c3aed' }} />
+                                                  <span>{t.item}</span>
+                                                  {t.estimatedHours != null && (
+                                                    <span style={{ color: '#7c3aed', fontWeight: 600 }}>· {t.estimatedHours}h</span>
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                        {/* Inline confirmation: parts added from this item */}
+                                        {(() => {
+                                          const addedPartsHere = sessionAddedParts.filter(p => p.sourceItem === item.item && !p.sourceSubField)
+                                          if (addedPartsHere.length === 0) return null
+                                          return (
+                                            <div style={{ marginTop: 8, padding: '8px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6 }}>
+                                              <p style={{ fontSize: 10, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '0 0 4px' }}>
+                                                Parts added from this task ({addedPartsHere.length})
+                                              </p>
+                                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                                {addedPartsHere.map((p, idx) => (
+                                                  <div key={idx} style={{ fontSize: 12, color: '#1d4ed8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#2563eb' }} />
+                                                    <span>{p.name}</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )
+                                        })()}
                                       </div>
                                     )
                                   })()}
@@ -2067,6 +2406,83 @@ export default function MechanicBoard() {
         <OrderPartModal partId={mechOrderModal.id} partName={mechOrderModal.name} onClose={() => setMechOrderModal(null)} onComplete={() => {
           fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || []))
         }} />
+      )}
+      {estimateModal && (
+        <div
+          onClick={() => setEstimateModal(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 2000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 14, padding: 20, width: '100%', maxWidth: 360,
+              boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
+            }}
+          >
+            <h3 style={{ fontSize: 15, fontWeight: 700, margin: '0 0 4px' }}>Estimated time</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 14px' }}>
+              How long do you think this will take?
+            </p>
+            <p style={{ fontSize: 13, fontWeight: 600, background: '#f9fafb', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', margin: '0 0 12px' }}>
+              {estimateModal.taskName}
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              <input
+                type="number" step="0.5" min="0" autoFocus
+                value={estimateHoursInput}
+                onChange={(e) => setEstimateHoursInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && parseFloat(estimateHoursInput) > 0) { e.preventDefault(); confirmEstimate() } }}
+                placeholder="e.g. 2"
+                style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', fontSize: 14 }}
+              />
+              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>hours</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setEstimateModal(null)}
+                style={{
+                  flex: 1, padding: '8px 0', borderRadius: 8, border: '1px solid var(--border)',
+                  background: '#fff', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  minHeight: 0,
+                }}
+              >Cancel</button>
+              <button
+                type="button"
+                onClick={confirmEstimate}
+                disabled={!(parseFloat(estimateHoursInput) > 0) || saving}
+                style={{
+                  flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
+                  background: '#1a1a1a', color: '#dffd6e', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  opacity: !(parseFloat(estimateHoursInput) > 0) || saving ? 0.5 : 1, minHeight: 0,
+                }}
+              >Add task</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {addPartFromTask && selectedJob && (
+        <AddPartModal
+          stockNumber={selectedJob.vehicle.stockNumber}
+          vehicleDesc={`${selectedJob.vehicle.year ?? ''} ${selectedJob.vehicle.make} ${selectedJob.vehicle.model}`.trim()}
+          defaultName={addPartFromTask.name}
+          sourceItem={addPartFromTask.sourceItem}
+          sourceSubField={addPartFromTask.sourceSubField}
+          onClose={() => setAddPartFromTask(null)}
+          onAdded={() => {
+            // Track for the inline confirmation under the originating task/sub-field
+            setSessionAddedParts(prev => [...prev, {
+              id: `local-${Date.now()}`,
+              name: addPartFromTask.name,
+              sourceItem: addPartFromTask.sourceItem,
+              sourceSubField: addPartFromTask.sourceSubField,
+            }])
+            fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || []))
+          }}
+        />
       )}
     </div>
   )

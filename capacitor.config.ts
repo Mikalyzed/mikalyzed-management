@@ -1,20 +1,22 @@
 import type { CapacitorConfig } from '@capacitor/cli'
 
 /**
- * DEV MODE — pointed at local Next.js dev server for fast iteration.
- * Every code change hot-reloads in the iOS Simulator without redeploying.
+ * Server URL is controlled by CAP_ENV:
+ *   - CAP_ENV=dev  → http://localhost:3000 (fast iteration in Simulator)
+ *   - CAP_ENV=prod → Vercel URL (for TestFlight builds)
  *
- * To ship to TestFlight / production: change `server.url` back to the
- * Vercel URL (https://mikalyzed-management.vercel.app), set cleartext: false,
- * then run `npm run ios:sync` and rebuild.
+ * Use `npm run cap:dev` or `npm run cap:prod` to sync. Never archive without
+ * running cap:prod first — testers would get a broken localhost build.
  */
+const isDev = process.env.CAP_ENV !== 'prod'
+
 const config: CapacitorConfig = {
-  appId: 'com.mikalyzed.management',
+  appId: 'com.mikalyzed.mgmt',
   appName: 'Mikalyzed',
   webDir: 'public',
   server: {
-    url: 'http://localhost:3000',
-    cleartext: true,  // required for plain HTTP localhost
+    url: isDev ? 'http://localhost:3000' : 'https://mikalyzed-management.vercel.app',
+    cleartext: isDev,
     allowNavigation: [
       'localhost',
       '*.vercel.app',

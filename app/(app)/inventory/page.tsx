@@ -140,20 +140,22 @@ export default function InventoryPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+      <div className="inventory-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Inventory</h1>
           <span style={{ fontSize: 13, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: '#eff6ff', color: '#2563eb' }}>
             {total} Vehicles
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div className="inventory-controls" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search inventory..."
+            className="inventory-search"
             style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, width: 220 }} />
-          <label style={{
+          <label className="inventory-import-btn" style={{
             padding: '8px 16px', borderRadius: 8, border: 'none',
             background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 600,
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+            whiteSpace: 'nowrap',
           }}>
             <input type="file" accept=".csv" onChange={handleImport} style={{ display: 'none' }} />
             {importing ? 'Importing...' : 'Import CSV'}
@@ -168,7 +170,7 @@ export default function InventoryPage() {
       )}
 
       {/* Status tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid var(--border)' }}>
+      <div className="inventory-tabs" style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '1px solid var(--border)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {STATUS_TABS.map(tab => {
           const active = statusFilter === tab.key
           const count = counts[tab.key] ?? 0
@@ -204,7 +206,112 @@ export default function InventoryPage() {
           {search ? 'No vehicles match your search.' : 'No inventory yet. Import a CSV to get started.'}
         </div>
       ) : (
-        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 12, overflow: 'auto' }}>
+        <>
+        {/* Mobile card list */}
+        <div className="mobile-only">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {vehicles.map(v => {
+            const statusLabel = v.status === 'external_repair' ? 'External Repair'
+              : v.status === 'in_recon' ? 'In Recon'
+              : v.status === 'sold' ? 'Sold'
+              : 'In Inventory'
+            const statusColors = v.status === 'external_repair' ? { bg: '#fef3c7', fg: '#b45309' }
+              : v.status === 'in_recon' ? { bg: '#ede9fe', fg: '#7c3aed' }
+              : v.status === 'sold' ? { bg: '#f3f4f6', fg: '#6b7280' }
+              : { bg: '#dcfce7', fg: '#15803d' }
+
+            const typeKey = (v.purchaseType || '').trim().toUpperCase()
+            const typeLabel = typeKey === 'FLOORING' ? 'Flooring'
+              : typeKey === 'CONSIGNMENT' ? 'Consignment'
+              : typeKey === 'TRADE-IN' || typeKey === 'TRADE IN' ? 'Trade-in'
+              : v.purchaseType || null
+
+            const aged = v.dateInStock
+              ? Math.max(0, Math.floor((Date.now() - new Date(v.dateInStock).getTime()) / 86400000))
+              : null
+            const vinMasked = v.vin && v.vin.length > 6 ? `*****${v.vin.slice(-6)}` : (v.vin || '—')
+
+            return (
+              <div
+                key={v.id}
+                onClick={() => openVehicleDetail(v.stockNumber)}
+                style={{
+                  background: '#fff', border: '1px solid var(--border)', borderRadius: 14,
+                  padding: 18,
+                  cursor: resolving === v.stockNumber ? 'wait' : 'pointer',
+                  opacity: resolving === v.stockNumber ? 0.6 : 1,
+                  WebkitTapHighlightColor: 'transparent',
+                  transition: 'transform 0.12s ease',
+                }}
+                onTouchStart={e => (e.currentTarget.style.transform = 'scale(0.985)')}
+                onTouchEnd={e => (e.currentTarget.style.transform = '')}
+              >
+                {/* Title row — name (truncates) + status badge */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  marginBottom: 14,
+                }}>
+                  <p style={{
+                    flex: 1, minWidth: 0,
+                    fontSize: 14, fontWeight: 600, letterSpacing: '-0.005em',
+                    textTransform: 'uppercase', lineHeight: 1.25,
+                    color: '#2563eb',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {v.year ? `${v.year} ` : ''}{v.make} {v.model}
+                  </p>
+                  <span style={{
+                    flexShrink: 0,
+                    fontSize: 10, fontWeight: 700,
+                    padding: '3px 9px', borderRadius: 100,
+                    background: statusColors.bg, color: statusColors.fg,
+                    textTransform: 'uppercase', letterSpacing: '0.06em',
+                  }}>{statusLabel}</span>
+                </div>
+
+                {/* Stats row */}
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+                  borderTop: '1px solid var(--border)',
+                  borderBottom: '1px solid var(--border)',
+                  padding: '14px 0',
+                  marginBottom: 14,
+                }}>
+                  <div style={{ borderRight: '1px solid var(--border)', paddingRight: 10 }}>
+                    <p style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Mileage</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{v.mileage ? `${v.mileage.toLocaleString()} mi` : '—'}</p>
+                  </div>
+                  <div style={{ borderRight: '1px solid var(--border)', paddingLeft: 12, paddingRight: 10 }}>
+                    <p style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Price</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{v.askingPrice ? `$${v.askingPrice.toLocaleString()}` : '$ —'}</p>
+                  </div>
+                  <div style={{ paddingLeft: 12 }}>
+                    <p style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Type</p>
+                    <p style={{ fontSize: 13, fontWeight: 700 }}>{typeLabel || '—'}</p>
+                  </div>
+                </div>
+
+                {/* Meta footer — 2-column grid */}
+                <div style={{
+                  fontSize: 11, color: 'var(--text-muted)',
+                  display: 'grid', gridTemplateColumns: '1fr 1fr',
+                  columnGap: 14, rowGap: 6,
+                }}>
+                  <span><span style={{ color: 'var(--text-muted)' }}>STOCK #:</span> <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{v.stockNumber}</span></span>
+                  <span><span style={{ color: 'var(--text-muted)' }}>VIN:</span> <span style={{ color: 'var(--text-primary)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{vinMasked}</span></span>
+                  <span><span style={{ color: 'var(--text-muted)' }}>COLOR:</span> <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{(v.color || '—').toUpperCase()}</span></span>
+                  {aged !== null && (
+                    <span><span style={{ color: 'var(--text-muted)' }}>AGED:</span> <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{aged} day{aged === 1 ? '' : 's'}</span></span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        </div>
+
+        {/* Desktop table */}
+        <div className="desktop-only" style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 12, overflow: 'auto' }}>
           {/* Table header */}
           <div style={{
             display: 'grid', gridTemplateColumns: '100px 2fr 160px 90px 90px 120px 130px',
@@ -280,6 +387,7 @@ export default function InventoryPage() {
             )
           })}
         </div>
+        </>
       )}
 
     </div>

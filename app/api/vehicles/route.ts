@@ -57,26 +57,48 @@ export async function GET(request: Request) {
   // For routing UI: fetch the most recent completed stage for any awaiting_routing vehicles
   const awaitingIds = vehicles.filter(v => v.status === 'awaiting_routing').map(v => v.id)
   const lastCompletedByVehicle: Record<string, {
-    stage: string; completedAt: Date | null; checklist: any; scopeName: string | null;
+    id: string; stage: string; completedAt: Date | null; checklist: any; scopeName: string | null;
     assignee: { id: string; name: string } | null
   }> = {}
+  const pendingInstallsByVehicle: Record<string, { id: string; name: string; sourceItem: string | null; sourceSubField: string | null }[]> = {}
+  const partsInPipelineByVehicle: Record<string, { id: string; name: string; status: string; sourceItem: string | null; sourceSubField: string | null }[]> = {}
   if (awaitingIds.length > 0) {
-    const lastDone = await prisma.vehicleStage.findMany({
-      where: { vehicleId: { in: awaitingIds }, status: 'done' },
-      orderBy: { completedAt: 'desc' },
-      select: {
-        vehicleId: true, stage: true, completedAt: true, checklist: true, scopeName: true,
-        assignee: { select: { id: true, name: true } },
-      },
-    })
+    const [lastDone, pendingInstalls, pipelineParts] = await Promise.all([
+      prisma.vehicleStage.findMany({
+        where: { vehicleId: { in: awaitingIds }, status: 'done' },
+        orderBy: { completedAt: 'desc' },
+        select: {
+          id: true, vehicleId: true, stage: true, completedAt: true, checklist: true, scopeName: true,
+          assignee: { select: { id: true, name: true } },
+        },
+      }),
+      // Pending install = received but no install task yet generated
+      prisma.part.findMany({
+        where: { vehicleId: { in: awaitingIds }, status: 'received', installTaskCreatedAt: null },
+        select: { id: true, vehicleId: true, name: true, sourceItem: true, sourceSubField: true },
+      }),
+      // Parts in pipeline = requested/sourced/ready_to_order/ordered (not yet received)
+      prisma.part.findMany({
+        where: { vehicleId: { in: awaitingIds }, status: { in: ['requested', 'sourced', 'ready_to_order', 'ordered'] } },
+        select: { id: true, vehicleId: true, name: true, status: true, sourceItem: true, sourceSubField: true },
+      }),
+    ])
     for (const s of lastDone) {
       if (!lastCompletedByVehicle[s.vehicleId]) {
         lastCompletedByVehicle[s.vehicleId] = {
-          stage: s.stage, completedAt: s.completedAt,
+          id: s.id, stage: s.stage, completedAt: s.completedAt,
           checklist: s.checklist, scopeName: s.scopeName,
           assignee: s.assignee,
         }
       }
+    }
+    for (const p of pendingInstalls) {
+      if (!pendingInstallsByVehicle[p.vehicleId]) pendingInstallsByVehicle[p.vehicleId] = []
+      pendingInstallsByVehicle[p.vehicleId].push({ id: p.id, name: p.name.trim(), sourceItem: p.sourceItem, sourceSubField: p.sourceSubField })
+    }
+    for (const p of pipelineParts) {
+      if (!partsInPipelineByVehicle[p.vehicleId]) partsInPipelineByVehicle[p.vehicleId] = []
+      partsInPipelineByVehicle[p.vehicleId].push({ id: p.id, name: p.name.trim(), status: p.status, sourceItem: p.sourceItem, sourceSubField: p.sourceSubField })
     }
   }
 
@@ -101,6 +123,8 @@ export async function GET(request: Request) {
       partsCount: partStatuses.length,
       lastCompletedStage: lastCompletedByVehicle[v.id]?.stage || null,
       lastCompleted: lastCompletedByVehicle[v.id] || null,
+      pendingInstalls: pendingInstallsByVehicle[v.id] || [],
+      partsInPipeline: partsInPipelineByVehicle[v.id] || [],
       inventoryStatus: invByStock[v.stockNumber] || null,
     }
   })

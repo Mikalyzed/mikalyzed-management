@@ -208,9 +208,11 @@ export default function TeamPage() {
 
       {/* Team list */}
       <div className="flex flex-col gap-3">
-        {users.map((u) => (
-          <div key={u.id} className="card" style={{ opacity: u.isActive ? 1 : 0.5, padding: '16px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+        {users.map((u) => {
+          const roleLabel = u.role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+          return (
+          <div key={u.id} className="card" style={{ opacity: u.isActive ? 1 : 0.5, padding: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
               <div style={{
                 width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 14, fontWeight: 700, flexShrink: 0,
@@ -219,44 +221,50 @@ export default function TeamPage() {
                 {u.name.charAt(0).toUpperCase()}
               </div>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <p style={{ fontSize: 15, fontWeight: 600 }}>{u.name}</p>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{u.email}</p>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 2 }}>
+                  <p style={{ fontSize: 15, fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</p>
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 100,
+                    background: '#f5f5f3', color: 'var(--text-secondary)', flexShrink: 0,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {roleLabel}
+                  </span>
+                </div>
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</p>
                 {u.twilioNumber && (
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
-                    📱 {u.twilioNumber}
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+                    {u.twilioNumber}
                   </p>
                 )}
               </div>
-              <span style={{
-                fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 6,
-                background: '#f5f5f3', color: 'var(--text-secondary)', textTransform: 'capitalize', flexShrink: 0,
-              }}>
-                {u.role}
-              </span>
             </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div className="team-card-actions" style={{
+              display: 'flex', gap: 8, justifyContent: 'flex-end',
+              marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)',
+            }}>
               <button onClick={() => openEdit(u)} style={{
-                padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)',
+                padding: '8px 16px', borderRadius: 8, border: '1px solid var(--border)',
                 background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                color: 'var(--text-secondary)', minHeight: 34,
+                color: 'var(--text-secondary)', minHeight: 36,
               }}>
                 Edit
               </button>
               <button
                 onClick={() => toggleActive(u.id, u.isActive)}
                 style={{
-                  padding: '6px 14px', borderRadius: 8, border: 'none',
+                  padding: '8px 16px', borderRadius: 8, border: 'none',
                   fontSize: 13, fontWeight: 600, cursor: 'pointer',
                   background: u.isActive ? 'var(--danger-bg)' : 'var(--success-bg)',
                   color: u.isActive ? 'var(--danger)' : 'var(--success)',
-                  minHeight: '34px',
+                  minHeight: 36,
                 }}
               >
                 {u.isActive ? 'Disable' : 'Enable'}
               </button>
             </div>
           </div>
-        ))}
+        )})}
       </div>
 
       {/* Edit Modal */}

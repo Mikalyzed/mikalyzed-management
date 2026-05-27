@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
 import { consumeReturnQueue } from '@/lib/return-queue'
+import { notifyStageReadyForRouting } from '@/lib/stage-notifications'
 
 /**
  * Stage completion. If the vehicle has a queued return (admin previously
@@ -19,7 +20,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   const stage = await prisma.vehicleStage.findUnique({
     where: { id },
-    include: { vehicle: { select: { id: true, stockNumber: true, currentStageId: true } } },
+    include: { vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, currentStageId: true } } },
   })
   if (!stage) return NextResponse.json({ error: 'Stage not found' }, { status: 404 })
 
@@ -57,6 +58,16 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   })
 
   await recomputeInventoryStatus(stage.vehicle.stockNumber).catch(() => {})
+
+  if (!returned) {
+    notifyStageReadyForRouting({
+      stageId: id,
+      vehicleId: stage.vehicleId,
+      vehicleStockNumber: stage.vehicle.stockNumber,
+      vehicleDesc: `${stage.vehicle.year ?? ''} ${stage.vehicle.make} ${stage.vehicle.model}`.trim(),
+      triggeredByUserId: user.id,
+    })
+  }
 
   return NextResponse.json({ success: true, awaitingRouting: !returned, returned })
 }

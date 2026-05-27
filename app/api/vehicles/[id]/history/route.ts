@@ -37,6 +37,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     orderBy: { createdAt: 'asc' }
   })
 
+  // Index parts by the stage they were created during (for the stage-event grouping below)
+  const partsByStage: Record<string, Array<{ id: string; name: string; url: string | null; status: string; createdAt: Date; sourceItem: string | null; sourceSubField: string | null }>> = {}
+  for (const p of parts) {
+    if (!p.sourceStageId) continue
+    if (!partsByStage[p.sourceStageId]) partsByStage[p.sourceStageId] = []
+    partsByStage[p.sourceStageId].push({
+      id: p.id,
+      name: p.name.trim(),
+      url: p.url,
+      status: p.status,
+      createdAt: p.createdAt,
+      sourceItem: p.sourceItem,
+      sourceSubField: p.sourceSubField,
+    })
+  }
+
   // Get external repairs by stock number
   const externalRepairs = await prisma.externalRepair.findMany({
     where: { stockNumber: vehicle.stockNumber },
@@ -101,6 +117,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
         scopeName: stage.scopeName || null,
         checklist: Array.isArray(stage.checklist) ? stage.checklist : [],
         notes: stage.notes || null,
+        partsRequested: partsByStage[stage.id] || [],
       }
     })
   })

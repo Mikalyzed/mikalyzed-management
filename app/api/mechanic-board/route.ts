@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 
 const WORK_START = 9
-const WORK_END = 19
+const WORK_END = 21
 const HOURS_PER_DAY = WORK_END - WORK_START
 const TZ = 'America/New_York'
 
@@ -364,41 +364,34 @@ export async function POST(req: NextRequest) {
           pauseReason: null,
         },
       })
-      const { STAGES, DEFAULT_CHECKLISTS } = await import('@/lib/constants')
-      type Stage = (typeof STAGES)[number]
-      const currentIdx = STAGES.indexOf(stage.stage as Stage)
-      if (currentIdx < STAGES.length - 1) {
-        const nextStage = STAGES[currentIdx + 1]
-        const config = await prisma.stageConfig.findUnique({ where: { stage: nextStage } })
-        const checklistItems = (config?.defaultChecklist as string[] | undefined)?.length
-          ? config!.defaultChecklist as string[]
-          : DEFAULT_CHECKLISTS[nextStage as Stage] || []
-        const checklist = checklistItems.map((item: string) => ({ item, done: false, note: '' }))
-
-        const maxPriority = await prisma.vehicleStage.aggregate({
-          where: { stage: nextStage, status: { notIn: ['done', 'skipped'] } },
-          _max: { priority: true },
-        })
-        const bottomPriority = (maxPriority._max.priority ?? -1) + 1
-
-        const newStage = await prisma.vehicleStage.create({
-          data: {
-            vehicleId: stage.vehicleId,
-            stage: nextStage,
-            status: 'pending',
-            assigneeId: config?.defaultAssigneeId || null,
-            checklist,
-            priority: bottomPriority,
-          },
-        })
-        await prisma.vehicle.update({
-          where: { id: stage.vehicleId },
-          data: { status: nextStage, currentStageId: newStage.id, currentAssigneeId: config?.defaultAssigneeId || null },
-        })
-      } else {
-        await prisma.vehicle.update({
-          where: { id: stage.vehicleId },
-          data: { status: 'completed', completedAt: now, currentStageId: null, currentAssigneeId: null },
+      // All stage completions park in awaiting_routing for admin review — never auto-advance.
+      // Admin decides next stage in the routing modal (which may pre-fill Fix/Install tasks).
+      await prisma.vehicle.update({
+        where: { id: stage.vehicleId },
+        data: { status: 'awaiting_routing', currentAssigneeId: null },
+      })
+      await prisma.activityLog.create({
+        data: {
+          entityType: 'vehicle',
+          entityId: stage.vehicleId,
+          action: 'stage_completed',
+          actorId: user.id,
+          details: { stage: stage.stage, via: 'mechanic_board_complete' },
+        },
+      }).catch(() => {})
+      // Notify admins if there's anything to review (issues, added tasks, pending install parts)
+      const vehicleForNotify = await prisma.vehicle.findUnique({
+        where: { id: stage.vehicleId },
+        select: { stockNumber: true, year: true, make: true, model: true },
+      })
+      if (vehicleForNotify) {
+        const { notifyStageReadyForRouting } = await import('@/lib/stage-notifications')
+        notifyStageReadyForRouting({
+          stageId,
+          vehicleId: stage.vehicleId,
+          vehicleStockNumber: vehicleForNotify.stockNumber,
+          vehicleDesc: `${vehicleForNotify.year ?? ''} ${vehicleForNotify.make} ${vehicleForNotify.model}`.trim(),
+          triggeredByUserId: user.id,
         })
       }
       break

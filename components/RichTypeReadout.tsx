@@ -79,10 +79,10 @@ export default function RichTypeReadout({ item }: Props) {
     )
   }
 
-  // Pill-type readout: each field with a colored chip + optional note
+  // Pill-type readout: each field with a colored chip + optional note (full-width note line below)
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', gap: 3,
+      display: 'flex', flexDirection: 'column', gap: 4,
       marginTop: 6, padding: '6px 8px', borderRadius: 6,
       background: 'rgba(0,0,0,0.03)',
     }}>
@@ -92,23 +92,26 @@ export default function RichTypeReadout({ item }: Props) {
         const note = getNote(v)
         const colors = status ? PILL_COLORS[status.toLowerCase()] : null
         return (
-          <div key={f.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-            <span style={{ flex: 1, color: 'var(--text-muted)' }}>{f.label}</span>
-            {status && colors ? (
-              <span style={{
-                fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 4,
-                background: colors.bg, color: colors.fg,
-                textTransform: 'uppercase', letterSpacing: '0.03em',
-              }}>
-                {PILL_LABELS[status.toLowerCase()] || status}
-              </span>
-            ) : (
-              <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>—</span>
-            )}
+          <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+              <span style={{ flex: 1, color: 'var(--text-muted)' }}>{f.label}</span>
+              {status && colors ? (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 4,
+                  background: colors.bg, color: colors.fg,
+                  textTransform: 'uppercase', letterSpacing: '0.03em',
+                }}>
+                  {PILL_LABELS[status.toLowerCase()] || status}
+                </span>
+              ) : (
+                <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>—</span>
+              )}
+            </div>
             {note && status && (
-              <span style={{ fontSize: 10, color: '#92400e', fontStyle: 'italic', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {note}
-              </span>
+              <p style={{ fontSize: 11, color: '#92400e', margin: '0 0 0 0', lineHeight: 1.4 }}>
+                <span style={{ fontWeight: 700 }}>Notes: </span>
+                <span style={{ fontStyle: 'italic' }}>{note}</span>
+              </p>
             )}
           </div>
         )

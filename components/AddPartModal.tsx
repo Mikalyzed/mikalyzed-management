@@ -7,10 +7,13 @@ type Props = {
   vehicleDesc: string  // e.g. "1969 Porsche 911"
   onClose: () => void
   onAdded?: () => void
+  defaultName?: string  // Pre-fill the part name (e.g. when opened from a specific inspection task)
+  sourceItem?: string  // Inspection task this part is linked to (for inline display under that task)
+  sourceSubField?: string  // Sub-field within the parent task (e.g. "Brake lights" in Electrical)
 }
 
-export default function AddPartModal({ stockNumber, vehicleDesc, onClose, onAdded }: Props) {
-  const [name, setName] = useState('')
+export default function AddPartModal({ stockNumber, vehicleDesc, onClose, onAdded, defaultName, sourceItem, sourceSubField }: Props) {
+  const [name, setName] = useState(defaultName || '')
   const [url, setUrl] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
@@ -20,40 +23,68 @@ export default function AddPartModal({ stockNumber, vehicleDesc, onClose, onAdde
     if (!name.trim()) return
     setSaving(true)
     setError('')
+
+    // Step 1: resolve stockNumber → vehicleId
+    let vehicleId: string | null = null
     try {
-      // Resolve stockNumber → Vehicle.id (creates a placeholder if no recon record)
       const resolveRes = await fetch('/api/vehicles/resolve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stockNumber }),
       })
-      const resolveData = await resolveRes.json()
-      if (!resolveData.vehicleId) {
-        setError(resolveData.error || 'Could not link this part to a vehicle')
+      const resolveText = await resolveRes.text()
+      let resolveData: { vehicleId?: string; error?: string } = {}
+      try {
+        resolveData = JSON.parse(resolveText)
+      } catch {
+        setError(`Resolve returned non-JSON (${resolveRes.status}): ${resolveText.slice(0, 200)}`)
         setSaving(false)
         return
       }
+      if (!resolveRes.ok || !resolveData.vehicleId) {
+        setError(resolveData.error || `Resolve failed (${resolveRes.status})`)
+        setSaving(false)
+        return
+      }
+      vehicleId = resolveData.vehicleId
+    } catch (e: any) {
+      setError(`Resolve error: ${e?.message || 'Network error'}`)
+      setSaving(false)
+      return
+    }
 
+    // Step 2: create the part
+    try {
       const res = await fetch('/api/parts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vehicleId: resolveData.vehicleId,
+          vehicleId,
           name: name.trim(),
           url: url.trim() || null,
           notes: notes.trim() || null,
+          sourceItem: sourceItem || null,
+          sourceSubField: sourceSubField || null,
         }),
       })
+      const text = await res.text()
+      let data: { error?: string; part?: { id: string } } = {}
+      try {
+        data = JSON.parse(text)
+      } catch {
+        setError(`Create returned non-JSON (${res.status}): ${text.slice(0, 200)}`)
+        setSaving(false)
+        return
+      }
       if (!res.ok) {
-        const d = await res.json()
-        setError(d.error || 'Failed to add part')
+        setError(data.error || `Failed to add part (${res.status})`)
         setSaving(false)
         return
       }
       onAdded?.()
       onClose()
     } catch (e: any) {
-      setError(e.message || 'Network error')
+      setError(`Create error: ${e?.message || 'Network error'}`)
     }
     setSaving(false)
   }
@@ -85,6 +116,7 @@ export default function AddPartModal({ stockNumber, vehicleDesc, onClose, onAdde
             Part Name *
           </label>
           <input
+            type="text"
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="e.g. Front brake rotors"
@@ -98,10 +130,15 @@ export default function AddPartModal({ stockNumber, vehicleDesc, onClose, onAdde
             Link (optional)
           </label>
           <input
+            type="text"
             value={url}
             onChange={e => setUrl(e.target.value)}
-            placeholder="https://..."
+            placeholder="paste link here..."
             className="input"
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
           />
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
             If you have a vendor link, paste it. Otherwise leave blank and parts will source it.

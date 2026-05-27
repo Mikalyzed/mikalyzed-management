@@ -9,7 +9,9 @@
     "start": "next start",
     "postinstall": "prisma generate",
     "ios:open": "npx cap open ios",
-    "ios:sync": "npx cap sync ios"
+    "ios:sync": "npx cap sync ios",
+    "cap:dev": "CAP_ENV=dev npx cap sync ios",
+    "cap:prod": "CAP_ENV=prod npx cap sync ios"
   },
   "repository": {
     "type": "git",

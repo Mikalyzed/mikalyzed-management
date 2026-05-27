@@ -4,6 +4,7 @@ import { getSessionUser } from '@/lib/auth'
 import { sendNotificationEmail } from '@/lib/email'
 import { inspectionReportEmail } from '@/lib/email-templates'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
+import { notifyStageReadyForRouting } from '@/lib/stage-notifications'
 
 const REPORT_RECIPIENT = process.env.INSPECTION_REPORT_EMAIL || 'ab-management@mikalyzedautoboutique.com'
 
@@ -90,6 +91,15 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   })
 
   await recomputeInventoryStatus(stage.vehicle.stockNumber).catch(() => {})
+
+  // Notify admins if there's anything they need to review before routing
+  notifyStageReadyForRouting({
+    stageId: id,
+    vehicleId: stage.vehicleId,
+    vehicleStockNumber: stage.vehicle.stockNumber,
+    vehicleDesc,
+    triggeredByUserId: user.id,
+  })
 
   return NextResponse.json({ success: true, awaitingRouting: true })
 }

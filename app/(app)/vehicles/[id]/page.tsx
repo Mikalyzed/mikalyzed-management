@@ -1130,10 +1130,30 @@ function VehicleHistorySection({ history, loading }: {
                         type?: string
                         data?: Record<string, unknown>
                         fields?: { key: string; label: string }[]
+                        estimatedHours?: number | null
+                        sourceItem?: string
+                        sourceSubField?: string
                       }
+                      type PartRequested = { id: string; name: string; url: string | null; status: string; sourceItem?: string | null; sourceSubField?: string | null }
                       const checklist: RichChecklistItem[] = Array.isArray(event.details.checklist) ? event.details.checklist : []
+                      const partsRequested: PartRequested[] = Array.isArray(event.details.partsRequested) ? event.details.partsRequested : []
+                      // Group parts and added tasks by sourceItem so they can render inline
+                      const partsByItem: Record<string, PartRequested[]> = {}
+                      for (const p of partsRequested) {
+                        if (!p.sourceItem) continue
+                        if (!partsByItem[p.sourceItem]) partsByItem[p.sourceItem] = []
+                        partsByItem[p.sourceItem].push(p)
+                      }
+                      const addedTasksByItem: Record<string, RichChecklistItem[]> = {}
+                      for (const t of checklist) {
+                        if (!t.addedByMechanic) continue
+                        const src = (t as any).sourceItem
+                        if (!src) continue
+                        if (!addedTasksByItem[src]) addedTasksByItem[src] = []
+                        addedTasksByItem[src].push(t)
+                      }
                       const days = event.details.days
-                      const hasDetails = checklist.length > 0 || event.details.notes
+                      const hasDetails = checklist.length > 0 || event.details.notes || partsRequested.length > 0
                       return (
                         <div>
                           <p style={{ margin: '0 0 4px 0' }}>
@@ -1173,12 +1193,71 @@ function VehicleHistorySection({ history, loading }: {
                           {isExpanded && hasDetails && (
                             <div style={{ marginTop: 10, padding: '10px 12px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8 }}>
                               {event.details.notes && (
-                                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px', fontStyle: 'italic' }}>{event.details.notes}</p>
+                                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.4 }}>
+                                  <span style={{ fontWeight: 700 }}>Notes: </span>
+                                  <span style={{ fontStyle: 'italic' }}>{event.details.notes}</span>
+                                </p>
                               )}
-                              {checklist.length > 0 && (
+                              {partsRequested.length > 0 && (() => {
+                                const partColors: Record<string, { bg: string; fg: string }> = {
+                                  requested: { bg: '#fef2f2', fg: '#ef4444' },
+                                  sourced: { bg: '#fef9c3', fg: '#a16207' },
+                                  ready_to_order: { bg: '#eff6ff', fg: '#2563eb' },
+                                  ordered: { bg: '#fefce8', fg: '#a16207' },
+                                  received: { bg: '#f0fdf4', fg: '#16a34a' },
+                                }
+                                const partLabels: Record<string, string> = {
+                                  requested: 'Requested',
+                                  sourced: 'Pending approval',
+                                  ready_to_order: 'Ready to order',
+                                  ordered: 'Ordered',
+                                  received: 'Received',
+                                }
+                                return (
+                                  <div style={{ marginBottom: 10, padding: '8px 10px', background: '#f9fafb', borderRadius: 6, border: '1px solid #e5e7eb' }}>
+                                    <p style={{ fontSize: 11, fontWeight: 700, color: '#374151', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                      Parts requested ({partsRequested.length})
+                                    </p>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                      {partsRequested.map(p => {
+                                        const colors = partColors[p.status] || partColors.requested
+                                        return (
+                                          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#9ca3af', flexShrink: 0 }} />
+                                            {p.url ? (
+                                              <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)', textDecoration: 'underline' }}>
+                                                {p.name}
+                                              </a>
+                                            ) : (
+                                              <span style={{ color: 'var(--text-primary)' }}>{p.name}</span>
+                                            )}
+                                            <span style={{
+                                              fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+                                              background: colors.bg, color: colors.fg, marginLeft: 'auto',
+                                              textTransform: 'uppercase', letterSpacing: '0.04em',
+                                            }}>
+                                              {partLabels[p.status] || p.status}
+                                            </span>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                              {checklist.length > 0 && (() => {
+                                const PART_LABELS: Record<string, string> = {
+                                  requested: 'Requested', sourced: 'Pending approval', ready_to_order: 'Ready to order',
+                                  ordered: 'Ordered', received: 'Received',
+                                }
+                                // Only render inspection (non-added) items here; added tasks render inline under their parent
+                                const inspectionItems = checklist.filter(t => !t.addedByMechanic)
+                                return (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                  {checklist.map((t, i) => {
+                                  {inspectionItems.map((t, i) => {
                                     const hasRichData = t.type && t.data && Object.keys(t.data).length > 0
+                                    const inlineTasks = addedTasksByItem[t.item] || []
+                                    const inlineParts = partsByItem[t.item] || []
                                     return (
                                       <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
                                         <span style={{
@@ -1195,23 +1274,43 @@ function VehicleHistorySection({ history, loading }: {
                                           }}>
                                             {t.item}
                                           </span>
-                                          {t.addedByMechanic && (
-                                            <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4, background: '#ede9fe', color: '#5b21b6', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                                              Added{t.approved ? ` · ${t.approved}` : ''}
-                                            </span>
-                                          )}
                                           {hasRichData && <RichTypeReadout item={t} />}
                                           {t.note && (
-                                            <p style={{ fontSize: 12, color: '#4b5563', margin: '4px 0 0', lineHeight: 1.4, fontStyle: 'italic' }}>
-                                              {t.note}
+                                            <p style={{ fontSize: 12, color: '#4b5563', margin: '4px 0 0', lineHeight: 1.4 }}>
+                                              <span style={{ fontWeight: 700 }}>Notes: </span>
+                                              <span style={{ fontStyle: 'italic' }}>{t.note}</span>
                                             </p>
                                           )}
+                                          {/* Inline added tasks from this inspection item */}
+                                          {inlineTasks.map((it, ii) => (
+                                            <div key={`it-${ii}`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12 }}>
+                                              <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#7c3aed', flexShrink: 0 }} />
+                                              <span style={{ flex: 1, color: '#5b21b6' }}>
+                                                {it.item}
+                                                {(it as any).sourceSubField && <span style={{ color: '#9ca3af' }}> · {(it as any).sourceSubField}</span>}
+                                                {it.estimatedHours != null && <span style={{ color: '#9ca3af' }}> · {it.estimatedHours}h</span>}
+                                              </span>
+                                              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6', textTransform: 'uppercase' }}>Task{it.approved ? ` · ${it.approved}` : ''}</span>
+                                            </div>
+                                          ))}
+                                          {/* Inline parts requested from this inspection item */}
+                                          {inlineParts.map((p, pi) => (
+                                            <div key={`pp-${pi}`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12 }}>
+                                              <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#2563eb', flexShrink: 0 }} />
+                                              <span style={{ flex: 1, color: '#1d4ed8' }}>
+                                                {p.url ? <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: '#1d4ed8', textDecoration: 'underline' }}>{p.name}</a> : p.name}
+                                                {p.sourceSubField && <span style={{ color: '#9ca3af' }}> · {p.sourceSubField}</span>}
+                                              </span>
+                                              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: '#dbeafe', color: '#1d4ed8', textTransform: 'uppercase' }}>Part · {PART_LABELS[p.status] || p.status}</span>
+                                            </div>
+                                          ))}
                                         </div>
                                       </div>
                                     )
                                   })}
                                 </div>
-                              )}
+                                )
+                              })()}
                             </div>
                           )}
                         </div>
