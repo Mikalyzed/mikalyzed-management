@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 type AskTurn = { q: string; a: string | null }
 
@@ -9,6 +9,13 @@ export default function AskAI() {
   const [askInput, setAskInput] = useState('')
   const [askTurns, setAskTurns] = useState<AskTurn[]>([])
   const [asking, setAsking] = useState(false)
+
+  // Allow other pages to open the AI dialog via window.dispatchEvent(new Event('open-ask-ai'))
+  useEffect(() => {
+    function handler() { setAskOpen(true) }
+    window.addEventListener('open-ask-ai', handler)
+    return () => window.removeEventListener('open-ask-ai', handler)
+  }, [])
 
   async function handleAsk() {
     const q = askInput.trim()

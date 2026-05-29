@@ -971,18 +971,24 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
   }
 
   /* ─── Contact detail mobile layout ─── */
-  /* Page sits BETWEEN the app's black topbar and bottom-nav (both stay visible).
+  /* Black topbar stays visible at the top; page extends to the bottom of the screen.
      Internal flex keeps header + composer pinned; only the conversation thread scrolls. */
   .contact-page-root {
     position: fixed !important;
     top: calc(env(safe-area-inset-top, 0px) + 58px) !important; /* below mobile-topbar */
     left: 0 !important;
     right: 0 !important;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 56px) !important; /* above bottom-nav */
+    bottom: 0 !important;
     height: auto !important;
     margin: 0 !important;
-    z-index: 10; /* below topbar (50) and bottom-nav (50) */
+    z-index: 10; /* below topbar (50) */
     background: #fff;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* Hide the AI floating button on this page — composer owns the bottom-right.
+     Add 'Ask AI' to the Quick Actions sheet (the + button) if you want it accessible here. */
+  body:has(.contact-page-root) .ask-ai-fab {
+    display: none !important;
   }
   /* Contact page's own header sits just below the topbar — no safe-area-top needed */
   .contact-page-header {
@@ -1004,18 +1010,18 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
   .contact-right-panel {
     display: none !important;
   }
-  /* Conversations inbox mobile: page sits BETWEEN the app topbar and bottom nav
-     so the app chrome stays visible. Internal flex still gives the list its own scroll. */
+  /* Conversations inbox mobile: page sits below the topbar and extends to the bottom of the screen */
   .conv-page-root {
     position: fixed !important;
     top: calc(env(safe-area-inset-top, 0px) + 58px); /* below mobile-topbar */
     left: 0 !important;
     right: 0 !important;
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 56px); /* above bottom-nav */
+    bottom: 0 !important;
     height: auto !important;
     margin: 0 !important;
-    z-index: 10; /* below topbar (50) and bottom-nav (50) */
+    z-index: 10; /* below topbar (50) */
     background: #fff;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .conv-list-panel {
     width: 100% !important;
