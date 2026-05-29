@@ -18,7 +18,16 @@ export async function GET(req: NextRequest) {
   const token = url.searchParams.get('hub.verify_token')
   const challenge = url.searchParams.get('hub.challenge')
   const expected = process.env.META_VERIFY_TOKEN
-  if (mode === 'subscribe' && token === expected && challenge) {
+  const matched = mode === 'subscribe' && token === expected && !!challenge
+  console.log('[ig-webhook] GET verification', {
+    mode,
+    tokenMatches: token === expected,
+    tokenLen: token?.length || 0,
+    expectedLen: expected?.length || 0,
+    hasChallenge: !!challenge,
+    result: matched ? 'OK' : 'REJECTED',
+  })
+  if (matched) {
     return new NextResponse(challenge, { status: 200, headers: { 'Content-Type': 'text/plain' } })
   }
   return new NextResponse('Forbidden', { status: 403 })
@@ -29,11 +38,18 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get('x-hub-signature-256') || ''
   const appSecret = process.env.META_APP_SECRET
 
+  console.log('[ig-webhook] POST received', {
+    rawLen: raw.length,
+    hasSignature: !!signature,
+    hasAppSecret: !!appSecret,
+    bodyPreview: raw.slice(0, 400),
+  })
+
   // Validate signature
   if (appSecret) {
     const expectedSig = 'sha256=' + crypto.createHmac('sha256', appSecret).update(raw).digest('hex')
     if (signature !== expectedSig) {
-      console.warn('[ig-webhook] signature mismatch')
+      console.warn('[ig-webhook] signature mismatch', { got: signature.slice(0, 20) + '...', expected: expectedSig.slice(0, 20) + '...' })
       return new NextResponse('Forbidden', { status: 403 })
     }
   }
@@ -44,18 +60,37 @@ export async function POST(req: NextRequest) {
     timestamp: number
     message?: { mid: string; text?: string; attachments?: Array<{ type: string; payload: { url: string } }>; is_echo?: boolean }
   }> }> }
-  try { body = JSON.parse(raw) } catch { return new NextResponse(null, { status: 200 }) }
+  try { body = JSON.parse(raw) }
+  catch (e) {
+    console.warn('[ig-webhook] body parse failed', e)
+    return new NextResponse(null, { status: 200 })
+  }
 
-  // Only process Instagram events for now
-  if (body.object !== 'instagram') return new NextResponse(null, { status: 200 })
+  console.log('[ig-webhook] parsed', { object: body.object, entryCount: body.entry?.length || 0 })
 
+  if (body.object !== 'instagram') {
+    console.log('[ig-webhook] ignoring non-instagram object', body.object)
+    return new NextResponse(null, { status: 200 })
+  }
+
+  let eventCount = 0
+  let handledCount = 0
   for (const entry of body.entry || []) {
     for (const evt of entry.messaging || []) {
-      if (!evt.message) continue
-      try { await handleMessageEvent(evt) }
-      catch (e) { console.error('[ig-webhook] handler error', e) }
+      eventCount++
+      if (!evt.message) {
+        console.log('[ig-webhook] event has no message field, skipping', { keys: Object.keys(evt) })
+        continue
+      }
+      try {
+        await handleMessageEvent(evt)
+        handledCount++
+      } catch (e) {
+        console.error('[ig-webhook] handler error', e)
+      }
     }
   }
+  console.log('[ig-webhook] done', { eventCount, handledCount })
 
   return new NextResponse(null, { status: 200 })
 }
@@ -70,11 +105,23 @@ type IGEvent = {
 async function handleMessageEvent(evt: IGEvent) {
   if (!evt.message) return
   const messageId = evt.message.mid
-  if (!messageId) return
+  if (!messageId) { console.warn('[ig-webhook] event missing message.mid'); return }
+
+  console.log('[ig-webhook] handleMessageEvent', {
+    messageId,
+    sender: evt.sender.id,
+    recipient: evt.recipient.id,
+    is_echo: !!evt.message.is_echo,
+    hasText: !!evt.message.text,
+    hasAttachment: !!evt.message.attachments?.length,
+  })
 
   // Dedup
   const existing = await prisma.message.findFirst({ where: { externalId: messageId }, select: { id: true } })
-  if (existing) return
+  if (existing) {
+    console.log('[ig-webhook] message already saved, skipping dedup', messageId)
+    return
+  }
 
   const isOutbound = !!evt.message.is_echo // Meta marks our own outbound DMs with is_echo=true
   const counterpartyIgId = isOutbound ? evt.recipient.id : evt.sender.id
@@ -83,6 +130,7 @@ async function handleMessageEvent(evt: IGEvent) {
   let contact = await prisma.contact.findFirst({
     where: { tags: { has: `ig:${counterpartyIgId}` } },
   })
+  console.log('[ig-webhook] contact lookup', { counterpartyIgId, found: !!contact, contactId: contact?.id })
 
   // Auto-create if unknown — Instagram DMs are mostly leads, mirror them all
   if (!contact) {
@@ -109,7 +157,7 @@ async function handleMessageEvent(evt: IGEvent) {
   const text = evt.message.text || ''
   const attachment = evt.message.attachments?.[0]
 
-  await prisma.message.create({
+  const saved = await prisma.message.create({
     data: {
       contactId: contact.id,
       direction: isOutbound ? 'outbound' : 'inbound',
@@ -121,6 +169,7 @@ async function handleMessageEvent(evt: IGEvent) {
       externalId: messageId,
     },
   })
+  console.log('[ig-webhook] message saved', { messageId: saved.id, direction: saved.direction, textLen: text.length })
 
   // Notify admins/sales managers of inbound only
   if (!isOutbound) {
