@@ -76,9 +76,6 @@ export default function ContactDetailPage() {
   const [activities, setActivities] = useState<any[]>([])
   const [oppNotes, setOppNotes] = useState<any[]>([])
   const [oppTasks, setOppTasks] = useState<any[]>([])
-  const [dispositions, setDispositions] = useState<any[]>([])
-  const [showDispositions, setShowDispositions] = useState(false)
-  const [dispSaving, setDispSaving] = useState(false)
   const [newNote, setNewNote] = useState('')
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskDue, setNewTaskDue] = useState('')
@@ -98,7 +95,6 @@ export default function ContactDetailPage() {
 
   useEffect(() => {
     fetch(`/api/contacts/${id}`).then(r => r.json()).then(d => { setContact(d); setLoading(false) })
-    fetch('/api/settings/dispositions').then(r => r.json()).then(d => setDispositions(d.dispositions || []))
     fetch('/api/auth/me').then(r => r.json()).then(d => { if (d.user) setMe(d.user) }).catch(() => {})
   }, [id])
 
@@ -180,45 +176,6 @@ export default function ContactDetailPage() {
       body: JSON.stringify({ status: newStatus }),
     })
     setTimeout(loadRightPanel, 300)
-  }
-
-  async function logDisposition(disp: any) {
-    if (!contact?.opportunities?.length) return
-    setDispSaving(true)
-    const oppId = contact.opportunities[0].id
-    try {
-      // Log the disposition
-      await fetch(`/api/opportunities/${oppId}/dispositions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dispositionId: disp.id }),
-      })
-      // If disposition has auto-move, move the stage
-      if (disp.moveToStageId) {
-        await fetch(`/api/opportunities/${oppId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stageId: disp.moveToStageId }),
-        })
-      }
-      // If disposition has follow-up, create a task
-      if (disp.followUpMinutes) {
-        const followUpAt = new Date(Date.now() + disp.followUpMinutes * 60000)
-        await fetch(`/api/opportunities/${oppId}/tasks`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: `Follow up: ${disp.name}`,
-            dueDate: followUpAt.toISOString(),
-          }),
-        })
-      }
-      setShowDispositions(false)
-      // Refresh data
-      fetch(`/api/contacts/${id}`).then(r => r.json()).then(d => setContact(d))
-      setTimeout(loadRightPanel, 500)
-    } catch (e) { console.error(e) }
-    setDispSaving(false)
   }
 
   async function sendUploadLinkToContact() {
@@ -413,42 +370,6 @@ export default function ContactDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
               </svg>
             </button>
-          )}
-          {/* Disposition button */}
-          {contact.opportunities.length > 0 && (
-            <div style={{ position: 'relative' }}>
-              <button onClick={() => setShowDispositions(!showDispositions)} style={{
-                padding: '6px 14px', borderRadius: 8, border: '1px solid var(--border)',
-                background: showDispositions ? '#1a1a1a' : '#fff', color: showDispositions ? '#dffd6e' : 'var(--text-secondary)',
-                fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-              }}>
-                Log Outcome
-              </button>
-              {showDispositions && (
-                <div style={{
-                  position: 'absolute', right: 0, top: 42, width: 220, background: '#fff',
-                  border: '1px solid var(--border)', borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                  zIndex: 100, padding: '6px 0',
-                }}>
-                  {dispositions.filter((d: any) => d.isActive).map((d: any) => (
-                    <button key={d.id} onClick={() => logDisposition(d)} disabled={dispSaving} style={{
-                      width: '100%', padding: '8px 14px', border: 'none', background: 'none',
-                      fontSize: 13, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
-                    }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
-                    >
-                      <span>{d.name}</span>
-                      {d.moveToStage && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>→ {d.moveToStage.name}</span>}
-                      {d.followUpMinutes && <span style={{ fontSize: 10, color: '#2563eb' }}>{d.followUpMinutes >= 1440 ? `${Math.round(d.followUpMinutes / 1440)}d` : d.followUpMinutes >= 60 ? `${Math.round(d.followUpMinutes / 60)}h` : `${d.followUpMinutes}m`}</span>}
-                    </button>
-                  ))}
-                  {dispositions.filter((d: any) => d.isActive).length === 0 && (
-                    <p style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>No dispositions configured. Add them in Settings → Sales.</p>
-                  )}
-                </div>
-              )}
-            </div>
           )}
           {/* Actions button — mobile only — slides up sheet with Note / Task / Appointment / Review */}
           <button onClick={() => setActionsSheetOpen(true)} aria-label="Actions"
