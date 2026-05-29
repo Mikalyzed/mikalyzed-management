@@ -31,14 +31,24 @@ export async function GET(req: NextRequest) {
   const contactId = searchParams.get('contactId')
 
   if (!contactId) {
-    // Return all conversations (grouped by contact, latest message)
+    // Return all conversations (grouped by contact, latest message).
+    // Also join the contact's most recent opportunity's assignee so the inbox can show / filter by rep.
     const conversations = await prisma.$queryRaw`
       SELECT DISTINCT ON (m.contact_id)
         m.id, m.contact_id, m.direction, m.channel, m.body, m.media_url, m.media_content_type, m.r2_key,
         m.status, m.read_at, m.created_at,
-        c.first_name, c.last_name, c.phone
+        c.first_name, c.last_name, c.phone,
+        opp.assignee_id, opp.assignee_name
       FROM messages m
       JOIN contacts c ON c.id = m.contact_id
+      LEFT JOIN LATERAL (
+        SELECT o.assignee_id, u.name AS assignee_name
+        FROM opportunities o
+        LEFT JOIN users u ON u.id = o.assignee_id
+        WHERE o.contact_id = c.id
+        ORDER BY o.updated_at DESC
+        LIMIT 1
+      ) opp ON true
       ORDER BY m.contact_id, m.created_at DESC
     ` as any[]
 
@@ -71,6 +81,8 @@ export async function GET(req: NextRequest) {
         lastDirection: c.direction,
         lastAt: c.created_at,
         unread: unreadMap[c.contact_id] || 0,
+        assigneeId: c.assignee_id || null,
+        assigneeName: c.assignee_name || null,
       }
     }).sort((a: any, b: any) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime())
 

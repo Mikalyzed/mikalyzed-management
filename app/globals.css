@@ -158,6 +158,289 @@ input, select, textarea { font-size: 14px; font-family: inherit; }
   cursor: grabbing !important;
 }
 
+/* Lead card action icons */
+.lead-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border: none;
+  background: none;
+  border-radius: 9px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.lead-icon-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
+}
+.lead-icon-btn-move {
+  color: #16a34a;
+}
+.lead-icon-btn-move:hover {
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+}
+.lead-icon-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 100px;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.lead-tag-chip {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: #f3effe;
+  color: #6d28d9;
+  letter-spacing: 0.01em;
+}
+
+/* Lead card popovers (tags / notepad menu / move-stage) */
+.lead-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.lead-popover {
+  position: absolute;
+  z-index: 41;
+  right: 10px;
+  bottom: 44px;
+  min-width: 180px;
+  max-width: 240px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 10px;
+}
+.lead-popover-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.lead-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.lead-menu-item:hover {
+  background: #f5f5f3;
+}
+
+/* Leads filters drawer — slides in from the right */
+.filters-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  animation: filters-fade 0.18s ease;
+}
+.filters-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 86vw);
+  background: #fff;
+  z-index: 201;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 20px);
+  box-shadow: -8px 0 28px rgba(0, 0, 0, 0.16);
+  animation: filters-slide-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes filters-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes filters-slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+/* Custom filter dropdown (replaces tiny native select inside the drawer) */
+.filter-dropdown-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+.filter-dropdown-btn[data-active="true"] {
+  border-color: #1a1a1a;
+  font-weight: 600;
+}
+.filter-dropdown-list {
+  margin-top: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-y: auto;
+  max-height: 264px;
+}
+.filter-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 13px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border-light);
+  background: #fff;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+.filter-dropdown-item:last-child {
+  border-bottom: none;
+}
+.filter-dropdown-item[data-selected="true"] {
+  background: #fafaf8;
+  font-weight: 600;
+}
+.filter-check {
+  color: #16a34a;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+/* Modern slide-up bottom sheet (move-stage, actions, assigned-to, etc.) */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.48);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  z-index: 200;
+  animation: filters-fade 0.2s ease;
+}
+.stage-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 201;
+  max-width: 520px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 28px 28px 0 0;
+  padding: 12px 0 calc(env(safe-area-inset-bottom, 0px) + 18px);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -16px 48px -8px rgba(15, 23, 42, 0.22), 0 -2px 6px rgba(15, 23, 42, 0.04);
+  animation: sheet-slide-up 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes sheet-slide-up { from { transform: translateY(102%); } to { transform: translateY(0); } }
+.stage-sheet-handle {
+  width: 38px;
+  height: 5px;
+  border-radius: 100px;
+  background: #d4d4d8;
+  margin: 0 auto 16px;
+  flex-shrink: 0;
+}
+.stage-sheet-title {
+  text-align: center;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  padding-bottom: 18px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #f2f2ef;
+  flex-shrink: 0;
+}
+.stage-sheet-list {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 6px 12px;
+}
+.stage-sheet-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  background: none;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  border-radius: 14px;
+  transition: background 0.14s ease, transform 0.12s ease;
+}
+.stage-sheet-item:hover {
+  background: #f7f7f5;
+}
+.stage-sheet-item:active {
+  background: #efefec;
+  transform: scale(0.985);
+}
+.stage-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.action-swatch {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Pipeline custom dropdown — positioned overlay below the trigger button */
+.pipeline-dropdown-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  overflow-y: auto;
+  max-height: 300px;
+}
+
 /* Hover tooltip — apply data-tip="..." to any inline-flex element */
 [data-tip] { position: relative; }
 [data-tip]:hover::after {
@@ -549,6 +832,88 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
   display: inline-block;
   line-height: 1;
 }
+
+/* Conversations filter chips — mobile only (hidden on desktop) */
+.conv-chips { display: none; }
+
+/* Contacts minimal mobile list — clean, line-separated rows */
+.contact-list-mobile {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.contact-row-mobile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 18px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  border-bottom: 1px solid var(--border-light);
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s ease;
+}
+.contact-row-mobile:last-child { border-bottom: none; }
+.contact-row-mobile:active { background: #f7f7f5; }
+.contact-row-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #334155;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+.contact-row-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.005em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Contacts filter chip */
+.contact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text-secondary);
+  border-radius: 100px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.contact-chip[data-active="true"] {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+  color: #fff;
+}
+.contact-chip-count {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
 @media (max-width: 767px) {
   .ask-ai-fab {
     bottom: calc(env(safe-area-inset-bottom, 0px) - 16px);
@@ -598,6 +963,160 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
      hide it so cards extend flush with the stage header. */
   .kanban-drag-handle {
     display: none !important;
+  }
+
+  /* Leads: inset cards on mobile so the stage tint shows around them (narrower card feel) */
+  .lead-stage-body {
+    padding: 12px 18px !important;
+  }
+
+  /* ─── Contact detail mobile layout ─── */
+  /* Lock the contact page to the viewport so ONLY the conversation thread scrolls.
+     Header + tabs + composer stay pinned. Covers the app's bottom nav while in here;
+     user uses the page's own back arrow to leave. */
+  .contact-page-root {
+    position: fixed !important;
+    inset: 0 !important;
+    height: 100dvh !important;
+    margin: 0 !important;
+    z-index: 60;
+    background: #fff;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* Header gets safe-area-top padding so the status bar / notch doesn't overlap */
+  .contact-page-header {
+    padding-top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
+    flex-shrink: 0;
+  }
+  /* Actions button (+) uses flex layout — override .mobile-only's display: block */
+  .contact-info-trigger {
+    display: flex !important;
+  }
+  /* Center panel: full width on mobile, no fixed widths or borders */
+  .contact-center-panel {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    border-left: none !important;
+    border-right: none !important;
+  }
+  /* Right panel: hidden on mobile (replaced by Actions sheet) */
+  .contact-right-panel {
+    display: none !important;
+  }
+  /* Conversations inbox mobile: page sits BETWEEN the app topbar and bottom nav
+     so the app chrome stays visible. Internal flex still gives the list its own scroll. */
+  .conv-page-root {
+    position: fixed !important;
+    top: calc(env(safe-area-inset-top, 0px) + 58px); /* below mobile-topbar */
+    left: 0 !important;
+    right: 0 !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 56px); /* above bottom-nav */
+    height: auto !important;
+    margin: 0 !important;
+    z-index: 10; /* below topbar (50) and bottom-nav (50) */
+    background: #fff;
+  }
+  .conv-list-panel {
+    width: 100% !important;
+    flex: 1 1 100% !important;
+    border-right: none !important;
+  }
+  .conv-detail-panel {
+    display: none !important;
+  }
+  /* Bigger, polished header on mobile */
+  .conv-title {
+    font-size: 22px !important;
+    margin-bottom: 12px !important;
+  }
+  .conv-search {
+    padding: 12px 14px !important;
+    font-size: 15px !important;
+    border-radius: 10px !important;
+  }
+  /* Filter chips row */
+  .conv-chips {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .conv-chips::-webkit-scrollbar { display: none; }
+  .conv-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text-secondary);
+    border-radius: 100px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .conv-chip[data-active="true"] {
+    background: #1a1a1a;
+    border-color: #1a1a1a;
+    color: #fff;
+  }
+  .conv-chip-count {
+    background: var(--border);
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    padding: 1px 7px;
+    border-radius: 100px;
+    min-width: 18px;
+    text-align: center;
+  }
+  .conv-chip[data-active="true"] .conv-chip-count {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+  .conv-chip-count-accent {
+    background: #2563eb !important;
+    color: #fff !important;
+  }
+  /* Assigned-to dropdown sits below the chip, comfortable width */
+  .conv-assigned-dropdown {
+    min-width: 200px;
+    right: 0;
+    left: auto;
+  }
+  /* Left panel becomes a slide-up sheet on mobile */
+  .contact-left-panel {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    max-height: 86vh;
+    border-right: none !important;
+    border-radius: 18px 18px 0 0;
+    background: #fff;
+    z-index: 201;
+    transform: translateY(100%);
+    transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.18);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .contact-left-panel[data-open="true"] {
+    transform: translateY(0);
+  }
+  /* Backdrop behind the info sheet */
+  .contact-info-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 200;
+    animation: filters-fade 0.18s ease;
   }
 
   /* Modal backdrops on mobile start below the topbar so the dark band stays visible */

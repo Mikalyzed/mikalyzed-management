@@ -21,6 +21,9 @@ const TAG_COLORS: Record<string, string> = {
   'name via lookup': '#ec4899',
 }
 
+// Standard avatar color (consistent with leads page — differentiate by initials, not color)
+const AVATAR_BG = '#334155'
+
 function initialsColor(name: string) {
   const colors = ['#94a3b8', '#a78bfa', '#67e8f9', '#fbbf24', '#f87171', '#4ade80', '#fb923c', '#c084fc']
   let hash = 0
@@ -102,13 +105,11 @@ export default function ContactsPage() {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Contacts</h1>
-          <span style={{ fontSize: 13, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: '#eff6ff', color: '#2563eb' }}>
-            {total} Contacts
-          </span>
-        </div>
+      {/* ─── Desktop header ─── */}
+      <div className="desktop-only" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, padding: '4px 12px', borderRadius: 20, background: '#eff6ff', color: '#2563eb' }}>
+          {total} Contacts
+        </span>
         <div style={{ display: 'flex', gap: 10 }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search Contacts"
             style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, width: 220 }} />
@@ -122,6 +123,24 @@ export default function ContactsPage() {
         </div>
       </div>
 
+      {/* ─── Mobile header ─── */}
+      <div className="mobile-only" style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, phone, email..."
+            style={{ flex: 1, padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border)', fontSize: 15, background: '#fff', minWidth: 0 }} />
+          <Link href="/leads/new" aria-label="Add contact" style={{
+            flexShrink: 0, width: 48, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: '#1a1a1a', color: '#dffd6e', borderRadius: 12, fontSize: 26, fontWeight: 400, lineHeight: 1, textDecoration: 'none',
+          }}>+</Link>
+        </div>
+        {/* Single chip for now — placeholder for future filters (Has Opps, Tagged, Recent, etc.) */}
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
+          <button className="contact-chip" data-active="true">
+            All Contacts <span className="contact-chip-count">{total}</span>
+          </button>
+        </div>
+      </div>
+
       {loading ? (
         <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>Loading...</p>
       ) : contacts.length === 0 ? (
@@ -130,7 +149,25 @@ export default function ContactsPage() {
         </div>
       ) : (
         <>
-          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 12, overflow: 'auto' }}>
+          {/* ─── Mobile minimal list ─── */}
+          <div className="mobile-only">
+            <div className="contact-list-mobile">
+              {contacts.map(c => {
+                const fullName = `${c.firstName} ${c.lastName}`
+                return (
+                  <button key={c.id} onClick={() => router.push(`/contacts/${c.id}`)} className="contact-row-mobile">
+                    <div className="contact-row-avatar">
+                      {c.firstName.charAt(0).toUpperCase()}{c.lastName.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="contact-row-name">{fullName}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* ─── Desktop table ─── */}
+          <div className="desktop-only" style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 12, overflow: 'auto' }}>
             {/* Table header */}
             <div style={{
               display: 'grid', gridTemplateColumns: gridTemplate, minWidth: 'max-content',

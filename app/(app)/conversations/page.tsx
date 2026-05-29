@@ -11,7 +11,12 @@ type Conversation = {
   lastDirection: string
   lastAt: string
   unread: number
+  assigneeId: string | null
+  assigneeName: string | null
 }
+
+// Roles that handle sales — only these appear in the "Assigned to" filter
+const SALES_ROLES = ['admin', 'sales', 'sales_manager']
 
 type Message = {
   id: string; direction: string; channel: string; body: string; mediaUrl: string | null; mediaContentType?: string | null; mediaPublicUrl?: string | null; r2Key?: string | null
@@ -62,6 +67,10 @@ export default function ConversationsPage() {
     fontSize: 14, lineHeight: 1, padding: 0,
   }
   const [search, setSearch] = useState('')
+  const [inboxFilter, setInboxFilter] = useState<'all' | 'unread'>('all')
+  const [assignedFilter, setAssignedFilter] = useState<string[]>([])
+  const [assignedDropdownOpen, setAssignedDropdownOpen] = useState(false)
+  const [salesUsers, setSalesUsers] = useState<{ id: string; name: string; role: string }[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   function loadConversations() {
@@ -74,6 +83,10 @@ export default function ConversationsPage() {
   useEffect(() => {
     loadConversations()
     fetch('/api/auth/me').then(r => r.json()).then(d => { if (d.user) setMe(d.user) }).catch(() => {})
+    fetch('/api/users').then(r => r.json()).then(d => {
+      const all = (d.users || []) as { id: string; name: string; role: string; isActive: boolean }[]
+      setSalesUsers(all.filter(u => u.isActive && SALES_ROLES.includes(u.role)))
+    }).catch(() => {})
     const interval = setInterval(loadConversations, 30000)
     return () => clearInterval(interval)
   }, [])
@@ -197,22 +210,52 @@ export default function ConversationsPage() {
     loadConversations()
   }
 
-  const filtered = search
-    ? conversations.filter(c => c.contactName.toLowerCase().includes(search.toLowerCase()) || c.phone?.includes(search))
-    : conversations
+  const filtered = (() => {
+    let list = conversations
+    if (search) {
+      const q = search.toLowerCase()
+      list = list.filter(c => c.contactName.toLowerCase().includes(q) || c.phone?.includes(q))
+    }
+    if (inboxFilter === 'unread') list = list.filter(c => c.unread > 0)
+    if (assignedFilter.length) list = list.filter(c => c.assigneeId != null && assignedFilter.includes(c.assigneeId))
+    return list
+  })()
 
   return (
-    <div style={{ height: '100vh', display: 'flex', margin: '-40px -32px -40px -32px' }}>
+    <div className="conv-page-root" style={{ height: '100vh', display: 'flex', margin: '-40px -32px -40px -32px' }}>
       {/* Left: Conversation list */}
-      <div style={{ width: 280, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+      <div className="conv-list-panel" style={{ width: 280, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', background: '#fff' }}>
         {/* Header */}
-        <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 10 }}>Conversations</h1>
+        <div className="conv-header" style={{ padding: '16px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           <input
+            className="conv-search"
             value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search conversations..."
             style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13 }}
           />
+          {/* Filter chips */}
+          <div className="conv-chips">
+            <button className="conv-chip" data-active={inboxFilter === 'all'} onClick={() => setInboxFilter('all')}>
+              All
+              <span className="conv-chip-count">{conversations.length}</span>
+            </button>
+            <button className="conv-chip" data-active={inboxFilter === 'unread'} onClick={() => setInboxFilter('unread')}>
+              Unread
+              {conversations.filter(c => c.unread > 0).length > 0 && (
+                <span className="conv-chip-count conv-chip-count-accent">{conversations.filter(c => c.unread > 0).length}</span>
+              )}
+            </button>
+            {/* Assigned to — opens a slide-up bottom sheet (multi-select) */}
+            <button className="conv-chip" data-active={assignedFilter.length > 0}
+              onClick={() => setAssignedDropdownOpen(true)}>
+              {assignedFilter.length === 0 ? 'Assigned to'
+                : assignedFilter.length === 1 ? (salesUsers.find(u => u.id === assignedFilter[0])?.name || '1 rep')
+                : `${assignedFilter.length} reps`}
+              <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.4" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* List */}
@@ -227,7 +270,15 @@ export default function ConversationsPage() {
             filtered.map(c => (
               <div
                 key={c.contactId}
-                onClick={() => selectConversation(c.contactId, c.contactName, c.phone)}
+                onClick={() => {
+                  // Mobile: jump straight to the contact's detail page (where we already polished the conversation UI)
+                  // Desktop: keep the inline split-view inbox behaviour
+                  if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+                    router.push(`/contacts/${c.contactId}?from=/conversations`)
+                  } else {
+                    selectConversation(c.contactId, c.contactName, c.phone)
+                  }
+                }}
                 style={{
                   padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid var(--border)',
                   background: selectedId === c.contactId ? '#f0f7ff' : '#fff',
@@ -272,8 +323,8 @@ export default function ConversationsPage() {
         </div>
       </div>
 
-      {/* Right: Message thread */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+      {/* Right: Message thread (desktop only — mobile routes to /contacts/[id]) */}
+      <div className="conv-detail-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
         {!selectedId ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
             <div style={{ textAlign: 'center' }}>
@@ -606,6 +657,49 @@ export default function ConversationsPage() {
           </>
         )}
       </div>
+
+      {/* Assigned-to bottom sheet (mobile) */}
+      {assignedDropdownOpen && (
+        <>
+          <div className="sheet-backdrop" onClick={() => setAssignedDropdownOpen(false)} />
+          <div className="stage-sheet">
+            <div className="stage-sheet-handle" />
+            <p className="stage-sheet-title">Assigned to</p>
+            <div className="stage-sheet-list">
+              <button className="stage-sheet-item" onClick={() => setAssignedFilter([])}>
+                <span className="action-swatch" style={{ background: '#94a3b8' }}>
+                  <svg width="14" height="14" fill="none" stroke="#fff" strokeWidth="2.4" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0a9 9 0 10-11.963 0m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                </span>
+                <span style={{ flex: 1 }}>All reps</span>
+                {assignedFilter.length === 0 && <span className="filter-check">✓</span>}
+              </button>
+              {salesUsers.map(u => {
+                const checked = assignedFilter.includes(u.id)
+                return (
+                  <button key={u.id} className="stage-sheet-item"
+                    onClick={() => setAssignedFilter(checked ? assignedFilter.filter(id => id !== u.id) : [...assignedFilter, u.id])}>
+                    <span className="action-swatch" style={{ background: '#334155', color: '#fff', fontSize: 11, fontWeight: 700 }}>
+                      {u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </span>
+                    <span style={{ flex: 1 }}>{u.name}</span>
+                    {checked && <span className="filter-check">✓</span>}
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 10, padding: '12px 22px 0', borderTop: '1px solid var(--border-light)', marginTop: 6 }}>
+              <button onClick={() => setAssignedFilter([])}
+                style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--border)', background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                Clear
+              </button>
+              <button onClick={() => setAssignedDropdownOpen(false)}
+                style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                Done
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -90,6 +90,11 @@ export default function ContactDetailPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
   const [sendingUploadLink, setSendingUploadLink] = useState(false)
+  // Mobile layout state
+  const [infoSheetOpen, setInfoSheetOpen] = useState(false)
+  const [actionsSheetOpen, setActionsSheetOpen] = useState(false)
+  // Sub-sheets opened from the Actions sheet
+  const [activeAction, setActiveAction] = useState<'note' | 'task' | null>(null)
 
   useEffect(() => {
     fetch(`/api/contacts/${id}`).then(r => r.json()).then(d => { setContact(d); setLoading(false) })
@@ -357,23 +362,32 @@ export default function ContactDetailPage() {
   }
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', margin: '-40px -32px -40px -32px' }}>
+    <div className="contact-page-root" style={{ height: '100vh', display: 'flex', flexDirection: 'column', margin: '-40px -32px -40px -32px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border)', marginBottom: 0 }}>
+      <div className="contact-page-header" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid var(--border)', marginBottom: 0 }}>
         <button onClick={() => router.push(backTo)} style={{
           background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--text-muted)', padding: 4,
         }}>←</button>
-        <div style={{
-          width: 36, height: 36, borderRadius: '50%', background: '#8b5cf6', color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700,
-        }}>
-          {contact.firstName.charAt(0)}{contact.lastName.charAt(0)}
-        </div>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>
-            {contact.firstName} {contact.lastName}
-          </h1>
-        </div>
+        <button onClick={() => setInfoSheetOpen(true)} aria-label="Open contact info"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0,
+            border: 'none', background: 'none', cursor: 'pointer', padding: 0, textAlign: 'left',
+          }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: '50%', background: '#8b5cf6', color: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0,
+          }}>
+            {contact.firstName.charAt(0)}{contact.lastName.charAt(0)}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', minWidth: 0 }}>
+            <h1 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+              {contact.firstName} {contact.lastName}
+            </h1>
+            <span className="mobile-only" style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 500, marginTop: 1, lineHeight: 1 }}>
+              Tap for contact info
+            </span>
+          </div>
+        </button>
         {/* Action icons */}
         <div style={{ display: 'flex', gap: 6 }}>
           {contact.phone && (
@@ -399,16 +413,6 @@ export default function ContactDetailPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
               </svg>
             </button>
-          )}
-          {contact.email && (
-            <a href={`mailto:${contact.email}`} style={{
-              width: 36, height: 36, borderRadius: 8, border: '1px solid var(--border)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', textDecoration: 'none',
-            }}>
-              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
-              </svg>
-            </a>
           )}
           {/* Disposition button */}
           {contact.opportunities.length > 0 && (
@@ -446,14 +450,28 @@ export default function ContactDetailPage() {
               )}
             </div>
           )}
+          {/* Actions button — mobile only — slides up sheet with Note / Task / Appointment / Review */}
+          <button onClick={() => setActionsSheetOpen(true)} aria-label="Actions"
+            className="mobile-only contact-info-trigger"
+            style={{
+              width: 36, height: 36, borderRadius: 8, border: '1px solid var(--border)',
+              background: '#fff', cursor: 'pointer',
+              alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)',
+            }}>
+            {/* Plus icon (add) — clearer affordance for "add note / task / etc" than info circle */}
+            <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+          </button>
         </div>
       </div>
 
       {/* Three-panel layout */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', marginTop: 0 }}>
+      <div className="contact-3panel" style={{ display: 'flex', flex: 1, overflow: 'hidden', marginTop: 0 }}>
 
-        {/* LEFT: Contact Fields */}
-        <div style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+        {/* LEFT: Contact Fields (mobile: becomes info bottom sheet) */}
+        <div className="contact-left-panel" data-open={infoSheetOpen}
+          style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
           {/* Contact section */}
           <button onClick={() => setSections(s => ({ ...s, contact: !s.contact }))} style={{
             display: 'flex', alignItems: 'center', gap: 8, width: '100%',
@@ -547,7 +565,8 @@ export default function ContactDetailPage() {
         </div>
 
         {/* CENTER: Conversation */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div className="contact-center-panel"
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* Message thread */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', background: '#f9fafb' }}>
             {messages.length === 0 && (
@@ -967,8 +986,9 @@ export default function ContactDetailPage() {
           </div>
         </div>
 
-        {/* RIGHT: Activity / Notes / Tasks / Appointments */}
-        <div style={{ width: 280, flexShrink: 0, borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+        {/* RIGHT: Activity / Notes / Tasks / Appointments (desktop only — mobile uses Actions sheet instead) */}
+        <div className="contact-right-panel"
+          style={{ width: 280, flexShrink: 0, borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
           {/* Tabs */}
           <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', flexShrink: 0, overflowX: 'auto' }}>
             {[
@@ -1105,6 +1125,110 @@ export default function ContactDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Mobile info-sheet backdrop — closes the slide-up sheet when tapped */}
+      {infoSheetOpen && <div className="contact-info-backdrop mobile-only" onClick={() => setInfoSheetOpen(false)} />}
+
+      {/* Actions sheet (mobile) — add note, task, appointment, review request */}
+      {actionsSheetOpen && (
+        <>
+          <div className="sheet-backdrop mobile-only" onClick={() => setActionsSheetOpen(false)} />
+          <div className="stage-sheet mobile-only">
+            <div className="stage-sheet-handle" />
+            <p className="stage-sheet-title">Quick Actions</p>
+            <div className="stage-sheet-list">
+              <button className="stage-sheet-item" onClick={() => { setActionsSheetOpen(false); setActiveAction('note') }}>
+                <span className="action-swatch" style={{ background: '#3b82f6' }}>
+                  <svg width="14" height="14" fill="none" stroke="#fff" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zM19.5 14.25v4.875a2.625 2.625 0 01-2.625 2.625H5.625a2.625 2.625 0 01-2.625-2.625V8.625A2.625 2.625 0 015.625 6H10.5" /></svg>
+                </span>
+                <span style={{ flex: 1 }}>Add Note</span>
+              </button>
+              <button className="stage-sheet-item" onClick={() => { setActionsSheetOpen(false); setActiveAction('task') }}>
+                <span className="action-swatch" style={{ background: '#22c55e' }}>
+                  <svg width="14" height="14" fill="none" stroke="#fff" strokeWidth="2.4" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                </span>
+                <span style={{ flex: 1 }}>Add Task</span>
+              </button>
+              <button className="stage-sheet-item" onClick={() => { setActionsSheetOpen(false); alert('Schedule Appointment — coming soon') }}>
+                <span className="action-swatch" style={{ background: '#f59e0b' }}>
+                  <svg width="14" height="14" fill="none" stroke="#fff" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+                </span>
+                <span style={{ flex: 1 }}>Schedule Appointment</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Soon</span>
+              </button>
+              <button className="stage-sheet-item" onClick={() => { setActionsSheetOpen(false); alert('Send Review Request — coming soon') }}>
+                <span className="action-swatch" style={{ background: '#8b5cf6' }}>
+                  <svg width="14" height="14" fill="none" stroke="#fff" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" /></svg>
+                </span>
+                <span style={{ flex: 1 }}>Send Review Request</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Soon</span>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Add Note sub-sheet (mobile) */}
+      {activeAction === 'note' && (
+        <>
+          <div className="sheet-backdrop mobile-only" onClick={() => setActiveAction(null)} />
+          <div className="stage-sheet mobile-only">
+            <div className="stage-sheet-handle" />
+            <p className="stage-sheet-title">Add Note</p>
+            <div style={{ padding: '0 22px 16px' }}>
+              {contact.opportunities.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>This contact has no opportunity yet. Add one first to attach notes.</p>
+              ) : (
+                <textarea value={newNote} onChange={e => setNewNote(e.target.value)} autoFocus rows={5}
+                  placeholder="Write a note..."
+                  style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 15, fontFamily: 'inherit', resize: 'vertical', boxSizing: 'border-box' }} />
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 10, padding: '0 22px' }}>
+              <button onClick={() => setActiveAction(null)}
+                style={{ flex: 1, padding: '13px', borderRadius: 10, border: '1px solid var(--border)', background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={async () => { await addNote(); setActiveAction(null) }}
+                disabled={savingRight || !newNote.trim() || contact.opportunities.length === 0}
+                style={{ flex: 1, padding: '13px', borderRadius: 10, border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: savingRight || !newNote.trim() || contact.opportunities.length === 0 ? 0.5 : 1 }}>
+                {savingRight ? 'Saving...' : 'Save Note'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Add Task sub-sheet (mobile) */}
+      {activeAction === 'task' && (
+        <>
+          <div className="sheet-backdrop mobile-only" onClick={() => setActiveAction(null)} />
+          <div className="stage-sheet mobile-only">
+            <div className="stage-sheet-handle" />
+            <p className="stage-sheet-title">Add Task</p>
+            <div style={{ padding: '0 22px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {contact.opportunities.length === 0 ? (
+                <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '20px 0' }}>This contact has no opportunity yet. Add one first to attach tasks.</p>
+              ) : (
+                <>
+                  <input value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} autoFocus
+                    placeholder="What needs to be done?"
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 15, boxSizing: 'border-box' }} />
+                  <input type="date" value={newTaskDue} onChange={e => setNewTaskDue(e.target.value)}
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 15, boxSizing: 'border-box' }} />
+                </>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 10, padding: '0 22px' }}>
+              <button onClick={() => setActiveAction(null)}
+                style={{ flex: 1, padding: '13px', borderRadius: 10, border: '1px solid var(--border)', background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={async () => { await addTask(); setActiveAction(null) }}
+                disabled={savingRight || !newTaskTitle.trim() || contact.opportunities.length === 0}
+                style={{ flex: 1, padding: '13px', borderRadius: 10, border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: savingRight || !newTaskTitle.trim() || contact.opportunities.length === 0 ? 0.5 : 1 }}>
+                {savingRight ? 'Saving...' : 'Save Task'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
