@@ -971,21 +971,22 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
   }
 
   /* ─── Contact detail mobile layout ─── */
-  /* Lock the contact page to the viewport so ONLY the conversation thread scrolls.
-     Header + tabs + composer stay pinned. Covers the app's bottom nav while in here;
-     user uses the page's own back arrow to leave. */
+  /* Page sits BETWEEN the app's black topbar and bottom-nav (both stay visible).
+     Internal flex keeps header + composer pinned; only the conversation thread scrolls. */
   .contact-page-root {
     position: fixed !important;
-    inset: 0 !important;
-    height: 100dvh !important;
+    top: calc(env(safe-area-inset-top, 0px) + 58px) !important; /* below mobile-topbar */
+    left: 0 !important;
+    right: 0 !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 56px) !important; /* above bottom-nav */
+    height: auto !important;
     margin: 0 !important;
-    z-index: 60;
+    z-index: 10; /* below topbar (50) and bottom-nav (50) */
     background: #fff;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
-  /* Header gets safe-area-top padding so the status bar / notch doesn't overlap */
+  /* Contact page's own header sits just below the topbar — no safe-area-top needed */
   .contact-page-header {
-    padding-top: calc(env(safe-area-inset-top, 0px) + 12px) !important;
+    padding-top: 14px !important;
     flex-shrink: 0;
   }
   /* Actions button (+) uses flex layout — override .mobile-only's display: block */
