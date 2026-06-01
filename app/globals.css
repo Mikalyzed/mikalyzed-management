@@ -807,6 +807,14 @@ details > summary::-webkit-details-marker { display: none; }
 details > summary::marker { display: none; }
 details[open] .parts-banner-chevron { transform: rotate(90deg); }
 
+/* Notifications dropdown — opens in the direction with room to fit.
+   Desktop (sidebar bell on the left): open rightward → left: 0.
+   Mobile (topbar bell on the right): open leftward → right: 0. */
+.notif-dropdown { left: 0; right: auto; }
+@media (max-width: 767px) {
+  .notif-dropdown { left: auto; right: 0; }
+}
+
 /* Ask AI floating button */
 .ask-ai-fab {
   position: fixed;

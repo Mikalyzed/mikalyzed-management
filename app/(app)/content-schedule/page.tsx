@@ -703,7 +703,9 @@ export default function ContentBoard() {
   const dragItem = useRef<number | null>(null)
   const dragOver = useRef<number | null>(null)
 
-  const isAdmin = userRole === 'admin'
+  // Content team gets parity with admin on this board (schedule, drag, add/edit/delete tasks, etc.)
+  // since they own the workflow. Other admin-only features elsewhere remain admin-only.
+  const isAdmin = userRole === 'admin' || userRole === 'content'
 
   const data = useMemo<BoardData | null>(() => {
     if (!rawData) return null
