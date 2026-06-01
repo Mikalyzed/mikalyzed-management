@@ -52,6 +52,7 @@ type VehicleWithStage = {
   pendingInstalls?: { id: string; name: string; sourceItem?: string | null; sourceSubField?: string | null }[]
   partsInPipeline?: { id: string; name: string; status: string; sourceItem?: string | null; sourceSubField?: string | null }[]
   returnQueue?: { stage: string; fromStage?: string; reason?: string }[]
+  routeHistory?: { stage: string; status: string; completedAt: string | null; scopeName: string | null }[]
   stages: Array<{
     id?: string
     status: string
@@ -990,9 +991,39 @@ export default function VehiclesPage() {
               #{routingVehicle.stockNumber} — {routingVehicle.year} {routingVehicle.make} {routingVehicle.model}
             </h2>
             {routingVehicle.lastCompletedStage && (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
                 Just completed: <strong>{STAGE_LABELS[routingVehicle.lastCompletedStage as keyof typeof STAGE_LABELS] || routingVehicle.lastCompletedStage}</strong>
               </p>
+            )}
+
+            {/* Route history — chronological trail of stages already completed */}
+            {routingVehicle.routeHistory && routingVehicle.routeHistory.length > 0 && (
+              <div style={{
+                background: '#f9fafb', border: '1px solid var(--border)', borderRadius: 10,
+                padding: '10px 12px', marginBottom: 16,
+              }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                  Route so far
+                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                  {routingVehicle.routeHistory.map((h, i) => (
+                    <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{
+                        padding: '3px 9px', borderRadius: 100, fontWeight: 600,
+                        background: h.status === 'skipped' ? '#f3f4f6' : '#dbeafe',
+                        color: h.status === 'skipped' ? '#6b7280' : '#1d4ed8',
+                        textDecoration: h.status === 'skipped' ? 'line-through' : 'none',
+                      }}>
+                        {STAGE_LABELS[h.stage as keyof typeof STAGE_LABELS] || h.stage}
+                        {h.scopeName ? ` · ${h.scopeName}` : ''}
+                      </span>
+                      {i < routingVehicle.routeHistory!.length - 1 && (
+                        <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>›</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* Smart review banner: shows what was flagged + suggests mechanic when needed */}

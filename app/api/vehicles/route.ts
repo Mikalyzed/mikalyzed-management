@@ -60,17 +60,27 @@ export async function GET(request: Request) {
     id: string; stage: string; completedAt: Date | null; checklist: any; scopeName: string | null;
     assignee: { id: string; name: string } | null
   }> = {}
+  const routeHistoryByVehicle: Record<string, { stage: string; status: string; completedAt: Date | null; scopeName: string | null }[]> = {}
   const pendingInstallsByVehicle: Record<string, { id: string; name: string; sourceItem: string | null; sourceSubField: string | null }[]> = {}
   const partsInPipelineByVehicle: Record<string, { id: string; name: string; status: string; sourceItem: string | null; sourceSubField: string | null }[]> = {}
   if (awaitingIds.length > 0) {
-    const [lastDone, pendingInstalls, pipelineParts] = await Promise.all([
+    const [lastDone, allDoneAsc, pendingInstalls, pipelineParts] = await Promise.all([
       prisma.vehicleStage.findMany({
-        where: { vehicleId: { in: awaitingIds }, status: 'done' },
+        // Exclude orphaned stages (status='done' but no completedAt) — Postgres NULLS FIRST
+        // in DESC would otherwise hoist them above legit recent completions.
+        where: { vehicleId: { in: awaitingIds }, status: 'done', completedAt: { not: null } },
         orderBy: { completedAt: 'desc' },
         select: {
           id: true, vehicleId: true, stage: true, completedAt: true, checklist: true, scopeName: true,
           assignee: { select: { id: true, name: true } },
         },
+      }),
+      // Full route history (incl. skipped) in chronological order — used by the routing modal.
+      // Same null-completedAt guard so the timeline doesn't include orphaned rows.
+      prisma.vehicleStage.findMany({
+        where: { vehicleId: { in: awaitingIds }, status: { in: ['done', 'skipped'] }, completedAt: { not: null } },
+        orderBy: { completedAt: 'asc' },
+        select: { vehicleId: true, stage: true, status: true, completedAt: true, scopeName: true },
       }),
       // Pending install = received but no install task yet generated
       prisma.part.findMany({
@@ -91,6 +101,12 @@ export async function GET(request: Request) {
           assignee: s.assignee,
         }
       }
+    }
+    for (const s of allDoneAsc) {
+      if (!routeHistoryByVehicle[s.vehicleId]) routeHistoryByVehicle[s.vehicleId] = []
+      routeHistoryByVehicle[s.vehicleId].push({
+        stage: s.stage, status: s.status, completedAt: s.completedAt, scopeName: s.scopeName,
+      })
     }
     for (const p of pendingInstalls) {
       if (!pendingInstallsByVehicle[p.vehicleId]) pendingInstallsByVehicle[p.vehicleId] = []
@@ -123,6 +139,7 @@ export async function GET(request: Request) {
       partsCount: partStatuses.length,
       lastCompletedStage: lastCompletedByVehicle[v.id]?.stage || null,
       lastCompleted: lastCompletedByVehicle[v.id] || null,
+      routeHistory: routeHistoryByVehicle[v.id] || [],
       pendingInstalls: pendingInstallsByVehicle[v.id] || [],
       partsInPipeline: partsInPipelineByVehicle[v.id] || [],
       inventoryStatus: invByStock[v.stockNumber] || null,
@@ -211,6 +228,17 @@ export async function POST(request: Request) {
             notes: notes || existing.notes,
             vin: vin || existing.vin,
           },
+        })
+
+        // Cleanly close any abandoned in-flight stages (e.g. an old mechanic stage
+        // the vehicle left when it went out to external repair). Mark them 'skipped'
+        // with a completedAt so they don't haunt the routing UI as the "last completed" stage.
+        await tx.vehicleStage.updateMany({
+          where: {
+            vehicleId: existing.id,
+            status: { notIn: ['done', 'skipped'] },
+          },
+          data: { status: 'skipped', completedAt: new Date() },
         })
 
         const stage = await tx.vehicleStage.create({

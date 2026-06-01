@@ -7,6 +7,7 @@ type ReturnEntry = {
   fromStage?: string
   reason?: string
   uncompletedTasks?: unknown[]
+  scopeName?: string | null
 }
 
 /**
@@ -46,6 +47,7 @@ export async function consumeReturnQueue(
       checklist: (nextReturn.uncompletedTasks as Prisma.InputJsonValue) || [],
       priority: bottomPriority,
       notes: `Returned from ${nextReturn.fromStage ?? '?'}: ${nextReturn.reason ?? ''}`.trim(),
+      scopeName: nextReturn.scopeName ?? null,
     },
   })
 

@@ -142,6 +142,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             checklist: nextReturn.uncompletedTasks || [],
             priority: bottomPriority,
             notes: `Returned from ${nextReturn.fromStage}: ${nextReturn.reason}`,
+            scopeName: nextReturn.scopeName ?? null,
           },
         })
 

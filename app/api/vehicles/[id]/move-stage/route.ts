@@ -117,7 +117,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           reason: uncompletedTasks.length > 0
             ? `Skipped with ${uncompletedTasks.length} remaining tasks`
             : `Return to ${currentStage.stage} after ${targetStage}`,
-          uncompletedTasks: uncompletedTasks
+          uncompletedTasks: uncompletedTasks,
+          scopeName: currentStage.scopeName ?? null,
         }
         vehicleUpdates.returnQueue = [...currentReturnQueue, newReturnEntry]
       }
