@@ -126,6 +126,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
     { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
     { href: '/reports', label: 'Reports', icon: 'reports' },
     { href: '/transport/new', label: 'New Request', icon: 'newrequest' },
+    { href: '/settings/integrations', label: 'Integrations', icon: 'settings' },
   ],
   coordinator: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },

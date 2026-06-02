@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { STAGE_LABELS } from '@/lib/constants'
 import type { Stage } from '@/lib/constants'
 import StageTemplatesInline from '@/components/StageTemplatesInline'
@@ -117,7 +118,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         {[{ key: 'recon' as const, label: 'Recon' }, { key: 'sales' as const, label: 'Sales' }].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             padding: '8px 20px', borderRadius: 8, border: `1px solid ${tab === t.key ? '#1a1a1a' : 'var(--border)'}`,
@@ -125,6 +126,17 @@ export default function SettingsPage() {
             fontSize: 14, fontWeight: 600, cursor: 'pointer',
           }}>{t.label}</button>
         ))}
+        <Link href="/settings/integrations" style={{
+          padding: '8px 20px', borderRadius: 8, border: '1px solid var(--border)',
+          background: '#fff', color: 'var(--text-secondary)',
+          fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+          </svg>
+          Integrations
+        </Link>
       </div>
 
       {tab === 'sales' && <SalesSettings />}
