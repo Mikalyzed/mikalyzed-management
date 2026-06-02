@@ -40,6 +40,7 @@ model User {
   assignedTasks    Task[]            @relation("TaskAssignee")
   createdTasks     Task[]            @relation("TaskCreator")
   taskApprovals    TaskApproval[]
+  connectedIgAccounts ConnectedInstagramAccount[]
   requestedParts   Part[]            @relation("PartRequestedBy")
   assignedParts    Part[]            @relation("PartAssignedTo")
   roundRobinWeights RoundRobinWeight[]
@@ -913,4 +914,22 @@ model WeeklyPlanSnapshot {
 
   @@unique([weekStart])
   @@map("weekly_plan_snapshots")
+}
+
+/// Instagram accounts connected to this app via OAuth (Instagram Business Login flow).
+/// Created when a user clicks "Connect Instagram Account" in Settings and authorizes via Meta.
+model ConnectedInstagramAccount {
+  id                 String    @id @default(uuid())
+  igUserId           String    @unique @map("ig_user_id") // Instagram-scoped user ID
+  username           String
+  name               String?
+  profilePictureUrl  String?   @map("profile_picture_url")
+  accessToken        String    @map("access_token") // long-lived (60 days)
+  tokenExpiresAt     DateTime? @map("token_expires_at")
+  connectedAt        DateTime  @default(now()) @map("connected_at")
+  connectedById      String    @map("connected_by_id")
+  connectedBy        User      @relation(fields: [connectedById], references: [id])
+
+  @@index([connectedById])
+  @@map("connected_instagram_accounts")
 }
