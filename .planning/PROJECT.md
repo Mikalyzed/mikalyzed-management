@@ -103,7 +103,7 @@ A single physical car currently exists as two unrelated rows: `Vehicle` (recon-b
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Promote `InventoryVehicle` into the canonical DMS vehicle (vs. `Vehicle`) | Already owns business/financial fields and DealerCenter-origin data; recon `Vehicle` keeps its stage/parts/checklist flow but references the canonical record | — Pending Phase 0 migration design |
+| Keep `Vehicle` as the canonical DMS vehicle (Strategy A); absorb `InventoryVehicle` scalar fields onto it | Lower migration risk: 6+ tables (`VehicleStage`, `Part`, `TransportRequest`, `CalendarItem`, `Opportunity`, `VehicleInterest`) reference `Vehicle.id`; zero tables reference `InventoryVehicle.id`. Reversed original "promote InventoryVehicle" call after counting downstream FKs. Goal: inventory tab → click vehicle → see everything (cost, photos, deals, history) on one page | ✓ Locked 2026-06-02 |
 | `Contact.contactType` promotion (lead → customer) instead of a separate Customer table | Already modeled; avoids a new table for a flag change | — Pending Phase 3 implementation |
 | `ActivityLog` is the single accountability sink for all DMS writes | Already polymorphic; building a new logger duplicates work | — Pending |
 | Cash + outside financing only (no in-house / BHPH for v1) | Avoids Reg Z/TILA scope; legal/compliance surface stays manageable | — Locked for v1 |
@@ -114,5 +114,9 @@ A single physical car currently exists as two unrelated rows: `Vehicle` (recon-b
 | Phase 0 is a hard gate — no later phase begins until vehicle identity is unified | Every later phase attaches to the canonical vehicle | — Locked |
 | Phase order: unify → inventory → media → customer/marketing → deal desk → docs+esign → credit → QBO → reporting+AI | Dependency- and risk-ordered; AI reporting last because data model has to exist first | — Pending (subject to roadmapper refinement) |
 
+## Implementation Notes
+
+- **`Vehicle.photos[]` is vestigial** — the column exists in `prisma/schema.prisma` (also on `VehicleStage`) but no code in `app/` or `lib/` reads or writes it. Photos in the running app flow through `UploadLink`, `Message` attachments, R2, Cloudinary. Phase 0 drops `Vehicle.photos[]` outright; no migration into `MediaAsset` is needed (overrides PITFALLS.md "MINOR — Vehicle.photos[] lost in move to MediaAsset" item).
+
 ---
-*Last updated: 2026-06-02 after initialization*
+*Last updated: 2026-06-02 after canonical-vehicle decision lock*
