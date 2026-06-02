@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
@@ -16,6 +16,14 @@ type ConnectedAccount = {
 }
 
 export default function IntegrationsPage() {
+  return (
+    <Suspense fallback={<p style={{ color: 'var(--text-muted)', padding: 40, textAlign: 'center' }}>Loading...</p>}>
+      <IntegrationsContent />
+    </Suspense>
+  )
+}
+
+function IntegrationsContent() {
   const searchParams = useSearchParams()
   const igConnected = searchParams.get('ig_connected')
   const igError = searchParams.get('ig_error')
