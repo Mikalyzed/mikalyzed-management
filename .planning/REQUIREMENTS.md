@@ -14,7 +14,7 @@ Requirements for the DMS milestone. Each maps to a roadmap phase. Validated exis
 - [ ] **VEH-03**: Inventory backfill is idempotent and verifiable on a Supabase preview-branch clone before live cutover
 - [ ] **VEH-04**: Dual-write window (DealerCenter mirror writes to both `InventoryVehicle` AND canonical `Vehicle`) runs for ≤2 weeks before reader cutover
 - [ ] **VEH-05**: After reader cutover, every DMS-facing read resolves to the canonical Vehicle; `Opportunity.vehicleId` continues to resolve correctly with no FK flip required
-- [ ] **VEH-06**: `Vehicle.photos[]` is migrated into `MediaAsset` rows (default `type=exterior`, ordered) during Phase 0; `photos[]` column retained 30 days as fallback then dropped
+- [ ] **VEH-06**: `Vehicle.photos[]` is dropped in Phase 0 (column is vestigial — no code reads or writes it; verified via grep). No MediaAsset migration needed; MediaAsset is Phase 3 scope. The same applies to the unused `photos[]` on VehicleStage
 - [ ] **VEH-07**: Recon workflow (stage transitions, parts, checklists, mechanic board, TV board, notifications) continues to function unchanged through Phase 0
 - [ ] **VEH-08**: A rollback plan exists with database snapshot + feature flag for read-from-old-vs-new and is rehearsed on a production data copy before cutover
 - [ ] **VEH-09**: Legacy ID redirect endpoint (`/api/vehicles/legacy/:oldId`) returns 301 to canonical for 90 days post-cutover; iOS Capacitor build is pushed pre-cutover
