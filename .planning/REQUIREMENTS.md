@@ -205,17 +205,121 @@ Explicitly excluded for v1. Documented to prevent scope creep.
 
 ## Traceability
 
-Empty initially. Populated by roadmapper during ROADMAP.md creation.
+Every v1 requirement is mapped to exactly one phase. Updated by roadmapper on 2026-06-02 during ROADMAP.md creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (To be filled by roadmapper) | | |
+| VEH-01 | Phase 0 | Pending |
+| VEH-02 | Phase 0 | Pending |
+| VEH-03 | Phase 0 | Pending |
+| VEH-04 | Phase 0 | Pending |
+| VEH-05 | Phase 0 | Pending |
+| VEH-06 | Phase 0 | Pending |
+| VEH-07 | Phase 0 | Pending |
+| VEH-08 | Phase 0 | Pending |
+| VEH-09 | Phase 0 | Pending |
+| RBAC-01 | Phase 1a | Pending |
+| RBAC-02 | Phase 1a | Pending |
+| RBAC-03 | Phase 1a | Pending |
+| RBAC-04 | Phase 1a | Pending |
+| RBAC-05 | Phase 1a | Pending |
+| JOB-01 | Phase 1b | Pending |
+| JOB-02 | Phase 1b | Pending |
+| JOB-03 | Phase 1b | Pending |
+| JOB-04 | Phase 1b | Pending |
+| JOB-05 | Phase 1b | Pending |
+| JOB-06 | Phase 1b | Pending |
+| INV-01 | Phase 2 | Pending |
+| INV-02 | Phase 2 | Pending |
+| INV-03 | Phase 2 | Pending |
+| INV-04 | Phase 2 | Pending |
+| INV-05 | Phase 2 | Pending |
+| INV-06 | Phase 2 | Pending |
+| INV-07 | Phase 2 | Pending |
+| INV-08 | Phase 2 | Pending |
+| INV-09 | Phase 2 | Pending |
+| INV-10 | Phase 2 | Pending |
+| INV-11 | Phase 2 | Pending |
+| INV-12 | Phase 2 | Pending |
+| MEDIA-01 | Phase 3 | Pending |
+| MEDIA-02 | Phase 3 | Pending |
+| MEDIA-03 | Phase 3 | Pending |
+| MEDIA-04 | Phase 3 | Pending |
+| MEDIA-05 | Phase 3 | Pending |
+| CUST-01 | Phase 4 | Pending |
+| DEAL-01 | Phase 4 | Pending |
+| DEAL-02 | Phase 4 | Pending |
+| DEAL-03 | Phase 4 | Pending |
+| DEAL-04 | Phase 4 | Pending |
+| DEAL-05 | Phase 4 | Pending |
+| DEAL-06 | Phase 4 | Pending |
+| DEAL-07 | Phase 4 | Pending |
+| DEAL-08 | Phase 4 | Pending |
+| DEAL-09 | Phase 4 | Pending |
+| DEAL-10 | Phase 4 | Pending |
+| DEAL-11 | Phase 4 | Pending |
+| DEAL-12 | Phase 4 | Pending |
+| DEAL-13 | Phase 4 | Pending |
+| DEAL-14 | Phase 4 | Pending |
+| DEAL-15 | Phase 4 | Pending |
+| DOC-01 | Phase 5 | Pending |
+| DOC-02 | Phase 5 | Pending |
+| DOC-03 | Phase 5 | Pending |
+| DOC-04 | Phase 5 | Pending |
+| DOC-05 | Phase 5 | Pending |
+| DOC-06 | Phase 5 | Pending |
+| DOC-07 | Phase 5 | Pending |
+| DOC-08 | Phase 5 | Pending |
+| DOC-09 | Phase 5 | Pending |
+| DOC-10 | Phase 5 | Pending |
+| DOC-11 | Phase 5 | Pending |
+| DOC-12 | Phase 5 | Pending |
+| DOC-13 | Phase 5 | Pending |
+| DOC-14 | Phase 5 | Pending |
+| CRED-01 | Phase 6 | Pending |
+| CRED-02 | Phase 6 | Pending |
+| CRED-03 | Phase 6 | Pending |
+| CRED-04 | Phase 6 | Pending |
+| CRED-05 | Phase 6 | Pending |
+| CRED-06 | Phase 6 | Pending |
+| CRED-07 | Phase 6 | Pending |
+| CRED-08 | Phase 6 | Pending |
+| CRED-09 | Phase 6 | Pending |
+| CRED-10 | Phase 6 | Pending |
+| CRED-11 | Phase 6 | Pending |
+| CRED-12 | Phase 6 | Pending |
+| CRED-13 | Phase 6 | Pending |
+| QBO-01 | Phase 7 | Pending |
+| QBO-02 | Phase 7 | Pending |
+| QBO-03 | Phase 7 | Pending |
+| QBO-04 | Phase 7 | Pending |
+| QBO-05 | Phase 7 | Pending |
+| QBO-06 | Phase 7 | Pending |
+| QBO-07 | Phase 7 | Pending |
+| QBO-08 | Phase 7 | Pending |
+| QBO-09 | Phase 7 | Pending |
+| QBO-10 | Phase 7 | Pending |
+| QBO-11 | Phase 7 | Pending |
+| QBO-12 | Phase 7 | Pending |
+| REP-01 | Phase 8 | Pending |
+| REP-02 | Phase 8 | Pending |
+| REP-03 | Phase 8 | Pending |
+| REP-04 | Phase 8 | Pending |
+| REP-05 | Phase 8 | Pending |
+| REP-06 | Phase 8 | Pending |
+| REP-07 | Phase 8 | Pending |
+| CUT-01 | Phase 9 | Pending |
+| CUT-02 | Phase 9 | Pending |
+| CUT-03 | Phase 9 | Pending |
+| CUT-04 | Phase 9 | Pending |
+| CUT-05 | Phase 9 | Pending |
+| CUT-06 | Phase 9 | Pending |
 
-**Coverage (to be filled by roadmapper):**
-- v1 requirements: TBD total
-- Mapped to phases: TBD
-- Unmapped: TBD
+**Coverage:**
+- v1 requirements: 99 total
+- Mapped to phases: 99
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-06-02*
-*Last updated: 2026-06-02 after initial definition*
+*Last updated: 2026-06-02 — traceability populated by roadmapper (Phase 0 → Phase 9 mapping)*
