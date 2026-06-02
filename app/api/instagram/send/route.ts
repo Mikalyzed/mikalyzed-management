@@ -54,10 +54,17 @@ export async function POST(req: NextRequest) {
 
   if (!metaRes.ok) {
     console.error('[ig-send] Meta API error', metaRes.status, metaJson)
-    return NextResponse.json({
-      error: 'Meta API rejected the send',
-      detail: metaJson?.error?.message || `HTTP ${metaRes.status}`,
-    }, { status: 502 })
+    const raw = metaJson?.error?.message || `HTTP ${metaRes.status}`
+    const looksLikeRecipientIssue =
+      /recipient/i.test(raw) ||
+      /valid ID/i.test(raw) ||
+      /does not exist/i.test(raw) ||
+      /Object with ID/i.test(raw) ||
+      /user is not (a )?valid/i.test(raw)
+    const friendly = looksLikeRecipientIssue
+      ? 'Could not deliver to this Instagram user. Instagram requires the recipient to have messaged your business within the last 24 hours, and (while the app is still under review) to be added as a Tester in Meta. Once Advanced Access is approved this restriction is lifted.'
+      : raw
+    return NextResponse.json({ error: friendly }, { status: 502 })
   }
 
   // Meta returns { recipient_id, message_id } on success

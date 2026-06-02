@@ -72,6 +72,7 @@ export default function ContactDetailPage() {
     fontSize: 14, lineHeight: 1, padding: 0,
   }
   const [me, setMe] = useState<{ id: string; name: string; email: string; twilioNumber: string | null } | null>(null)
+  const [igAccounts, setIgAccounts] = useState<{ username: string }[]>([])
   const [rightTab, setRightTab] = useState<'activity' | 'notes' | 'tasks' | 'appointments'>('activity')
   const [activities, setActivities] = useState<any[]>([])
   const [oppNotes, setOppNotes] = useState<any[]>([])
@@ -96,6 +97,7 @@ export default function ContactDetailPage() {
   useEffect(() => {
     fetch(`/api/contacts/${id}`).then(r => r.json()).then(d => { setContact(d); setLoading(false) })
     fetch('/api/auth/me').then(r => r.json()).then(d => { if (d.user) setMe(d.user) }).catch(() => {})
+    fetch('/api/instagram/connected-accounts').then(r => r.json()).then(d => setIgAccounts(d.accounts || [])).catch(() => {})
   }, [id])
 
   function loadMessages() {
@@ -745,6 +747,8 @@ export default function ContactDetailPage() {
                   <span style={{ color: 'var(--text-primary)', fontWeight: 600, marginRight: 16 }}>
                     {channel === 'sms'
                       ? (me?.twilioNumber || '—')
+                      : channel === 'instagram'
+                      ? (igAccounts[0]?.username ? `@${igAccounts[0].username}` : '—')
                       : (me?.email || '—')}
                   </span>
                   <span style={{ width: 1, height: 14, background: 'var(--border)', marginRight: 16 }} />
@@ -752,6 +756,13 @@ export default function ContactDetailPage() {
                   <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
                     {channel === 'sms'
                       ? (contact.phone || '—')
+                      : channel === 'instagram'
+                      ? (() => {
+                          const handleTag = contact.tags.find(t => t.startsWith('ig_handle:'))
+                          if (handleTag) return `@${handleTag.slice('ig_handle:'.length)}`
+                          const idTag = contact.tags.find(t => t.startsWith('ig:'))
+                          return idTag ? idTag.slice(3) : '—'
+                        })()
                       : (contact.email || '—')}
                   </span>
                 </div>
