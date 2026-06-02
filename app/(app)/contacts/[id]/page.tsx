@@ -55,8 +55,8 @@ export default function ContactDetailPage() {
   const [msgText, setMsgText] = useState('')
   const [sending, setSending] = useState(false)
   // msgTab kept for backwards compat with existing render code; reflects effective send mode
-  const [msgTab, setMsgTab] = useState<'sms' | 'email' | 'internal'>('sms')
-  const [channel, setChannel] = useState<'sms' | 'email' | 'internal'>('sms')
+  const [msgTab, setMsgTab] = useState<'sms' | 'email' | 'internal' | 'instagram'>('sms')
+  const [channel, setChannel] = useState<'sms' | 'email' | 'internal' | 'instagram'>('sms')
   const [showChannelMenu, setShowChannelMenu] = useState(false)
   const [composeMinimized, setComposeMinimized] = useState(false)
   const [emailSubject, setEmailSubject] = useState('')
@@ -218,6 +218,9 @@ export default function ContactDetailPage() {
     if (msgTab === 'sms' && !contact?.phone) return
     if (msgTab === 'email' && !contact?.email) { alert('No email on file for this contact.'); return }
     if (msgTab === 'email' && !emailSubject.trim()) { alert('Subject required.'); return }
+    if (msgTab === 'instagram' && !contact?.tags?.some(t => t.startsWith('ig:'))) {
+      alert('No Instagram ID on file for this contact.'); return
+    }
     setSending(true)
     try {
       if (msgTab === 'internal') {
@@ -245,6 +248,17 @@ export default function ContactDetailPage() {
         } else {
           const err = await res.json().catch(() => ({}))
           alert(`Email failed: ${err.error || res.status}`)
+        }
+      } else if (msgTab === 'instagram') {
+        const res = await fetch('/api/instagram/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contactId: id, body: msgText }),
+        })
+        if (res.ok) { setMsgText(''); loadMessages() }
+        else {
+          const err = await res.json().catch(() => ({}))
+          alert(`Instagram send failed: ${err.detail || err.error || res.status}`)
         }
       } else {
         const res = await fetch('/api/sms/send', {
@@ -666,6 +680,7 @@ export default function ContactDetailPage() {
                         {new Date(msg.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                         {msg.channel === 'email' && ' · Email'}
                         {msg.channel === 'sms' && ' · SMS'}
+                        {msg.channel === 'instagram' && ' · Instagram'}
                         {msg.channel === 'upload' && ' · Upload'}
                         {msg.sender && ` · ${msg.sender.name}`}
                         {msg.status === 'failed' && ' · Failed'}
@@ -708,6 +723,7 @@ export default function ContactDetailPage() {
                     <ChannelDropdown
                       channel={channel} setChannel={setChannel}
                       open={showChannelMenu} setOpen={setShowChannelMenu}
+                      hasInstagram={contact.tags.some(t => t.startsWith('ig:'))}
                     />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
@@ -870,6 +886,7 @@ export default function ContactDetailPage() {
                     channel={channel} setChannel={setChannel}
                     open={showChannelMenu} setOpen={setShowChannelMenu}
                     popUp
+                    hasInstagram={contact.tags.some(t => t.startsWith('ig:'))}
                   />
                   <input
                     value={msgText}
@@ -1160,35 +1177,46 @@ export default function ContactDetailPage() {
   )
 }
 
-type Channel = 'sms' | 'email' | 'internal'
+type Channel = 'sms' | 'email' | 'internal' | 'instagram'
 
 function ChannelDropdown({
-  channel, setChannel, open, setOpen, popUp,
+  channel, setChannel, open, setOpen, popUp, hasInstagram,
 }: {
   channel: Channel
   setChannel: (c: Channel) => void
   open: boolean
   setOpen: (next: boolean | ((prev: boolean) => boolean)) => void
   popUp?: boolean
+  hasInstagram?: boolean
 }) {
-  const labels: Record<Channel, string> = { sms: 'SMS', email: 'Email', internal: 'Internal Comment' }
+  const labels: Record<Channel, string> = { sms: 'SMS', email: 'Email', internal: 'Internal Comment', instagram: 'Instagram DM' }
   const isInternal = channel === 'internal'
+  const isInstagram = channel === 'instagram'
+  // Show Instagram option only when the contact has an ig:* tag (so we know their IG ID)
+  const options: Channel[] = hasInstagram
+    ? ['sms', 'email', 'instagram', 'internal']
+    : ['sms', 'email', 'internal']
   return (
     <div style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen(s => !s)}
         style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
-          background: isInternal ? '#fef3c7' : '#e7efff',
+          background: isInternal ? '#fef3c7' : isInstagram ? '#fce7f3' : '#e7efff',
           border: 'none', padding: '5px 12px', borderRadius: 8,
           fontSize: 13, fontWeight: 600,
-          color: isInternal ? '#92400e' : '#2563eb',
+          color: isInternal ? '#92400e' : isInstagram ? '#be185d' : '#2563eb',
           cursor: 'pointer',
         }}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           {channel === 'sms' && <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />}
           {channel === 'email' && <><path d="M4 4h16v16H4z" /><path d="M22 6L12 13 2 6" /></>}
           {channel === 'internal' && <><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" /><circle cx="12" cy="12" r="3" /></>}
+          {channel === 'instagram' && <>
+            <rect x="3" y="3" width="18" height="18" rx="5" />
+            <circle cx="12" cy="12" r="4" />
+            <circle cx="17.5" cy="6.5" r="0.6" fill="currentColor" />
+          </>}
         </svg>
         {labels[channel]}
         <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 4.5l3 3 3-3" /></svg>
@@ -1203,7 +1231,7 @@ function ChannelDropdown({
           background: '#fff', border: '1px solid var(--border)', borderRadius: 10,
           boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 180, zIndex: 30, overflow: 'hidden',
         }}>
-          {(['sms', 'email', 'internal'] as Channel[]).map(opt => (
+          {options.map(opt => (
             <button key={opt} onClick={() => { setChannel(opt); setOpen(false) }}
               style={{
                 width: '100%', textAlign: 'left', padding: '9px 12px',
