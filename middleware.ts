@@ -21,7 +21,9 @@ export function middleware(request: NextRequest) {
     pathname === '/api/voice/recording-status' ||
     pathname === '/api/voice/transcription' ||
     pathname === '/api/voice/voicemail' ||
-    pathname === '/api/instagram/webhook'
+    pathname === '/api/instagram/webhook' ||
+    pathname === '/privacy' ||
+    pathname === '/terms'
   ) {
     return NextResponse.next()
   }
