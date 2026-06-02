@@ -22,6 +22,9 @@ export function middleware(request: NextRequest) {
     pathname === '/api/voice/transcription' ||
     pathname === '/api/voice/voicemail' ||
     pathname === '/api/instagram/webhook' ||
+    pathname === '/api/instagram/deauthorize' ||
+    pathname === '/api/instagram/data-deletion' ||
+    pathname === '/data-deletion-status' ||
     pathname === '/privacy' ||
     pathname === '/terms'
   ) {
