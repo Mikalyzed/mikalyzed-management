@@ -219,7 +219,8 @@ export default function ContactDetailPage() {
     if (msgTab === 'email' && !contact?.email) { alert('No email on file for this contact.'); return }
     if (msgTab === 'email' && !emailSubject.trim()) { alert('Subject required.'); return }
     if (msgTab === 'instagram' && !contact?.tags?.some(t => t.startsWith('ig:'))) {
-      alert('No Instagram ID on file for this contact.'); return
+      alert('This contact has no Instagram ID on file. Instagram messaging works after the customer first messages our Instagram account — the inbound webhook auto-creates the contact with their Instagram-scoped ID stored as a tag (ig:<id>).')
+      return
     }
     setSending(true)
     try {
@@ -723,7 +724,7 @@ export default function ContactDetailPage() {
                     <ChannelDropdown
                       channel={channel} setChannel={setChannel}
                       open={showChannelMenu} setOpen={setShowChannelMenu}
-                      hasInstagram={contact.tags.some(t => t.startsWith('ig:'))}
+                      hasInstagram={true}
                     />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)' }}>
@@ -886,7 +887,7 @@ export default function ContactDetailPage() {
                     channel={channel} setChannel={setChannel}
                     open={showChannelMenu} setOpen={setShowChannelMenu}
                     popUp
-                    hasInstagram={contact.tags.some(t => t.startsWith('ig:'))}
+                    hasInstagram={true}
                   />
                   <input
                     value={msgText}
