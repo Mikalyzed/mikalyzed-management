@@ -52,6 +52,18 @@ function IntegrationsContent() {
     window.location.href = '/api/instagram/oauth/start'
   }
 
+  async function disconnect(id: string, username: string) {
+    if (!confirm(`Disconnect @${username} from Mikalyzed Management?\n\nThis removes our stored connection record. You can re-connect any time. To fully revoke this app's access on Instagram's side, go to Instagram → Settings → Apps and Websites.`)) return
+    const res = await fetch(`/api/instagram/connected-accounts/${id}`, { method: 'DELETE' })
+    if (res.ok) {
+      setAccounts(prev => prev.filter(a => a.id !== id))
+      setBanner({ kind: 'success', text: `Disconnected @${username}.` })
+    } else {
+      const err = await res.json().catch(() => ({}))
+      setBanner({ kind: 'error', text: `Could not disconnect: ${err.error || res.status}` })
+    }
+  }
+
   return (
     <div>
       <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -147,12 +159,22 @@ function IntegrationsContent() {
                     {' · by '}{a.connectedBy.name}
                   </p>
                 </div>
-                <span style={{
-                  fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7',
-                  padding: '4px 10px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.04em',
-                }}>
-                  Active
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7',
+                    padding: '4px 10px', borderRadius: 100, textTransform: 'uppercase', letterSpacing: '0.04em',
+                  }}>
+                    Active
+                  </span>
+                  <button onClick={() => disconnect(a.id, a.username)}
+                    style={{
+                      padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)',
+                      background: '#fff', fontSize: 12, fontWeight: 600, color: '#dc2626',
+                      cursor: 'pointer', minHeight: 32,
+                    }}>
+                    Disconnect
+                  </button>
+                </div>
               </div>
             ))
           )}
