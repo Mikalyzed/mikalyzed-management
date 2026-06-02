@@ -51,7 +51,7 @@ Every phase ships in sub-phases of 1–2 weeks each, behind feature flags, until
   3. `Opportunity.vehicleId` resolves correctly to the canonical `Vehicle` with no FK repointing required (Strategy A invariant) — sales attribution numbers match pre-migration baselines for any closed date range
   4. `VehicleMigrationMap` table preserves every old `Vehicle.id` ↔ old `InventoryVehicle.id` ↔ canonical-id mapping with `matchMethod` and `matchConfidence`; legacy ID redirect endpoint `/api/vehicles/legacy/:oldId` returns 301 to canonical for 90 days
   5. Backfill executed and verified idempotent on a Supabase preview-branch clone; rollback rehearsed on production data copy with database snapshot in hand before live cutover; iOS Capacitor build with new ID resolution logic shipped to TestFlight pre-cutover
-**Plans**: TBD — likely 5 sub-phases (0.A additive schema, 0.B idempotent backfill, 0.C dual-write window, 0.D reader cutover, 0.E decommission)
+**Plans**: 5 sub-phases — 00-01 (0.A additive schema, **code-complete 2026-06-02, awaiting prod migration apply**), 00-02 (0.B idempotent backfill), 00-03 (0.C dual-write window), 00-04 (0.D reader cutover), 00-05 (0.E decommission)
 
 ### Phase 1a: RBAC Upgrade
 **Goal**: New permission model (`Permission` + `RolePermission` + `UserPermission` tables) coexisting with existing `requireRole` helper, with `requireCan(userId, key)` callable from every new DMS API route. Admin role bypasses all checks. Existing role enum preserved.
@@ -179,7 +179,7 @@ Phase 1a and 1b are cognitively parallel (different domains) but ship sequential
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Vehicle Identity Unification | 0/TBD | Not started | - |
+| 0. Vehicle Identity Unification | 1/5 | In progress (00-01 code-complete; awaiting preview-branch migration apply checkpoint) | - |
 | 1a. RBAC Upgrade | 0/TBD | Not started | - |
 | 1b. Background Jobs Scaffold + Storage Consolidation | 0/TBD | Not started | - |
 | 2. Inventory Core | 0/TBD | Not started | - |
