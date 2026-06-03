@@ -1426,7 +1426,20 @@ function v2Btn(variant: 'primary' | 'ghost'): React.CSSProperties {
   return { ...base, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)' }
 }
 
-// ─── Media Card ─────────────────────────────────────────────────────
+// ─── Media Card (sectioned by type) ──────────────────────────────────
+
+const MEDIA_TYPE_ORDER = ['exterior', 'interior', 'undercarriage', 'walkaround_video', 'turntable_video', 'other_video', 'doc', 'other'] as const
+
+const MEDIA_TYPE_ICONS: Record<string, string> = {
+  exterior: '🚗',
+  interior: '🛋️',
+  undercarriage: '🔧',
+  walkaround_video: '🎥',
+  turntable_video: '🔄',
+  other_video: '📹',
+  doc: '📄',
+  other: '📎',
+}
 
 function MediaCard({
   vehicleId,
@@ -1441,17 +1454,15 @@ function MediaCard({
   currentUserId: string | null
   isAdmin: boolean
 }) {
-  const [uploadType, setUploadType] = useState<string>('exterior')
-  const [uploading, setUploading] = useState(false)
+  const [uploadingType, setUploadingType] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
   const [err, setErr] = useState<string | null>(null)
 
-  async function uploadFile(file: File) {
+  async function uploadFile(file: File, type: string) {
     setErr(null)
-    setUploading(true)
+    setUploadingType(type)
     setProgress(0)
     try {
-      // 1. Get presigned URL
       const presignRes = await fetch('/api/media/presign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1460,7 +1471,6 @@ function MediaCard({
       if (!presignRes.ok) throw new Error(`Presign failed (${presignRes.status})`)
       const { uploadUrl, r2Key } = await presignRes.json()
 
-      // 2. Upload directly to R2
       await new Promise<void>((resolve, reject) => {
         const xhr = new XMLHttpRequest()
         xhr.upload.addEventListener('progress', (e) => {
@@ -1476,17 +1486,12 @@ function MediaCard({
         xhr.send(file)
       })
 
-      // 3. Confirm with server (create MediaAsset record)
       const confirmRes = await fetch('/api/media/confirm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vehicleId,
-          r2Key,
-          type: uploadType,
-          contentType: file.type,
-          sizeBytes: file.size,
-          filename: file.name,
+          vehicleId, r2Key, type,
+          contentType: file.type, sizeBytes: file.size, filename: file.name,
         }),
       })
       if (!confirmRes.ok) throw new Error(`Confirm failed (${confirmRes.status})`)
@@ -1495,15 +1500,15 @@ function MediaCard({
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
-      setUploading(false)
+      setUploadingType(null)
       setProgress(0)
     }
   }
 
-  async function handleFiles(files: FileList | null) {
+  async function handleFiles(files: FileList | null, type: string) {
     if (!files || files.length === 0) return
     for (const f of Array.from(files)) {
-      await uploadFile(f)
+      await uploadFile(f, type)
     }
   }
 
@@ -1513,119 +1518,174 @@ function MediaCard({
     await onChange()
   }
 
-  // Group by type for display
-  const photos = media.filter(m => !isVideoType(m.type) && m.type !== 'doc')
-  const videos = media.filter(m => isVideoType(m.type))
-  const docs = media.filter(m => m.type === 'doc')
-
   return (
     <div style={{
       background: '#ffffff', border: '1px solid var(--border)',
       borderRadius: 16, padding: 20, boxShadow: 'var(--shadow-sm)', gridColumn: '1 / -1',
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
-        <div>
-          <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Media</h3>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            {media.length === 0 ? 'No media yet — upload photos and videos' : `${photos.length} photo${photos.length === 1 ? '' : 's'} · ${videos.length} video${videos.length === 1 ? '' : 's'}${docs.length > 0 ? ` · ${docs.length} doc${docs.length === 1 ? '' : 's'}` : ''}`}
-          </p>
-        </div>
-
-        {/* Upload controls */}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select
-            value={uploadType}
-            onChange={(e) => setUploadType(e.target.value)}
-            disabled={uploading}
-            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: '#fff' }}
-          >
-            {Object.entries(MEDIA_TYPE_LABELS).map(([k, label]) => (
-              <option key={k} value={k}>{label}</option>
-            ))}
-          </select>
-          <label style={{ ...v2Btn('primary'), display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            {uploading ? `Uploading… ${progress}%` : '+ Upload'}
-            <input
-              type="file"
-              multiple
-              accept="image/*,video/*"
-              disabled={uploading}
-              onChange={(e) => handleFiles(e.target.files)}
-              style={{ display: 'none' }}
-            />
-          </label>
-        </div>
+      <div style={{ marginBottom: 16 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Media</h3>
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+          {media.length === 0 ? 'No media yet — upload to each section below' : `${media.length} item${media.length === 1 ? '' : 's'} across ${MEDIA_TYPE_ORDER.filter(t => media.some(m => m.type === t)).length} section${MEDIA_TYPE_ORDER.filter(t => media.some(m => m.type === t)).length === 1 ? '' : 's'}`}
+        </p>
       </div>
 
       {err && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{err}</p>}
 
-      {media.length > 0 && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-          gap: 10,
-        }}>
-          {media.map((m) => {
-            const canDelete = isAdmin || m.uploadedBy?.id === currentUserId
-            const isVideo = isVideoType(m.type)
-            return (
-              <div key={m.id} style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#f0f0ec' }}>
-                {isVideo ? (
-                  <video src={m.url} controls style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block', background: '#1a1a1a' }} />
-                ) : m.type === 'doc' ? (
-                  <a href={m.url} target="_blank" rel="noreferrer" style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    aspectRatio: '4/3', background: '#f8f8f5', color: 'var(--text-secondary)',
-                    textDecoration: 'none', fontSize: 13, fontWeight: 600, gap: 4, flexDirection: 'column',
-                  }}>
-                    <span style={{ fontSize: 32 }}>📄</span>
-                    <span>{m.filename || 'Document'}</span>
-                  </a>
-                ) : (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={m.url} alt={m.caption || ''} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block' }} />
-                )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {MEDIA_TYPE_ORDER.map((type) => {
+          const items = media.filter(m => m.type === type)
+          const isUploading = uploadingType === type
+          const acceptType = type === 'doc' ? '' : type.endsWith('_video') ? 'video/*' : 'image/*'
 
-                {/* Overlay: type badge + delete */}
-                <div style={{
-                  position: 'absolute', top: 6, left: 6, right: 6,
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-                  pointerEvents: 'none',
+          return (
+            <MediaSection
+              key={type}
+              type={type}
+              items={items}
+              isUploading={isUploading}
+              uploadProgress={progress}
+              acceptType={acceptType}
+              onFiles={(files) => handleFiles(files, type)}
+              onDelete={deleteAsset}
+              currentUserId={currentUserId}
+              isAdmin={isAdmin}
+            />
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function MediaSection({
+  type, items, isUploading, uploadProgress, acceptType, onFiles, onDelete, currentUserId, isAdmin,
+}: {
+  type: string
+  items: MediaAsset[]
+  isUploading: boolean
+  uploadProgress: number
+  acceptType: string
+  onFiles: (files: FileList | null) => void
+  onDelete: (id: string) => void
+  currentUserId: string | null
+  isAdmin: boolean
+}) {
+  const isEmpty = items.length === 0
+  const isVideoSection = isVideoType(type)
+  const isDocSection = type === 'doc'
+  const icon = MEDIA_TYPE_ICONS[type] || '📎'
+  const label = MEDIA_TYPE_LABELS[type] || type
+
+  // EMPTY: compact one-line row
+  if (isEmpty) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px', background: '#f8f8f5', border: '1px dashed var(--border)',
+        borderRadius: 10, gap: 10, flexWrap: 'wrap',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 18 }}>{icon}</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{label}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· empty</span>
+        </div>
+        <label style={{
+          padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+          background: '#ffffff', border: '1px solid var(--border)',
+          color: 'var(--text-secondary)', cursor: isUploading ? 'wait' : 'pointer', minHeight: 'auto',
+        }}>
+          {isUploading ? `Uploading ${uploadProgress}%` : `+ Add ${label}`}
+          <input
+            type="file"
+            multiple
+            accept={acceptType}
+            disabled={isUploading}
+            onChange={(e) => onFiles(e.target.files)}
+            style={{ display: 'none' }}
+          />
+        </label>
+      </div>
+    )
+  }
+
+  // POPULATED: full section with gallery
+  return (
+    <div style={{
+      background: '#ffffff', border: '1px solid var(--border)',
+      borderRadius: 12, padding: 14,
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 10, gap: 10, flexWrap: 'wrap',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 18 }}>{icon}</span>
+          <span style={{ fontSize: 14, fontWeight: 700 }}>{label}</span>
+          <span style={{
+            fontSize: 11, fontWeight: 700, padding: '2px 8px',
+            background: '#1a1a1a', color: '#dffd6e',
+            borderRadius: 999, lineHeight: 1.4,
+          }}>{items.length}</span>
+        </div>
+        <label style={{
+          padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+          background: '#1a1a1a', color: '#dffd6e', border: 'none',
+          cursor: isUploading ? 'wait' : 'pointer', minHeight: 'auto',
+        }}>
+          {isUploading ? `Uploading ${uploadProgress}%` : `+ Add`}
+          <input
+            type="file"
+            multiple
+            accept={acceptType}
+            disabled={isUploading}
+            onChange={(e) => onFiles(e.target.files)}
+            style={{ display: 'none' }}
+          />
+        </label>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+        gap: 8,
+      }}>
+        {items.map((m) => {
+          const canDelete = isAdmin || m.uploadedBy?.id === currentUserId
+          return (
+            <div key={m.id} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#f0f0ec' }}>
+              {isVideoSection ? (
+                <video src={m.url} controls style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block', background: '#1a1a1a' }} />
+              ) : isDocSection ? (
+                <a href={m.url} target="_blank" rel="noreferrer" style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  aspectRatio: '4/3', background: '#f8f8f5', color: 'var(--text-secondary)',
+                  textDecoration: 'none', fontSize: 12, fontWeight: 600, gap: 4, flexDirection: 'column',
+                  padding: 8, textAlign: 'center',
                 }}>
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, padding: '3px 8px',
-                    background: 'rgba(0,0,0,0.7)', color: '#fff',
-                    borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.04em',
-                  }}>{MEDIA_TYPE_LABELS[m.type] || m.type}</span>
-                  {canDelete && (
-                    <button
-                      onClick={(e) => { e.preventDefault(); deleteAsset(m.id) }}
-                      style={{
-                        background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff',
-                        fontSize: 14, lineHeight: 1, padding: '4px 8px', borderRadius: 4,
-                        cursor: 'pointer', pointerEvents: 'auto', minHeight: 'auto',
-                      }}
-                      title="Delete"
-                    >×</button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {media.length === 0 && (
-        <div style={{
-          padding: '40px 20px', textAlign: 'center', background: '#f8f8f5',
-          borderRadius: 10, border: '1px dashed var(--border)',
-        }}>
-          <p style={{ fontSize: 28, marginBottom: 6 }}>📷</p>
-          <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
-            No photos or videos yet. Pick a type and hit Upload.
-          </p>
-        </div>
-      )}
+                  <span style={{ fontSize: 28 }}>📄</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{m.filename || 'Document'}</span>
+                </a>
+              ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={m.url} alt={m.caption || ''} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block' }} />
+              )}
+              {canDelete && (
+                <button
+                  onClick={(e) => { e.preventDefault(); onDelete(m.id) }}
+                  style={{
+                    position: 'absolute', top: 4, right: 4,
+                    background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff',
+                    fontSize: 12, lineHeight: 1, padding: '4px 7px', borderRadius: 4,
+                    cursor: 'pointer', minHeight: 'auto',
+                  }}
+                  title="Delete"
+                >×</button>
+              )}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
