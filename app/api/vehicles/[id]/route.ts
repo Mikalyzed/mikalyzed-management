@@ -43,10 +43,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   const body = await request.json()
 
-  const allowed = ['stockNumber', 'vin', 'year', 'make', 'model', 'color', 'trim', 'notes', 'status']
+  const allowed = [
+    'stockNumber', 'vin', 'year', 'make', 'model', 'color', 'trim', 'notes', 'status',
+    // Phase 2 — flooring
+    'floorLender', 'floorPrincipal', 'floorDailyRate', 'floorAdvanceDate', 'floorStatus',
+  ]
   const data: Record<string, unknown> = {}
   for (const key of allowed) {
-    if (body[key] !== undefined) data[key] = body[key]
+    if (body[key] !== undefined) {
+      // Coerce floorAdvanceDate string → Date
+      if (key === 'floorAdvanceDate' && typeof body[key] === 'string' && body[key]) {
+        data[key] = new Date(body[key])
+      } else {
+        data[key] = body[key]
+      }
+    }
   }
 
   const vehicle = await prisma.vehicle.update({

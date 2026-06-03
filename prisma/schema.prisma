@@ -91,6 +91,13 @@ model Vehicle {
   inventoryStatus          String?   @map("inventory_status") // in_stock / in_recon / external_repair / sold / removed / inventory_only — separate from recon `status`
   consignmentCommissionPct Float?    @map("consignment_commission_pct")
 
+  // Phase 2 — flooring (simple inline fields; lender table + curtailment come later)
+  floorLender      String?   @map("floor_lender") // e.g. "NextGear Capital"
+  floorPrincipal   Float?    @map("floor_principal") // dollars advanced
+  floorDailyRate   Float?    @map("floor_daily_rate") // percent per day, e.g. 0.025 means 0.025%/day
+  floorAdvanceDate DateTime? @map("floor_advance_date")
+  floorStatus      String?   @map("floor_status") // pending | active | paid_off
+
   // VIN-history dup linking (per CONTEXT dup-VIN handling)
   priorVehicleId String?   @map("prior_vehicle_id")
   priorVehicle   Vehicle?  @relation("VehiclePriorHistory", fields: [priorVehicleId], references: [id])

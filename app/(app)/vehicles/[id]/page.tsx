@@ -45,6 +45,12 @@ type Vehicle = {
   dateInStock: string | null
   inventoryStatus: string | null
   consignmentCommissionPct: number | null
+  // Phase 2 flooring
+  floorLender: string | null
+  floorPrincipal: number | null
+  floorDailyRate: number | null // percent per day (e.g. 0.025 means 0.025%/day)
+  floorAdvanceDate: string | null
+  floorStatus: string | null // pending | active | paid_off
   stages?: ReconStage[]
   currentAssignee?: { id: string; name: string } | null
 }
@@ -110,18 +116,23 @@ const daysAgo = (s: string | null): number | null => {
   return Math.floor(ms / 86400000)
 }
 
-const demoFlooring = (cost: number | null, days: number | null) => {
-  if (cost === null || days === null) return null
-  const dailyRate = 0.00025
-  const accrued = Math.round(cost * dailyRate * days * 100) / 100
+// Real flooring calc from vehicle's floor_* fields
+function computeFlooring(vehicle: Vehicle) {
+  if (!vehicle.floorPrincipal || !vehicle.floorDailyRate || !vehicle.floorAdvanceDate || vehicle.floorStatus === 'paid_off') return null
+  const days = daysAgo(vehicle.floorAdvanceDate) ?? 0
+  const rateFraction = vehicle.floorDailyRate / 100 // 0.025% per day → 0.00025 multiplier
+  const accrued = Math.round(vehicle.floorPrincipal * rateFraction * days * 100) / 100
+  const costPerDay = Math.round(vehicle.floorPrincipal * rateFraction * 100) / 100
   return {
-    lender: 'NextGear (placeholder)',
-    dailyRate: 0.025,
-    principal: cost,
+    lender: vehicle.floorLender || 'Unspecified lender',
+    dailyRate: vehicle.floorDailyRate,
+    principal: vehicle.floorPrincipal,
     daysHeld: days,
     accruedInterest: accrued,
-    costPerDay: Math.round(cost * dailyRate * 100) / 100,
-    payoff: Math.round((cost + accrued) * 100) / 100,
+    costPerDay,
+    payoff: Math.round((vehicle.floorPrincipal + accrued) * 100) / 100,
+    status: vehicle.floorStatus || 'active',
+    advanceDate: vehicle.floorAdvanceDate,
   }
 }
 
@@ -151,6 +162,7 @@ export default function VehicleDetailV2() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [showEdit, setShowEdit] = useState(false)
   const [showAddCost, setShowAddCost] = useState(false)
+  const [showSetFlooring, setShowSetFlooring] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const refreshVehicle = () =>
@@ -224,7 +236,7 @@ export default function VehicleDetailV2() {
   const days = daysAgo(vehicle.dateInStock)
   const profit = vehicle.askingPrice !== null && vehicle.vehicleCost !== null ? vehicle.askingPrice - vehicle.vehicleCost : null
   const margin = profit !== null && vehicle.askingPrice && vehicle.askingPrice > 0 ? (profit / vehicle.askingPrice) * 100 : null
-  const flooring = demoFlooring(vehicle.vehicleCost, days)
+  const flooring = computeFlooring(vehicle)
 
   const totalCostAddsCents = costAdds.reduce((s, c) => s + c.amountCents, 0)
   const totalCostAdds = totalCostAddsCents / 100
@@ -422,18 +434,48 @@ export default function VehicleDetailV2() {
         )}
 
         {/* Flooring */}
-        {(activeSection === 'all' || activeSection === 'inventory') && flooring && (
-          <V2Card title="Flooring" subtitle={`${flooring.lender} · ${flooring.dailyRate}%/day`}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <V2StatMini label="Principal" value={money(flooring.principal)} />
-              <V2StatMini label="Accrued" value={money(flooring.accruedInterest)} sub={`${flooring.daysHeld}d`} />
-              <V2StatMini label="Cost/Day" value={`${money(flooring.costPerDay)}`} accent="negative" />
-              <V2StatMini label="Payoff Today" value={money(flooring.payoff)} accent="negative" />
+        {(activeSection === 'all' || activeSection === 'inventory') && (
+          <div style={{
+            background: '#ffffff', border: '1px solid var(--border)',
+            borderRadius: 16, padding: 20, boxShadow: 'var(--shadow-sm)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <div>
+                <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Flooring</h3>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {flooring ? `${flooring.lender} · ${flooring.dailyRate}%/day` : 'No flooring on this vehicle'}
+                </p>
+              </div>
+              {isAdmin && (
+                <button onClick={() => setShowSetFlooring(true)} style={v2Btn(flooring ? 'ghost' : 'primary')}>
+                  {flooring ? 'Edit' : '+ Set Flooring'}
+                </button>
+              )}
             </div>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', marginTop: 12 }}>
-              Demo math — real Flooring model lands next.
-            </p>
-          </V2Card>
+            {flooring ? (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <V2StatMini label="Principal" value={money(flooring.principal)} />
+                  <V2StatMini label="Accrued" value={money(flooring.accruedInterest)} sub={`${flooring.daysHeld}d held`} />
+                  <V2StatMini label="Cost/Day" value={money(flooring.costPerDay)} accent="negative" />
+                  <V2StatMini label="Payoff Today" value={money(flooring.payoff)} accent="negative" />
+                </div>
+                {vehicle.floorAdvanceDate && (
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
+                    Advanced {fmtDate(vehicle.floorAdvanceDate)} · status: {flooring.status}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                {vehicle.purchaseType === 'CONSIGNMENT'
+                  ? 'Consignment vehicles are not floored.'
+                  : isAdmin
+                    ? 'Click "Set Flooring" if this vehicle is on a floorplan.'
+                    : 'Not on a floorplan.'}
+              </p>
+            )}
+          </div>
         )}
 
         {/* Title & Location */}
@@ -676,6 +718,143 @@ export default function VehicleDetailV2() {
           }}
         />
       )}
+
+      {/* ═══ SET FLOORING MODAL ═══ */}
+      {showSetFlooring && (
+        <SetFlooringModal
+          vehicle={vehicle}
+          onClose={() => setShowSetFlooring(false)}
+          onSaved={async () => {
+            await refreshVehicle()
+            setShowSetFlooring(false)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Set Flooring Modal ─────────────────────────────────────────────
+
+function SetFlooringModal({ vehicle, onClose, onSaved }: { vehicle: Vehicle; onClose: () => void; onSaved: () => void }) {
+  const [lender, setLender] = useState(vehicle.floorLender || '')
+  const [principal, setPrincipal] = useState(vehicle.floorPrincipal?.toString() || vehicle.vehicleCost?.toString() || '')
+  const [dailyRate, setDailyRate] = useState(vehicle.floorDailyRate?.toString() || '0.025')
+  const [advanceDate, setAdvanceDate] = useState(
+    vehicle.floorAdvanceDate
+      ? new Date(vehicle.floorAdvanceDate).toISOString().slice(0, 10)
+      : vehicle.dateInStock
+        ? new Date(vehicle.dateInStock).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10)
+  )
+  const [status, setStatus] = useState(vehicle.floorStatus || 'active')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function save() {
+    const p = parseFloat(principal)
+    const r = parseFloat(dailyRate)
+    if (!Number.isFinite(p) || p <= 0) { setErr('Principal must be a positive number'); return }
+    if (!Number.isFinite(r) || r <= 0) { setErr('Daily rate must be a positive percent (e.g. 0.025)'); return }
+    setSaving(true); setErr(null)
+    try {
+      const res = await fetch(`/api/vehicles/${vehicle.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          floorLender: lender.trim() || null,
+          floorPrincipal: p,
+          floorDailyRate: r,
+          floorAdvanceDate: advanceDate || null,
+          floorStatus: status,
+        }),
+      })
+      if (!res.ok) {
+        const txt = await res.text()
+        setErr(`Save failed (${res.status}): ${txt.slice(0, 120)}`)
+        setSaving(false); return
+      }
+      onSaved()
+    } catch (e) {
+      setErr(`Save failed: ${e instanceof Error ? e.message : String(e)}`)
+      setSaving(false)
+    }
+  }
+
+  async function clearFlooring() {
+    if (!confirm('Remove flooring from this vehicle?')) return
+    setSaving(true); setErr(null)
+    await fetch(`/api/vehicles/${vehicle.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        floorLender: null, floorPrincipal: null, floorDailyRate: null, floorAdvanceDate: null, floorStatus: null,
+      }),
+    })
+    onSaved()
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 500, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>{vehicle.floorPrincipal ? 'Edit Flooring' : 'Set Flooring'}</h2>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Daily interest accrues on top of vehicle cost</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: 'var(--text-muted)', minHeight: 'auto' }}>×</button>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Lender</p>
+          <input value={lender} onChange={(e) => setLender(e.target.value)} placeholder="e.g. NextGear Capital, Floorplan Xpress"
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Principal ($)</p>
+            <input type="number" step="100" min="0" value={principal} onChange={(e) => setPrincipal(e.target.value)} placeholder="0"
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
+          </div>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Daily Rate (%)</p>
+            <input type="number" step="0.001" min="0" value={dailyRate} onChange={(e) => setDailyRate(e.target.value)} placeholder="0.025"
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Advance Date</p>
+            <input type="date" value={advanceDate} onChange={(e) => setAdvanceDate(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
+          </div>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Status</p>
+            <select value={status} onChange={(e) => setStatus(e.target.value)}
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, background: '#fff' }}>
+              <option value="pending">Pending</option>
+              <option value="active">Active</option>
+              <option value="paid_off">Paid Off</option>
+            </select>
+          </div>
+        </div>
+
+        {err && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{err}</p>}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+          <div>
+            {vehicle.floorPrincipal && (
+              <button onClick={clearFlooring} disabled={saving} style={{ ...v2Btn('ghost'), color: '#ef4444' }}>Remove flooring</button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} disabled={saving} style={v2Btn('ghost')}>Cancel</button>
+            <button onClick={save} disabled={saving} style={v2Btn('primary')}>{saving ? 'Saving…' : 'Save'}</button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
