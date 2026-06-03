@@ -72,6 +72,28 @@ type Part = {
   assignedTo: { id: string; name: string } | null
 }
 
+type CostAdd = {
+  id: string
+  vehicleId: string
+  kind: string
+  amountCents: number
+  description: string | null
+  vendor: string | null
+  receiptUrl: string | null
+  addedAt: string
+  addedBy: { id: string; name: string } | null
+}
+
+const COST_KIND_LABELS: Record<string, string> = {
+  recon: 'Recon',
+  parts: 'Parts',
+  transport: 'Transport',
+  detail: 'Detail',
+  pack: 'Pack',
+  acquisition_fee: 'Acquisition Fee',
+  other: 'Other',
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────
 
 const money = (n: number | null | undefined) =>
@@ -121,11 +143,14 @@ export default function VehicleDetailV2() {
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)
   const [parts, setParts] = useState<Part[]>([])
   const [activity, setActivity] = useState<ActivityEvent[]>([])
+  const [costAdds, setCostAdds] = useState<CostAdd[]>([])
   const [loading, setLoading] = useState(true)
   const [activeSection, setActiveSection] = useState<'all' | 'inventory' | 'recon' | 'activity'>('all')
   const [expandedStageId, setExpandedStageId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [showEdit, setShowEdit] = useState(false)
+  const [showAddCost, setShowAddCost] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const refreshVehicle = () =>
@@ -161,8 +186,19 @@ export default function VehicleDetailV2() {
       .then((d) => setActivity(d?.events || []))
       .catch(() => {})
 
+  const refreshCostAdds = () =>
+    fetch(`/api/cost-adds?vehicleId=${id}`)
+      .then(async (r) => {
+        if (!r.ok) return null
+        const txt = await r.text()
+        if (!txt) return null
+        try { return JSON.parse(txt) } catch { return null }
+      })
+      .then((d) => setCostAdds(d?.costAdds || []))
+      .catch(() => {})
+
   useEffect(() => {
-    Promise.all([refreshVehicle(), refreshParts(), refreshActivity()]).finally(() => setLoading(false))
+    Promise.all([refreshVehicle(), refreshParts(), refreshActivity(), refreshCostAdds()]).finally(() => setLoading(false))
 
     const cookies = document.cookie.split(';').reduce((acc, c) => {
       const [k, v] = c.trim().split('=')
@@ -170,8 +206,17 @@ export default function VehicleDetailV2() {
       return acc
     }, {} as Record<string, string>)
     if (cookies.mm_user_role === 'admin') setIsAdmin(true)
+    if (cookies.mm_user_id) setCurrentUserId(decodeURIComponent(cookies.mm_user_id))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  async function deleteCostAdd(costAddId: string) {
+    if (!confirm('Delete this cost add?')) return
+    setBusy(true)
+    await fetch(`/api/cost-adds/${costAddId}`, { method: 'DELETE' })
+    await refreshCostAdds()
+    setBusy(false)
+  }
 
   if (loading) return <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
   if (!vehicle) return <div style={{ padding: 60, textAlign: 'center', color: 'var(--danger)' }}>Vehicle not found</div>
@@ -181,12 +226,8 @@ export default function VehicleDetailV2() {
   const margin = profit !== null && vehicle.askingPrice && vehicle.askingPrice > 0 ? (profit / vehicle.askingPrice) * 100 : null
   const flooring = demoFlooring(vehicle.vehicleCost, days)
 
-  const demoCostAdds = [
-    { date: '2026-04-12', description: 'Recon parts', vendor: 'In-house', amount: 450 },
-    { date: '2026-04-13', description: 'Transport from auction', vendor: 'Auction Logistics', amount: 200 },
-    { date: '2026-04-14', description: 'Detail', vendor: 'Detailer', amount: 150 },
-  ]
-  const totalCostAdds = demoCostAdds.reduce((s, c) => s + c.amount, 0)
+  const totalCostAddsCents = costAdds.reduce((s, c) => s + c.amountCents, 0)
+  const totalCostAdds = totalCostAddsCents / 100
   const trueCost = (vehicle.vehicleCost || 0) + totalCostAdds
 
   // Stage actions
@@ -324,24 +365,60 @@ export default function VehicleDetailV2() {
 
         {/* Cost Adds */}
         {(activeSection === 'all' || activeSection === 'inventory') && (
-          <V2Card title="Cost Adds" subtitle="Itemized recon, parts, transport costs" action="+ Add" wide>
-            {demoCostAdds.map((c, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 600 }}>{c.description}</p>
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{fmtDate(c.date)} · {c.vendor}</p>
-                </div>
-                <span style={{ fontSize: 14, fontWeight: 700 }}>{money(c.amount)}</span>
+          <div style={{
+            background: '#ffffff', border: '1px solid var(--border)',
+            borderRadius: 16, padding: 20, boxShadow: 'var(--shadow-sm)', gridColumn: '1 / -1',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+              <div>
+                <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Cost Adds</h3>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {costAdds.length === 0 ? 'No cost adds yet — track recon parts, transport, packs, etc.' : `${costAdds.length} item${costAdds.length === 1 ? '' : 's'} · rolls into true cost`}
+                </p>
               </div>
-            ))}
+              <button onClick={() => setShowAddCost(true)} style={v2Btn('primary')}>+ Add Cost</button>
+            </div>
+
+            {costAdds.length > 0 && (
+              <>
+                {costAdds.map((c) => {
+                  const canDelete = isAdmin || c.addedBy?.id === currentUserId
+                  return (
+                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)', gap: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
+                            padding: '2px 6px', background: '#f0f0ec', color: 'var(--text-secondary)', borderRadius: 4,
+                          }}>{COST_KIND_LABELS[c.kind] || c.kind}</span>
+                          {c.description && <span style={{ fontSize: 13, fontWeight: 600 }}>{c.description}</span>}
+                        </div>
+                        <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          {fmtDate(c.addedAt)}
+                          {c.vendor && ` · ${c.vendor}`}
+                          {c.addedBy && ` · added by ${c.addedBy.name}`}
+                        </p>
+                      </div>
+                      <span style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{money(c.amountCents / 100)}</span>
+                      {canDelete && (
+                        <button
+                          onClick={() => deleteCostAdd(c.id)}
+                          disabled={busy}
+                          style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', minHeight: 'auto' }}
+                          title="Delete"
+                        >×</button>
+                      )}
+                    </div>
+                  )
+                })}
+              </>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0 4px', borderTop: '2px solid #1a1a1a', marginTop: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 700 }}>True cost = vehicle + adds</span>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>True cost (vehicle + adds)</span>
               <span style={{ fontSize: 16, fontWeight: 800 }}>{money(trueCost)}</span>
             </div>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', marginTop: 8 }}>
-              Demo data — CostAdd backend lands next.
-            </p>
-          </V2Card>
+          </div>
         )}
 
         {/* Flooring */}
@@ -587,6 +664,132 @@ export default function VehicleDetailV2() {
           }}
         />
       )}
+
+      {/* ═══ ADD COST MODAL ═══ */}
+      {showAddCost && (
+        <AddCostModal
+          vehicleId={vehicle.id}
+          onClose={() => setShowAddCost(false)}
+          onSaved={async () => {
+            await refreshCostAdds()
+            setShowAddCost(false)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ─── Add Cost Modal ─────────────────────────────────────────────────
+
+function AddCostModal({ vehicleId, onClose, onSaved }: { vehicleId: string; onClose: () => void; onSaved: () => void }) {
+  const [kind, setKind] = useState<string>('recon')
+  const [amount, setAmount] = useState('')
+  const [description, setDescription] = useState('')
+  const [vendor, setVendor] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function save() {
+    const num = parseFloat(amount)
+    if (!Number.isFinite(num) || num <= 0) {
+      setErr('Amount must be a positive number')
+      return
+    }
+    setSaving(true)
+    setErr(null)
+    try {
+      const r = await fetch('/api/cost-adds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicleId,
+          kind,
+          amount: num,
+          description: description.trim() || undefined,
+          vendor: vendor.trim() || undefined,
+        }),
+      })
+      if (!r.ok) {
+        const txt = await r.text()
+        setErr(`Save failed (${r.status}): ${txt.slice(0, 100)}`)
+        setSaving(false)
+        return
+      }
+      onSaved()
+    } catch (e) {
+      setErr(`Save failed: ${e instanceof Error ? e.message : String(e)}`)
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%', boxShadow: '0 24px 48px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>Add Cost</h2>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Itemized cost that rolls into true cost</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: 'var(--text-muted)', minHeight: 'auto' }}>×</button>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Category</p>
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, background: '#fff' }}
+          >
+            {Object.entries(COST_KIND_LABELS).map(([k, label]) => (
+              <option key={k} value={k}>{label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Amount ($)</p>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00"
+            autoFocus
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Description</p>
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="e.g. New radiator, ball joints, etc."
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Vendor (optional)</p>
+          <input
+            value={vendor}
+            onChange={(e) => setVendor(e.target.value)}
+            placeholder="Vendor or supplier name"
+            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }}
+          />
+        </div>
+
+        {err && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{err}</p>}
+
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} disabled={saving} style={v2Btn('ghost')}>Cancel</button>
+          <button onClick={save} disabled={saving || !amount} style={v2Btn('primary')}>
+            {saving ? 'Saving…' : 'Add Cost'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

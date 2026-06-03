@@ -7,8 +7,37 @@ type Vehicle = {
   id: string; stockNumber: string; vin: string | null; vehicleInfo: string
   year: number | null; make: string; model: string; color: string | null
   mileage: number | null; location: string | null; askingPrice: number | null
+  vehicleCost: number | null
   purchaseType: string | null; purchasedFrom: string | null; titleStatus: string | null
   dateInStock: string | null; status: string
+}
+
+// Aging color coding (0-30 green, 31-60 yellow, 61-90 orange, 90+ red)
+function agingColor(days: number | null): { bg: string; fg: string; label: string } {
+  if (days === null) return { bg: '#f3f4f6', fg: '#6b7280', label: '—' }
+  if (days <= 30) return { bg: '#dcfce7', fg: '#16a34a', label: `${days}d` }
+  if (days <= 60) return { bg: '#fef3c7', fg: '#b45309', label: `${days}d` }
+  if (days <= 90) return { bg: '#fed7aa', fg: '#c2410c', label: `${days}d` }
+  return { bg: '#fee2e2', fg: '#991b1b', label: `${days}d` }
+}
+
+const moneyShort = (n: number | null | undefined) => {
+  if (n === null || n === undefined) return '—'
+  if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`
+  return `$${Math.round(n)}`
+}
+
+// Demo flooring math — 0.025% daily on cost
+function costPerDay(cost: number | null): number | null {
+  if (cost === null || cost === undefined) return null
+  return Math.round(cost * 0.00025 * 100) / 100
+}
+
+function daysSince(dateString: string | null): number | null {
+  if (!dateString) return null
+  const ms = Date.now() - new Date(dateString).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return null
+  return Math.floor(ms / 86400000)
 }
 
 function parseCSV(text: string): Record<string, string>[] {
@@ -314,11 +343,11 @@ export default function InventoryPage() {
         <div className="desktop-only" style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 12, overflow: 'auto' }}>
           {/* Table header */}
           <div style={{
-            display: 'grid', gridTemplateColumns: '100px 2fr 160px 90px 90px 120px 130px',
+            display: 'grid', gridTemplateColumns: '95px 1.7fr 145px 80px 80px 80px 90px 110px 110px',
             borderBottom: '1px solid var(--border)', background: '#f9fafb',
             fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em',
           }}>
-            {['Stock #', 'Vehicle', 'VIN', 'Color', 'Miles', 'Status', 'Type'].map((h, i) => (
+            {['Stock #', 'Vehicle', 'VIN', 'Color', 'Miles', 'Days', 'Cost/Day', 'Status', 'Type'].map((h, i) => (
               <span key={h} style={{ padding: '10px 12px', borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>{h}</span>
             ))}
           </div>
@@ -344,12 +373,16 @@ export default function InventoryPage() {
               : typeKey === 'TRADE-IN' || typeKey === 'TRADE IN' ? { bg: '#f3f4f6', fg: '#6b7280' }
               : { bg: '#f3f4f6', fg: '#6b7280' }
 
+            const days = daysSince(v.dateInStock)
+            const aging = agingColor(days)
+            const perDay = costPerDay(v.vehicleCost)
+
             return (
               <div
                 key={v.id}
                 onClick={() => openVehicleDetail(v.stockNumber)}
                 style={{
-                  display: 'grid', gridTemplateColumns: '100px 2fr 160px 90px 90px 120px 130px',
+                  display: 'grid', gridTemplateColumns: '95px 1.7fr 145px 80px 80px 80px 90px 110px 110px',
                   borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center',
                   cursor: resolving === v.stockNumber ? 'wait' : 'pointer',
                   opacity: resolving === v.stockNumber ? 0.6 : 1,
@@ -368,6 +401,15 @@ export default function InventoryPage() {
                 <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)', color: 'var(--text-secondary)' }}>{v.color || '—'}</span>
                 <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)', color: 'var(--text-secondary)' }}>
                   {v.mileage ? v.mileage.toLocaleString() : '—'}
+                </span>
+                <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)' }}>
+                  <span style={{
+                    fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4, whiteSpace: 'nowrap',
+                    background: aging.bg, color: aging.fg,
+                  }}>{aging.label}</span>
+                </span>
+                <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: 12 }}>
+                  {perDay !== null ? moneyShort(perDay) : '—'}
                 </span>
                 <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)' }}>
                   <span style={{
