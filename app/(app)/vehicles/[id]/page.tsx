@@ -1,51 +1,24 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter, useSearchParams } from 'next/navigation'
-import OrderPartModal from '@/components/OrderPartModal'
-import RichTypeReadout from '@/components/RichTypeReadout'
+import { useParams, useRouter } from 'next/navigation'
 
-type ChecklistItem = { item: string; done: boolean; note: string }
+// ─── Types ─────────────────────────────────────────────────────────
 
-type Stage = {
+type ChecklistItem = { item: string; done: boolean; note?: string }
+
+type ReconStage = {
   id: string
   stage: string
   status: string
   assignee: { id: string; name: string } | null
-  checklist: ChecklistItem[]
-  notes: string | null
-  dueDate: string | null
-  scopeName: string | null
-  estimatedHours: number | null
   startedAt: string
   completedAt: string | null
-}
-
-type ScopeTemplate = {
-  id: string
-  stage: string
-  name: string
-  items: { item: string; type?: string; fields?: { key: string; label: string }[] }[]
-}
-
-type Part = {
-  id: string
-  name: string
-  url: string | null
-  status: string
-  price: string | null
-  tracking: string | null
+  scopeName: string | null
+  estimatedHours: number | null
+  dueDate: string | null
   notes: string | null
-  createdAt: string
-  requestedBy: { id: string; name: string }
-  assignedTo: { id: string; name: string } | null
-}
-
-type ReturnQueueEntry = {
-  stage: string
-  reason?: string
-  fromStage?: string
-  uncompletedTasks?: string[]
+  checklist?: ChecklistItem[]
 }
 
 type Vehicle = {
@@ -59,13 +32,8 @@ type Vehicle = {
   trim: string | null
   status: string
   notes: string | null
-  currentAssignee: { id: string; name: string; role: string } | null
-  createdBy: { id: string; name: string } | null
-  createdAt: string
   completedAt: string | null
-  stages: Stage[]
-  returnQueue?: ReturnQueueEntry[]
-  // Phase 0.A — absorbed inventory fields (canonical Vehicle)
+  createdAt: string
   vehicleInfo: string | null
   mileage: number | null
   location: string | null
@@ -77,2030 +45,797 @@ type Vehicle = {
   dateInStock: string | null
   inventoryStatus: string | null
   consignmentCommissionPct: number | null
+  stages?: ReconStage[]
+  currentAssignee?: { id: string; name: string } | null
 }
 
 type ActivityEvent = {
   id: string
   entityType: string
-  entityId: string
   action: string
-  actorId: string | null
-  details: Record<string, unknown> | null
   createdAt: string
-  actor: { id: string; name: string; role: string } | null
+  details: Record<string, unknown> | null
+  actor: { name: string } | null
 }
 
-const STAGE_LABELS: Record<string, string> = {
-  mechanic: 'Mechanic', detailing: 'Detailing', content: 'Content', publish: 'Publish', completed: 'Completed',
-}
-const STAGE_ICONS: Record<string, string> = {
-  mechanic: '', detailing: '', content: '', publish: '', completed: '',
-}
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pending', in_progress: 'In Progress', blocked: 'Blocked', done: 'Done',
-}
-const STATUS_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-  pending: { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
-  in_progress: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
-  blocked: { bg: '#fef2f2', color: '#ef4444', border: '#fecaca' },
-  done: { bg: '#f0f0ec', color: '#9a9a9a', border: '#e8e8e4' },
+type Part = {
+  id: string
+  name: string
+  status: string
+  price: string | null
+  url: string | null
+  tracking: string | null
+  notes: string | null
+  createdAt: string
+  sourceStageId: string | null
+  requestedBy: { id: string; name: string } | null
+  assignedTo: { id: string; name: string } | null
 }
 
-export default function VehicleDetailPage() {
+// ─── Helpers ───────────────────────────────────────────────────────
+
+const money = (n: number | null | undefined) =>
+  n === null || n === undefined ? '—' : n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+
+const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—')
+
+const fmtDateTime = (s: string | null) => (s ? new Date(s).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—')
+
+const daysAgo = (s: string | null): number | null => {
+  if (!s) return null
+  const ms = Date.now() - new Date(s).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return null
+  return Math.floor(ms / 86400000)
+}
+
+const demoFlooring = (cost: number | null, days: number | null) => {
+  if (cost === null || days === null) return null
+  const dailyRate = 0.00025
+  const accrued = Math.round(cost * dailyRate * days * 100) / 100
+  return {
+    lender: 'NextGear (placeholder)',
+    dailyRate: 0.025,
+    principal: cost,
+    daysHeld: days,
+    accruedInterest: accrued,
+    costPerDay: Math.round(cost * dailyRate * 100) / 100,
+    payoff: Math.round((cost + accrued) * 100) / 100,
+  }
+}
+
+const STAGE_LABEL: Record<string, string> = {
+  mechanic: 'Mechanic',
+  detailing: 'Detailing',
+  content: 'Content',
+  publish: 'Publish',
+  external: 'External Repair',
+  awaiting_routing: 'Awaiting Routing',
+  completed: 'Completed',
+}
+
+// ─── Main ──────────────────────────────────────────────────────────
+
+export default function VehicleDetailV2() {
   const { id } = useParams()
   const router = useRouter()
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const searchParams = useSearchParams()
-  const tabParam = searchParams.get('tab')
-  const initialTab =
-    tabParam === 'history' ? 'history'
-    : tabParam === 'parts' ? 'parts'
-    : tabParam === 'inventory' ? 'inventory'
-    : tabParam === 'activity' ? 'activity'
-    : 'overview'
-  const [activeTab, setActiveTab] = useState(initialTab)
-
-  // Parts state
   const [parts, setParts] = useState<Part[]>([])
-  const [partsLoading, setPartsLoading] = useState(false)
-  const [showAddPart, setShowAddPart] = useState(false)
-  const [partForm, setPartForm] = useState({ name: '', url: '', notes: '', assignedToId: '' })
-  const [editingPartId, setEditingPartId] = useState<string | null>(null)
-
-  // History state
-  const [history, setHistory] = useState<any[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
-
-  // Activity state (Phase 0.A — unified activity timeline)
   const [activity, setActivity] = useState<ActivityEvent[]>([])
-  const [activityLoading, setActivityLoading] = useState(false)
-  const [activityLoaded, setActivityLoaded] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [activeSection, setActiveSection] = useState<'all' | 'inventory' | 'recon' | 'activity'>('all')
+  const [expandedStageId, setExpandedStageId] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
+  const [busy, setBusy] = useState(false)
 
-  // Original state
-  const [editing, setEditing] = useState(false)
-  const [editChecklist, setEditChecklist] = useState<ChecklistItem[]>([])
-  const [newTaskText, setNewTaskText] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [editingInfo, setEditingInfo] = useState(false)
-  const [editInfo, setEditInfo] = useState({ stockNumber: '', vin: '', year: '', make: '', model: '', color: '', trim: '', notes: '', stageStatus: '', estimatedHours: '', dueDate: '' })
-  const [showAdvanceModal, setShowAdvanceModal] = useState(false)
-  const [scopeTemplates, setScopeTemplates] = useState<ScopeTemplate[]>([])
-  const [selectedScope, setSelectedScope] = useState('')
-  const [advanceDueDate, setAdvanceDueDate] = useState('')
-  const [advanceChecklist, setAdvanceChecklist] = useState<ChecklistItem[]>([])
-  const [advanceEstHours, setAdvanceEstHours] = useState('')
-
-  const refresh = () => fetch(`/api/vehicles/${id}`).then(r => r.json()).then(d => setVehicle(d.vehicle))
-  
-  const loadParts = () => {
-    setPartsLoading(true)
-    fetch(`/api/parts?vehicleId=${id}`)
-      .then(r => r.json())
-      .then(d => setParts(d.parts || []))
-      .catch(console.error)
-      .finally(() => setPartsLoading(false))
-  }
-
-  const loadHistory = () => {
-    if (history.length > 0) return // Already loaded
-    setHistoryLoading(true)
-    fetch(`/api/vehicles/${id}/history`)
-      .then(r => r.json())
-      .then(d => setHistory(d.events || []))
-      .catch(console.error)
-      .finally(() => setHistoryLoading(false))
-  }
-
-  const loadActivity = () => {
-    if (activityLoaded) return
-    setActivityLoading(true)
-    fetch(`/api/vehicles/${id}/activity`)
-      .then(r => r.json())
-      .then(d => {
-        setActivity(d.events || [])
-        setActivityLoaded(true)
+  const refreshVehicle = () =>
+    fetch(`/api/vehicles/${id}`)
+      .then(async (r) => {
+        if (!r.ok) return null
+        const txt = await r.text()
+        if (!txt) return null
+        try { return JSON.parse(txt) } catch { return null }
       })
-      .catch(console.error)
-      .finally(() => setActivityLoading(false))
-  }
+      .then((d) => setVehicle(d?.vehicle || null))
+      .catch(() => setVehicle(null))
+
+  const refreshParts = () =>
+    fetch(`/api/parts?vehicleId=${id}`)
+      .then(async (r) => {
+        if (!r.ok) return null
+        const txt = await r.text()
+        if (!txt) return null
+        try { return JSON.parse(txt) } catch { return null }
+      })
+      .then((d) => setParts(d?.parts || []))
+      .catch(() => {})
+
+  const refreshActivity = () =>
+    fetch(`/api/vehicles/${id}/activity`)
+      .then(async (r) => {
+        if (!r.ok) return null
+        const txt = await r.text()
+        if (!txt) return null
+        try { return JSON.parse(txt) } catch { return null }
+      })
+      .then((d) => setActivity(d?.events || []))
+      .catch(() => {})
 
   useEffect(() => {
-    if (initialTab === 'history') loadHistory()
-    if (initialTab === 'activity') loadActivity()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialTab])
+    Promise.all([refreshVehicle(), refreshParts(), refreshActivity()]).finally(() => setLoading(false))
 
-  useEffect(() => {
-    refresh().finally(() => setLoading(false))
-    loadParts()
-    // Check if admin
     const cookies = document.cookie.split(';').reduce((acc, c) => {
       const [k, v] = c.trim().split('=')
       acc[k] = v
       return acc
     }, {} as Record<string, string>)
     if (cookies.mm_user_role === 'admin') setIsAdmin(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center" style={{ minHeight: '60vh' }}>
-        <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#e8e8e4', borderTopColor: 'transparent' }} />
-      </div>
-    )
+  if (loading) return <div style={{ padding: 60, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
+  if (!vehicle) return <div style={{ padding: 60, textAlign: 'center', color: 'var(--danger)' }}>Vehicle not found</div>
+
+  const days = daysAgo(vehicle.dateInStock)
+  const profit = vehicle.askingPrice !== null && vehicle.vehicleCost !== null ? vehicle.askingPrice - vehicle.vehicleCost : null
+  const margin = profit !== null && vehicle.askingPrice && vehicle.askingPrice > 0 ? (profit / vehicle.askingPrice) * 100 : null
+  const flooring = demoFlooring(vehicle.vehicleCost, days)
+
+  const demoCostAdds = [
+    { date: '2026-04-12', description: 'Recon parts', vendor: 'In-house', amount: 450 },
+    { date: '2026-04-13', description: 'Transport from auction', vendor: 'Auction Logistics', amount: 200 },
+    { date: '2026-04-14', description: 'Detail', vendor: 'Detailer', amount: 150 },
+  ]
+  const totalCostAdds = demoCostAdds.reduce((s, c) => s + c.amount, 0)
+  const trueCost = (vehicle.vehicleCost || 0) + totalCostAdds
+
+  // Stage actions
+  async function completeStage(stageId: string) {
+    if (!confirm('Mark this stage complete?')) return
+    setBusy(true)
+    await fetch(`/api/stages/${stageId}/complete`, { method: 'POST' })
+    await refreshVehicle()
+    setBusy(false)
   }
-  if (!vehicle) return <p style={{ color: 'var(--danger)', textAlign: 'center', marginTop: '40px' }}>Vehicle not found</p>
-
-  const currentStage = vehicle.stages.find((s) => s.status !== 'done' && s.status !== 'skipped')
-  const completedStages = vehicle.stages.filter((s) => s.status === 'done' || s.status === 'skipped')
-  const stageIcon = STAGE_ICONS[vehicle.status] || '📋'
-  const stageLabel = STAGE_LABELS[vehicle.status] || vehicle.status
-
-  // Time in current stage
-  let timeStr = ''
-  if (currentStage) {
-    const elapsed = (Date.now() - new Date(currentStage.startedAt).getTime()) / 1000
-    const hours = Math.floor(elapsed / 3600)
-    if (hours < 1) timeStr = `${Math.floor(elapsed / 60)}m`
-    else if (hours < 24) timeStr = `${hours}h`
-    else timeStr = `${Math.floor(hours / 24)}d ${hours % 24}h`
+  async function blockStage(stageId: string) {
+    const reason = prompt('Block reason:')
+    if (!reason) return
+    setBusy(true)
+    await fetch(`/api/stages/${stageId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'blocked', blockNote: reason }),
+    })
+    await refreshVehicle()
+    setBusy(false)
+  }
+  async function unblockStage(stageId: string) {
+    setBusy(true)
+    await fetch(`/api/stages/${stageId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'in_progress' }),
+    })
+    await refreshVehicle()
+    setBusy(false)
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
-      {/* Back */}
-      <button onClick={() => router.back()} className="text-sm mb-5 flex items-center gap-1" style={{ color: 'var(--text-muted)', minHeight: 'auto' }}>
-        ← Back
+    <div style={{ maxWidth: '1500px', margin: '0 auto', padding: '16px 24px' }}>
+      <button onClick={() => router.back()} style={{ color: 'var(--text-muted)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', minHeight: 'auto', marginBottom: 16 }}>
+        ← Inventory
       </button>
 
-      {/* Hero Card */}
+      {/* ═══ HERO ═══ */}
       <div style={{
+        display: 'grid',
+        gridTemplateColumns: '340px 1fr',
+        gap: 24,
+        marginBottom: 24,
         background: '#ffffff',
-        border: '1px solid var(--border)',
-        borderRadius: '20px',
-        padding: '24px',
-        marginBottom: '16px',
+        borderRadius: 24,
+        padding: 24,
         boxShadow: 'var(--shadow)',
+        border: '1px solid var(--border)',
       }}>
-        {!editingInfo ? (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-            <div>
-              <p style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '4px' }}>
-                STOCK #{vehicle.stockNumber}
-              </p>
-              <h1 style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-                {vehicle.year} {vehicle.make} {vehicle.model}
-              </h1>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '6px', flexWrap: 'wrap' }}>
-                {vehicle.color && (
-                  <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{vehicle.color}</span>
-                )}
-                {vehicle.trim && (
-                  <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>· {vehicle.trim}</span>
-                )}
-                {vehicle.vin && (
-                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>· VIN: {vehicle.vin}</span>
-                )}
-              </div>
-            </div>
-            {isAdmin && (
-              <button onClick={() => {
-                setEditInfo({
-                  stockNumber: vehicle.stockNumber,
-                  vin: vehicle.vin || '',
-                  year: vehicle.year?.toString() || '',
-                  make: vehicle.make,
-                  model: vehicle.model,
-                  color: vehicle.color || '',
-                  trim: vehicle.trim || '',
-                  notes: vehicle.notes || '',
-                  stageStatus: currentStage?.status || 'pending',
-                  estimatedHours: currentStage?.estimatedHours?.toString() || '',
-                  dueDate: currentStage?.dueDate ? new Date(currentStage.dueDate).toISOString().split('T')[0] : '',
-                })
-                setEditingInfo(true)
-              }} style={{
-                fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', background: 'none',
-                border: '1px solid var(--border)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', minHeight: 'auto',
-              }}>Edit</button>
-            )}
-          </div>
-        ) : (
-          <div style={{ marginBottom: 16 }}>
-            <div className="form-row" style={{ marginBottom: 8 }}>
-              <div style={{ flex: 1 }}>
-                <label className="form-label">Stock #</label>
-                <input className="input" value={editInfo.stockNumber} onChange={e => setEditInfo({ ...editInfo, stockNumber: e.target.value })} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="form-label">VIN</label>
-                <input className="input" value={editInfo.vin} onChange={e => setEditInfo({ ...editInfo, vin: e.target.value })} />
-              </div>
-            </div>
-            <div className="form-row" style={{ marginBottom: 8 }}>
-              <div style={{ flex: '0 0 80px' }}>
-                <label className="form-label">Year</label>
-                <input className="input" type="number" value={editInfo.year} onChange={e => setEditInfo({ ...editInfo, year: e.target.value })} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="form-label">Make</label>
-                <input className="input" value={editInfo.make} onChange={e => setEditInfo({ ...editInfo, make: e.target.value })} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="form-label">Model</label>
-                <input className="input" value={editInfo.model} onChange={e => setEditInfo({ ...editInfo, model: e.target.value })} />
-              </div>
-            </div>
-            <div className="form-row" style={{ marginBottom: 8 }}>
-              <div style={{ flex: 1 }}>
-                <label className="form-label">Color</label>
-                <input className="input" value={editInfo.color} onChange={e => setEditInfo({ ...editInfo, color: e.target.value })} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="form-label">Trim</label>
-                <input className="input" value={editInfo.trim} onChange={e => setEditInfo({ ...editInfo, trim: e.target.value })} />
-              </div>
-            </div>
-            <div style={{ marginBottom: 8 }}>
-              <label className="form-label">Notes</label>
-              <textarea className="input" rows={2} value={editInfo.notes} onChange={e => setEditInfo({ ...editInfo, notes: e.target.value })} style={{ resize: 'vertical' }} />
-            </div>
-            {/* Stage settings */}
-            {currentStage && (
-              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginBottom: 8 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
-                  Stage Settings
-                </p>
-                <div className="form-row" style={{ marginBottom: 8, gap: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <label className="form-label">Status</label>
-                    <select className="input" value={editInfo.stageStatus} onChange={e => setEditInfo({ ...editInfo, stageStatus: e.target.value })} style={{ fontSize: 13 }}>
-                      <option value="pending">Pending</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="blocked">Blocked</option>
-                    </select>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label className="form-label">Est. Hours</label>
-                    <input type="number" className="input" step="0.5" min="0" placeholder="e.g. 4"
-                      value={editInfo.estimatedHours} onChange={e => setEditInfo({ ...editInfo, estimatedHours: e.target.value })} style={{ fontSize: 13 }} />
-                  </div>
-                </div>
-                <div style={{ marginBottom: 8 }}>
-                  <label className="form-label">Due Date</label>
-                  <input type="date" className="input"
-                    value={editInfo.dueDate} onChange={e => setEditInfo({ ...editInfo, dueDate: e.target.value })}
-                    style={{ fontSize: 13 }} />
-                </div>
-                <div style={{ marginBottom: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
-                  <label className="form-label">Move to Stage</label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <select id="moveStageSelect" className="input" defaultValue="" style={{ fontSize: 13, flex: 1 }}>
-                      <option value="" disabled>Current: {currentStage.stage.charAt(0).toUpperCase() + currentStage.stage.slice(1)}</option>
-                      {['mechanic', 'detailing', 'content', 'publish', 'completed'].filter(s => s !== currentStage.stage).map(s => (
-                        <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                      ))}
-                    </select>
-                    <button
-                      className="btn btn-secondary"
-                      style={{ fontSize: 13, whiteSpace: 'nowrap' }}
-                      onClick={async () => {
-                        const sel = (document.getElementById('moveStageSelect') as HTMLSelectElement).value
-                        if (!sel) { alert('Select a stage'); return }
-                        if (!confirm(`Move this vehicle to ${sel.charAt(0).toUpperCase() + sel.slice(1)}?`)) return
-                        const res = await fetch(`/api/vehicles/${vehicle.id}/move-stage`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ targetStage: sel }),
-                        })
-                        if (res.ok) {
-                          window.location.reload()
-                        } else {
-                          const err = await res.json()
-                          alert(err.error || 'Failed to move stage')
-                        }
-                      }}
-                    >Move</button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setEditingInfo(false)} className="btn btn-secondary" style={{ fontSize: 13 }}>Cancel</button>
-              <button onClick={async () => {
-                await fetch(`/api/vehicles/${vehicle.id}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    stockNumber: editInfo.stockNumber,
-                    vin: editInfo.vin || null,
-                    year: editInfo.year ? parseInt(editInfo.year) : null,
-                    make: editInfo.make,
-                    model: editInfo.model,
-                    color: editInfo.color || null,
-                    trim: editInfo.trim || null,
-                    notes: editInfo.notes || null,
-                  }),
-                })
-                if (currentStage) {
-                  const stageRes = await fetch(`/api/stages/${currentStage.id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      status: editInfo.stageStatus,
-                      estimatedHours: editInfo.estimatedHours || null,
-                      dueDate: editInfo.dueDate || null,
-                    }),
-                  })
-                  if (!stageRes.ok) {
-                    const err = await stageRes.json()
-                    alert(`Stage update failed: ${err.error || 'Unknown error'}`)
-                    return
-                  }
-                }
-                setEditingInfo(false)
-                refresh()
-              }} className="btn btn-primary" style={{ fontSize: 13 }}>Save</button>
-            </div>
-          </div>
-        )}
-
-        {/* Status row */}
         <div style={{
+          aspectRatio: '4/3',
+          background: 'linear-gradient(135deg, #1a1a1a, #404040)',
+          borderRadius: 16,
           display: 'flex',
           alignItems: 'center',
-          gap: '12px',
-          padding: '12px 16px',
-          background: 'var(--bg-primary)',
-          borderRadius: '12px',
-          flexWrap: 'wrap',
+          justifyContent: 'center',
+          color: '#dffd6e',
+          fontSize: 14,
+          fontWeight: 600,
         }}>
-          {stageIcon && <span style={{ fontSize: '20px' }}>{stageIcon}</span>}
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: '14px', fontWeight: 600 }}>{stageLabel}</p>
-            {currentStage && (
-              <>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  {STATUS_LABELS[currentStage.status] || currentStage.status}
-                  {currentStage.scopeName && ` · ${currentStage.scopeName}`}
-                  {timeStr && ` · ${timeStr}`}
-                  {currentStage.assignee && ` · ${currentStage.assignee.name}`}
-                </p>
-                {currentStage.dueDate && (
-                  <p style={{
-                    fontSize: '11px', fontWeight: 600, marginTop: 2,
-                    color: new Date(currentStage.dueDate) < new Date() && currentStage.status !== 'done' ? '#ef4444' : 'var(--text-muted)',
-                  }}>
-                    Due: {new Date(currentStage.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                    {new Date(currentStage.dueDate) < new Date() && currentStage.status !== 'done' && ' (OVERDUE)'}
-                  </p>
-                )}
-                {currentStage.estimatedHours && (
-                  <p style={{ fontSize: '11px', fontWeight: 600, marginTop: 2, color: 'var(--text-muted)' }}>
-                    Est: {currentStage.estimatedHours}h
-                  </p>
-                )}
-              </>
-            )}
-            {vehicle.status === 'completed' && (
-              <div>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Completed {vehicle.completedAt && new Date(vehicle.completedAt).toLocaleDateString()}
-                </p>
-                {isAdmin && (
-                  <button onClick={async () => {
-                    const reason = prompt('Why is this vehicle going back through recon?')
-                    if (!reason) return
-                    await fetch(`/api/vehicles/${vehicle.id}/restart`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ reason }),
-                    })
-                    refresh()
-                  }} style={{
-                    marginTop: 8, padding: '6px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-                    background: '#1a1a1a', color: '#dffd6e', border: 'none', cursor: 'pointer',
-                  }}>
-                    Restart Recon
-                  </button>
-                )}
+          Photo · Phase 3
+        </div>
+
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+            <div>
+              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
+                STOCK #{vehicle.stockNumber}
+              </p>
+              <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1, marginBottom: 8 }}>
+                {vehicle.year} {vehicle.make}
+              </h1>
+              <p style={{ fontSize: 18, color: 'var(--text-secondary)', fontWeight: 500 }}>
+                {vehicle.model}{vehicle.trim && ` · ${vehicle.trim}`}
+              </p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+              <V2StatusPill value={vehicle.inventoryStatus || vehicle.status} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                {isAdmin && <button onClick={() => setShowEdit(true)} style={v2Btn('ghost')}>Edit</button>}
+                <button style={v2Btn('primary')}>Mark Sold</button>
               </div>
-            )}
+            </div>
           </div>
-          {currentStage && (
-            <span style={{
-              padding: '4px 12px',
-              borderRadius: '100px',
-              fontSize: '12px',
-              fontWeight: 600,
-              background: STATUS_COLORS[currentStage.status]?.bg || '#f5f5f3',
-              color: STATUS_COLORS[currentStage.status]?.color || '#9a9a9a',
-              border: `1px solid ${STATUS_COLORS[currentStage.status]?.border || '#e8e8e4'}`,
-            }}>
-              {STATUS_LABELS[currentStage.status] || currentStage.status}
-            </span>
-          )}
+
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+            {vehicle.color && <V2Chip>● {vehicle.color}</V2Chip>}
+            {vehicle.mileage !== null && <V2Chip>{vehicle.mileage.toLocaleString()} mi</V2Chip>}
+            {vehicle.location && <V2Chip>📍 {vehicle.location}</V2Chip>}
+            {vehicle.vin && <V2Chip mono>{vehicle.vin}</V2Chip>}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            <Stat label="Vehicle Cost" value={money(vehicle.vehicleCost)} />
+            <Stat label="Asking" value={money(vehicle.askingPrice)} />
+            <Stat
+              label="Spread"
+              value={profit !== null ? money(profit) : '—'}
+              sub={margin !== null ? `${margin.toFixed(1)}%` : undefined}
+              accent={profit !== null && profit >= 0 ? 'positive' : profit !== null ? 'negative' : undefined}
+            />
+            <Stat label="Days Held" value={days !== null ? `${days}` : '—'} sub={vehicle.dateInStock ? `since ${fmtDate(vehicle.dateInStock)}` : undefined} />
+          </div>
         </div>
       </div>
 
-      {/* Return queue banner — filter out stale entries that point at the current stage */}
-      {(() => {
-        const visibleReturns = (vehicle.returnQueue || []).filter(r => r.stage !== vehicle.status)
-        if (visibleReturns.length === 0) return null
-        return (
-          <div style={{
-            background: '#fef3c7', border: '1px solid #fcd34d', borderLeft: '4px solid #f59e0b',
-            borderRadius: '12px', padding: '14px 18px', marginBottom: '16px',
-          }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Queued Return{visibleReturns.length > 1 ? 's' : ''}
-            </p>
-            {visibleReturns.map((r, i) => (
-              <p key={i} style={{ fontSize: 13, color: '#78350f', marginTop: i > 0 ? 4 : 0 }}>
-                After <strong>{STAGE_LABELS[r.fromStage || ''] || r.fromStage || 'current stage'}</strong>,
-                returns to <strong>{STAGE_LABELS[r.stage] || r.stage}</strong>
-                {r.reason && ` — ${r.reason}`}
-              </p>
+      {/* ═══ Filter chips ═══ */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
+        {(['all', 'inventory', 'recon', 'activity'] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setActiveSection(s)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 999,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: '1px solid var(--border)',
+              background: activeSection === s ? '#1a1a1a' : '#ffffff',
+              color: activeSection === s ? '#dffd6e' : 'var(--text-secondary)',
+              textTransform: 'capitalize',
+              whiteSpace: 'nowrap',
+              minHeight: 'auto',
+            }}
+          >
+            {s === 'recon' && vehicle.stages && vehicle.stages.length > 0 ? `Recon (${vehicle.stages.length})` : s}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, alignItems: 'start' }}>
+
+        {/* Cost Adds */}
+        {(activeSection === 'all' || activeSection === 'inventory') && (
+          <V2Card title="Cost Adds" subtitle="Itemized recon, parts, transport costs" action="+ Add" wide>
+            {demoCostAdds.map((c, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 600 }}>{c.description}</p>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{fmtDate(c.date)} · {c.vendor}</p>
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 700 }}>{money(c.amount)}</span>
+              </div>
             ))}
-          </div>
-        )
-      })()}
-
-      {/* Notes */}
-      {vehicle.notes && (
-        <div style={{
-          background: '#ffffff',
-          border: '1px solid var(--border)',
-          borderRadius: '16px',
-          padding: '16px 20px',
-          marginBottom: '16px',
-          boxShadow: 'var(--shadow-sm)',
-        }}>
-          <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>Notes</p>
-          <p style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{vehicle.notes}</p>
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border)', marginBottom: '24px', overflowX: 'auto', flexWrap: 'nowrap' }}>
-          {[
-            { key: 'inventory', label: 'Inventory', count: null as number | null },
-            { key: 'overview', label: 'Recon', count: null as number | null },
-            { key: 'parts', label: 'Parts', count: parts.length },
-            { key: 'history', label: 'History', count: completedStages.length },
-            { key: 'activity', label: 'Activity', count: null as number | null }
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => {
-                setActiveTab(tab.key)
-                if (tab.key === 'history') loadHistory()
-                if (tab.key === 'activity') loadActivity()
-              }}
-              style={{
-                padding: '12px 16px',
-                borderRadius: '8px 8px 0 0',
-                border: 'none',
-                background: activeTab === tab.key ? '#ffffff' : 'transparent',
-                color: activeTab === tab.key ? 'var(--text-primary)' : 'var(--text-muted)',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                borderBottom: activeTab === tab.key ? '2px solid #1a1a1a' : '2px solid transparent',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              {tab.label}
-              {tab.count !== null && (
-                <span style={{
-                  background: activeTab === tab.key ? '#1a1a1a' : 'var(--border)',
-                  color: activeTab === tab.key ? '#dffd6e' : 'var(--text-muted)',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  minWidth: '18px',
-                  textAlign: 'center'
-                }}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab Content */}
-        {activeTab === 'overview' && currentStage && (
-        <div style={{
-          background: '#ffffff',
-          border: '1px solid var(--border)',
-          borderRadius: '16px',
-          padding: '20px',
-          marginBottom: '16px',
-          boxShadow: 'var(--shadow-sm)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Tasks ({currentStage.checklist.filter(c => c.done).length}/{currentStage.checklist.length})
-            </p>
-            {isAdmin && !editing && (
-              <button
-                onClick={() => { setEditing(true); setEditChecklist([...currentStage.checklist]); setNewTaskText('') }}
-                style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', minHeight: 'auto', padding: '4px 8px' }}
-              >
-                Edit Tasks
-              </button>
-            )}
-          </div>
-
-          {!editing ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              {currentStage.checklist.map((item, i) => (
-                <ChecklistRow key={i} item={item} index={i} stageId={currentStage.id} onUpdate={refresh} />
-              ))}
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0 4px', borderTop: '2px solid #1a1a1a', marginTop: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>True cost = vehicle + adds</span>
+              <span style={{ fontSize: 16, fontWeight: 800 }}>{money(trueCost)}</span>
             </div>
-          ) : (
-            <div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
-                {editChecklist.map((item, i) => (
-                  <div key={i} style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    padding: '8px 12px', borderRadius: '10px',
-                    background: 'var(--bg-primary)', border: '1px solid var(--border)',
-                  }}>
-                    <input
-                      value={item.item}
-                      onChange={(e) => {
-                        const updated = [...editChecklist]
-                        updated[i] = { ...updated[i], item: e.target.value }
-                        setEditChecklist(updated)
-                      }}
-                      style={{
-                        flex: 1, border: 'none', background: 'transparent',
-                        fontSize: '14px', fontWeight: 500, outline: 'none',
-                        color: 'var(--text-primary)',
-                      }}
-                    />
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', marginTop: 8 }}>
+              Demo data — CostAdd backend lands next.
+            </p>
+          </V2Card>
+        )}
+
+        {/* Flooring */}
+        {(activeSection === 'all' || activeSection === 'inventory') && flooring && (
+          <V2Card title="Flooring" subtitle={`${flooring.lender} · ${flooring.dailyRate}%/day`}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <V2StatMini label="Principal" value={money(flooring.principal)} />
+              <V2StatMini label="Accrued" value={money(flooring.accruedInterest)} sub={`${flooring.daysHeld}d`} />
+              <V2StatMini label="Cost/Day" value={`${money(flooring.costPerDay)}`} accent="negative" />
+              <V2StatMini label="Payoff Today" value={money(flooring.payoff)} accent="negative" />
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic', marginTop: 12 }}>
+              Demo math — real Flooring model lands next.
+            </p>
+          </V2Card>
+        )}
+
+        {/* Title & Location */}
+        {(activeSection === 'all' || activeSection === 'inventory') && (
+          <V2Card title="Title & Location">
+            <V2Row label="Title Status" value={vehicle.titleStatus || '—'} />
+            <V2Row label="Location" value={vehicle.location || '—'} />
+            <V2Row label="Inventory Status" value={vehicle.inventoryStatus || '—'} />
+            <V2Row label="Purchase Type" value={vehicle.purchaseType || '—'} />
+          </V2Card>
+        )}
+
+        {/* Source */}
+        {(activeSection === 'all' || activeSection === 'inventory') && (vehicle.purchasedFrom || vehicle.dateInStock) && (
+          <V2Card title="Source">
+            <V2Row label="Purchased From" value={vehicle.purchasedFrom || '—'} />
+            <V2Row label="Date in Stock" value={fmtDate(vehicle.dateInStock)} />
+            {vehicle.consignmentCommissionPct !== null && (
+              <V2Row label="Consignment %" value={`${vehicle.consignmentCommissionPct}%`} />
+            )}
+          </V2Card>
+        )}
+
+        {/* Description */}
+        {(activeSection === 'all' || activeSection === 'inventory') && vehicle.vehicleInfo && (
+          <V2Card title="Description" wide>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{vehicle.vehicleInfo}</p>
+          </V2Card>
+        )}
+
+        {/* ═══ RECON — expandable stages ═══ */}
+        {(activeSection === 'all' || activeSection === 'recon') && (
+          <V2Card
+            title="Recon History"
+            subtitle={vehicle.stages && vehicle.stages.length > 0 ? `${vehicle.stages.length} stage${vehicle.stages.length === 1 ? '' : 's'} · current: ${vehicle.status}` : 'No recon stages yet'}
+            wide
+          >
+            {vehicle.stages && vehicle.stages.length > 0 ? (
+              vehicle.stages.map((s) => {
+                const isActive = s.status !== 'done' && s.status !== 'skipped' && !s.completedAt
+                const isExpanded = expandedStageId === s.id
+                const checkedCount = s.checklist?.filter(c => c.done).length || 0
+                const totalCount = s.checklist?.length || 0
+                const stagePartsOrdered = parts.filter(p => p.sourceStageId === s.id)
+
+                return (
+                  <div key={s.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    {/* Stage header — clickable */}
                     <button
-                      onClick={() => setEditChecklist(editChecklist.filter((_, idx) => idx !== i))}
+                      onClick={() => setExpandedStageId(isExpanded ? null : s.id)}
                       style={{
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        color: 'var(--danger)', fontSize: '14px', fontWeight: 700,
-                        minHeight: 'auto', padding: '2px 6px',
+                        width: '100%',
+                        display: 'flex',
+                        gap: 12,
+                        alignItems: 'center',
+                        padding: '14px 0',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        minHeight: 'auto',
                       }}
                     >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add new task */}
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-                <input
-                  value={newTaskText}
-                  onChange={(e) => setNewTaskText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newTaskText.trim()) {
-                      e.preventDefault()
-                      setEditChecklist([...editChecklist, { item: newTaskText.trim(), done: false, note: '' }])
-                      setNewTaskText('')
-                    }
-                  }}
-                  placeholder="Add a task..."
-                  style={{
-                    flex: 1, padding: '10px 14px', borderRadius: '10px',
-                    border: '1px solid var(--border)', background: '#fff',
-                    fontSize: '14px', outline: 'none',
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    if (!newTaskText.trim()) return
-                    setEditChecklist([...editChecklist, { item: newTaskText.trim(), done: false, note: '' }])
-                    setNewTaskText('')
-                  }}
-                  style={{
-                    padding: '10px 16px', borderRadius: '10px',
-                    border: '1px solid var(--border)', background: '#fff',
-                    fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: 'auto',
-                  }}
-                >
-                  Add
-                </button>
-              </div>
-
-              {/* Save / Cancel */}
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  onClick={() => setEditing(false)}
-                  style={{
-                    flex: 1, padding: '10px', borderRadius: '10px',
-                    border: '1px solid var(--border)', background: '#fff',
-                    fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px',
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  disabled={saving}
-                  onClick={async () => {
-                    setSaving(true)
-                    const filtered = editChecklist.filter(c => c.item.trim())
-                    await fetch(`/api/stages/${currentStage.id}`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ checklist: filtered }),
-                    })
-                    setEditing(false)
-                    setSaving(false)
-                    refresh()
-                  }}
-                  style={{
-                    flex: 1, padding: '10px', borderRadius: '10px',
-                    border: 'none', background: '#1a1a1a', color: '#dffd6e',
-                    fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px',
-                    opacity: saving ? 0.5 : 1,
-                  }}
-                >
-                  {saving ? 'Saving...' : 'Save Tasks'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Stage notes */}
-          {currentStage.notes && (
-            <p style={{
-              fontSize: '13px',
-              marginTop: '12px',
-              padding: '10px 12px',
-              borderRadius: '8px',
-              background: 'var(--bg-primary)',
-              color: 'var(--text-secondary)',
-              lineHeight: 1.4,
-            }}>
-              {currentStage.notes}
-            </p>
-          )}
-
-          {/* Actions */}
-          {(() => {
-            const allDone = currentStage.checklist.length > 0 && currentStage.checklist.every(c => c.done)
-            const doneCount = currentStage.checklist.filter(c => c.done).length
-            const totalCount = currentStage.checklist.length
-            return (
-              <div style={{ marginTop: '16px' }}>
-                {/* Progress indicator */}
-                {currentStage.status === 'in_progress' && totalCount > 0 && (
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: allDone ? '#16a34a' : 'var(--text-muted)' }}>
-                        {allDone ? 'All tasks complete — ready to advance' : `${totalCount - doneCount} task${totalCount - doneCount !== 1 ? 's' : ''} remaining`}
-                      </span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: allDone ? '#16a34a' : 'var(--text-secondary)' }}>
-                        {doneCount}/{totalCount}
-                      </span>
-                    </div>
-                    <div style={{ height: 6, background: '#f0f0ec', borderRadius: 3, overflow: 'hidden' }}>
                       <div style={{
-                        width: `${totalCount > 0 ? (doneCount / totalCount) * 100 : 0}%`,
-                        height: '100%',
-                        background: allDone ? '#22c55e' : '#1a1a1a',
-                        borderRadius: 3,
-                        transition: 'width 0.3s ease',
-                      }} />
-                    </div>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {currentStage.status === 'pending' && (
-                    <ActionBtn label="Start Working" style="primary" onClick={async () => {
-                      await fetch(`/api/stages/${currentStage.id}`, {
-                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status: 'in_progress' }),
-                      })
-                      refresh()
-                    }} />
-                  )}
-                  {currentStage.status === 'in_progress' && (
-                    <>
-                      {allDone ? (
-                        <ActionBtn label="Advance to Next Stage →" style="success" onClick={async () => {
-                          // Fetch scope templates for next stage
-                          const NEXT: Record<string, string> = { mechanic: 'detailing', detailing: 'content', content: 'publish', publish: 'completed' }
-                          const next = NEXT[currentStage.stage]
-                          if (next === 'completed') {
-                            await fetch(`/api/stages/${currentStage.id}/advance`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) })
-                            refresh()
-                            return
-                          }
-                          const tmplRes = await fetch(`/api/checklist-templates?stage=${next}`)
-                          const tmplData = await tmplRes.json().catch(() => ({ templates: [] }))
-                          setScopeTemplates(tmplData.templates || [])
-                          setSelectedScope('')
-                          setAdvanceDueDate('')
-                          setAdvanceEstHours('')
-                          setAdvanceChecklist([])
-                          setShowAdvanceModal(true)
-                        }} />
-                      ) : (
-                        <div style={{
-                          flex: 1, padding: '10px 20px', borderRadius: 12,
-                          border: '1px solid var(--border)', background: '#f5f5f3',
-                          fontSize: 14, fontWeight: 600, color: 'var(--text-muted)',
-                          textAlign: 'center', minHeight: 44,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}>
-                          Complete all tasks to advance
+                        width: 28, height: 28, borderRadius: '50%',
+                        background: isActive ? '#1a1a1a' : (s.status === 'done' ? '#dffd6e' : 'var(--border)'),
+                        color: isActive ? '#dffd6e' : (s.status === 'done' ? '#1a1a1a' : 'var(--text-muted)'),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 12, fontWeight: 700, flexShrink: 0,
+                      }}>
+                        {s.status === 'done' || s.completedAt ? '✓' : isActive ? '▶' : '·'}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, textTransform: 'capitalize' }}>
+                            {STAGE_LABEL[s.stage] || s.stage}
+                            {s.scopeName && <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6, fontWeight: 500 }}>· {s.scopeName}</span>}
+                          </span>
+                          <V2StageStatus value={s.status} active={isActive} />
                         </div>
-                      )}
-                      <ActionBtn label="Block" style="danger" onClick={async () => {
-                        const note = prompt('Block reason:')
-                        if (!note) return
-                        await fetch(`/api/stages/${currentStage.id}`, {
-                          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ status: 'blocked', blockNote: note }),
-                        })
-                        refresh()
-                      }} />
-                    </>
-                  )}
-                  {currentStage.status === 'blocked' && (
-                    <ActionBtn label="Unblock" style="warning" onClick={async () => {
-                      await fetch(`/api/stages/${currentStage.id}`, {
-                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status: 'in_progress' }),
-                      })
-                      refresh()
-                    }} />
-                  )}
+                        <div style={{ display: 'flex', gap: 12, marginTop: 4, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                          {s.assignee && <span>👤 {s.assignee.name}</span>}
+                          <span>📅 {fmtDate(s.startedAt)}{s.completedAt ? ` → ${fmtDate(s.completedAt)}` : ''}</span>
+                          {totalCount > 0 && <span>☑ {checkedCount}/{totalCount}</span>}
+                          {stagePartsOrdered.length > 0 && <span>🔧 {stagePartsOrdered.length} part{stagePartsOrdered.length === 1 ? '' : 's'}</span>}
+                          {s.estimatedHours && <span>⏱ {s.estimatedHours}h</span>}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 14, color: 'var(--text-muted)', flexShrink: 0 }}>
+                        {isExpanded ? '▲' : '▼'}
+                      </span>
+                    </button>
+
+                    {/* Expanded content */}
+                    {isExpanded && (
+                      <div style={{ padding: '4px 0 16px 40px' }}>
+                        {/* Checklist */}
+                        {s.checklist && s.checklist.length > 0 && (
+                          <div style={{ marginBottom: 12 }}>
+                            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Checklist</p>
+                            {s.checklist.map((item, i) => (
+                              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0' }}>
+                                <span style={{
+                                  display: 'inline-flex', width: 16, height: 16, borderRadius: 4,
+                                  background: item.done ? '#1a1a1a' : 'transparent',
+                                  border: `1px solid ${item.done ? '#1a1a1a' : 'var(--border)'}`,
+                                  alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2,
+                                }}>
+                                  {item.done && <span style={{ color: '#dffd6e', fontSize: 11, fontWeight: 700 }}>✓</span>}
+                                </span>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <span style={{ fontSize: 13, color: item.done ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: item.done ? 'line-through' : 'none' }}>
+                                    {item.item}
+                                  </span>
+                                  {item.note && (
+                                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>↳ {item.note}</p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Notes */}
+                        {s.notes && (
+                          <div style={{ marginBottom: 12 }}>
+                            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Notes</p>
+                            <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{s.notes}</p>
+                          </div>
+                        )}
+
+                        {/* Parts ordered during this stage */}
+                        {stagePartsOrdered.length > 0 && (
+                          <div style={{ marginBottom: 12 }}>
+                            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Parts Ordered ({stagePartsOrdered.length})</p>
+                            {stagePartsOrdered.map((p) => (
+                              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <p style={{ fontSize: 13, fontWeight: 600 }}>{p.name}</p>
+                                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                    {p.requestedBy?.name || 'Unknown'} · {fmtDate(p.createdAt)}
+                                    {p.tracking && ` · 📦 ${p.tracking}`}
+                                  </p>
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                                  <V2PartStatus value={p.status} />
+                                  {p.price && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{money(parseFloat(p.price))}</span>}
+                                </div>
+                              </div>
+                            ))}
+                            <a href={`/parts?vehicleId=${vehicle.id}`} style={{ display: 'inline-block', marginTop: 8, fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'underline' }}>
+                              Manage parts →
+                            </a>
+                          </div>
+                        )}
+
+                        {/* Empty state inside expand */}
+                        {(!s.checklist || s.checklist.length === 0) && !s.notes && stagePartsOrdered.length === 0 && (
+                          <p style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>No checklist, notes, or parts recorded for this stage.</p>
+                        )}
+
+                        {/* Active-stage actions */}
+                        {isActive && (
+                          <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
+                            {s.status === 'blocked' ? (
+                              <button onClick={() => unblockStage(s.id)} disabled={busy} style={v2Btn('primary')}>Unblock</button>
+                            ) : (
+                              <>
+                                <button onClick={() => completeStage(s.id)} disabled={busy} style={v2Btn('primary')}>✓ Complete Stage</button>
+                                <button onClick={() => blockStage(s.id)} disabled={busy} style={v2Btn('ghost')}>Block</button>
+                              </>
+                            )}
+                            <a
+                              href={`/vehicles?focus=${vehicle.id}`}
+                              style={{ ...v2Btn('ghost'), textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                            >
+                              Open in Recon Board →
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                This vehicle has no recon stages yet. {vehicle.status === 'inventory_only' && '(Inventory-only — never started recon.)'}
+              </p>
+            )}
+          </V2Card>
+        )}
+
+        {/* Activity */}
+        {(activeSection === 'all' || activeSection === 'activity') && (
+          <V2Card title="Activity" subtitle={`${activity.length} events`} wide>
+            {activity.slice(0, 15).map((e) => (
+              <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                <div>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{e.action.replace(/_/g, ' ')}</span>
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {e.entityType} · {e.actor?.name || 'system'}
+                  </p>
                 </div>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtDateTime(e.createdAt)}</span>
               </div>
-            )
-          })()}
-        </div>
+            ))}
+            {activity.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No activity yet.</p>}
+          </V2Card>
         )}
 
-        {activeTab === 'parts' && (
-          <PartsSection 
-            vehicleId={vehicle.id}
-            parts={parts}
-            onPartsChange={loadParts}
-            isAdmin={isAdmin}
-          />
-        )}
-
-        {activeTab === 'history' && (
-          <VehicleHistorySection
-            history={history}
-            loading={historyLoading}
-          />
-        )}
-
-        {activeTab === 'inventory' && (
-          <InventoryTab vehicle={vehicle} />
-        )}
-
-        {activeTab === 'activity' && (
-          <ActivityTab events={activity} loading={activityLoading} />
+        {/* Notes */}
+        {vehicle.notes && (activeSection === 'all') && (
+          <V2Card title="Notes" wide>
+            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, fontStyle: 'italic' }}>{vehicle.notes}</p>
+          </V2Card>
         )}
       </div>
 
-      {/* Meta */}
-      <p style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0 24px' }}>
-        Added by {vehicle.createdBy?.name || 'System'} on {new Date(vehicle.createdAt).toLocaleDateString()}
-      </p>
-
-      {/* Advance Modal — pick scope + deadline for next stage */}
-      {showAdvanceModal && currentStage && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Advance to Next Stage</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 20 }}>
-              Configure the next stage before advancing.
-            </p>
-
-            {/* Due Date + Estimated Hours */}
-            <div className="form-row" style={{ marginBottom: 16 }}>
-              <div style={{ flex: 1 }}>
-                <label className="form-label">Due Date</label>
-                <input type="date" className="input" value={advanceDueDate} onChange={e => setAdvanceDueDate(e.target.value)} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label className="form-label">Est. Hours</label>
-                <input type="number" className="input" step="0.5" min="0" placeholder="e.g. 4"
-                  value={advanceEstHours} onChange={e => setAdvanceEstHours(e.target.value)} />
-              </div>
-            </div>
-
-            {/* Scope Templates */}
-            {scopeTemplates.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <label className="form-label">Work Scope</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button type="button" onClick={() => { setSelectedScope(''); setAdvanceChecklist([]) }}
-                    style={{
-                      padding: '10px 14px', borderRadius: 10, border: `2px solid ${!selectedScope ? '#1a1a1a' : 'var(--border)'}`,
-                      background: !selectedScope ? '#1a1a1a' : '#fff', color: !selectedScope ? '#dffd6e' : 'var(--text-secondary)',
-                      fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left', minHeight: 42,
-                    }}>
-                    Use default checklist
-                  </button>
-                  {scopeTemplates.map(t => (
-                    <button key={t.id} type="button" onClick={() => {
-                      setSelectedScope(t.name)
-                      setAdvanceChecklist(t.items.map(c => ({
-                        item: c.item,
-                        done: false,
-                        note: '',
-                        ...(c.type ? { type: c.type } : {}),
-                        ...(c.fields ? { fields: c.fields } : {}),
-                      })))
-                    }}
-                      style={{
-                        padding: '10px 14px', borderRadius: 10, border: `2px solid ${selectedScope === t.name ? '#1a1a1a' : 'var(--border)'}`,
-                        background: selectedScope === t.name ? '#1a1a1a' : '#fff', color: selectedScope === t.name ? '#dffd6e' : 'var(--text-secondary)',
-                        fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left', minHeight: 42,
-                      }}>
-                      {t.name}
-                      <span style={{ display: 'block', fontSize: 11, fontWeight: 400, marginTop: 2, color: selectedScope === t.name ? '#b0b0b0' : 'var(--text-muted)' }}>
-                        {t.items.map(c => c.item).join(', ')}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Preview checklist if scope selected */}
-            {advanceChecklist.length > 0 && (
-              <div style={{ marginBottom: 16, padding: 14, background: 'var(--bg-primary)', borderRadius: 10 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 8 }}>
-                  Checklist Preview
-                </p>
-                {advanceChecklist.map((c, i) => (
-                  <p key={i} style={{ fontSize: 13, color: 'var(--text-secondary)', padding: '3px 0' }}>
-                    {i + 1}. {c.item}
-                  </p>
-                ))}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-              <button onClick={() => setShowAdvanceModal(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>
-              <button onClick={async () => {
-                await fetch(`/api/stages/${currentStage.id}/advance`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    dueDate: advanceDueDate || null,
-                    scopeName: selectedScope || null,
-                    checklist: advanceChecklist.length > 0 ? advanceChecklist : undefined,
-                    estimatedHours: advanceEstHours ? parseFloat(advanceEstHours) : null,
-                  }),
-                })
-                setShowAdvanceModal(false)
-                refresh()
-              }} className="btn btn-primary" style={{ flex: 1 }}>
-                Advance
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* ═══ EDIT MODAL ═══ */}
+      {showEdit && (
+        <EditVehicleModal
+          vehicle={vehicle}
+          onClose={() => setShowEdit(false)}
+          onSaved={async () => {
+            await refreshVehicle()
+            setShowEdit(false)
+          }}
+        />
       )}
     </div>
   )
 }
 
-function VehicleHistorySection({ history, loading }: {
-  history: any[]
-  loading: boolean
-}) {
-  const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set())
-  const toggleStage = (idx: number) => {
-    setExpandedStages(prev => {
-      const next = new Set(prev)
-      if (next.has(idx)) next.delete(idx); else next.add(idx)
-      return next
-    })
-  }
+// ─── Edit Modal ─────────────────────────────────────────────────────
 
-  const getEventIcon = (type: string, status?: string) => {
-    switch (type) {
-      case 'stage':
-        if (status === 'skipped') return '⚠️'
-        return status === 'done' ? '✅' : '🔄'
-      case 'part':
-        return status === 'received' ? '📦' : '🔧'
-      case 'external':
-        return status === 'returned' ? '🏠' : '🏪'
-      case 'external_override':
-        return '⚠️'
-      case 'external_followup':
-        return '📞'
-      case 'activity':
-        return '📋'
-      case 'queued_return':
-        return '↺'
-      default:
-        return '•'
-    }
-  }
-
-  const getEventColor = (type: string, status?: string) => {
-    switch (type) {
-      case 'stage':
-        if (status === 'skipped') return '#f59e0b'
-        return status === 'done' ? '#16a34a' : '#6366f1'
-      case 'part':
-        return status === 'received' ? '#16a34a' : '#2563eb'
-      case 'external':
-        return status === 'returned' ? '#16a34a' : '#f59e0b'
-      case 'external_override':
-        return '#b45309'
-      case 'external_followup':
-        return '#8b5cf6'
-      case 'activity':
-        return '#6b7280'
-      case 'queued_return':
-        return '#f59e0b'
-      default:
-        return '#6b7280'
-    }
-  }
-
-  if (loading) {
-    return (
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid var(--border)',
-        borderRadius: '16px',
-        padding: '40px',
-        textAlign: 'center'
-      }}>
-        <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: '#e8e8e4', borderTopColor: 'transparent' }} />
-        <p style={{ marginTop: '16px', fontSize: '14px', color: 'var(--text-muted)' }}>Loading history...</p>
-      </div>
-    )
-  }
-
-  if (history.length === 0) {
-    return (
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid var(--border)',
-        borderRadius: '16px',
-        padding: '40px',
-        textAlign: 'center'
-      }}>
-        <p style={{ fontSize: '16px', fontWeight: 600, marginBottom: '8px' }}>No history available</p>
-        <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Vehicle history will appear here as events occur</p>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{
-      background: '#ffffff',
-      border: '1px solid var(--border)',
-      borderRadius: '16px',
-      overflow: 'hidden'
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: '20px 24px',
-        borderBottom: '1px solid var(--border)',
-        background: '#f8f9fa'
-      }}>
-        <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Vehicle History Timeline</h3>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-          Complete chronological history of all events
-        </p>
-      </div>
-
-      {/* Timeline */}
-      <div style={{ padding: '20px 24px' }}>
-        <div style={{ position: 'relative' }}>
-          {/* Timeline line */}
-          <div style={{
-            position: 'absolute',
-            left: '20px',
-            top: '0',
-            bottom: '0',
-            width: '2px',
-            background: 'linear-gradient(to bottom, #e5e7eb, #f3f4f6)'
-          }} />
-
-          {/* Timeline events */}
-          {history.map((event, index) => {
-            const eventColor = getEventColor(event.type, event.status)
-            const isLast = index === history.length - 1
-
-            return (
-              <div key={index} style={{ 
-                position: 'relative', 
-                paddingLeft: '52px',
-                paddingBottom: isLast ? '0' : '24px'
-              }}>
-                {/* Timeline dot */}
-                <div style={{
-                  position: 'absolute',
-                  left: '11px',
-                  top: '4px',
-                  width: '20px',
-                  height: '20px',
-                  borderRadius: '50%',
-                  background: '#ffffff',
-                  border: `3px solid ${eventColor}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '10px',
-                  zIndex: 1
-                }}>
-                  {getEventIcon(event.type, event.status)}
-                </div>
-
-                {/* Event content */}
-                <div style={{
-                  background: event.details?.skipped ? '#fef3c7' : '#f8f9fa',
-                  border: `1px solid ${event.details?.skipped ? '#fbbf24' : '#e5e7eb'}`,
-                  borderRadius: '12px',
-                  padding: '16px 20px'
-                }}>
-                  {/* Event header */}
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'flex-start',
-                    marginBottom: '8px'
-                  }}>
-                    <h4 style={{ 
-                      fontSize: '15px', 
-                      fontWeight: 600, 
-                      margin: 0,
-                      color: event.details?.skipped ? '#92400e' : 'var(--text-primary)'
-                    }}>
-                      {event.title}
-                      {event.details?.skipped && (
-                        <span style={{
-                          marginLeft: '8px',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          background: '#fbbf24',
-                          color: '#92400e',
-                          textTransform: 'uppercase'
-                        }}>
-                          SKIPPED
-                        </span>
-                      )}
-                    </h4>
-                    <span style={{ 
-                      fontSize: '12px', 
-                      color: 'var(--text-muted)',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {new Date(event.date).toLocaleDateString()} {new Date(event.date).toLocaleTimeString()}
-                    </span>
-                  </div>
-
-                  {/* Event details */}
-                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                    {event.type === 'stage' && (() => {
-                      const isExpanded = expandedStages.has(index)
-                      type RichChecklistItem = {
-                        item: string
-                        done: boolean
-                        note?: string
-                        addedByMechanic?: boolean
-                        approved?: string
-                        type?: string
-                        data?: Record<string, unknown>
-                        fields?: { key: string; label: string }[]
-                        estimatedHours?: number | null
-                        sourceItem?: string
-                        sourceSubField?: string
-                      }
-                      type PartRequested = { id: string; name: string; url: string | null; status: string; sourceItem?: string | null; sourceSubField?: string | null }
-                      const checklist: RichChecklistItem[] = Array.isArray(event.details.checklist) ? event.details.checklist : []
-                      const partsRequested: PartRequested[] = Array.isArray(event.details.partsRequested) ? event.details.partsRequested : []
-                      // Group parts and added tasks by sourceItem so they can render inline
-                      const partsByItem: Record<string, PartRequested[]> = {}
-                      for (const p of partsRequested) {
-                        if (!p.sourceItem) continue
-                        if (!partsByItem[p.sourceItem]) partsByItem[p.sourceItem] = []
-                        partsByItem[p.sourceItem].push(p)
-                      }
-                      const addedTasksByItem: Record<string, RichChecklistItem[]> = {}
-                      for (const t of checklist) {
-                        if (!t.addedByMechanic) continue
-                        const src = (t as any).sourceItem
-                        if (!src) continue
-                        if (!addedTasksByItem[src]) addedTasksByItem[src] = []
-                        addedTasksByItem[src].push(t)
-                      }
-                      const days = event.details.days
-                      const hasDetails = checklist.length > 0 || event.details.notes || partsRequested.length > 0
-                      return (
-                        <div>
-                          <p style={{ margin: '0 0 4px 0' }}>
-                            Assigned to: {event.details.assignee}
-                            {event.details.duration != null && (
-                              <span style={{ marginLeft: '12px' }}>
-                                Duration: {event.details.duration < 24
-                                  ? `${event.details.duration}h`
-                                  : `${days}d ${event.details.duration % 24}h`}
-                              </span>
-                            )}
-                          </p>
-                          {event.details.totalTasks > 0 && (
-                            <p style={{ margin: '4px 0 0 0' }}>
-                              Tasks completed: {event.details.completedTasks}/{event.details.totalTasks}
-                              {event.details.skipped && event.details.completedTasks < event.details.totalTasks && (
-                                <span style={{ color: '#f59e0b', fontWeight: 600, marginLeft: '8px' }}>
-                                  ({event.details.totalTasks - event.details.completedTasks} tasks remaining)
-                                </span>
-                              )}
-                            </p>
-                          )}
-                          {hasDetails && (
-                            <button
-                              onClick={() => toggleStage(index)}
-                              style={{
-                                marginTop: 8, padding: '4px 10px', borderRadius: 6,
-                                border: '1px solid var(--border)', background: '#fff',
-                                color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600,
-                                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
-                              }}
-                            >
-                              <span style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', display: 'inline-block' }}>▸</span>
-                              {isExpanded ? 'Hide tasks' : 'View tasks'}
-                            </button>
-                          )}
-                          {isExpanded && hasDetails && (
-                            <div style={{ marginTop: 10, padding: '10px 12px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8 }}>
-                              {event.details.notes && (
-                                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px', lineHeight: 1.4 }}>
-                                  <span style={{ fontWeight: 700 }}>Notes: </span>
-                                  <span style={{ fontStyle: 'italic' }}>{event.details.notes}</span>
-                                </p>
-                              )}
-                              {partsRequested.length > 0 && (() => {
-                                const partColors: Record<string, { bg: string; fg: string }> = {
-                                  requested: { bg: '#fef2f2', fg: '#ef4444' },
-                                  sourced: { bg: '#fef9c3', fg: '#a16207' },
-                                  ready_to_order: { bg: '#eff6ff', fg: '#2563eb' },
-                                  ordered: { bg: '#fefce8', fg: '#a16207' },
-                                  received: { bg: '#f0fdf4', fg: '#16a34a' },
-                                }
-                                const partLabels: Record<string, string> = {
-                                  requested: 'Requested',
-                                  sourced: 'Pending approval',
-                                  ready_to_order: 'Ready to order',
-                                  ordered: 'Ordered',
-                                  received: 'Received',
-                                }
-                                return (
-                                  <div style={{ marginBottom: 10, padding: '8px 10px', background: '#f9fafb', borderRadius: 6, border: '1px solid #e5e7eb' }}>
-                                    <p style={{ fontSize: 11, fontWeight: 700, color: '#374151', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                      Parts requested ({partsRequested.length})
-                                    </p>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                      {partsRequested.map(p => {
-                                        const colors = partColors[p.status] || partColors.requested
-                                        return (
-                                          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-                                            <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#9ca3af', flexShrink: 0 }} />
-                                            {p.url ? (
-                                              <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)', textDecoration: 'underline' }}>
-                                                {p.name}
-                                              </a>
-                                            ) : (
-                                              <span style={{ color: 'var(--text-primary)' }}>{p.name}</span>
-                                            )}
-                                            <span style={{
-                                              fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
-                                              background: colors.bg, color: colors.fg, marginLeft: 'auto',
-                                              textTransform: 'uppercase', letterSpacing: '0.04em',
-                                            }}>
-                                              {partLabels[p.status] || p.status}
-                                            </span>
-                                          </div>
-                                        )
-                                      })}
-                                    </div>
-                                  </div>
-                                )
-                              })()}
-                              {checklist.length > 0 && (() => {
-                                const PART_LABELS: Record<string, string> = {
-                                  requested: 'Requested', sourced: 'Pending approval', ready_to_order: 'Ready to order',
-                                  ordered: 'Ordered', received: 'Received',
-                                }
-                                // Only render inspection (non-added) items here; added tasks render inline under their parent
-                                const inspectionItems = checklist.filter(t => !t.addedByMechanic)
-                                return (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                  {inspectionItems.map((t, i) => {
-                                    const hasRichData = t.type && t.data && Object.keys(t.data).length > 0
-                                    const inlineTasks = addedTasksByItem[t.item] || []
-                                    const inlineParts = partsByItem[t.item] || []
-                                    return (
-                                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13 }}>
-                                        <span style={{
-                                          width: 14, height: 14, borderRadius: 4, flexShrink: 0, marginTop: 2,
-                                          border: t.done ? 'none' : '1.5px solid #d4d4d4',
-                                          background: t.done ? '#16a34a' : 'transparent',
-                                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                          color: '#fff', fontSize: 10, fontWeight: 700,
-                                        }}>{t.done ? '✓' : ''}</span>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                          <span style={{
-                                            color: t.done ? 'var(--text-muted)' : 'var(--text-primary)',
-                                            textDecoration: t.done ? 'line-through' : 'none',
-                                          }}>
-                                            {t.item}
-                                          </span>
-                                          {hasRichData && <RichTypeReadout item={t} />}
-                                          {t.note && (
-                                            <p style={{ fontSize: 12, color: '#4b5563', margin: '4px 0 0', lineHeight: 1.4 }}>
-                                              <span style={{ fontWeight: 700 }}>Notes: </span>
-                                              <span style={{ fontStyle: 'italic' }}>{t.note}</span>
-                                            </p>
-                                          )}
-                                          {/* Inline added tasks from this inspection item */}
-                                          {inlineTasks.map((it, ii) => (
-                                            <div key={`it-${ii}`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12 }}>
-                                              <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#7c3aed', flexShrink: 0 }} />
-                                              <span style={{ flex: 1, color: '#5b21b6' }}>
-                                                {it.item}
-                                                {(it as any).sourceSubField && <span style={{ color: '#9ca3af' }}> · {(it as any).sourceSubField}</span>}
-                                                {it.estimatedHours != null && <span style={{ color: '#9ca3af' }}> · {it.estimatedHours}h</span>}
-                                              </span>
-                                              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: '#ede9fe', color: '#5b21b6', textTransform: 'uppercase' }}>Task{it.approved ? ` · ${it.approved}` : ''}</span>
-                                            </div>
-                                          ))}
-                                          {/* Inline parts requested from this inspection item */}
-                                          {inlineParts.map((p, pi) => (
-                                            <div key={`pp-${pi}`} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12 }}>
-                                              <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#2563eb', flexShrink: 0 }} />
-                                              <span style={{ flex: 1, color: '#1d4ed8' }}>
-                                                {p.url ? <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ color: '#1d4ed8', textDecoration: 'underline' }}>{p.name}</a> : p.name}
-                                                {p.sourceSubField && <span style={{ color: '#9ca3af' }}> · {p.sourceSubField}</span>}
-                                              </span>
-                                              <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3, background: '#dbeafe', color: '#1d4ed8', textTransform: 'uppercase' }}>Part · {PART_LABELS[p.status] || p.status}</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                                )
-                              })()}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })()}
-
-                    {event.type === 'part' && (
-                      <div>
-                        <p style={{ margin: '0 0 4px 0' }}>
-                          Part: {event.details.partName}
-                          {event.details.requestedBy && (
-                            <span style={{ marginLeft: '12px' }}>
-                              Requested by: {event.details.requestedBy}
-                            </span>
-                          )}
-                        </p>
-                        {event.details.url && (
-                          <p style={{ margin: '4px 0 0 0' }}>
-                            <a href={event.details.url} target="_blank" rel="noopener noreferrer" 
-                               style={{ color: '#2563eb', textDecoration: 'none' }}>
-                              View Link →
-                            </a>
-                          </p>
-                        )}
-                        {event.details.currentStatus && (
-                          <p style={{ margin: '4px 0 0 0', fontWeight: 600 }}>
-                            Current status: {event.details.currentStatus}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {event.type === 'external' && (
-                      <div>
-                        <p style={{ margin: '0 0 4px 0' }}>
-                          Shop: {event.details.shopName}
-                        </p>
-                        <p style={{ margin: '4px 0 0 0' }}>
-                          Work: {event.details.repairDescription}
-                        </p>
-                        {event.details.estimatedDays && (
-                          <p style={{ margin: '4px 0 0 0' }}>
-                            Estimated: {event.details.estimatedDays} days
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {event.type === 'external_override' && (
-                      <div>
-                        <p style={{ margin: '0 0 4px 0' }}>
-                          Shop: {event.details.shopName}
-                        </p>
-                        <p style={{ margin: '4px 0 0 0' }}>
-                          <strong>{event.details.fromStatus}</strong> → <strong>{event.details.toStatus}</strong>
-                        </p>
-                        {event.details.reason && (
-                          <p style={{ margin: '4px 0 0 0' }}>
-                            Reason: <strong>{event.details.reason}</strong>
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {event.type === 'external_followup' && (
-                      <div>
-                        <p style={{ margin: '0 0 4px 0' }}>
-                          Shop: {event.details.shopName}
-                        </p>
-                        <p style={{ margin: '4px 0 0 0' }}>{event.details.note}</p>
-                        {event.details.etaDays && (
-                          <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
-                            New ETA: +{event.details.etaDays} days
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    {event.type === 'activity' && (
-                      <div>
-                        {event.details.reason && (
-                          <p style={{ margin: '0 0 4px 0' }}>Reason: <strong>{event.details.reason}</strong></p>
-                        )}
-                        <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)' }}>
-                          {event.details.actor && `by ${event.details.actor}`}
-                        </p>
-                      </div>
-                    )}
-
-                    {event.type === 'queued_return' && (
-                      <div>
-                        <p style={{ margin: '0 0 4px 0' }}>
-                          From <strong>{STAGE_LABELS[event.details.fromStage] || event.details.fromStage}</strong>{' '}
-                          → <strong>{STAGE_LABELS[event.details.toStage] || event.details.toStage}</strong>
-                        </p>
-                        {event.details.reason && (
-                          <p style={{ margin: '4px 0 0 0' }}>Reason: {event.details.reason}</p>
-                        )}
-                        {event.details.uncompletedTasks?.length > 0 && (
-                          <p style={{ margin: '4px 0 0 0', color: '#92400e' }}>
-                            Carrying over: {event.details.uncompletedTasks.join(', ')}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function slimPartBtn(color: string, bg: string): React.CSSProperties {
-  return {
-    padding: '7px 12px', borderRadius: 8,
-    border: `1px solid ${color}`, background: bg, color,
-    fontSize: 12, fontWeight: 600, cursor: 'pointer',
-    whiteSpace: 'nowrap', minHeight: 0,
-  }
-}
-
-function PartsSection({ vehicleId, parts, onPartsChange, isAdmin }: {
-  vehicleId: string
-  parts: Part[]
-  onPartsChange: () => void
-  isAdmin: boolean
-}) {
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [newPart, setNewPart] = useState({ name: '', notes: '', assignedToId: '' })
-  const [addingUrl, setAddingUrl] = useState<string | null>(null)
-  const [urlInput, setUrlInput] = useState('')
+function EditVehicleModal({ vehicle, onClose, onSaved }: { vehicle: Vehicle; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState({
+    stockNumber: vehicle.stockNumber,
+    vin: vehicle.vin || '',
+    year: vehicle.year?.toString() || '',
+    make: vehicle.make,
+    model: vehicle.model,
+    color: vehicle.color || '',
+    trim: vehicle.trim || '',
+    notes: vehicle.notes || '',
+  })
   const [saving, setSaving] = useState(false)
-  const [orderModalPart, setOrderModalPart] = useState<{ id: string; name: string } | null>(null)
-  const [users, setUsers] = useState<{ id: string; name: string }[]>([])
+  const [err, setErr] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetch('/api/users').then(r => r.json()).then((d) => {
-      setUsers((d.users || d).filter((u: { isActive?: boolean }) => u.isActive !== false).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })))
-    }).catch(() => {})
-  }, [])
-
-  const statusLabels: Record<string, string> = {
-    requested: 'Requested',
-    sourced: 'Pending Approval',
-    ready_to_order: 'Ready to Order',
-    ordered: 'Ordered',
-    received: 'Received'
-  }
-
-  const statusColors: Record<string, { bg: string; color: string; border: string }> = {
-    requested: { bg: '#fef2f2', color: '#ef4444', border: '#fecaca' },
-    sourced: { bg: '#fef9c3', color: '#a16207', border: '#fde047' },
-    ready_to_order: { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
-    ordered: { bg: '#fefce8', color: '#eab308', border: '#fde047' },
-    received: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' }
-  }
-
-  async function addPart() {
-    if (!newPart.name.trim()) return
+  async function save() {
     setSaving(true)
+    setErr(null)
     try {
-      const response = await fetch('/api/parts', {
-        method: 'POST',
+      const r = await fetch(`/api/vehicles/${vehicle.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vehicleId,
-          name: newPart.name,
-          notes: newPart.notes || null,
-          assignedToId: newPart.assignedToId || null,
-        })
+          stockNumber: form.stockNumber,
+          vin: form.vin || null,
+          year: form.year ? parseInt(form.year) : null,
+          make: form.make,
+          model: form.model,
+          color: form.color || null,
+          trim: form.trim || null,
+          notes: form.notes || null,
+        }),
       })
-      if (response.ok) {
-        setNewPart({ name: '', notes: '', assignedToId: '' })
-        setShowAddForm(false)
-        onPartsChange()
+      if (!r.ok) {
+        const txt = await r.text()
+        setErr(`Save failed (${r.status}): ${txt.slice(0, 100)}`)
+        setSaving(false)
+        return
       }
-    } catch (error) { console.error('Error adding part:', error) }
-    setSaving(false)
-  }
-
-  async function submitUrl(partId: string) {
-    if (!urlInput.trim()) return
-    setSaving(true)
-    try {
-      const response = await fetch(`/api/parts/${partId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: urlInput })
-      })
-      if (response.ok) { setAddingUrl(null); setUrlInput(''); onPartsChange() }
-    } catch (error) { console.error('Error:', error) }
-    setSaving(false)
-  }
-
-  async function updatePart(partId: string, updates: Record<string, unknown>) {
-    setSaving(true)
-    try {
-      const response = await fetch(`/api/parts/${partId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
-      })
-      if (response.ok) onPartsChange()
-    } catch (error) { console.error('Error:', error) }
-    setSaving(false)
-  }
-
-  return (
-    <div style={{ background: '#ffffff', border: '1px solid var(--border)', borderRadius: '16px', overflow: 'hidden' }}>
-      <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Parts</h3>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>Track vehicle parts requests and sourcing</p>
-        </div>
-        <button onClick={() => setShowAddForm(true)} style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #1a1a1a', background: '#1a1a1a', color: '#dffd6e', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
-          Add Part
-        </button>
-      </div>
-
-      {showAddForm && (
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border)', background: '#f8f9fa' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div>
-              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Part Name *</label>
-              <input type="text" value={newPart.name} onChange={e => setNewPart({ ...newPart, name: e.target.value })} placeholder="e.g. Front brake pads" style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px' }} />
-            </div>
-            <div>
-              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-                Assign to find part (optional)
-                <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6, fontSize: 12 }}>
-                  Defaults to admin if unassigned
-                </span>
-              </label>
-              <select
-                value={newPart.assignedToId}
-                onChange={e => setNewPart({ ...newPart, assignedToId: e.target.value })}
-                style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px', background: '#fff' }}
-              >
-                <option value="">Unassigned (admin handles)</option>
-                {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Notes (optional)</label>
-              <textarea value={newPart.notes} onChange={e => setNewPart({ ...newPart, notes: e.target.value })} rows={2} style={{ width: '100%', padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px', resize: 'vertical' }} />
-            </div>
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowAddForm(false)} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid var(--border)', background: '#fff', color: 'var(--text-secondary)', fontSize: '13px', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={addPart} disabled={saving || !newPart.name.trim()} style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #1a1a1a', background: '#1a1a1a', color: '#dffd6e', fontSize: '13px', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving || !newPart.name.trim() ? 0.5 : 1 }}>
-                {saving ? 'Adding...' : 'Add Part'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {parts.length === 0 ? (
-        <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          <p style={{ fontSize: '14px', marginBottom: '8px' }}>No parts requested yet</p>
-          <p style={{ fontSize: '13px' }}>Add parts needed for this vehicle</p>
-        </div>
-      ) : (
-        <div>
-          {parts.map((part, index) => {
-            const statusStyle = statusColors[part.status] || statusColors.requested
-
-            return (
-              <div key={part.id} style={{
-                padding: '14px 18px',
-                borderBottom: index < parts.length - 1 ? '1px solid var(--border)' : 'none',
-              }}>
-                {/* Top row: name + status pill */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
-                  <h4 style={{ fontSize: 15, fontWeight: 700, margin: 0, lineHeight: 1.3, flex: 1, minWidth: 0 }}>{part.name}</h4>
-                  <span style={{
-                    background: statusStyle.bg, color: statusStyle.color,
-                    padding: '3px 10px', borderRadius: 999,
-                    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
-                    border: `1px solid ${statusStyle.border}`,
-                    textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0,
-                  }}>{statusLabels[part.status]}</span>
-                </div>
-                {part.url && (
-                  <a href={part.url} target="_blank" rel="noopener noreferrer" style={{
-                    fontSize: 12, color: '#2563eb', textDecoration: 'none',
-                    display: 'block', marginBottom: 4, wordBreak: 'break-all',
-                  }}>
-                    {part.url.length > 60 ? part.url.slice(0, 60) + '…' : part.url}
-                  </a>
-                )}
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
-                  {part.assignedTo ? `Assigned to ${part.assignedTo.name}` : 'Unassigned'}
-                  {part.price && ` · ${part.price}`}
-                  {part.tracking && ` · Tracking ${part.tracking}`}
-                  <span style={{ opacity: 0.7 }}> · by {part.requestedBy.name}</span>
-                </p>
-                {part.notes && (
-                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0 0', fontStyle: 'italic' }}>{part.notes}</p>
-                )}
-
-                {/* Slim action row */}
-                {(isAdmin || (part.status === 'requested' && !part.url)) && (
-                  <div style={{
-                    marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)',
-                    display: 'flex', gap: 6,
-                  }}>
-                    {part.status === 'requested' && !part.url && (
-                      <button onClick={() => { setAddingUrl(part.id); setUrlInput('') }} style={slimPartBtn('#2563eb', '#eff6ff')}>Add Link</button>
-                    )}
-                    {part.status === 'sourced' && isAdmin && (
-                      <>
-                        <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving} style={slimPartBtn('#16a34a', '#f0fdf4')}>✓ Approve</button>
-                        <button onClick={() => updatePart(part.id, { status: 'requested', url: null })} disabled={saving} style={slimPartBtn('#ef4444', '#fef2f2')}>✗ Decline</button>
-                      </>
-                    )}
-                    {part.status === 'ready_to_order' && isAdmin && (
-                      <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} style={slimPartBtn('#a16207', '#fefce8')}>Mark Ordered</button>
-                    )}
-                    {part.status === 'ordered' && isAdmin && (
-                      <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving} style={slimPartBtn('#16a34a', '#f0fdf4')}>Mark Received</button>
-                    )}
-                    {isAdmin && (
-                      <button
-                        onClick={async () => { if (!confirm('Delete this part?')) return; setSaving(true); await fetch(`/api/parts/${part.id}`, { method: 'DELETE' }); setSaving(false); onPartsChange() }}
-                        disabled={saving}
-                        title="Delete part"
-                        style={{
-                          marginLeft: 'auto',
-                          width: 32, height: 32, padding: 0,
-                          borderRadius: 8, border: '1px solid var(--border)',
-                          background: '#fff', color: 'var(--text-muted)',
-                          cursor: 'pointer',
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
-                          <path d="M10 11v6M14 11v6" />
-                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* URL input form (inline, shows when "Add Link" is clicked) */}
-                {addingUrl === part.id && (
-                  <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <input
-                      type="url"
-                      value={urlInput}
-                      onChange={e => setUrlInput(e.target.value)}
-                      placeholder="Paste part link here..."
-                      autoFocus
-                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitUrl(part.id) } }}
-                      style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '14px' }}
-                    />
-                    <button onClick={() => setAddingUrl(null)} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: '#fff', fontSize: '13px', cursor: 'pointer' }}>Cancel</button>
-                    <button onClick={() => submitUrl(part.id)} disabled={saving || !urlInput.trim()} style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: '13px', fontWeight: 600, cursor: 'pointer', opacity: saving || !urlInput.trim() ? 0.5 : 1 }}>
-                      Submit
-                    </button>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-      {orderModalPart && (
-        <OrderPartModal partId={orderModalPart.id} partName={orderModalPart.name} onClose={() => setOrderModalPart(null)} onComplete={onPartsChange} />
-      )}
-    </div>
-  )
-}
-
-function ChecklistRow({ item, index, stageId, onUpdate }: {
-  item: ChecklistItem; index: number; stageId: string; onUpdate: () => void
-}) {
-  const [toggling, setToggling] = useState(false)
-
-  async function toggle() {
-    setToggling(true)
-    try {
-      const res = await fetch(`/api/stages/${stageId}`)
-      const data = await res.json()
-      const checklist = data.stage?.checklist || []
-      if (checklist[index]) {
-        checklist[index].done = !checklist[index].done
-        await fetch(`/api/stages/${stageId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ checklist }),
-        })
-      }
-      onUpdate()
-    } finally {
-      setToggling(false)
+      onSaved()
+    } catch (e) {
+      setErr(`Save failed: ${e instanceof Error ? e.message : String(e)}`)
+      setSaving(false)
     }
   }
 
   return (
-    <button
-      onClick={toggle}
-      disabled={toggling}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        padding: '10px 12px',
-        borderRadius: '10px',
-        border: 'none',
-        background: 'transparent',
-        cursor: 'pointer',
-        width: '100%',
-        textAlign: 'left',
-        transition: 'background 0.15s',
-        minHeight: '44px',
-        opacity: toggling ? 0.5 : 1,
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-primary)')}
-      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-    >
-      <span style={{
-        width: '22px',
-        height: '22px',
-        borderRadius: '6px',
-        border: item.done ? 'none' : '2px solid #d4d4d4',
-        background: item.done ? '#1a1a1a' : 'transparent',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        transition: 'all 0.15s',
-      }}>
-        {item.done && <span style={{ color: '#dffd6e', fontSize: '13px', fontWeight: 700 }}>✓</span>}
-      </span>
-      <span style={{
-        fontSize: '14px',
-        color: item.done ? 'var(--text-muted)' : 'var(--text-primary)',
-        textDecoration: item.done ? 'line-through' : 'none',
-        fontWeight: 500,
-      }}>
-        {item.item}
-      </span>
-    </button>
-  )
-}
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 16, padding: 24, maxWidth: 560, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 48px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+          <div>
+            <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>Edit Vehicle</h2>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>Admin only · changes save immediately</p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: 'var(--text-muted)', minHeight: 'auto' }}>×</button>
+        </div>
 
-// ───────────────────────── Inventory Tab ─────────────────────────
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <Field label="Stock #" value={form.stockNumber} onChange={(v) => setForm({ ...form, stockNumber: v })} />
+          <Field label="VIN" value={form.vin} onChange={(v) => setForm({ ...form, vin: v })} mono />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <Field label="Year" type="number" value={form.year} onChange={(v) => setForm({ ...form, year: v })} />
+          <Field label="Make" value={form.make} onChange={(v) => setForm({ ...form, make: v })} />
+          <Field label="Model" value={form.model} onChange={(v) => setForm({ ...form, model: v })} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+          <Field label="Color" value={form.color} onChange={(v) => setForm({ ...form, color: v })} />
+          <Field label="Trim" value={form.trim} onChange={(v) => setForm({ ...form, trim: v })} />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>Notes</p>
+          <textarea
+            value={form.notes}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            rows={4}
+            style={{ width: '100%', padding: 10, border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, fontFamily: 'inherit', resize: 'vertical' }}
+          />
+        </div>
 
-function formatMoney(cents: number | null): string {
-  if (cents === null || cents === undefined) return '—'
-  // InventoryVehicle stored values as dollars (Float), not cents. Display as dollars.
-  return cents.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-}
+        {err && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{err}</p>}
 
-function formatDate(s: string | null): string {
-  if (!s) return '—'
-  try {
-    return new Date(s).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-  } catch {
-    return s
-  }
-}
-
-function daysSince(s: string | null): number | null {
-  if (!s) return null
-  const ms = Date.now() - new Date(s).getTime()
-  if (!Number.isFinite(ms) || ms < 0) return null
-  return Math.floor(ms / (1000 * 60 * 60 * 24))
-}
-
-function InventoryFieldRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '10px 0', borderBottom: '1px solid var(--border)', gap: 16 }}>
-      <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>{label}</span>
-      <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600, textAlign: 'right', wordBreak: 'break-word' }}>{value || '—'}</span>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} disabled={saving} style={v2Btn('ghost')}>Cancel</button>
+          <button onClick={save} disabled={saving || !form.stockNumber || !form.make || !form.model} style={v2Btn('primary')}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
 
-function InventorySection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{
-      background: '#ffffff',
-      border: '1px solid var(--border)',
-      borderRadius: '16px',
-      padding: '16px 20px',
-      marginBottom: '16px',
-      boxShadow: 'var(--shadow-sm)',
-    }}>
-      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{title}</p>
-      <div>{children}</div>
-    </div>
-  )
-}
-
-function InventoryTab({ vehicle }: { vehicle: Vehicle }) {
-  const days = daysSince(vehicle.dateInStock)
-  const profit = vehicle.askingPrice !== null && vehicle.vehicleCost !== null
-    ? vehicle.askingPrice - vehicle.vehicleCost
-    : null
-  const margin = profit !== null && vehicle.askingPrice && vehicle.askingPrice > 0
-    ? (profit / vehicle.askingPrice) * 100
-    : null
-
+function Field({ label, value, onChange, type = 'text', mono }: { label: string; value: string; onChange: (v: string) => void; type?: string; mono?: boolean }) {
   return (
     <div>
-      {/* Money */}
-      <InventorySection title="Money">
-        <InventoryFieldRow label="Vehicle Cost" value={formatMoney(vehicle.vehicleCost)} />
-        <InventoryFieldRow label="Asking Price" value={formatMoney(vehicle.askingPrice)} />
-        <InventoryFieldRow
-          label="Spread"
-          value={
-            profit !== null ? (
-              <span style={{ color: profit >= 0 ? '#16a34a' : '#ef4444' }}>
-                {formatMoney(profit)}
-                {margin !== null && <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>({margin.toFixed(1)}%)</span>}
-              </span>
-            ) : '—'
-          }
-        />
-        <InventoryFieldRow label="Purchase Type" value={vehicle.purchaseType || '—'} />
-        {vehicle.purchaseType === 'CONSIGNMENT' && (
-          <InventoryFieldRow
-            label="Consignment Commission"
-            value={vehicle.consignmentCommissionPct !== null ? `${vehicle.consignmentCommissionPct}%` : '—'}
-          />
-        )}
-      </InventorySection>
-
-      {/* Title */}
-      <InventorySection title="Title & Location">
-        <InventoryFieldRow label="Title Status" value={vehicle.titleStatus || '—'} />
-        <InventoryFieldRow label="Location" value={vehicle.location || '—'} />
-        <InventoryFieldRow label="Inventory Status" value={vehicle.inventoryStatus || '—'} />
-      </InventorySection>
-
-      {/* Stock info */}
-      <InventorySection title="Stock Info">
-        <InventoryFieldRow label="Stock #" value={vehicle.stockNumber} />
-        <InventoryFieldRow label="VIN" value={vehicle.vin || '—'} />
-        <InventoryFieldRow label="Mileage" value={vehicle.mileage !== null ? `${vehicle.mileage.toLocaleString()} mi` : '—'} />
-        <InventoryFieldRow
-          label="Date In Stock"
-          value={
-            <>
-              {formatDate(vehicle.dateInStock)}
-              {days !== null && <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>· {days}d ago</span>}
-            </>
-          }
-        />
-      </InventorySection>
-
-      {/* Source */}
-      <InventorySection title="Source">
-        <InventoryFieldRow label="Purchased From" value={vehicle.purchasedFrom || '—'} />
-      </InventorySection>
-
-      {/* Full description */}
-      {vehicle.vehicleInfo && (
-        <InventorySection title="Description">
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, paddingTop: 4 }}>{vehicle.vehicleInfo}</p>
-        </InventorySection>
-      )}
+      <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>{label}</p>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14, fontFamily: mono ? 'ui-monospace, monospace' : 'inherit' }}
+      />
     </div>
   )
 }
 
-// ───────────────────────── Activity Tab ─────────────────────────
+// ─── UI primitives ──────────────────────────────────────────────────
 
-const ACTIVITY_ACTION_LABELS: Record<string, string> = {
-  created: 'Vehicle created',
-  stage_advanced: 'Stage advanced',
-  stage_completed: 'Stage completed',
-  stage_moved: 'Stage moved',
-  recon_restarted: 'Recon restarted',
-  returned_from_external: 'Returned from external repair',
-  returned_to_stage: 'Returned to stage',
-  return_queue_cleared: 'Return queue cleared',
-  inspection_completed: 'Inspection completed',
-  promoted_from_placeholder: 'Promoted from placeholder',
-  routed: 'Routed',
-  part_created: 'Part requested',
-  part_ordered: 'Part ordered',
-  part_received: 'Part received',
-  part_installed: 'Part installed',
-  updated: 'Updated',
-}
-
-function ActivityEventCard({ event }: { event: ActivityEvent }) {
-  const label = ACTIVITY_ACTION_LABELS[event.action] || event.action.replace(/_/g, ' ')
-  const when = new Date(event.createdAt)
-  const ago = (() => {
-    const sec = Math.floor((Date.now() - when.getTime()) / 1000)
-    if (sec < 60) return `${sec}s ago`
-    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`
-    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`
-    if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`
-    return when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  })()
-
-  // Build a concise detail string from common detail keys
-  const detailParts: string[] = []
-  if (event.details) {
-    const d = event.details as Record<string, unknown>
-    if (typeof d.stage === 'string') detailParts.push(d.stage)
-    if (typeof d.fromStage === 'string' && typeof d.toStage === 'string') detailParts.push(`${d.fromStage} → ${d.toStage}`)
-    if (typeof d.partName === 'string') detailParts.push(d.partName)
-    if (typeof d.note === 'string' && d.note) detailParts.push(d.note)
-    if (typeof d.via === 'string') detailParts.push(`via ${d.via}`)
-  }
-  const detail = detailParts.join(' · ')
-
-  const typeColors: Record<string, { bg: string; color: string }> = {
-    vehicle: { bg: '#eff6ff', color: '#2563eb' },
-    stage: { bg: '#f0fdf4', color: '#16a34a' },
-    part: { bg: '#fffbeb', color: '#d97706' },
-  }
-  const tc = typeColors[event.entityType] || { bg: 'var(--border)', color: 'var(--text-muted)' }
-
+function Stat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'positive' | 'negative' }) {
+  const valueColor = accent === 'positive' ? '#16a34a' : accent === 'negative' ? '#ef4444' : 'var(--text-primary)'
   return (
-    <div style={{
-      display: 'flex',
-      gap: 12,
-      padding: '12px 0',
-      borderBottom: '1px solid var(--border)',
-    }}>
-      <span style={{
-        flexShrink: 0,
-        fontSize: 10,
-        fontWeight: 700,
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        background: tc.bg,
-        color: tc.color,
-        padding: '4px 8px',
-        borderRadius: 6,
-        height: 'fit-content',
-      }}>
-        {event.entityType}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{label}</p>
-        {detail && <p style={{ fontSize: 13, color: 'var(--text-secondary)', wordBreak: 'break-word' }}>{detail}</p>}
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-          {ago}{event.actor && ` · ${event.actor.name}`}
-        </p>
-      </div>
+    <div style={{ background: '#f8f8f5', borderRadius: 12, padding: '12px 14px' }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</p>
+      <p style={{ fontSize: 20, fontWeight: 800, color: valueColor, letterSpacing: '-0.02em' }}>{value}</p>
+      {sub && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</p>}
     </div>
   )
 }
 
-function ActivityTab({ events, loading }: { events: ActivityEvent[]; loading: boolean }) {
-  if (loading) {
-    return (
-      <div style={{ textAlign: 'center', padding: '40px 0' }}>
-        <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: '#e8e8e4', borderTopColor: 'transparent' }} />
-      </div>
-    )
+function V2Chip({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
+  return (
+    <span style={{
+      fontSize: 12,
+      padding: '4px 10px',
+      background: '#f0f0ec',
+      color: 'var(--text-secondary)',
+      borderRadius: 999,
+      fontWeight: 500,
+      fontFamily: mono ? 'ui-monospace, monospace' : undefined,
+    }}>{children}</span>
+  )
+}
+
+function V2StageStatus({ value, active }: { value: string; active: boolean }) {
+  const colors: Record<string, { bg: string; color: string }> = {
+    pending: { bg: '#eff6ff', color: '#2563eb' },
+    in_progress: { bg: '#fef3c7', color: '#92400e' },
+    blocked: { bg: '#fee2e2', color: '#991b1b' },
+    awaiting_parts: { bg: '#f3e8ff', color: '#7c3aed' },
+    done: { bg: '#dcfce7', color: '#15803d' },
+    skipped: { bg: '#f0f0ec', color: '#525252' },
   }
+  const c = colors[value] || { bg: '#f0f0ec', color: 'var(--text-muted)' }
+  return (
+    <span style={{
+      fontSize: 11, padding: '3px 8px',
+      background: active ? c.bg : '#f0f0ec',
+      color: active ? c.color : 'var(--text-muted)',
+      borderRadius: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+    }}>{value.replace(/_/g, ' ')}</span>
+  )
+}
 
-  if (events.length === 0) {
-    return (
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid var(--border)',
-        borderRadius: '16px',
-        padding: '32px 20px',
-        textAlign: 'center',
-      }}>
-        <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>No activity yet</p>
-      </div>
-    )
+function V2PartStatus({ value }: { value: string }) {
+  const colors: Record<string, { bg: string; color: string }> = {
+    requested: { bg: '#eff6ff', color: '#2563eb' },
+    ready_to_order: { bg: '#fef3c7', color: '#92400e' },
+    ordered: { bg: '#f3e8ff', color: '#7c3aed' },
+    received: { bg: '#dcfce7', color: '#15803d' },
+    installed: { bg: '#dcfce7', color: '#15803d' },
+    canceled: { bg: '#fee2e2', color: '#991b1b' },
   }
+  const c = colors[value] || { bg: '#f0f0ec', color: 'var(--text-muted)' }
+  return (
+    <span style={{
+      fontSize: 10, padding: '2px 6px',
+      background: c.bg, color: c.color,
+      borderRadius: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+    }}>{value.replace(/_/g, ' ')}</span>
+  )
+}
 
-  // Optional simple filter chips
-  const counts: Record<string, number> = {}
-  for (const e of events) counts[e.entityType] = (counts[e.entityType] || 0) + 1
+function V2StatusPill({ value }: { value: string }) {
+  const colors: Record<string, { bg: string; color: string }> = {
+    in_stock: { bg: '#dffd6e', color: '#1a1a1a' },
+    in_recon: { bg: '#fef3c7', color: '#92400e' },
+    external_repair: { bg: '#fee2e2', color: '#991b1b' },
+    sold: { bg: '#f0f0ec', color: '#525252' },
+    inventory_only: { bg: '#fef3c7', color: '#92400e' },
+    mechanic: { bg: '#fef3c7', color: '#92400e' },
+    completed: { bg: '#f0f0ec', color: '#525252' },
+  }
+  const c = colors[value] || { bg: '#f0f0ec', color: 'var(--text-muted)' }
+  return (
+    <span style={{
+      fontSize: 12, padding: '6px 14px',
+      background: c.bg, color: c.color,
+      borderRadius: 999, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em',
+    }}>{value.replace(/_/g, ' ')}</span>
+  )
+}
 
+function V2Card({ title, subtitle, children, action, wide }: { title: string; subtitle?: string; children: React.ReactNode; action?: string; wide?: boolean }) {
   return (
     <div style={{
       background: '#ffffff',
       border: '1px solid var(--border)',
-      borderRadius: '16px',
-      padding: '8px 20px 16px',
+      borderRadius: 16,
+      padding: 20,
+      boxShadow: 'var(--shadow-sm)',
+      gridColumn: wide ? '1 / -1' : undefined,
     }}>
-      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '12px 0 4px' }}>
-        Timeline · {events.length} event{events.length === 1 ? '' : 's'}
-      </p>
-      <div>
-        {events.map(e => <ActivityEventCard key={e.id} event={e} />)}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>{title}</h3>
+          {subtitle && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{subtitle}</p>}
+        </div>
+        {action && <button style={v2Btn('ghost')}>{action}</button>}
       </div>
+      {children}
     </div>
   )
 }
 
-function ActionBtn({ label, onClick, style: btnStyle }: { label: string; onClick: () => void; style: 'primary' | 'success' | 'danger' | 'warning' }) {
-  const [loading, setLoading] = useState(false)
-  const styles: Record<string, { bg: string; color: string; border: string }> = {
-    primary: { bg: '#1a1a1a', color: '#dffd6e', border: '#1a1a1a' },
-    success: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
-    danger: { bg: '#fef2f2', color: '#ef4444', border: '#fecaca' },
-    warning: { bg: '#fffbeb', color: '#d97706', border: '#fde68a' },
-  }
-  const s = styles[btnStyle]
-
+function V2Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <button
-      onClick={async () => { setLoading(true); await onClick(); setLoading(false) }}
-      disabled={loading}
-      style={{
-        flex: btnStyle === 'danger' ? '0 0 auto' : 1,
-        padding: '10px 20px',
-        borderRadius: '12px',
-        border: `1px solid ${s.border}`,
-        background: s.bg,
-        color: s.color,
-        fontSize: '14px',
-        fontWeight: 600,
-        cursor: 'pointer',
-        minHeight: '44px',
-        opacity: loading ? 0.5 : 1,
-        transition: 'opacity 0.15s',
-      }}
-    >
-      {loading ? '...' : label}
-    </button>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 0', borderBottom: '1px solid var(--border)', gap: 12 }}>
+      <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{label}</span>
+      <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600, textAlign: 'right' }}>{value}</span>
+    </div>
   )
+}
+
+function V2StatMini({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'positive' | 'negative' }) {
+  const valueColor = accent === 'positive' ? '#16a34a' : accent === 'negative' ? '#ef4444' : 'var(--text-primary)'
+  return (
+    <div style={{ background: '#f8f8f5', borderRadius: 10, padding: '10px 12px' }}>
+      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>{label}</p>
+      <p style={{ fontSize: 16, fontWeight: 700, color: valueColor }}>{value}</p>
+      {sub && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{sub}</p>}
+    </div>
+  )
+}
+
+function v2Btn(variant: 'primary' | 'ghost'): React.CSSProperties {
+  const base: React.CSSProperties = {
+    padding: '8px 14px',
+    borderRadius: 8,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    minHeight: 'auto',
+  }
+  if (variant === 'primary') return { ...base, background: '#1a1a1a', color: '#dffd6e', border: 'none' }
+  return { ...base, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)' }
 }

@@ -85,7 +85,7 @@ export default function InventoryPage() {
         body: JSON.stringify({ stockNumber }),
       })
       const data = await res.json()
-      if (data.vehicleId) router.push(`/vehicles/${data.vehicleId}?tab=inventory`)
+      if (data.vehicleId) router.push(`/vehicles/${data.vehicleId}`)
     } catch {}
     setResolving(null)
   }
