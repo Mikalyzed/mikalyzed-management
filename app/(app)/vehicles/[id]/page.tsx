@@ -416,8 +416,7 @@ export default function VehicleDetailV2() {
                 minHeight: 'auto',
               }}
             >
-              <span style={{ fontSize: 28 }}>📷</span>
-              <span>No photos yet</span>
+              <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>No Photos</span>
               <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.7 }}>Click to add</span>
             </button>
           )
@@ -1430,16 +1429,6 @@ function v2Btn(variant: 'primary' | 'ghost'): React.CSSProperties {
 
 const MEDIA_TYPE_ORDER = ['exterior', 'interior', 'undercarriage', 'walkaround_video', 'turntable_video', 'other_video', 'doc', 'other'] as const
 
-const MEDIA_TYPE_ICONS: Record<string, string> = {
-  exterior: '🚗',
-  interior: '🛋️',
-  undercarriage: '🔧',
-  walkaround_video: '🎥',
-  turntable_video: '🔄',
-  other_video: '📹',
-  doc: '📄',
-  other: '📎',
-}
 
 function MediaCard({
   vehicleId,
@@ -1574,7 +1563,6 @@ function MediaSection({
   const isEmpty = items.length === 0
   const isVideoSection = isVideoType(type)
   const isDocSection = type === 'doc'
-  const icon = MEDIA_TYPE_ICONS[type] || '📎'
   const label = MEDIA_TYPE_LABELS[type] || type
 
   // EMPTY: compact one-line row
@@ -1586,7 +1574,6 @@ function MediaSection({
         borderRadius: 10, gap: 10, flexWrap: 'wrap',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 18 }}>{icon}</span>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{label}</span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· empty</span>
         </div>
@@ -1620,7 +1607,6 @@ function MediaSection({
         marginBottom: 10, gap: 10, flexWrap: 'wrap',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 18 }}>{icon}</span>
           <span style={{ fontSize: 14, fontWeight: 700 }}>{label}</span>
           <span style={{
             fontSize: 11, fontWeight: 700, padding: '2px 8px',
@@ -1663,8 +1649,8 @@ function MediaSection({
                   textDecoration: 'none', fontSize: 12, fontWeight: 600, gap: 4, flexDirection: 'column',
                   padding: 8, textAlign: 'center',
                 }}>
-                  <span style={{ fontSize: 28 }}>📄</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{m.filename || 'Document'}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Document</span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{m.filename || ''}</span>
                 </a>
               ) : (
                 /* eslint-disable-next-line @next/next/no-img-element */
