@@ -355,13 +355,13 @@ export default function InventoryPage() {
           <div style={{
             display: 'grid',
             gridTemplateColumns: canSeeMoney
-              ? '95px 1.7fr 145px 80px 80px 80px 90px 110px 110px'
+              ? '95px 1.5fr 140px 75px 75px 75px 85px 100px 105px 105px'
               : '95px 1.7fr 145px 80px 80px 80px 110px 110px',
             borderBottom: '1px solid var(--border)', background: '#f9fafb',
             fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em',
           }}>
             {(canSeeMoney
-              ? ['Stock #', 'Vehicle', 'VIN', 'Color', 'Miles', 'Days', 'Cost/Day', 'Status', 'Type']
+              ? ['Stock #', 'Vehicle', 'VIN', 'Color', 'Miles', 'Days', 'Cost/Day', 'Asking', 'Status', 'Type']
               : ['Stock #', 'Vehicle', 'VIN', 'Color', 'Miles', 'Days', 'Status', 'Type']
             ).map((h, i) => (
               <span key={h} style={{ padding: '10px 12px', borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>{h}</span>
@@ -400,7 +400,7 @@ export default function InventoryPage() {
                 style={{
                   display: 'grid',
                   gridTemplateColumns: canSeeMoney
-                    ? '95px 1.7fr 145px 80px 80px 80px 90px 110px 110px'
+                    ? '95px 1.5fr 140px 75px 75px 75px 85px 100px 105px 105px'
                     : '95px 1.7fr 145px 80px 80px 80px 110px 110px',
                   borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center',
                   cursor: resolving === v.stockNumber ? 'wait' : 'pointer',
@@ -430,6 +430,11 @@ export default function InventoryPage() {
                 {canSeeMoney && (
                   <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: 12 }}>
                     {perDay !== null ? moneyShort(perDay) : '—'}
+                  </span>
+                )}
+                {canSeeMoney && (
+                  <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)', fontWeight: 700, fontSize: 13 }}>
+                    {v.askingPrice ? moneyShort(v.askingPrice) : '—'}
                   </span>
                 )}
                 <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)' }}>
