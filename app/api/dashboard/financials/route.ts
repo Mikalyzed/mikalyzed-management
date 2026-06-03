@@ -20,6 +20,10 @@ import { getSessionUser } from '@/lib/auth'
 export async function GET() {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Money-visibility gate: admin or sales_manager only (temporary; per-user settings come later in Phase 1a RBAC)
+  if (user.role !== 'admin' && user.role !== 'sales_manager') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   // Active fleet — exclude sold + inventory_only "ghost" vehicles
   const activeFilter = {

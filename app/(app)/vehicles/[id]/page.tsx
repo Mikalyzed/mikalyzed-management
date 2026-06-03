@@ -159,6 +159,7 @@ export default function VehicleDetailV2() {
   const [activeSection, setActiveSection] = useState<'all' | 'inventory' | 'recon' | 'activity'>('all')
   const [expandedStageId, setExpandedStageId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [canSeeMoney, setCanSeeMoney] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [showEdit, setShowEdit] = useState(false)
   const [showAddCost, setShowAddCost] = useState(false)
@@ -218,6 +219,7 @@ export default function VehicleDetailV2() {
       return acc
     }, {} as Record<string, string>)
     if (cookies.mm_user_role === 'admin') setIsAdmin(true)
+    if (cookies.mm_user_role === 'admin' || cookies.mm_user_role === 'sales_manager') setCanSeeMoney(true)
     if (cookies.mm_user_id) setCurrentUserId(decodeURIComponent(cookies.mm_user_id))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -376,17 +378,24 @@ export default function VehicleDetailV2() {
             {vehicle.vin && <V2Chip mono>{vehicle.vin}</V2Chip>}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-            <Stat label="Vehicle Cost" value={money(vehicle.vehicleCost)} />
-            <Stat label="Asking" value={money(vehicle.askingPrice)} />
-            <Stat
-              label="Spread"
-              value={profit !== null ? money(profit) : '—'}
-              sub={margin !== null ? `${margin.toFixed(1)}%` : undefined}
-              accent={profit !== null && profit >= 0 ? 'positive' : profit !== null ? 'negative' : undefined}
-            />
-            <Stat label="Days Held" value={days !== null ? `${days}` : '—'} sub={vehicle.dateInStock ? `since ${fmtDate(vehicle.dateInStock)}` : undefined} />
-          </div>
+          {canSeeMoney ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+              <Stat label="Vehicle Cost" value={money(vehicle.vehicleCost)} />
+              <Stat label="Asking" value={money(vehicle.askingPrice)} />
+              <Stat
+                label="Spread"
+                value={profit !== null ? money(profit) : '—'}
+                sub={margin !== null ? `${margin.toFixed(1)}%` : undefined}
+                accent={profit !== null && profit >= 0 ? 'positive' : profit !== null ? 'negative' : undefined}
+              />
+              <Stat label="Days Held" value={days !== null ? `${days}` : '—'} sub={vehicle.dateInStock ? `since ${fmtDate(vehicle.dateInStock)}` : undefined} />
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+              <Stat label="Days Held" value={days !== null ? `${days}` : '—'} sub={vehicle.dateInStock ? `since ${fmtDate(vehicle.dateInStock)}` : undefined} />
+              <Stat label="Stage" value={vehicle.status?.replace(/_/g, ' ') || '—'} sub={vehicle.currentAssignee?.name ? `→ ${vehicle.currentAssignee.name}` : undefined} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -417,8 +426,8 @@ export default function VehicleDetailV2() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, alignItems: 'start' }}>
 
-        {/* Cost Adds */}
-        {(activeSection === 'all' || activeSection === 'inventory') && (
+        {/* Cost Adds (money — gated to admin / sales_manager) */}
+        {canSeeMoney && (activeSection === 'all' || activeSection === 'inventory') && (
           <div style={{
             background: '#ffffff', border: '1px solid var(--border)',
             borderRadius: 16, padding: 20, boxShadow: 'var(--shadow-sm)', gridColumn: '1 / -1',
@@ -475,8 +484,8 @@ export default function VehicleDetailV2() {
           </div>
         )}
 
-        {/* Flooring */}
-        {(activeSection === 'all' || activeSection === 'inventory') && (
+        {/* Flooring (money — gated to admin / sales_manager) */}
+        {canSeeMoney && (activeSection === 'all' || activeSection === 'inventory') && (
           <div style={{
             background: '#ffffff', border: '1px solid var(--border)',
             borderRadius: 16, padding: 20, boxShadow: 'var(--shadow-sm)',

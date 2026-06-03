@@ -483,8 +483,8 @@ export default function DashboardPage() {
         {isAdmin && <AddButton />}
       </div>
 
-      {/* ═══ Fleet Financials ═══ */}
-      {isAdmin && financials && <FleetFinancialsWidget f={financials} />}
+      {/* ═══ Fleet Financials (admin + sales_manager only) ═══ */}
+      {(isAdmin || data.user.role === 'sales_manager') && financials && <FleetFinancialsWidget f={financials} />}
 
       {/* ═══ Recon Pipeline ═══ */}
       {isAdmin && (

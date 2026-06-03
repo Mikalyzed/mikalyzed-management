@@ -101,6 +101,16 @@ export default function InventoryPage() {
   const [search, setSearch] = useState('')
   const [searchDebounced, setSearchDebounced] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [canSeeMoney, setCanSeeMoney] = useState(false)
+
+  useEffect(() => {
+    const cookies = document.cookie.split(';').reduce((acc, c) => {
+      const [k, v] = c.trim().split('=')
+      acc[k] = v
+      return acc
+    }, {} as Record<string, string>)
+    if (cookies.mm_user_role === 'admin' || cookies.mm_user_role === 'sales_manager') setCanSeeMoney(true)
+  }, [])
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<string | null>(null)
 
@@ -343,11 +353,17 @@ export default function InventoryPage() {
         <div className="desktop-only" style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 12, overflow: 'auto' }}>
           {/* Table header */}
           <div style={{
-            display: 'grid', gridTemplateColumns: '95px 1.7fr 145px 80px 80px 80px 90px 110px 110px',
+            display: 'grid',
+            gridTemplateColumns: canSeeMoney
+              ? '95px 1.7fr 145px 80px 80px 80px 90px 110px 110px'
+              : '95px 1.7fr 145px 80px 80px 80px 110px 110px',
             borderBottom: '1px solid var(--border)', background: '#f9fafb',
             fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em',
           }}>
-            {['Stock #', 'Vehicle', 'VIN', 'Color', 'Miles', 'Days', 'Cost/Day', 'Status', 'Type'].map((h, i) => (
+            {(canSeeMoney
+              ? ['Stock #', 'Vehicle', 'VIN', 'Color', 'Miles', 'Days', 'Cost/Day', 'Status', 'Type']
+              : ['Stock #', 'Vehicle', 'VIN', 'Color', 'Miles', 'Days', 'Status', 'Type']
+            ).map((h, i) => (
               <span key={h} style={{ padding: '10px 12px', borderLeft: i > 0 ? '1px solid var(--border)' : 'none' }}>{h}</span>
             ))}
           </div>
@@ -382,7 +398,10 @@ export default function InventoryPage() {
                 key={v.id}
                 onClick={() => openVehicleDetail(v.stockNumber)}
                 style={{
-                  display: 'grid', gridTemplateColumns: '95px 1.7fr 145px 80px 80px 80px 90px 110px 110px',
+                  display: 'grid',
+                  gridTemplateColumns: canSeeMoney
+                    ? '95px 1.7fr 145px 80px 80px 80px 90px 110px 110px'
+                    : '95px 1.7fr 145px 80px 80px 80px 110px 110px',
                   borderBottom: '1px solid var(--border)', fontSize: 13, alignItems: 'center',
                   cursor: resolving === v.stockNumber ? 'wait' : 'pointer',
                   opacity: resolving === v.stockNumber ? 0.6 : 1,
@@ -408,9 +427,11 @@ export default function InventoryPage() {
                     background: aging.bg, color: aging.fg,
                   }}>{aging.label}</span>
                 </span>
-                <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: 12 }}>
-                  {perDay !== null ? moneyShort(perDay) : '—'}
-                </span>
+                {canSeeMoney && (
+                  <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: 12 }}>
+                    {perDay !== null ? moneyShort(perDay) : '—'}
+                  </span>
+                )}
                 <span style={{ padding: '8px 12px', borderLeft: '1px solid var(--border)' }}>
                   <span style={{
                     fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 4, whiteSpace: 'nowrap',

@@ -7,6 +7,10 @@ const VALID_KINDS = ['recon', 'parts', 'transport', 'detail', 'pack', 'acquisiti
 export async function GET(req: NextRequest) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Money-visibility gate (Phase 1a RBAC will replace with per-user settings)
+  if (user.role !== 'admin' && user.role !== 'sales_manager') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { searchParams } = new URL(req.url)
   const vehicleId = searchParams.get('vehicleId')
@@ -24,6 +28,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (user.role !== 'admin' && user.role !== 'sales_manager') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const body = await req.json()
   const { vehicleId, kind, amount, description, vendor, receiptUrl } = body
