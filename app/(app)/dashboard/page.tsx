@@ -5,6 +5,21 @@ import Link from 'next/link'
 import { CALENDAR_TYPE_LABELS, CALENDAR_TYPE_COLORS } from '@/lib/calendar'
 import ReconTaskCard from '@/components/ReconTaskCard'
 
+type FleetFinancials = {
+  activeVehicleCount: number
+  totalInventoryCost: number
+  totalAskingPrice: number
+  potentialGrossProfit: number
+  vehiclesWithCost: number
+  vehiclesWithPrice: number
+  totalCostAdds: number
+  flooringPrincipal: number
+  flooringAccrued: number
+  flooringExposure: number
+  activeFlooredCount: number
+  agingBuckets: { '0-30': number; '31-60': number; '61-90': number; '90+': number; unknown: number }
+}
+
 type DashboardData = {
   user: { name: string; role: string; id: string }
   pipeline: { mechanic: number; detailing: number; content: number; publish: number; completed: number; externalRepairs: number; partsPending: number }
@@ -411,12 +426,22 @@ function AddButton() {
 // ─── Main Dashboard ───
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null)
+  const [financials, setFinancials] = useState<FleetFinancials | null>(null)
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [expandedApproval, setExpandedApproval] = useState<string | null>(null)
   const [adjustedHours, setAdjustedHours] = useState<Record<string, number>>({})
 
   useEffect(() => {
     fetch('/api/dashboard').then(r => r.json()).then(setData).catch(console.error)
+    fetch('/api/dashboard/financials')
+      .then(async (r) => {
+        if (!r.ok) return null
+        const txt = await r.text()
+        if (!txt) return null
+        try { return JSON.parse(txt) } catch { return null }
+      })
+      .then((d) => d && setFinancials(d))
+      .catch(() => {})
   }, [])
 
   if (!data) {
@@ -457,6 +482,9 @@ export default function DashboardPage() {
         </div>
         {isAdmin && <AddButton />}
       </div>
+
+      {/* ═══ Fleet Financials ═══ */}
+      {isAdmin && financials && <FleetFinancialsWidget f={financials} />}
 
       {/* ═══ Recon Pipeline ═══ */}
       {isAdmin && (
@@ -851,6 +879,114 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Fleet Financials Widget ────────────────────────────────────────
+
+function FleetFinancialsWidget({ f }: { f: FleetFinancials }) {
+  const m = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+  const totalAging = f.agingBuckets['0-30'] + f.agingBuckets['31-60'] + f.agingBuckets['61-90'] + f.agingBuckets['90+']
+
+  const StatBlock = ({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'positive' | 'negative' | 'warning' }) => {
+    const colors = {
+      positive: '#16a34a',
+      negative: '#ef4444',
+      warning: '#d97706',
+    }
+    const valueColor = accent ? colors[accent] : 'var(--text-primary)'
+    return (
+      <div style={{ background: '#f8f8f5', borderRadius: 12, padding: '14px 16px', flex: 1, minWidth: 140 }}>
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>{label}</p>
+        <p style={{ fontSize: 22, fontWeight: 800, color: valueColor, letterSpacing: '-0.02em', lineHeight: 1.1 }}>{value}</p>
+        {sub && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{sub}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{
+      background: '#ffffff',
+      border: '1px solid var(--border)',
+      borderRadius: 20,
+      padding: 20,
+      marginBottom: 32,
+      boxShadow: 'var(--shadow-sm)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div>
+          <h2 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em' }}>Fleet Financials</h2>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+            Across {f.activeVehicleCount} active vehicles · live
+          </p>
+        </div>
+      </div>
+
+      {/* Money stats */}
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <StatBlock
+          label="Inventory Cost"
+          value={m(f.totalInventoryCost)}
+          sub={`${f.vehiclesWithCost} of ${f.activeVehicleCount} priced`}
+        />
+        <StatBlock
+          label="Total Asking"
+          value={m(f.totalAskingPrice)}
+          sub={`${f.vehiclesWithPrice} of ${f.activeVehicleCount} priced`}
+        />
+        <StatBlock
+          label="Potential Gross"
+          value={m(f.potentialGrossProfit)}
+          accent={f.potentialGrossProfit >= 0 ? 'positive' : 'negative'}
+          sub="asking − cost across fleet"
+        />
+        <StatBlock
+          label="Cost Adds Total"
+          value={m(f.totalCostAdds)}
+          accent="warning"
+          sub="recon, parts, transport, etc."
+        />
+      </div>
+
+      {/* Flooring + Aging */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* Flooring */}
+        <div style={{ background: '#f8f8f5', borderRadius: 12, padding: '14px 16px' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+            Flooring Exposure · {f.activeFlooredCount} active line{f.activeFlooredCount === 1 ? '' : 's'}
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+            <p style={{ fontSize: 24, fontWeight: 800, color: f.flooringExposure > 0 ? '#ef4444' : 'var(--text-muted)', letterSpacing: '-0.02em' }}>
+              {m(f.flooringExposure)}
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--text-muted)' }}>
+            <span>Principal: <strong style={{ color: 'var(--text-primary)' }}>{m(f.flooringPrincipal)}</strong></span>
+            <span>Accrued: <strong style={{ color: 'var(--text-primary)' }}>{m(f.flooringAccrued)}</strong></span>
+          </div>
+        </div>
+
+        {/* Aging buckets */}
+        <div style={{ background: '#f8f8f5', borderRadius: 12, padding: '14px 16px' }}>
+          <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+            Aging · {totalAging} vehicles with stock dates
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+            {([
+              ['0-30', '#dcfce7', '#16a34a', 'Fresh'],
+              ['31-60', '#fef3c7', '#b45309', 'Aging'],
+              ['61-90', '#fed7aa', '#c2410c', 'Stale'],
+              ['90+', '#fee2e2', '#991b1b', 'Old'],
+            ] as const).map(([key, bg, fg, label]) => (
+              <div key={key} style={{ background: bg, borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                <p style={{ fontSize: 18, fontWeight: 800, color: fg, lineHeight: 1 }}>{f.agingBuckets[key as keyof typeof f.agingBuckets]}</p>
+                <p style={{ fontSize: 10, fontWeight: 700, color: fg, marginTop: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{key} · {label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
