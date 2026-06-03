@@ -273,6 +273,48 @@ export default function VehicleDetailV2() {
     setBusy(false)
   }
 
+  // Inline checklist editing (mirrors recon board modal)
+  async function toggleChecklistItem(stageId: string, index: number) {
+    setVehicle((cur) => {
+      if (!cur || !cur.stages) return cur
+      const stage = cur.stages.find(s => s.id === stageId)
+      if (!stage || !stage.checklist) return cur
+      const updated = stage.checklist.map((item, i) => i === index ? { ...item, done: !item.done } : item)
+      // Fire-and-forget API update
+      fetch(`/api/stages/${stageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: updated }),
+      }).catch(() => {})
+      return { ...cur, stages: cur.stages.map(s => s.id === stageId ? { ...s, checklist: updated } : s) }
+    })
+  }
+
+  async function addChecklistTask(stageId: string, taskText: string) {
+    const trimmed = taskText.trim()
+    if (!trimmed) return
+    setVehicle((cur) => {
+      if (!cur || !cur.stages) return cur
+      const stage = cur.stages.find(s => s.id === stageId)
+      if (!stage) return cur
+      const updated = [...(stage.checklist || []), { item: trimmed, done: false }]
+      fetch(`/api/stages/${stageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: updated }),
+      }).catch(() => {})
+      return { ...cur, stages: cur.stages.map(s => s.id === stageId ? { ...s, checklist: updated } : s) }
+    })
+  }
+
+  async function advanceStage(stageId: string) {
+    if (!confirm('Advance to the next stage?')) return
+    setBusy(true)
+    await fetch(`/api/stages/${stageId}/advance`, { method: 'POST' })
+    await refreshVehicle()
+    setBusy(false)
+  }
+
   return (
     <div style={{ maxWidth: '1500px', margin: '0 auto', padding: '16px 24px' }}>
       <button onClick={() => router.back()} style={{ color: 'var(--text-muted)', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', minHeight: 'auto', marginBottom: 16 }}>
@@ -572,19 +614,35 @@ export default function VehicleDetailV2() {
                     {/* Expanded content */}
                     {isExpanded && (
                       <div style={{ padding: '4px 0 16px 40px' }}>
-                        {/* Checklist */}
-                        {s.checklist && s.checklist.length > 0 && (
+                        {/* Checklist (editable when stage is active) */}
+                        {((s.checklist && s.checklist.length > 0) || isActive) && (
                           <div style={{ marginBottom: 12 }}>
-                            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Checklist</p>
-                            {s.checklist.map((item, i) => (
-                              <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '4px 0' }}>
+                            <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                              Checklist {(s.checklist?.length || 0) > 0 && `· ${checkedCount}/${totalCount}`}
+                            </p>
+                            {s.checklist && s.checklist.length > 0 && s.checklist.map((item, i) => (
+                              <div
+                                key={i}
+                                onClick={isActive ? () => toggleChecklistItem(s.id, i) : undefined}
+                                style={{
+                                  display: 'flex', gap: 10, alignItems: 'flex-start',
+                                  padding: '8px 10px',
+                                  background: item.done ? '#f0fdf4' : (isActive ? '#f8f8f6' : 'transparent'),
+                                  border: '1px solid',
+                                  borderColor: item.done ? '#bbf7d0' : (isActive ? '#e5e5e5' : 'transparent'),
+                                  borderRadius: 8,
+                                  marginBottom: 4,
+                                  cursor: isActive ? 'pointer' : 'default',
+                                  transition: 'all 0.15s',
+                                }}
+                              >
                                 <span style={{
-                                  display: 'inline-flex', width: 16, height: 16, borderRadius: 4,
-                                  background: item.done ? '#1a1a1a' : 'transparent',
-                                  border: `1px solid ${item.done ? '#1a1a1a' : 'var(--border)'}`,
-                                  alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 2,
+                                  display: 'inline-flex', width: 18, height: 18, borderRadius: 4,
+                                  background: item.done ? '#22c55e' : 'transparent',
+                                  border: `2px solid ${item.done ? '#22c55e' : 'var(--border)'}`,
+                                  alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1,
                                 }}>
-                                  {item.done && <span style={{ color: '#dffd6e', fontSize: 11, fontWeight: 700 }}>✓</span>}
+                                  {item.done && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700, lineHeight: 1 }}>✓</span>}
                                 </span>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <span style={{ fontSize: 13, color: item.done ? 'var(--text-muted)' : 'var(--text-primary)', textDecoration: item.done ? 'line-through' : 'none' }}>
@@ -596,6 +654,35 @@ export default function VehicleDetailV2() {
                                 </div>
                               </div>
                             ))}
+
+                            {/* Add custom task — only when active */}
+                            {isActive && (
+                              <form
+                                onSubmit={(e) => {
+                                  e.preventDefault()
+                                  const input = e.currentTarget.elements.namedItem('newTask') as HTMLInputElement
+                                  addChecklistTask(s.id, input.value)
+                                  input.value = ''
+                                }}
+                                style={{ display: 'flex', gap: 6, marginTop: 8 }}
+                              >
+                                <input
+                                  name="newTask"
+                                  placeholder="+ Add custom task..."
+                                  style={{
+                                    flex: 1, padding: '8px 12px', borderRadius: 8,
+                                    border: '1px solid var(--border)', fontSize: 13, background: '#fff',
+                                  }}
+                                />
+                                <button
+                                  type="submit"
+                                  style={{
+                                    padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)',
+                                    background: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', minHeight: 'auto',
+                                  }}
+                                >Add</button>
+                              </form>
+                            )}
                           </div>
                         )}
 
@@ -638,24 +725,43 @@ export default function VehicleDetailV2() {
                         )}
 
                         {/* Active-stage actions */}
-                        {isActive && (
-                          <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border)', flexWrap: 'wrap' }}>
-                            {s.status === 'blocked' ? (
-                              <button onClick={() => unblockStage(s.id)} disabled={busy} style={v2Btn('primary')}>Unblock</button>
-                            ) : (
-                              <>
-                                <button onClick={() => completeStage(s.id)} disabled={busy} style={v2Btn('primary')}>✓ Complete Stage</button>
-                                <button onClick={() => blockStage(s.id)} disabled={busy} style={v2Btn('ghost')}>Block</button>
-                              </>
-                            )}
-                            <a
-                              href={`/vehicles?focus=${vehicle.id}`}
-                              style={{ ...v2Btn('ghost'), textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
-                            >
-                              Open in Recon Board →
-                            </a>
-                          </div>
-                        )}
+                        {isActive && (() => {
+                          const allDone = totalCount > 0 && checkedCount === totalCount
+                          return (
+                            <div style={{ display: 'flex', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border)', flexWrap: 'wrap', alignItems: 'center' }}>
+                              {s.status === 'blocked' ? (
+                                <button onClick={() => unblockStage(s.id)} disabled={busy} style={v2Btn('primary')}>Unblock</button>
+                              ) : (
+                                <>
+                                  {/* Advance Stage — primary when all done */}
+                                  <button
+                                    onClick={() => advanceStage(s.id)}
+                                    disabled={busy || !allDone}
+                                    style={{
+                                      padding: '10px 18px', borderRadius: 8, border: 'none',
+                                      background: allDone ? '#dffd6e' : '#e5e5e5',
+                                      color: allDone ? '#1a1a1a' : '#999',
+                                      fontSize: 14, fontWeight: 700,
+                                      cursor: allDone && !busy ? 'pointer' : 'not-allowed',
+                                      minHeight: 'auto',
+                                    }}
+                                    title={allDone ? 'Advance to next stage' : 'Complete all checklist items first'}
+                                  >
+                                    Advance Stage →
+                                  </button>
+                                  <button onClick={() => completeStage(s.id)} disabled={busy} style={v2Btn('ghost')}>✓ Complete</button>
+                                  <button onClick={() => blockStage(s.id)} disabled={busy} style={v2Btn('ghost')}>Block</button>
+                                </>
+                              )}
+                              <a
+                                href={`/vehicles?focus=${vehicle.id}`}
+                                style={{ ...v2Btn('ghost'), textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                              >
+                                Open in Recon Board →
+                              </a>
+                            </div>
+                          )
+                        })()}
                       </div>
                     )}
                   </div>
@@ -737,7 +843,7 @@ export default function VehicleDetailV2() {
 // ─── Set Flooring Modal ─────────────────────────────────────────────
 
 function SetFlooringModal({ vehicle, onClose, onSaved }: { vehicle: Vehicle; onClose: () => void; onSaved: () => void }) {
-  const [lender, setLender] = useState(vehicle.floorLender || '')
+  const [lender, setLender] = useState(vehicle.floorLender || 'Mikalyzed LLC')
   const [principal, setPrincipal] = useState(vehicle.floorPrincipal?.toString() || vehicle.vehicleCost?.toString() || '')
   const [dailyRate, setDailyRate] = useState(vehicle.floorDailyRate?.toString() || '0.025')
   const [advanceDate, setAdvanceDate] = useState(
