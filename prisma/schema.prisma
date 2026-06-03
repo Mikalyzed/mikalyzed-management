@@ -3,124 +3,151 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
-  id        String   @id @default(uuid())
-  clerkId   String   @unique @map("clerk_id")
-  name      String
-  email     String   @unique
-  role      String   @default("sales")
-  password  String   @default("")
-  isActive  Boolean  @default(true) @map("is_active")
-  twilioNumber String? @unique @map("twilio_number") // E.164 format, owns inbound + outbound SMS for this rep
-  emailSignature String? @map("email_signature") // user's outlook signature — stripped from mirrored emails
-  createdAt DateTime @default(now()) @map("created_at")
+  id             String   @id @default(uuid())
+  clerkId        String   @unique @map("clerk_id")
+  name           String
+  email          String   @unique
+  role           String   @default("sales")
+  password       String   @default("")
+  isActive       Boolean  @default(true) @map("is_active")
+  twilioNumber   String?  @unique @map("twilio_number") // E.164 format, owns inbound + outbound SMS for this rep
+  emailSignature String?  @map("email_signature") // user's outlook signature — stripped from mirrored emails
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  assignedVehicles Vehicle[]         @relation("CurrentAssignee")
-  createdVehicles  Vehicle[]         @relation("CreatedBy")
-  assignedStages   VehicleStage[]    @relation("StageAssignee")
-  transportRequests TransportRequest[] @relation("RequestedBy")
-  coordinatedTransports TransportRequest[] @relation("Coordinator")
-  notifications    Notification[]
-  activityLogs     ActivityLog[]
-  calendarAssignments CalendarAssignee[]
-  createdCalendarItems CalendarItem[]  @relation("CalendarCreatedBy")
-  ownedEvents      Event[]           @relation("EventOwner")
-  createdEvents    Event[]           @relation("EventCreatedBy")
-  assignedEventTasks EventTask[]     @relation("EventTaskAssignee")
-  createdContacts  Contact[]         @relation("ContactCreatedBy")
-  assignedOpps     Opportunity[]     @relation("OpportunityAssignee")
-  createdNotes     OpportunityNote[] @relation("NoteCreatedBy")
-  assignedOppTasks OpportunityTask[] @relation("OppTaskAssignee")
-  createdOppTasks  OpportunityTask[] @relation("OppTaskCreatedBy")
-  activityActions  ActivityEvent[]   @relation("ActivityActor")
-  assignedTasks    Task[]            @relation("TaskAssignee")
-  createdTasks     Task[]            @relation("TaskCreator")
-  taskApprovals    TaskApproval[]
-  connectedIgAccounts ConnectedInstagramAccount[]
-  requestedParts   Part[]            @relation("PartRequestedBy")
-  assignedParts    Part[]            @relation("PartAssignedTo")
-  roundRobinWeights RoundRobinWeight[]
-  dispositionLogs  DispositionLog[]
-  sentMessages     Message[]         @relation("MessageSender")
-  porterEntries    PorterEntry[]     @relation("PorterEntries")
-  porterTasksAssigned PorterTask[]   @relation("PorterTaskAssignee")
-  porterTasksCreated  PorterTask[]   @relation("PorterTaskCreator")
-  uploadLinksCreated  UploadLink[]   @relation("UploadLinkCreator")
-  emailSubscriptions  EmailSubscription[]
-  calls               Call[]
+  assignedVehicles      Vehicle[]                   @relation("CurrentAssignee")
+  createdVehicles       Vehicle[]                   @relation("CreatedBy")
+  assignedStages        VehicleStage[]              @relation("StageAssignee")
+  transportRequests     TransportRequest[]          @relation("RequestedBy")
+  coordinatedTransports TransportRequest[]          @relation("Coordinator")
+  notifications         Notification[]
+  activityLogs          ActivityLog[]
+  calendarAssignments   CalendarAssignee[]
+  createdCalendarItems  CalendarItem[]              @relation("CalendarCreatedBy")
+  ownedEvents           Event[]                     @relation("EventOwner")
+  createdEvents         Event[]                     @relation("EventCreatedBy")
+  assignedEventTasks    EventTask[]                 @relation("EventTaskAssignee")
+  createdContacts       Contact[]                   @relation("ContactCreatedBy")
+  assignedOpps          Opportunity[]               @relation("OpportunityAssignee")
+  createdNotes          OpportunityNote[]           @relation("NoteCreatedBy")
+  assignedOppTasks      OpportunityTask[]           @relation("OppTaskAssignee")
+  createdOppTasks       OpportunityTask[]           @relation("OppTaskCreatedBy")
+  activityActions       ActivityEvent[]             @relation("ActivityActor")
+  assignedTasks         Task[]                      @relation("TaskAssignee")
+  createdTasks          Task[]                      @relation("TaskCreator")
+  taskApprovals         TaskApproval[]
+  connectedIgAccounts   ConnectedInstagramAccount[]
+  requestedParts        Part[]                      @relation("PartRequestedBy")
+  assignedParts         Part[]                      @relation("PartAssignedTo")
+  roundRobinWeights     RoundRobinWeight[]
+  dispositionLogs       DispositionLog[]
+  sentMessages          Message[]                   @relation("MessageSender")
+  porterEntries         PorterEntry[]               @relation("PorterEntries")
+  porterTasksAssigned   PorterTask[]                @relation("PorterTaskAssignee")
+  porterTasksCreated    PorterTask[]                @relation("PorterTaskCreator")
+  uploadLinksCreated    UploadLink[]                @relation("UploadLinkCreator")
+  emailSubscriptions    EmailSubscription[]
+  calls                 Call[]
 
   @@map("users")
 }
 
 model Vehicle {
-  id               String    @id @default(uuid())
-  stockNumber      String    @unique @map("stock_number")
-  vin              String?
-  year             Int?
-  make             String
-  model            String
-  color            String?
-  trim             String?
-  status           String    @default("mechanic")
-  currentStageId   String?   @map("current_stage_id")
-  currentAssigneeId String?  @map("current_assignee_id")
-  notes            String?
-  photos           String[]  @default([])
-  createdById      String?   @map("created_by")
-  returnQueue      Json      @default("[]") @map("return_queue")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
-  completedAt      DateTime? @map("completed_at")
+  id                String    @id @default(uuid())
+  stockNumber       String    @unique @map("stock_number")
+  vin               String?
+  year              Int?
+  make              String
+  model             String
+  color             String?
+  trim              String?
+  status            String    @default("mechanic")
+  currentStageId    String?   @map("current_stage_id")
+  currentAssigneeId String?   @map("current_assignee_id")
+  notes             String?
+  createdById       String?   @map("created_by")
+  returnQueue       Json      @default("[]") @map("return_queue")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  completedAt       DateTime? @map("completed_at")
 
-  currentAssignee  User?     @relation("CurrentAssignee", fields: [currentAssigneeId], references: [id])
-  createdBy        User?     @relation("CreatedBy", fields: [createdById], references: [id])
-  stages           VehicleStage[]
+  // Phase 0.A — absorbed from InventoryVehicle (all nullable for backward compat)
+  vehicleInfo              String?   @map("vehicle_info")
+  mileage                  Int?
+  location                 String?
+  askingPrice              Float?    @map("asking_price")
+  vehicleCost              Float?    @map("vehicle_cost")
+  purchaseType             String?   @map("purchase_type") // PURCHASED / TRADE_IN / CONSIGNMENT — Phase 0.B backfill maps legacy "FLOORING" → "PURCHASED"
+  purchasedFrom            String?   @map("purchased_from") // raw vendor name string — Vendor FK is Phase 2
+  purchasedFromVendorId    String?   @map("purchased_from_vendor_id") // nullable FK, no relation yet (Vendor model lands Phase 2)
+  titleStatus              String?   @map("title_status") // RECEIVED / NOT_RECEIVED
+  dateInStock              DateTime? @map("date_in_stock")
+  inventoryStatus          String?   @map("inventory_status") // in_stock / in_recon / external_repair / sold / removed / inventory_only — separate from recon `status`
+  consignmentCommissionPct Float?    @map("consignment_commission_pct")
+
+  // VIN-history dup linking (per CONTEXT dup-VIN handling)
+  priorVehicleId String?   @map("prior_vehicle_id")
+  priorVehicle   Vehicle?  @relation("VehiclePriorHistory", fields: [priorVehicleId], references: [id])
+  laterVehicles  Vehicle[] @relation("VehiclePriorHistory")
+
+  // Audit-trail bridges (preserved permanently per VEH-02)
+  legacyInventoryVehicleId String? @map("legacy_inventory_vehicle_id")
+  legacyVehicleId          String? @map("legacy_vehicle_id") // for Strategy A this equals current id, but reserved for traceability symmetry
+
+  currentAssignee   User?              @relation("CurrentAssignee", fields: [currentAssigneeId], references: [id])
+  createdBy         User?              @relation("CreatedBy", fields: [createdById], references: [id])
+  stages            VehicleStage[]
   transportRequests TransportRequest[]
-  calendarItems    CalendarItem[]
-  opportunities    Opportunity[]    @relation("OpportunityVehicle")
-  vehicleInterests VehicleInterest[] @relation("VehicleInterestVehicle")
-  parts            Part[]
+  calendarItems     CalendarItem[]
+  opportunities     Opportunity[]      @relation("OpportunityVehicle")
+  vehicleInterests  VehicleInterest[]  @relation("VehicleInterestVehicle")
+  parts             Part[]
 
   @@index([status])
   @@index([currentAssigneeId])
+  @@index([vin])
+  @@index([inventoryStatus])
+  @@index([priorVehicleId])
+  @@index([legacyInventoryVehicleId])
   @@map("vehicles")
 }
 
 model Part {
-  id              String    @id @default(uuid())
-  vehicleId       String    @map("vehicle_id")
-  name            String
-  url             String?
-  status          String    @default("requested") // requested, sourced, ordered, received
-  requestedById   String    @map("requested_by_id")
-  assignedToId    String?   @map("assigned_to_id")
-  price           String?
-  tracking        String?
-  orderImage      String?   @map("order_image")
-  expectedDelivery DateTime? @map("expected_delivery")
-  notes           String?
+  id                   String    @id @default(uuid())
+  vehicleId            String    @map("vehicle_id")
+  name                 String
+  url                  String?
+  status               String    @default("requested") // requested, sourced, ordered, received
+  requestedById        String    @map("requested_by_id")
+  assignedToId         String?   @map("assigned_to_id")
+  price                String?
+  tracking             String?
+  orderImage           String?   @map("order_image")
+  expectedDelivery     DateTime? @map("expected_delivery")
+  notes                String?
   // Stamped when admin generates an "Install [part]" task in mechanic via routing.
   // Used to prevent the same install from being re-suggested in future routing cycles.
   installTaskCreatedAt DateTime? @map("install_task_created_at")
   // The stage during which this part was added (e.g. mechanic inspection).
   // Lets the vehicle history dropdown group parts under their originating stage.
-  sourceStageId   String?   @map("source_stage_id")
+  sourceStageId        String?   @map("source_stage_id")
   // Which inspection task this part was added from (e.g. "Brake inspection").
   // Optional: only set when the part was created via the inline form on a specific task.
-  sourceItem      String?   @map("source_item")
+  sourceItem           String?   @map("source_item")
   // Which sub-field within the parent item triggered the part request (e.g. "Brake lights").
-  sourceSubField  String?   @map("source_sub_field")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  sourceSubField       String?   @map("source_sub_field")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
-  vehicle         Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  requestedBy     User          @relation("PartRequestedBy", fields: [requestedById], references: [id])
-  assignedTo      User?         @relation("PartAssignedTo", fields: [assignedToId], references: [id])
-  sourceStage     VehicleStage? @relation("PartSourceStage", fields: [sourceStageId], references: [id], onDelete: SetNull)
+  vehicle     Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  requestedBy User          @relation("PartRequestedBy", fields: [requestedById], references: [id])
+  assignedTo  User?         @relation("PartAssignedTo", fields: [assignedToId], references: [id])
+  sourceStage VehicleStage? @relation("PartSourceStage", fields: [sourceStageId], references: [id], onDelete: SetNull)
 
   @@index([vehicleId])
   @@index([status])
@@ -131,40 +158,39 @@ model Part {
 }
 
 model VehicleStage {
-  id                  String    @id @default(uuid())
-  vehicleId           String    @map("vehicle_id")
-  stage               String
-  status              String    @default("pending")
-  assigneeId          String?   @map("assignee_id")
-  checklist           Json      @default("[]")
-  notes               String?
-  photos              String[]  @default([])
-  dueDate             DateTime? @map("due_date")
-  scopeName           String?   @map("scope_name")
-  estimatedHours      Float?    @map("estimated_hours")
-  startedAt           DateTime  @default(now()) @map("started_at")
-  completedAt         DateTime? @map("completed_at")
-  blockedAt           DateTime? @map("blocked_at")
-  totalBlockedSeconds Int       @default(0) @map("total_blocked_seconds")
-  priority            Int       @default(0)
-  awaitingParts       Boolean   @default(false) @map("awaiting_parts")
-  awaitingPartsDate   DateTime? @map("awaiting_parts_date")
-  awaitingPartsSince  DateTime? @map("awaiting_parts_since")
-  awaitingPartsName   String?   @map("awaiting_parts_name")
-  awaitingPartsTracking String? @map("awaiting_parts_tracking")
-  pauseReason         String?   @map("pause_reason")
-  activeSeconds       Int       @default(0) @map("active_seconds")
-  timerStartedAt      DateTime? @map("timer_started_at")
-  autoPaused          Boolean   @default(false) @map("auto_paused")
-  pauseDetail         String?   @map("pause_detail")
-  pausedAt            DateTime? @map("paused_at")
-  scheduledDate       DateTime? @map("scheduled_date")
-  createdAt           DateTime  @default(now()) @map("created_at")
+  id                    String    @id @default(uuid())
+  vehicleId             String    @map("vehicle_id")
+  stage                 String
+  status                String    @default("pending")
+  assigneeId            String?   @map("assignee_id")
+  checklist             Json      @default("[]")
+  notes                 String?
+  dueDate               DateTime? @map("due_date")
+  scopeName             String?   @map("scope_name")
+  estimatedHours        Float?    @map("estimated_hours")
+  startedAt             DateTime  @default(now()) @map("started_at")
+  completedAt           DateTime? @map("completed_at")
+  blockedAt             DateTime? @map("blocked_at")
+  totalBlockedSeconds   Int       @default(0) @map("total_blocked_seconds")
+  priority              Int       @default(0)
+  awaitingParts         Boolean   @default(false) @map("awaiting_parts")
+  awaitingPartsDate     DateTime? @map("awaiting_parts_date")
+  awaitingPartsSince    DateTime? @map("awaiting_parts_since")
+  awaitingPartsName     String?   @map("awaiting_parts_name")
+  awaitingPartsTracking String?   @map("awaiting_parts_tracking")
+  pauseReason           String?   @map("pause_reason")
+  activeSeconds         Int       @default(0) @map("active_seconds")
+  timerStartedAt        DateTime? @map("timer_started_at")
+  autoPaused            Boolean   @default(false) @map("auto_paused")
+  pauseDetail           String?   @map("pause_detail")
+  pausedAt              DateTime? @map("paused_at")
+  scheduledDate         DateTime? @map("scheduled_date")
+  createdAt             DateTime  @default(now()) @map("created_at")
 
-  vehicle             Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  assignee            User?     @relation("StageAssignee", fields: [assigneeId], references: [id])
-  taskApprovals       TaskApproval[]
-  sourcedParts        Part[]    @relation("PartSourceStage")
+  vehicle       Vehicle        @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  assignee      User?          @relation("StageAssignee", fields: [assigneeId], references: [id])
+  taskApprovals TaskApproval[]
+  sourcedParts  Part[]         @relation("PartSourceStage")
 
   @@index([vehicleId])
   @@index([assigneeId])
@@ -186,7 +212,7 @@ model TransportRequest {
   urgency            String    @default("standard")
   preferredDate      DateTime? @map("preferred_date")
   transportType      String?   @map("transport_type") // internal, third_party
-  purpose            String?   // event, ship_to_client, other
+  purpose            String? // event, ship_to_client, other
   purposeNote        String?   @map("purpose_note") // free text when purpose = other
   estimatedPrice     Float?    @map("estimated_price") // ship-to-client quote
   status             String    @default("requested")
@@ -197,9 +223,9 @@ model TransportRequest {
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
-  vehicle            Vehicle?  @relation(fields: [vehicleId], references: [id])
-  requestedBy        User      @relation("RequestedBy", fields: [requestedById], references: [id])
-  coordinator        User?     @relation("Coordinator", fields: [coordinatorId], references: [id])
+  vehicle     Vehicle? @relation(fields: [vehicleId], references: [id])
+  requestedBy User     @relation("RequestedBy", fields: [requestedById], references: [id])
+  coordinator User?    @relation("Coordinator", fields: [coordinatorId], references: [id])
 
   @@index([status])
   @@index([requestedById])
@@ -217,7 +243,7 @@ model Notification {
   isRead     Boolean  @default(false) @map("is_read")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  user       User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@index([userId, isRead])
   @@map("notifications")
@@ -232,7 +258,7 @@ model ActivityLog {
   details    Json?
   createdAt  DateTime @default(now()) @map("created_at")
 
-  actor      User?    @relation(fields: [actorId], references: [id])
+  actor User? @relation(fields: [actorId], references: [id])
 
   @@index([entityType, entityId])
   @@index([createdAt])
@@ -290,15 +316,15 @@ model StageConfig {
 }
 
 model ChecklistTemplate {
-  id         String   @id @default(uuid())
-  stage      String
-  name       String
-  items      Json     @default("[]") // [{ item: string, type?: string }, ...]
-  isDefault  Boolean  @default(false) @map("is_default")
-  isActive   Boolean  @default(true)  @map("is_active")
-  sortOrder  Int      @default(0)     @map("sort_order")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt      @map("updated_at")
+  id        String   @id @default(uuid())
+  stage     String
+  name      String
+  items     Json     @default("[]") // [{ item: string, type?: string }, ...]
+  isDefault Boolean  @default(false) @map("is_default")
+  isActive  Boolean  @default(true) @map("is_active")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([stage, name])
   @@index([stage])
@@ -306,32 +332,32 @@ model ChecklistTemplate {
 }
 
 model TaskApproval {
-  id              String    @id @default(uuid())
-  vehicleStageId  String    @map("vehicle_stage_id")
+  id              String       @id @default(uuid())
+  vehicleStageId  String       @map("vehicle_stage_id")
   vehicleStage    VehicleStage @relation(fields: [vehicleStageId], references: [id], onDelete: Cascade)
-  taskName        String    @map("task_name")
-  additionalHours Float?    @map("additional_hours")
-  tasks           Json?     @default("[]")
-  requestedById   String    @map("requested_by_id")
-  requestedBy     User      @relation(fields: [requestedById], references: [id])
-  status          String    @default("pending")
-  reviewedById    String?   @map("reviewed_by_id")
-  reviewedAt      DateTime? @map("reviewed_at")
-  adminNote       String?   @map("admin_note")
-  createdAt       DateTime  @default(now()) @map("created_at")
+  taskName        String       @map("task_name")
+  additionalHours Float?       @map("additional_hours")
+  tasks           Json?        @default("[]")
+  requestedById   String       @map("requested_by_id")
+  requestedBy     User         @relation(fields: [requestedById], references: [id])
+  status          String       @default("pending")
+  reviewedById    String?      @map("reviewed_by_id")
+  reviewedAt      DateTime?    @map("reviewed_at")
+  adminNote       String?      @map("admin_note")
+  createdAt       DateTime     @default(now()) @map("created_at")
 
   @@map("task_approvals")
 }
 
 model Task {
-  id          String    @id @default(uuid())
-  title       String
-  description String?
-  category    String    @default("content") // content, marketing, admin, operations
-  status      String    @default("todo") // todo, in_progress, done
-  priority    Int       @default(0) // 0=normal, 1=high, 2=urgent
-  assigneeId  String?   @map("assignee_id")
-  createdById String    @map("created_by_id")
+  id            String    @id @default(uuid())
+  title         String
+  description   String?
+  category      String    @default("content") // content, marketing, admin, operations
+  status        String    @default("todo") // todo, in_progress, done
+  priority      Int       @default(0) // 0=normal, 1=high, 2=urgent
+  assigneeId    String?   @map("assignee_id")
+  createdById   String    @map("created_by_id")
   dueDate       DateTime? @map("due_date")
   scheduledDate DateTime? @map("scheduled_date")
   completedAt   DateTime? @map("completed_at")
@@ -341,8 +367,8 @@ model Task {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  assignee    User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  createdBy   User      @relation("TaskCreator", fields: [createdById], references: [id])
+  assignee  User? @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy User  @relation("TaskCreator", fields: [createdById], references: [id])
 
   @@index([assigneeId])
   @@index([status])
@@ -365,13 +391,13 @@ model StageTemplate {
 // ═══ CRM ═══
 
 model Pipeline {
-  id          String   @id @default(uuid())
-  name        String
-  color       String   @default("#3b82f6")
-  sortOrder   Int      @default(0) @map("sort_order")
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#3b82f6")
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   stages        PipelineStage[]
   opportunities Opportunity[]
@@ -382,17 +408,17 @@ model Pipeline {
 }
 
 model PipelineStage {
-  id          String   @id @default(uuid())
-  pipelineId  String   @map("pipeline_id")
-  name        String
-  type        String   @default("open") // open, won, lost
-  color       String?
-  sortOrder   Int      @default(0) @map("sort_order")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid())
+  pipelineId String   @map("pipeline_id")
+  name       String
+  type       String   @default("open") // open, won, lost
+  color      String?
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
 
-  pipeline      Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  opportunities Opportunity[]
-  dispositions  Disposition[]
+  pipeline       Pipeline               @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  opportunities  Opportunity[]
+  dispositions   Disposition[]
   ruleCurrentFor DispositionStageRule[] @relation("RuleCurrentStage")
   ruleMoveToFor  DispositionStageRule[] @relation("RuleMoveToStage")
 
@@ -423,12 +449,12 @@ model Contact {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  createdBy       User?            @relation("ContactCreatedBy", fields: [createdById], references: [id])
-  opportunities   Opportunity[]
+  createdBy        User?             @relation("ContactCreatedBy", fields: [createdById], references: [id])
+  opportunities    Opportunity[]
   vehicleInterests VehicleInterest[]
-  messages        Message[]
-  uploadLinks     UploadLink[]
-  calls           Call[]
+  messages         Message[]
+  uploadLinks      UploadLink[]
+  calls            Call[]
 
   @@index([email])
   @@index([phone])
@@ -436,17 +462,17 @@ model Contact {
 }
 
 model EmailSubscription {
-  id              String   @id @default(uuid())
-  userId          String   @map("user_id")
-  userEmail       String   @map("user_email") // M365 mailbox address
-  subscriptionId  String   @unique @map("subscription_id") // Graph subscription id
-  clientState     String   @map("client_state") // shared secret to validate notifications
-  resource        String   // e.g. users/{email}/mailFolders('inbox')/messages
-  expiresAt       DateTime @map("expires_at")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  userEmail      String   @map("user_email") // M365 mailbox address
+  subscriptionId String   @unique @map("subscription_id") // Graph subscription id
+  clientState    String   @map("client_state") // shared secret to validate notifications
+  resource       String // e.g. users/{email}/mailFolders('inbox')/messages
+  expiresAt      DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userEmail])
   @@index([expiresAt])
@@ -454,26 +480,26 @@ model EmailSubscription {
 }
 
 model Call {
-  id              String    @id @default(uuid())
-  contactId       String?   @map("contact_id")
-  direction       String    // outbound, inbound
-  fromNumber      String    @map("from_number") // E.164
-  toNumber        String    @map("to_number")   // E.164
-  twilioCallSid   String    @unique @map("twilio_call_sid")
-  status          String    @default("initiated") // initiated, ringing, in-progress, completed, busy, failed, no-answer, canceled, voicemail
-  startedAt       DateTime  @default(now()) @map("started_at")
-  answeredAt      DateTime? @map("answered_at")
-  endedAt         DateTime? @map("ended_at")
-  durationSeconds Int?      @map("duration_seconds")
-  recordingSid    String?   @map("recording_sid")
-  recordingUrl    String?   @map("recording_url")
-  recordingDurationSeconds Int? @map("recording_duration_seconds")
-  transcription   String?   // Full transcript (when ready)
-  transcriptionStatus String? @map("transcription_status") // pending, completed, failed
-  voicemail       Boolean   @default(false) // true if call went to voicemail
-  ownerId         String?   @map("owner_id") // rep who placed/received the call
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id                       String    @id @default(uuid())
+  contactId                String?   @map("contact_id")
+  direction                String // outbound, inbound
+  fromNumber               String    @map("from_number") // E.164
+  toNumber                 String    @map("to_number") // E.164
+  twilioCallSid            String    @unique @map("twilio_call_sid")
+  status                   String    @default("initiated") // initiated, ringing, in-progress, completed, busy, failed, no-answer, canceled, voicemail
+  startedAt                DateTime  @default(now()) @map("started_at")
+  answeredAt               DateTime? @map("answered_at")
+  endedAt                  DateTime? @map("ended_at")
+  durationSeconds          Int?      @map("duration_seconds")
+  recordingSid             String?   @map("recording_sid")
+  recordingUrl             String?   @map("recording_url")
+  recordingDurationSeconds Int?      @map("recording_duration_seconds")
+  transcription            String? // Full transcript (when ready)
+  transcriptionStatus      String?   @map("transcription_status") // pending, completed, failed
+  voicemail                Boolean   @default(false) // true if call went to voicemail
+  ownerId                  String?   @map("owner_id") // rep who placed/received the call
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
 
   contact Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
   owner   User?    @relation(fields: [ownerId], references: [id])
@@ -493,8 +519,8 @@ model UploadLink {
   maxUses     Int      @default(20) @map("max_uses")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  contact     Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  createdBy   User     @relation("UploadLinkCreator", fields: [createdById], references: [id])
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("UploadLinkCreator", fields: [createdById], references: [id])
 
   @@index([token])
   @@index([contactId])
@@ -511,7 +537,7 @@ model Opportunity {
   vehicleInterest String?   @map("vehicle_interest")
   source          String    @default("other")
   sourceDetail    String?   @map("source_detail")
-  value           Int?      // deal value in cents
+  value           Int? // deal value in cents
   lostReason      String?   @map("lost_reason")
   lostNotes       String?   @map("lost_notes")
   appointmentDate DateTime? @map("appointment_date")
@@ -521,14 +547,14 @@ model Opportunity {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  contact    Contact        @relation(fields: [contactId], references: [id])
-  pipeline   Pipeline       @relation(fields: [pipelineId], references: [id])
-  stage      PipelineStage  @relation(fields: [stageId], references: [id])
-  assignee   User?          @relation("OpportunityAssignee", fields: [assigneeId], references: [id])
-  vehicle    Vehicle?       @relation("OpportunityVehicle", fields: [vehicleId], references: [id])
-  tasks      OpportunityTask[]
-  notes      OpportunityNote[]
-  activities ActivityEvent[]
+  contact         Contact           @relation(fields: [contactId], references: [id])
+  pipeline        Pipeline          @relation(fields: [pipelineId], references: [id])
+  stage           PipelineStage     @relation(fields: [stageId], references: [id])
+  assignee        User?             @relation("OpportunityAssignee", fields: [assigneeId], references: [id])
+  vehicle         Vehicle?          @relation("OpportunityVehicle", fields: [vehicleId], references: [id])
+  tasks           OpportunityTask[]
+  notes           OpportunityNote[]
+  activities      ActivityEvent[]
   dispositionLogs DispositionLog[]
 
   @@index([contactId])
@@ -539,35 +565,35 @@ model Opportunity {
 }
 
 model OpportunityNote {
-  id             String   @id @default(uuid())
-  opportunityId  String   @map("opportunity_id")
-  body           String
-  createdById    String?  @map("created_by")
-  createdAt      DateTime @default(now()) @map("created_at")
+  id            String   @id @default(uuid())
+  opportunityId String   @map("opportunity_id")
+  body          String
+  createdById   String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
 
-  opportunity  Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  createdBy    User?       @relation("NoteCreatedBy", fields: [createdById], references: [id])
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  createdBy   User?       @relation("NoteCreatedBy", fields: [createdById], references: [id])
 
   @@index([opportunityId])
   @@map("opportunity_notes")
 }
 
 model OpportunityTask {
-  id             String    @id @default(uuid())
-  opportunityId  String    @map("opportunity_id")
-  title          String
-  dueDate        DateTime? @map("due_date")
-  assigneeId     String?   @map("assignee_id")
-  status         String    @default("pending") // pending, completed
-  completedAt    DateTime? @map("completed_at")
-  notes          String?
-  createdById    String?   @map("created_by")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id            String    @id @default(uuid())
+  opportunityId String    @map("opportunity_id")
+  title         String
+  dueDate       DateTime? @map("due_date")
+  assigneeId    String?   @map("assignee_id")
+  status        String    @default("pending") // pending, completed
+  completedAt   DateTime? @map("completed_at")
+  notes         String?
+  createdById   String?   @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  opportunity  Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  assignee     User?       @relation("OppTaskAssignee", fields: [assigneeId], references: [id])
-  createdBy    User?       @relation("OppTaskCreatedBy", fields: [createdById], references: [id])
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  assignee    User?       @relation("OppTaskAssignee", fields: [assigneeId], references: [id])
+  createdBy   User?       @relation("OppTaskCreatedBy", fields: [createdById], references: [id])
 
   @@index([opportunityId])
   @@index([assigneeId])
@@ -575,34 +601,34 @@ model OpportunityTask {
 }
 
 model ActivityEvent {
-  id             String   @id @default(uuid())
-  opportunityId  String   @map("opportunity_id")
-  type           String   // lead_created, stage_changed, assigned, note_added, task_created, task_completed, call_logged, sms_sent, sms_received, email_sent, appointment_set
-  description    String
-  metadata       Json?
-  actorId        String?  @map("actor_id")
-  createdAt      DateTime @default(now()) @map("created_at")
+  id            String   @id @default(uuid())
+  opportunityId String   @map("opportunity_id")
+  type          String // lead_created, stage_changed, assigned, note_added, task_created, task_completed, call_logged, sms_sent, sms_received, email_sent, appointment_set
+  description   String
+  metadata      Json?
+  actorId       String?  @map("actor_id")
+  createdAt     DateTime @default(now()) @map("created_at")
 
-  opportunity  Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  actor        User?       @relation("ActivityActor", fields: [actorId], references: [id])
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  actor       User?       @relation("ActivityActor", fields: [actorId], references: [id])
 
   @@index([opportunityId, createdAt])
   @@map("activity_events")
 }
 
 model VehicleInterest {
-  id          String   @id @default(uuid())
-  contactId   String   @map("contact_id")
-  vehicleId   String?  @map("vehicle_id")
-  make        String?
-  model       String?
-  yearMin     Int?     @map("year_min")
-  yearMax     Int?     @map("year_max")
-  priceMax    Int?     @map("price_max")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id        String   @id @default(uuid())
+  contactId String   @map("contact_id")
+  vehicleId String?  @map("vehicle_id")
+  make      String?
+  model     String?
+  yearMin   Int?     @map("year_min")
+  yearMax   Int?     @map("year_max")
+  priceMax  Int?     @map("price_max")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  vehicle  Vehicle? @relation("VehicleInterestVehicle", fields: [vehicleId], references: [id])
+  contact Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  vehicle Vehicle? @relation("VehicleInterestVehicle", fields: [vehicleId], references: [id])
 
   @@index([contactId])
   @@index([make, model])
@@ -610,10 +636,10 @@ model VehicleInterest {
 }
 
 model RoundRobinState {
-  id              String   @id @default(uuid())
-  pipelineId      String   @unique @map("pipeline_id")
-  lastAssignedId  String   @map("last_assigned_id")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid())
+  pipelineId     String   @unique @map("pipeline_id")
+  lastAssignedId String   @map("last_assigned_id")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@map("round_robin_state")
 }
@@ -624,7 +650,7 @@ model RoundRobinWeight {
   userId     String @map("user_id")
   weight     Int    @default(1) // e.g., 2 means gets 2x leads
 
-  user       User   @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
   @@unique([pipelineId, userId])
   @@map("round_robin_weights")
@@ -640,28 +666,28 @@ model Disposition {
   isActive        Boolean @default(true) @map("is_active")
   color           String? // optional color for UI
 
-  pipeline  Pipeline?      @relation(fields: [pipelineId], references: [id])
-  moveToStage PipelineStage? @relation(fields: [moveToStageId], references: [id])
-  logs      DispositionLog[]
-  rules     DispositionStageRule[]
+  pipeline    Pipeline?              @relation(fields: [pipelineId], references: [id])
+  moveToStage PipelineStage?         @relation(fields: [moveToStageId], references: [id])
+  logs        DispositionLog[]
+  rules       DispositionStageRule[]
 
   @@map("dispositions")
 }
 
 model DispositionStageRule {
-  id              String   @id @default(uuid())
-  pipelineId      String   @map("pipeline_id")
-  dispositionId   String   @map("disposition_id")
-  currentStageId  String?  @map("current_stage_id") // null = matches any non-final stage
-  moveToStageId   String   @map("move_to_stage_id")
-  enabled         Boolean  @default(true)
-  sortOrder       Int      @default(0) @map("sort_order")
-  description     String?
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid())
+  pipelineId     String   @map("pipeline_id")
+  dispositionId  String   @map("disposition_id")
+  currentStageId String?  @map("current_stage_id") // null = matches any non-final stage
+  moveToStageId  String   @map("move_to_stage_id")
+  enabled        Boolean  @default(true)
+  sortOrder      Int      @default(0) @map("sort_order")
+  description    String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  pipeline     Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  disposition  Disposition   @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
+  pipeline     Pipeline       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  disposition  Disposition    @relation(fields: [dispositionId], references: [id], onDelete: Cascade)
   currentStage PipelineStage? @relation("RuleCurrentStage", fields: [currentStageId], references: [id])
   moveToStage  PipelineStage  @relation("RuleMoveToStage", fields: [moveToStageId], references: [id])
 
@@ -672,13 +698,13 @@ model DispositionStageRule {
 }
 
 model DispositionLog {
-  id              String    @id @default(uuid())
-  opportunityId   String    @map("opportunity_id")
-  dispositionId   String    @map("disposition_id")
-  userId          String    @map("user_id")
-  notes           String?
-  followUpAt      DateTime? @map("follow_up_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
+  id            String    @id @default(uuid())
+  opportunityId String    @map("opportunity_id")
+  dispositionId String    @map("disposition_id")
+  userId        String    @map("user_id")
+  notes         String?
+  followUpAt    DateTime? @map("follow_up_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
   disposition Disposition @relation(fields: [dispositionId], references: [id])
@@ -702,26 +728,26 @@ model LeadSource {
 // ═══ Messaging ═══
 
 model Message {
-  id          String    @id @default(uuid())
-  contactId   String    @map("contact_id")
-  direction   String    // inbound, outbound
-  channel     String    @default("sms") // sms, email, instagram, whatsapp
-  body        String
-  subject     String?   // emails only
-  mediaUrl    String?   @map("media_url") // original Twilio URL (auth-required) — used as ingest source
-  mediaContentType String? @map("media_content_type") // e.g. image/jpeg, video/mp4
-  emailConversationId String? @map("email_conversation_id") // Graph conversationId for email threading
-  cloudinaryPublicId String? @map("cloudinary_public_id") // Cloudinary public_id once uploaded — UI prefers this
-  cloudinaryResourceType String? @map("cloudinary_resource_type") // 'image' | 'video' — needed for URL building
-  r2Key String? @map("r2_key") // R2 object key for direct customer uploads (any size)
-  status      String    @default("sent") // sent, delivered, failed, received
-  externalId  String?   @map("external_id") // Twilio SID or external message ID
-  senderId    String?   @map("sender_id") // user who sent (null for inbound)
-  readAt      DateTime? @map("read_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  id                     String    @id @default(uuid())
+  contactId              String    @map("contact_id")
+  direction              String // inbound, outbound
+  channel                String    @default("sms") // sms, email, instagram, whatsapp
+  body                   String
+  subject                String? // emails only
+  mediaUrl               String?   @map("media_url") // original Twilio URL (auth-required) — used as ingest source
+  mediaContentType       String?   @map("media_content_type") // e.g. image/jpeg, video/mp4
+  emailConversationId    String?   @map("email_conversation_id") // Graph conversationId for email threading
+  cloudinaryPublicId     String?   @map("cloudinary_public_id") // Cloudinary public_id once uploaded — UI prefers this
+  cloudinaryResourceType String?   @map("cloudinary_resource_type") // 'image' | 'video' — needed for URL building
+  r2Key                  String?   @map("r2_key") // R2 object key for direct customer uploads (any size)
+  status                 String    @default("sent") // sent, delivered, failed, received
+  externalId             String?   @map("external_id") // Twilio SID or external message ID
+  senderId               String?   @map("sender_id") // user who sent (null for inbound)
+  readAt                 DateTime? @map("read_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
 
-  contact     Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  sender      User?     @relation("MessageSender", fields: [senderId], references: [id])
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  sender  User?   @relation("MessageSender", fields: [senderId], references: [id])
 
   @@index([contactId, createdAt])
   @@index([externalId])
@@ -760,22 +786,22 @@ model InventoryVehicle {
 // ═══ Porter ═══
 
 model PorterEntry {
-  id          String   @id @default(uuid())
-  vin6        String   @map("vin6") // last 6 of VIN
-  carName     String   @map("car_name") // e.g. "Black Camaro"
-  wipeDown    Boolean  @default(false) @map("wipe_down")
-  tirePressure Boolean @default(false) @map("tire_pressure")
-  matUnderCar Boolean  @default(false) @map("mat_under_car")
-  charger     Boolean  @default(false)
-  startedAt   DateTime? @map("started_at")
-  finishedAt  DateTime? @map("finished_at")
-  completedAt DateTime? @map("completed_at")
-  date        DateTime @default(now()) // which day this entry is for
-  porterId    String?  @map("porter_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String    @id @default(uuid())
+  vin6         String    @map("vin6") // last 6 of VIN
+  carName      String    @map("car_name") // e.g. "Black Camaro"
+  wipeDown     Boolean   @default(false) @map("wipe_down")
+  tirePressure Boolean   @default(false) @map("tire_pressure")
+  matUnderCar  Boolean   @default(false) @map("mat_under_car")
+  charger      Boolean   @default(false)
+  startedAt    DateTime? @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  completedAt  DateTime? @map("completed_at")
+  date         DateTime  @default(now()) // which day this entry is for
+  porterId     String?   @map("porter_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  porter      User?    @relation("PorterEntries", fields: [porterId], references: [id])
+  porter User? @relation("PorterEntries", fields: [porterId], references: [id])
 
   @@index([date])
   @@index([porterId])
@@ -783,18 +809,18 @@ model PorterEntry {
 }
 
 model PorterTask {
-  id          String    @id @default(uuid())
-  title       String
-  notes       String?
-  assignedToId String?  @map("assigned_to_id")
-  status      String   @default("pending") // pending, in_progress, completed
-  startedAt   DateTime? @map("started_at")
-  completedAt DateTime? @map("completed_at")
-  createdById String?  @map("created_by_id")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id           String    @id @default(uuid())
+  title        String
+  notes        String?
+  assignedToId String?   @map("assigned_to_id")
+  status       String    @default("pending") // pending, in_progress, completed
+  startedAt    DateTime? @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  createdById  String?   @map("created_by_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
-  assignedTo  User?    @relation("PorterTaskAssignee", fields: [assignedToId], references: [id])
-  createdBy   User?    @relation("PorterTaskCreator", fields: [createdById], references: [id])
+  assignedTo User? @relation("PorterTaskAssignee", fields: [assignedToId], references: [id])
+  createdBy  User? @relation("PorterTaskCreator", fields: [createdById], references: [id])
 
   @@index([assignedToId])
   @@map("porter_tasks")
@@ -818,10 +844,10 @@ model CalendarItem {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  vehicle     Vehicle?  @relation(fields: [vehicleId], references: [id])
-  event       Event?    @relation(fields: [eventId], references: [id])
-  createdBy   User      @relation("CalendarCreatedBy", fields: [createdById], references: [id])
-  assignees   CalendarAssignee[]
+  vehicle   Vehicle?           @relation(fields: [vehicleId], references: [id])
+  event     Event?             @relation(fields: [eventId], references: [id])
+  createdBy User               @relation("CalendarCreatedBy", fields: [createdById], references: [id])
+  assignees CalendarAssignee[]
 
   @@index([date])
   @@index([status])
@@ -831,13 +857,13 @@ model CalendarItem {
 }
 
 model CalendarAssignee {
-  id             String       @id @default(uuid())
-  calendarItemId String       @map("calendar_item_id")
-  userId         String       @map("user_id")
-  createdAt      DateTime     @default(now()) @map("created_at")
+  id             String   @id @default(uuid())
+  calendarItemId String   @map("calendar_item_id")
+  userId         String   @map("user_id")
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  calendarItem   CalendarItem @relation(fields: [calendarItemId], references: [id], onDelete: Cascade)
-  user           User         @relation(fields: [userId], references: [id])
+  calendarItem CalendarItem @relation(fields: [calendarItemId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
 
   @@unique([calendarItemId, userId])
   @@map("calendar_assignees")
@@ -859,9 +885,9 @@ model Event {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  owner       User      @relation("EventOwner", fields: [ownerId], references: [id])
-  createdBy   User      @relation("EventCreatedBy", fields: [createdById], references: [id])
-  sections    EventSection[]
+  owner         User           @relation("EventOwner", fields: [ownerId], references: [id])
+  createdBy     User           @relation("EventCreatedBy", fields: [createdById], references: [id])
+  sections      EventSection[]
   calendarItems CalendarItem[]
 
   @@index([date])
@@ -876,8 +902,8 @@ model EventSection {
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at")
 
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  tasks     EventTask[]
+  event Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tasks EventTask[]
 
   @@index([eventId])
   @@map("event_sections")
@@ -897,8 +923,8 @@ model EventTask {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  section     EventSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  assignee    User?        @relation("EventTaskAssignee", fields: [assigneeId], references: [id])
+  section  EventSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  assignee User?        @relation("EventTaskAssignee", fields: [assigneeId], references: [id])
 
   @@index([sectionId])
   @@index([assigneeId])
@@ -907,10 +933,10 @@ model EventTask {
 }
 
 model WeeklyPlanSnapshot {
-  id              String   @id @default(uuid())
-  weekStart       DateTime @map("week_start")
-  createdAt       DateTime @default(now()) @map("created_at")
-  entries         Json     @default("[]") // Array of { vehicleStageId, vehicleId, stockNumber, year, make, model, color, day, estimatedHours, assigneeName }
+  id        String   @id @default(uuid())
+  weekStart DateTime @map("week_start")
+  createdAt DateTime @default(now()) @map("created_at")
+  entries   Json     @default("[]") // Array of { vehicleStageId, vehicleId, stockNumber, year, make, model, color, day, estimatedHours, assigneeName }
 
   @@unique([weekStart])
   @@map("weekly_plan_snapshots")
@@ -919,17 +945,36 @@ model WeeklyPlanSnapshot {
 /// Instagram accounts connected to this app via OAuth (Instagram Business Login flow).
 /// Created when a user clicks "Connect Instagram Account" in Settings and authorizes via Meta.
 model ConnectedInstagramAccount {
-  id                 String    @id @default(uuid())
-  igUserId           String    @unique @map("ig_user_id") // Instagram-scoped user ID
-  username           String
-  name               String?
-  profilePictureUrl  String?   @map("profile_picture_url")
-  accessToken        String    @map("access_token") // long-lived (60 days)
-  tokenExpiresAt     DateTime? @map("token_expires_at")
-  connectedAt        DateTime  @default(now()) @map("connected_at")
-  connectedById      String    @map("connected_by_id")
-  connectedBy        User      @relation(fields: [connectedById], references: [id])
+  id                String    @id @default(uuid())
+  igUserId          String    @unique @map("ig_user_id") // Instagram-scoped user ID
+  username          String
+  name              String?
+  profilePictureUrl String?   @map("profile_picture_url")
+  accessToken       String    @map("access_token") // long-lived (60 days)
+  tokenExpiresAt    DateTime? @map("token_expires_at")
+  connectedAt       DateTime  @default(now()) @map("connected_at")
+  connectedById     String    @map("connected_by_id")
+  connectedBy       User      @relation(fields: [connectedById], references: [id])
 
   @@index([connectedById])
   @@map("connected_instagram_accounts")
+}
+
+// Phase 0.A — audit trail mapping legacy Vehicle + InventoryVehicle rows to canonical Vehicle.
+// Populated by the Sub-phase 0.B backfill script; queried by /api/vehicles/legacy/[oldId] redirect.
+// One row per (old_vehicle_id, old_inventory_vehicle_id) pair OR per orphan side.
+model VehicleMigrationMap {
+  id                    String   @id @default(uuid())
+  oldVehicleId          String?  @map("old_vehicle_id") // null = orphan IV (no recon match)
+  oldInventoryVehicleId String?  @map("old_inventory_vehicle_id") // null = orphan V (no IV match)
+  canonicalVehicleId    String   @map("canonical_vehicle_id")
+  matchMethod           String   @map("match_method") // "stock_number" | "manual_review" | "orphan_iv_created" | "orphan_v_left_alone"
+  matchConfidence       String   @map("match_confidence") // "high" | "low" | "manual"
+  notes                 String?
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([canonicalVehicleId])
+  @@index([oldVehicleId])
+  @@index([oldInventoryVehicleId])
+  @@map("vehicle_migration_map")
 }
