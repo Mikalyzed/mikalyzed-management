@@ -90,6 +90,32 @@ type CostAdd = {
   addedBy: { id: string; name: string } | null
 }
 
+type MediaAsset = {
+  id: string
+  type: string
+  contentType: string | null
+  sizeBytes: number | null
+  filename: string | null
+  caption: string | null
+  sortOrder: number
+  uploadedAt: string
+  uploadedBy: { id: string; name: string } | null
+  url: string
+}
+
+const MEDIA_TYPE_LABELS: Record<string, string> = {
+  exterior: 'Exterior',
+  interior: 'Interior',
+  undercarriage: 'Undercarriage',
+  walkaround_video: 'Walkaround Video',
+  turntable_video: 'Turntable Video',
+  other_video: 'Other Video',
+  doc: 'Document',
+  other: 'Other',
+}
+
+function isVideoType(t: string) { return t.endsWith('_video') }
+
 const COST_KIND_LABELS: Record<string, string> = {
   recon: 'Recon',
   parts: 'Parts',
@@ -155,8 +181,9 @@ export default function VehicleDetailV2() {
   const [parts, setParts] = useState<Part[]>([])
   const [activity, setActivity] = useState<ActivityEvent[]>([])
   const [costAdds, setCostAdds] = useState<CostAdd[]>([])
+  const [media, setMedia] = useState<MediaAsset[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeSection, setActiveSection] = useState<'all' | 'inventory' | 'recon' | 'activity'>('all')
+  const [activeSection, setActiveSection] = useState<'all' | 'inventory' | 'recon' | 'media' | 'activity'>('all')
   const [expandedStageId, setExpandedStageId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [canSeeMoney, setCanSeeMoney] = useState(false)
@@ -210,8 +237,19 @@ export default function VehicleDetailV2() {
       .then((d) => setCostAdds(d?.costAdds || []))
       .catch(() => {})
 
+  const refreshMedia = () =>
+    fetch(`/api/media?vehicleId=${id}`)
+      .then(async (r) => {
+        if (!r.ok) return null
+        const txt = await r.text()
+        if (!txt) return null
+        try { return JSON.parse(txt) } catch { return null }
+      })
+      .then((d) => setMedia(d?.media || []))
+      .catch(() => {})
+
   useEffect(() => {
-    Promise.all([refreshVehicle(), refreshParts(), refreshActivity(), refreshCostAdds()]).finally(() => setLoading(false))
+    Promise.all([refreshVehicle(), refreshParts(), refreshActivity(), refreshCostAdds(), refreshMedia()]).finally(() => setLoading(false))
 
     const cookies = document.cookie.split(';').reduce((acc, c) => {
       const [k, v] = c.trim().split('=')
@@ -335,19 +373,55 @@ export default function VehicleDetailV2() {
         boxShadow: 'var(--shadow)',
         border: '1px solid var(--border)',
       }}>
-        <div style={{
-          aspectRatio: '4/3',
-          background: 'linear-gradient(135deg, #1a1a1a, #404040)',
-          borderRadius: 16,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#dffd6e',
-          fontSize: 14,
-          fontWeight: 600,
-        }}>
-          Photo · Phase 3
-        </div>
+        {(() => {
+          const heroPhoto = media.find((m) => !isVideoType(m.type) && m.type !== 'doc')
+          return heroPhoto ? (
+            <button
+              type="button"
+              onClick={() => setActiveSection('media')}
+              title="View all media"
+              style={{
+                aspectRatio: '4/3',
+                background: 'transparent',
+                borderRadius: 16,
+                overflow: 'hidden',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                minHeight: 'auto',
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={heroPhoto.url} alt={heroPhoto.caption || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setActiveSection('media')}
+              title="Upload photos"
+              style={{
+                aspectRatio: '4/3',
+                background: 'linear-gradient(135deg, #1a1a1a, #404040)',
+                borderRadius: 16,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#dffd6e',
+                fontSize: 14,
+                fontWeight: 600,
+                gap: 6,
+                border: 'none',
+                cursor: 'pointer',
+                minHeight: 'auto',
+              }}
+            >
+              <span style={{ fontSize: 28 }}>📷</span>
+              <span>No photos yet</span>
+              <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.7 }}>Click to add</span>
+            </button>
+          )
+        })()}
 
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -401,7 +475,7 @@ export default function VehicleDetailV2() {
 
       {/* ═══ Filter chips ═══ */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
-        {(['all', 'inventory', 'recon', 'activity'] as const).map((s) => (
+        {(['all', 'inventory', 'recon', 'media', 'activity'] as const).map((s) => (
           <button
             key={s}
             onClick={() => setActiveSection(s)}
@@ -419,7 +493,11 @@ export default function VehicleDetailV2() {
               minHeight: 'auto',
             }}
           >
-            {s === 'recon' && vehicle.stages && vehicle.stages.length > 0 ? `Recon (${vehicle.stages.length})` : s}
+            {s === 'recon' && vehicle.stages && vehicle.stages.length > 0
+              ? `Recon (${vehicle.stages.length})`
+              : s === 'media' && media.length > 0
+                ? `Media (${media.length})`
+                : s}
           </button>
         ))}
       </div>
@@ -782,6 +860,17 @@ export default function VehicleDetailV2() {
               </p>
             )}
           </V2Card>
+        )}
+
+        {/* ═══ MEDIA ═══ */}
+        {(activeSection === 'all' || activeSection === 'media') && (
+          <MediaCard
+            vehicleId={vehicle.id}
+            media={media}
+            onChange={refreshMedia}
+            currentUserId={currentUserId}
+            isAdmin={isAdmin}
+          />
         )}
 
         {/* Activity */}
@@ -1335,4 +1424,208 @@ function v2Btn(variant: 'primary' | 'ghost'): React.CSSProperties {
   }
   if (variant === 'primary') return { ...base, background: '#1a1a1a', color: '#dffd6e', border: 'none' }
   return { ...base, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)' }
+}
+
+// ─── Media Card ─────────────────────────────────────────────────────
+
+function MediaCard({
+  vehicleId,
+  media,
+  onChange,
+  currentUserId,
+  isAdmin,
+}: {
+  vehicleId: string
+  media: MediaAsset[]
+  onChange: () => void
+  currentUserId: string | null
+  isAdmin: boolean
+}) {
+  const [uploadType, setUploadType] = useState<string>('exterior')
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function uploadFile(file: File) {
+    setErr(null)
+    setUploading(true)
+    setProgress(0)
+    try {
+      // 1. Get presigned URL
+      const presignRes = await fetch('/api/media/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId, filename: file.name, contentType: file.type }),
+      })
+      if (!presignRes.ok) throw new Error(`Presign failed (${presignRes.status})`)
+      const { uploadUrl, r2Key } = await presignRes.json()
+
+      // 2. Upload directly to R2
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100))
+        })
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve()
+          else reject(new Error(`R2 upload failed (${xhr.status})`))
+        })
+        xhr.addEventListener('error', () => reject(new Error('R2 network error')))
+        xhr.open('PUT', uploadUrl)
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+        xhr.send(file)
+      })
+
+      // 3. Confirm with server (create MediaAsset record)
+      const confirmRes = await fetch('/api/media/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicleId,
+          r2Key,
+          type: uploadType,
+          contentType: file.type,
+          sizeBytes: file.size,
+          filename: file.name,
+        }),
+      })
+      if (!confirmRes.ok) throw new Error(`Confirm failed (${confirmRes.status})`)
+
+      await onChange()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setUploading(false)
+      setProgress(0)
+    }
+  }
+
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return
+    for (const f of Array.from(files)) {
+      await uploadFile(f)
+    }
+  }
+
+  async function deleteAsset(id: string) {
+    if (!confirm('Delete this media?')) return
+    await fetch(`/api/media/${id}`, { method: 'DELETE' })
+    await onChange()
+  }
+
+  // Group by type for display
+  const photos = media.filter(m => !isVideoType(m.type) && m.type !== 'doc')
+  const videos = media.filter(m => isVideoType(m.type))
+  const docs = media.filter(m => m.type === 'doc')
+
+  return (
+    <div style={{
+      background: '#ffffff', border: '1px solid var(--border)',
+      borderRadius: 16, padding: 20, boxShadow: 'var(--shadow-sm)', gridColumn: '1 / -1',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Media</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+            {media.length === 0 ? 'No media yet — upload photos and videos' : `${photos.length} photo${photos.length === 1 ? '' : 's'} · ${videos.length} video${videos.length === 1 ? '' : 's'}${docs.length > 0 ? ` · ${docs.length} doc${docs.length === 1 ? '' : 's'}` : ''}`}
+          </p>
+        </div>
+
+        {/* Upload controls */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select
+            value={uploadType}
+            onChange={(e) => setUploadType(e.target.value)}
+            disabled={uploading}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, background: '#fff' }}
+          >
+            {Object.entries(MEDIA_TYPE_LABELS).map(([k, label]) => (
+              <option key={k} value={k}>{label}</option>
+            ))}
+          </select>
+          <label style={{ ...v2Btn('primary'), display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            {uploading ? `Uploading… ${progress}%` : '+ Upload'}
+            <input
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              disabled={uploading}
+              onChange={(e) => handleFiles(e.target.files)}
+              style={{ display: 'none' }}
+            />
+          </label>
+        </div>
+      </div>
+
+      {err && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{err}</p>}
+
+      {media.length > 0 && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+          gap: 10,
+        }}>
+          {media.map((m) => {
+            const canDelete = isAdmin || m.uploadedBy?.id === currentUserId
+            const isVideo = isVideoType(m.type)
+            return (
+              <div key={m.id} style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', background: '#f0f0ec' }}>
+                {isVideo ? (
+                  <video src={m.url} controls style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block', background: '#1a1a1a' }} />
+                ) : m.type === 'doc' ? (
+                  <a href={m.url} target="_blank" rel="noreferrer" style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    aspectRatio: '4/3', background: '#f8f8f5', color: 'var(--text-secondary)',
+                    textDecoration: 'none', fontSize: 13, fontWeight: 600, gap: 4, flexDirection: 'column',
+                  }}>
+                    <span style={{ fontSize: 32 }}>📄</span>
+                    <span>{m.filename || 'Document'}</span>
+                  </a>
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={m.url} alt={m.caption || ''} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block' }} />
+                )}
+
+                {/* Overlay: type badge + delete */}
+                <div style={{
+                  position: 'absolute', top: 6, left: 6, right: 6,
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                  pointerEvents: 'none',
+                }}>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '3px 8px',
+                    background: 'rgba(0,0,0,0.7)', color: '#fff',
+                    borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.04em',
+                  }}>{MEDIA_TYPE_LABELS[m.type] || m.type}</span>
+                  {canDelete && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); deleteAsset(m.id) }}
+                      style={{
+                        background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff',
+                        fontSize: 14, lineHeight: 1, padding: '4px 8px', borderRadius: 4,
+                        cursor: 'pointer', pointerEvents: 'auto', minHeight: 'auto',
+                      }}
+                      title="Delete"
+                    >×</button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {media.length === 0 && (
+        <div style={{
+          padding: '40px 20px', textAlign: 'center', background: '#f8f8f5',
+          borderRadius: 10, border: '1px dashed var(--border)',
+        }}>
+          <p style={{ fontSize: 28, marginBottom: 6 }}>📷</p>
+          <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+            No photos or videos yet. Pick a type and hit Upload.
+          </p>
+        </div>
+      )}
+    </div>
+  )
 }
