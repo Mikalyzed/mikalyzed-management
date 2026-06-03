@@ -65,6 +65,29 @@ type Vehicle = {
   completedAt: string | null
   stages: Stage[]
   returnQueue?: ReturnQueueEntry[]
+  // Phase 0.A — absorbed inventory fields (canonical Vehicle)
+  vehicleInfo: string | null
+  mileage: number | null
+  location: string | null
+  askingPrice: number | null
+  vehicleCost: number | null
+  purchaseType: string | null
+  purchasedFrom: string | null
+  titleStatus: string | null
+  dateInStock: string | null
+  inventoryStatus: string | null
+  consignmentCommissionPct: number | null
+}
+
+type ActivityEvent = {
+  id: string
+  entityType: string
+  entityId: string
+  action: string
+  actorId: string | null
+  details: Record<string, unknown> | null
+  createdAt: string
+  actor: { id: string; name: string; role: string } | null
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -90,21 +113,30 @@ export default function VehicleDetailPage() {
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
   const searchParams = useSearchParams()
-  const initialTab = searchParams.get('tab') === 'history' ? 'history'
-    : searchParams.get('tab') === 'parts' ? 'parts'
+  const tabParam = searchParams.get('tab')
+  const initialTab =
+    tabParam === 'history' ? 'history'
+    : tabParam === 'parts' ? 'parts'
+    : tabParam === 'inventory' ? 'inventory'
+    : tabParam === 'activity' ? 'activity'
     : 'overview'
   const [activeTab, setActiveTab] = useState(initialTab)
-  
+
   // Parts state
   const [parts, setParts] = useState<Part[]>([])
   const [partsLoading, setPartsLoading] = useState(false)
   const [showAddPart, setShowAddPart] = useState(false)
   const [partForm, setPartForm] = useState({ name: '', url: '', notes: '', assignedToId: '' })
   const [editingPartId, setEditingPartId] = useState<string | null>(null)
-  
+
   // History state
   const [history, setHistory] = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+
+  // Activity state (Phase 0.A — unified activity timeline)
+  const [activity, setActivity] = useState<ActivityEvent[]>([])
+  const [activityLoading, setActivityLoading] = useState(false)
+  const [activityLoaded, setActivityLoaded] = useState(false)
 
   // Original state
   const [editing, setEditing] = useState(false)
@@ -141,8 +173,22 @@ export default function VehicleDetailPage() {
       .finally(() => setHistoryLoading(false))
   }
 
+  const loadActivity = () => {
+    if (activityLoaded) return
+    setActivityLoading(true)
+    fetch(`/api/vehicles/${id}/activity`)
+      .then(r => r.json())
+      .then(d => {
+        setActivity(d.events || [])
+        setActivityLoaded(true)
+      })
+      .catch(console.error)
+      .finally(() => setActivityLoading(false))
+  }
+
   useEffect(() => {
     if (initialTab === 'history') loadHistory()
+    if (initialTab === 'activity') loadActivity()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTab])
 
@@ -500,17 +546,20 @@ export default function VehicleDetailPage() {
 
       {/* Tabs */}
       <div style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border)', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--border)', marginBottom: '24px', overflowX: 'auto', flexWrap: 'nowrap' }}>
           {[
-            { key: 'overview', label: 'Overview', count: null },
+            { key: 'inventory', label: 'Inventory', count: null as number | null },
+            { key: 'overview', label: 'Recon', count: null as number | null },
             { key: 'parts', label: 'Parts', count: parts.length },
-            { key: 'history', label: 'History', count: completedStages.length }
+            { key: 'history', label: 'History', count: completedStages.length },
+            { key: 'activity', label: 'Activity', count: null as number | null }
           ].map(tab => (
             <button
               key={tab.key}
               onClick={() => {
                 setActiveTab(tab.key)
                 if (tab.key === 'history') loadHistory()
+                if (tab.key === 'activity') loadActivity()
               }}
               style={{
                 padding: '12px 16px',
@@ -810,10 +859,18 @@ export default function VehicleDetailPage() {
         )}
 
         {activeTab === 'history' && (
-          <VehicleHistorySection 
+          <VehicleHistorySection
             history={history}
             loading={historyLoading}
           />
+        )}
+
+        {activeTab === 'inventory' && (
+          <InventoryTab vehicle={vehicle} />
+        )}
+
+        {activeTab === 'activity' && (
+          <ActivityTab events={activity} loading={activityLoading} />
         )}
       </div>
 
@@ -1761,6 +1818,256 @@ function ChecklistRow({ item, index, stageId, onUpdate }: {
         {item.item}
       </span>
     </button>
+  )
+}
+
+// ───────────────────────── Inventory Tab ─────────────────────────
+
+function formatMoney(cents: number | null): string {
+  if (cents === null || cents === undefined) return '—'
+  // InventoryVehicle stored values as dollars (Float), not cents. Display as dollars.
+  return cents.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+}
+
+function formatDate(s: string | null): string {
+  if (!s) return '—'
+  try {
+    return new Date(s).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  } catch {
+    return s
+  }
+}
+
+function daysSince(s: string | null): number | null {
+  if (!s) return null
+  const ms = Date.now() - new Date(s).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return null
+  return Math.floor(ms / (1000 * 60 * 60 * 24))
+}
+
+function InventoryFieldRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '10px 0', borderBottom: '1px solid var(--border)', gap: 16 }}>
+      <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>{label}</span>
+      <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600, textAlign: 'right', wordBreak: 'break-word' }}>{value || '—'}</span>
+    </div>
+  )
+}
+
+function InventorySection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{
+      background: '#ffffff',
+      border: '1px solid var(--border)',
+      borderRadius: '16px',
+      padding: '16px 20px',
+      marginBottom: '16px',
+      boxShadow: 'var(--shadow-sm)',
+    }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{title}</p>
+      <div>{children}</div>
+    </div>
+  )
+}
+
+function InventoryTab({ vehicle }: { vehicle: Vehicle }) {
+  const days = daysSince(vehicle.dateInStock)
+  const profit = vehicle.askingPrice !== null && vehicle.vehicleCost !== null
+    ? vehicle.askingPrice - vehicle.vehicleCost
+    : null
+  const margin = profit !== null && vehicle.askingPrice && vehicle.askingPrice > 0
+    ? (profit / vehicle.askingPrice) * 100
+    : null
+
+  return (
+    <div>
+      {/* Money */}
+      <InventorySection title="Money">
+        <InventoryFieldRow label="Vehicle Cost" value={formatMoney(vehicle.vehicleCost)} />
+        <InventoryFieldRow label="Asking Price" value={formatMoney(vehicle.askingPrice)} />
+        <InventoryFieldRow
+          label="Spread"
+          value={
+            profit !== null ? (
+              <span style={{ color: profit >= 0 ? '#16a34a' : '#ef4444' }}>
+                {formatMoney(profit)}
+                {margin !== null && <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>({margin.toFixed(1)}%)</span>}
+              </span>
+            ) : '—'
+          }
+        />
+        <InventoryFieldRow label="Purchase Type" value={vehicle.purchaseType || '—'} />
+        {vehicle.purchaseType === 'CONSIGNMENT' && (
+          <InventoryFieldRow
+            label="Consignment Commission"
+            value={vehicle.consignmentCommissionPct !== null ? `${vehicle.consignmentCommissionPct}%` : '—'}
+          />
+        )}
+      </InventorySection>
+
+      {/* Title */}
+      <InventorySection title="Title & Location">
+        <InventoryFieldRow label="Title Status" value={vehicle.titleStatus || '—'} />
+        <InventoryFieldRow label="Location" value={vehicle.location || '—'} />
+        <InventoryFieldRow label="Inventory Status" value={vehicle.inventoryStatus || '—'} />
+      </InventorySection>
+
+      {/* Stock info */}
+      <InventorySection title="Stock Info">
+        <InventoryFieldRow label="Stock #" value={vehicle.stockNumber} />
+        <InventoryFieldRow label="VIN" value={vehicle.vin || '—'} />
+        <InventoryFieldRow label="Mileage" value={vehicle.mileage !== null ? `${vehicle.mileage.toLocaleString()} mi` : '—'} />
+        <InventoryFieldRow
+          label="Date In Stock"
+          value={
+            <>
+              {formatDate(vehicle.dateInStock)}
+              {days !== null && <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>· {days}d ago</span>}
+            </>
+          }
+        />
+      </InventorySection>
+
+      {/* Source */}
+      <InventorySection title="Source">
+        <InventoryFieldRow label="Purchased From" value={vehicle.purchasedFrom || '—'} />
+      </InventorySection>
+
+      {/* Full description */}
+      {vehicle.vehicleInfo && (
+        <InventorySection title="Description">
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5, paddingTop: 4 }}>{vehicle.vehicleInfo}</p>
+        </InventorySection>
+      )}
+    </div>
+  )
+}
+
+// ───────────────────────── Activity Tab ─────────────────────────
+
+const ACTIVITY_ACTION_LABELS: Record<string, string> = {
+  created: 'Vehicle created',
+  stage_advanced: 'Stage advanced',
+  stage_completed: 'Stage completed',
+  stage_moved: 'Stage moved',
+  recon_restarted: 'Recon restarted',
+  returned_from_external: 'Returned from external repair',
+  returned_to_stage: 'Returned to stage',
+  return_queue_cleared: 'Return queue cleared',
+  inspection_completed: 'Inspection completed',
+  promoted_from_placeholder: 'Promoted from placeholder',
+  routed: 'Routed',
+  part_created: 'Part requested',
+  part_ordered: 'Part ordered',
+  part_received: 'Part received',
+  part_installed: 'Part installed',
+  updated: 'Updated',
+}
+
+function ActivityEventCard({ event }: { event: ActivityEvent }) {
+  const label = ACTIVITY_ACTION_LABELS[event.action] || event.action.replace(/_/g, ' ')
+  const when = new Date(event.createdAt)
+  const ago = (() => {
+    const sec = Math.floor((Date.now() - when.getTime()) / 1000)
+    if (sec < 60) return `${sec}s ago`
+    if (sec < 3600) return `${Math.floor(sec / 60)}m ago`
+    if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`
+    if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`
+    return when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  })()
+
+  // Build a concise detail string from common detail keys
+  const detailParts: string[] = []
+  if (event.details) {
+    const d = event.details as Record<string, unknown>
+    if (typeof d.stage === 'string') detailParts.push(d.stage)
+    if (typeof d.fromStage === 'string' && typeof d.toStage === 'string') detailParts.push(`${d.fromStage} → ${d.toStage}`)
+    if (typeof d.partName === 'string') detailParts.push(d.partName)
+    if (typeof d.note === 'string' && d.note) detailParts.push(d.note)
+    if (typeof d.via === 'string') detailParts.push(`via ${d.via}`)
+  }
+  const detail = detailParts.join(' · ')
+
+  const typeColors: Record<string, { bg: string; color: string }> = {
+    vehicle: { bg: '#eff6ff', color: '#2563eb' },
+    stage: { bg: '#f0fdf4', color: '#16a34a' },
+    part: { bg: '#fffbeb', color: '#d97706' },
+  }
+  const tc = typeColors[event.entityType] || { bg: 'var(--border)', color: 'var(--text-muted)' }
+
+  return (
+    <div style={{
+      display: 'flex',
+      gap: 12,
+      padding: '12px 0',
+      borderBottom: '1px solid var(--border)',
+    }}>
+      <span style={{
+        flexShrink: 0,
+        fontSize: 10,
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        background: tc.bg,
+        color: tc.color,
+        padding: '4px 8px',
+        borderRadius: 6,
+        height: 'fit-content',
+      }}>
+        {event.entityType}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{label}</p>
+        {detail && <p style={{ fontSize: 13, color: 'var(--text-secondary)', wordBreak: 'break-word' }}>{detail}</p>}
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+          {ago}{event.actor && ` · ${event.actor.name}`}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function ActivityTab({ events, loading }: { events: ActivityEvent[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px 0' }}>
+        <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: '#e8e8e4', borderTopColor: 'transparent' }} />
+      </div>
+    )
+  }
+
+  if (events.length === 0) {
+    return (
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid var(--border)',
+        borderRadius: '16px',
+        padding: '32px 20px',
+        textAlign: 'center',
+      }}>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>No activity yet</p>
+      </div>
+    )
+  }
+
+  // Optional simple filter chips
+  const counts: Record<string, number> = {}
+  for (const e of events) counts[e.entityType] = (counts[e.entityType] || 0) + 1
+
+  return (
+    <div style={{
+      background: '#ffffff',
+      border: '1px solid var(--border)',
+      borderRadius: '16px',
+      padding: '8px 20px 16px',
+    }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', padding: '12px 0 4px' }}>
+        Timeline · {events.length} event{events.length === 1 ? '' : 's'}
+      </p>
+      <div>
+        {events.map(e => <ActivityEventCard key={e.id} event={e} />)}
+      </div>
+    </div>
   )
 }
 
