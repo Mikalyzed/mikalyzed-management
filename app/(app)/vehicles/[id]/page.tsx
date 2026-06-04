@@ -397,7 +397,7 @@ export default function VehicleDetailV2() {
             'inset 0 0 0 0.5px rgba(255, 255, 255, 0.3)',
           ].join(', '),
         }}>
-          {/* Left: photo box */}
+          {/* Left: photo box — stretches to right column height */}
           {(() => {
             const heroPhoto = media.find((m) => !isVideoType(m.type) && m.type !== 'doc')
             return heroPhoto ? (
@@ -406,15 +406,17 @@ export default function VehicleDetailV2() {
                 onClick={() => setActiveSection('media')}
                 title="View all media"
                 style={{
-                  aspectRatio: '4/3',
+                  width: '100%',
+                  height: '100%',
+                  minHeight: 220,
                   background: 'transparent',
                   borderRadius: 16,
                   overflow: 'hidden',
                   border: '1px solid rgba(255, 255, 255, 0.4)',
                   padding: 0,
                   cursor: 'pointer',
-                  minHeight: 'auto',
                   boxShadow: '0 8px 24px -8px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.5)',
+                  alignSelf: 'stretch',
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -426,7 +428,9 @@ export default function VehicleDetailV2() {
                 onClick={() => setActiveSection('media')}
                 title="Upload photos"
                 style={{
-                  aspectRatio: '4/3',
+                  width: '100%',
+                  height: '100%',
+                  minHeight: 220,
                   background: 'linear-gradient(145deg, rgba(20, 22, 30, 0.85), rgba(35, 38, 50, 0.7))',
                   backdropFilter: 'blur(14px)',
                   WebkitBackdropFilter: 'blur(14px)',
@@ -439,13 +443,13 @@ export default function VehicleDetailV2() {
                   gap: 8,
                   border: '1px solid rgba(255, 255, 255, 0.08)',
                   cursor: 'pointer',
-                  minHeight: 'auto',
                   boxShadow: [
                     '0 8px 24px -8px rgba(0, 0, 0, 0.35)',
                     'inset 0 1px 0 rgba(255, 255, 255, 0.08)',
                     'inset 0 -1px 0 rgba(0, 0, 0, 0.3)',
                   ].join(', '),
                   transition: 'transform 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                  alignSelf: 'stretch',
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.005)' }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
