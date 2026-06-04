@@ -360,114 +360,151 @@ export default function VehicleDetailV2() {
         ← Inventory
       </button>
 
-      {/* ═══ HERO ═══ */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '340px 1fr',
-        gap: 24,
-        marginBottom: 24,
-        background: '#ffffff',
-        borderRadius: 24,
-        padding: 24,
-        boxShadow: 'var(--shadow)',
-        border: '1px solid var(--border)',
-      }}>
-        {(() => {
-          const heroPhoto = media.find((m) => !isVideoType(m.type) && m.type !== 'doc')
-          return heroPhoto ? (
-            <button
-              type="button"
-              onClick={() => setActiveSection('media')}
-              title="View all media"
-              style={{
-                aspectRatio: '4/3',
-                background: 'transparent',
-                borderRadius: 16,
-                overflow: 'hidden',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer',
-                minHeight: 'auto',
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={heroPhoto.url} alt={heroPhoto.caption || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setActiveSection('media')}
-              title="Upload photos"
-              style={{
-                aspectRatio: '4/3',
-                background: 'linear-gradient(135deg, #1a1a1a, #404040)',
-                borderRadius: 16,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#dffd6e',
-                fontSize: 14,
-                fontWeight: 600,
-                gap: 6,
-                border: 'none',
-                cursor: 'pointer',
-                minHeight: 'auto',
-              }}
-            >
-              <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>No Photos</span>
-              <span style={{ fontSize: 11, fontWeight: 500, opacity: 0.7 }}>Click to add</span>
-            </button>
-          )
-        })()}
+      {/* ═══ GLASSMORPHIC HERO ═══ */}
+      <div style={{ position: 'relative', marginBottom: 24 }}>
+        {/* Mesh-gradient backdrop (creates the surface that the glass blurs) */}
+        <div aria-hidden style={{
+          position: 'absolute',
+          inset: '-30px',
+          background: [
+            'radial-gradient(at 18% 24%, hsla(220, 90%, 72%, 0.32) 0px, transparent 55%)',
+            'radial-gradient(at 82% 8%, hsla(280, 80%, 68%, 0.28) 0px, transparent 55%)',
+            'radial-gradient(at 72% 76%, hsla(190, 70%, 78%, 0.22) 0px, transparent 50%)',
+            'radial-gradient(at 4% 96%, hsla(340, 75%, 72%, 0.26) 0px, transparent 55%)',
+            'radial-gradient(at 50% 50%, hsla(40, 80%, 80%, 0.16) 0px, transparent 50%)',
+          ].join(', '),
+          filter: 'blur(60px) saturate(110%)',
+          borderRadius: 40,
+          zIndex: 0,
+          pointerEvents: 'none',
+        }} />
 
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-            <div>
-              <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
-                STOCK #{vehicle.stockNumber}
-              </p>
-              <h1 style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1, marginBottom: 8 }}>
-                {vehicle.year} {vehicle.make}
-              </h1>
-              <p style={{ fontSize: 18, color: 'var(--text-secondary)', fontWeight: 500 }}>
-                {vehicle.model}{vehicle.trim && ` · ${vehicle.trim}`}
-              </p>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-              <V2StatusPill value={vehicle.inventoryStatus || vehicle.status} />
-              <div style={{ display: 'flex', gap: 6 }}>
-                {isAdmin && <button onClick={() => setShowEdit(true)} style={v2Btn('ghost')}>Edit</button>}
-                <button style={v2Btn('primary')}>Mark Sold</button>
+        {/* Glass card */}
+        <div style={{
+          position: 'relative',
+          zIndex: 1,
+          display: 'grid',
+          gridTemplateColumns: '340px 1fr',
+          gap: 24,
+          padding: 28,
+          background: 'rgba(255, 255, 255, 0.45)',
+          backdropFilter: 'blur(24px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+          borderRadius: 28,
+          border: '1px solid rgba(255, 255, 255, 0.55)',
+          boxShadow: [
+            '0 16px 48px -12px rgba(31, 38, 135, 0.18)',
+            '0 2px 8px rgba(0, 0, 0, 0.04)',
+            'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
+            'inset 0 0 0 0.5px rgba(255, 255, 255, 0.3)',
+          ].join(', '),
+        }}>
+          {/* Left: photo box */}
+          {(() => {
+            const heroPhoto = media.find((m) => !isVideoType(m.type) && m.type !== 'doc')
+            return heroPhoto ? (
+              <button
+                type="button"
+                onClick={() => setActiveSection('media')}
+                title="View all media"
+                style={{
+                  aspectRatio: '4/3',
+                  background: 'transparent',
+                  borderRadius: 16,
+                  overflow: 'hidden',
+                  border: '1px solid rgba(255, 255, 255, 0.4)',
+                  padding: 0,
+                  cursor: 'pointer',
+                  minHeight: 'auto',
+                  boxShadow: '0 8px 24px -8px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.5)',
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={heroPhoto.url} alt={heroPhoto.caption || ''} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setActiveSection('media')}
+                title="Upload photos"
+                style={{
+                  aspectRatio: '4/3',
+                  background: 'linear-gradient(145deg, rgba(20, 22, 30, 0.85), rgba(35, 38, 50, 0.7))',
+                  backdropFilter: 'blur(14px)',
+                  WebkitBackdropFilter: 'blur(14px)',
+                  borderRadius: 16,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'rgba(255, 255, 255, 0.9)',
+                  gap: 8,
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  cursor: 'pointer',
+                  minHeight: 'auto',
+                  boxShadow: [
+                    '0 8px 24px -8px rgba(0, 0, 0, 0.35)',
+                    'inset 0 1px 0 rgba(255, 255, 255, 0.08)',
+                    'inset 0 -1px 0 rgba(0, 0, 0, 0.3)',
+                  ].join(', '),
+                  transition: 'transform 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.005)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
+              >
+                <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)' }}>No Photo</span>
+                <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.4)' }}>Click to add</span>
+              </button>
+            )
+          })()}
+
+          {/* Right: identity, chips, metrics */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Title row + actions */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 600, color: 'rgba(0, 0, 0, 0.45)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 6 }}>
+                  STOCK · {vehicle.stockNumber}
+                </p>
+                <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1.05, color: '#0a0a0a', marginBottom: 6 }}>
+                  {vehicle.year} {vehicle.make}
+                </h1>
+                <p style={{ fontSize: 17, color: 'rgba(0, 0, 0, 0.6)', fontWeight: 500, letterSpacing: '-0.01em' }}>
+                  {vehicle.model}{vehicle.trim && ` · ${vehicle.trim}`}
+                </p>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+                <V2StatusPill value={vehicle.inventoryStatus || vehicle.status} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {isAdmin && <PillButton variant="ghost" onClick={() => setShowEdit(true)}>Edit</PillButton>}
+                  <PillButton variant="primary">Mark Sold</PillButton>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-            {vehicle.color && <V2Chip>● {vehicle.color}</V2Chip>}
-            {vehicle.mileage !== null && <V2Chip>{vehicle.mileage.toLocaleString()} mi</V2Chip>}
-            {vehicle.location && <V2Chip>📍 {vehicle.location}</V2Chip>}
-            {vehicle.vin && <V2Chip mono>{vehicle.vin}</V2Chip>}
-          </div>
+            {/* Satin capsules */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {vehicle.color && <SatinCapsule dotColor={vehicle.color}>{vehicle.color}</SatinCapsule>}
+              {vehicle.mileage !== null && <SatinCapsule>{vehicle.mileage.toLocaleString()} mi</SatinCapsule>}
+              {vehicle.location && <SatinCapsule>{vehicle.location}</SatinCapsule>}
+              {vehicle.vin && <SatinCapsule mono>{vehicle.vin}</SatinCapsule>}
+            </div>
 
-          {canSeeMoney ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-              <Stat label="Vehicle Cost" value={money(vehicle.vehicleCost)} />
-              <Stat label="Asking" value={money(vehicle.askingPrice)} />
-              <Stat
-                label="Spread"
-                value={profit !== null ? money(profit) : '—'}
-                sub={margin !== null ? `${margin.toFixed(1)}%` : undefined}
-                accent={profit !== null && profit >= 0 ? 'positive' : profit !== null ? 'negative' : undefined}
-              />
-              <Stat label="Days Held" value={days !== null ? `${days}` : '—'} sub={vehicle.dateInStock ? `since ${fmtDate(vehicle.dateInStock)}` : undefined} />
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-              <Stat label="Days Held" value={days !== null ? `${days}` : '—'} sub={vehicle.dateInStock ? `since ${fmtDate(vehicle.dateInStock)}` : undefined} />
-              <Stat label="Stage" value={vehicle.status?.replace(/_/g, ' ') || '—'} sub={vehicle.currentAssignee?.name ? `→ ${vehicle.currentAssignee.name}` : undefined} />
-            </div>
-          )}
+            {/* Floating glass metric panels */}
+            {canSeeMoney ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                <GlassMetric label="Vehicle Cost" value={money(vehicle.vehicleCost)} />
+                <GlassMetric label="Asking" value={money(vehicle.askingPrice)} />
+                <GlassSpread cost={vehicle.vehicleCost} asking={vehicle.askingPrice} />
+                <GlassMetric label="Days Held" value={days !== null ? `${days}d` : '—'} sub={vehicle.dateInStock ? fmtDate(vehicle.dateInStock) : undefined} />
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+                <GlassMetric label="Days Held" value={days !== null ? `${days}d` : '—'} sub={vehicle.dateInStock ? fmtDate(vehicle.dateInStock) : undefined} />
+                <GlassMetric label="Stage" value={vehicle.status?.replace(/_/g, ' ') || '—'} sub={vehicle.currentAssignee?.name ? `→ ${vehicle.currentAssignee.name}` : undefined} />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1346,6 +1383,201 @@ function V2PartStatus({ value }: { value: string }) {
       background: c.bg, color: c.color,
       borderRadius: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
     }}>{value.replace(/_/g, ' ')}</span>
+  )
+}
+
+// ─── Glassmorphic primitives ────────────────────────────────────────
+
+function PillButton({
+  children, onClick, variant = 'ghost', disabled,
+}: {
+  children: React.ReactNode
+  onClick?: () => void
+  variant?: 'primary' | 'ghost'
+  disabled?: boolean
+}) {
+  const [hovered, setHovered] = useState(false)
+  const [pressed, setPressed] = useState(false)
+
+  const base: React.CSSProperties = {
+    padding: '8px 18px',
+    borderRadius: 999,
+    fontSize: 13,
+    fontWeight: 600,
+    letterSpacing: '-0.005em',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    border: 'none',
+    minHeight: 'auto',
+    transition: 'transform 180ms cubic-bezier(0.25, 0.46, 0.45, 0.94), background 180ms ease, box-shadow 180ms ease',
+    transform: pressed ? 'scale(0.97)' : hovered ? 'translateY(-1px)' : 'translateY(0)',
+    opacity: disabled ? 0.4 : 1,
+  }
+
+  const variantStyles: React.CSSProperties =
+    variant === 'primary'
+      ? {
+          background: hovered ? '#0a0a0a' : '#1d1d1f',
+          color: '#fff',
+          boxShadow: hovered
+            ? '0 6px 16px -4px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.1)'
+            : '0 2px 6px -2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.08)',
+        }
+      : {
+          background: hovered ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.5)',
+          color: '#1d1d1f',
+          boxShadow: hovered
+            ? '0 4px 12px -4px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.6), inset 0 0 0 1px rgba(255,255,255,0.4)'
+            : '0 1px 3px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6), inset 0 0 0 1px rgba(255,255,255,0.4)',
+          backdropFilter: 'blur(12px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(12px) saturate(180%)',
+        }
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setPressed(false) }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      style={{ ...base, ...variantStyles }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function SatinCapsule({
+  children, dotColor, mono,
+}: {
+  children: React.ReactNode
+  dotColor?: string
+  mono?: boolean
+}) {
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 6,
+      padding: '6px 12px',
+      fontSize: 12,
+      fontWeight: 500,
+      color: 'rgba(0, 0, 0, 0.72)',
+      fontFamily: mono ? 'ui-monospace, SFMono-Regular, monospace' : undefined,
+      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.55) 100%)',
+      borderRadius: 999,
+      backdropFilter: 'blur(14px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(14px) saturate(180%)',
+      border: '1px solid rgba(255, 255, 255, 0.5)',
+      boxShadow: [
+        '0 2px 6px -2px rgba(0, 0, 0, 0.08)',
+        'inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+        'inset 0 -1px 0 rgba(0, 0, 0, 0.03)',
+      ].join(', '),
+      letterSpacing: '-0.005em',
+    }}>
+      {dotColor && (
+        <span style={{
+          width: 7, height: 7, borderRadius: '50%',
+          background: dotColor.toLowerCase(),
+          boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.08), inset 0 1px 1px rgba(255, 255, 255, 0.4)',
+          flexShrink: 0,
+        }} />
+      )}
+      {children}
+    </span>
+  )
+}
+
+function GlassMetric({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'positive' | 'negative' }) {
+  const valueColor = accent === 'positive' ? '#06a55a' : accent === 'negative' ? '#dc2626' : '#0a0a0a'
+  return (
+    <div style={{
+      padding: '14px 16px',
+      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.4) 100%)',
+      backdropFilter: 'blur(20px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      borderRadius: 16,
+      border: '1px solid rgba(255, 255, 255, 0.5)',
+      boxShadow: [
+        '0 4px 16px -4px rgba(31, 38, 135, 0.08)',
+        'inset 0 1px 0 rgba(255, 255, 255, 0.85)',
+        'inset 0 0 0 0.5px rgba(255, 255, 255, 0.4)',
+      ].join(', '),
+    }}>
+      <p style={{
+        fontSize: 10, fontWeight: 700, color: 'rgba(0, 0, 0, 0.45)',
+        textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 6,
+      }}>{label}</p>
+      <p style={{
+        fontSize: 20, fontWeight: 700, color: valueColor,
+        letterSpacing: '-0.02em', lineHeight: 1.1,
+      }}>{value}</p>
+      {sub && <p style={{ fontSize: 11, color: 'rgba(0, 0, 0, 0.45)', marginTop: 4, fontWeight: 500 }}>{sub}</p>}
+    </div>
+  )
+}
+
+// Spread tile with three micro-metrics: Price · Est. Profit · Water
+function GlassSpread({ cost, asking }: { cost: number | null; asking: number | null }) {
+  const m = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+  const price = asking
+  const estProfit = asking !== null && cost !== null ? Math.max(0, asking - cost) : null
+  const water = asking !== null && cost !== null ? Math.max(0, cost - asking) : null
+
+  const MicroMetric = ({ label, value, color }: { label: string; value: string; color: string }) => (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <p style={{
+        fontSize: 9, fontWeight: 700, color: 'rgba(0,0,0,0.42)',
+        textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3,
+        whiteSpace: 'nowrap',
+      }}>{label}</p>
+      <p style={{
+        fontSize: 13, fontWeight: 700, color,
+        letterSpacing: '-0.015em', lineHeight: 1.15,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+      }}>{value}</p>
+    </div>
+  )
+
+  return (
+    <div style={{
+      padding: '14px 16px',
+      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.4) 100%)',
+      backdropFilter: 'blur(20px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      borderRadius: 16,
+      border: '1px solid rgba(255, 255, 255, 0.5)',
+      boxShadow: [
+        '0 4px 16px -4px rgba(31, 38, 135, 0.08)',
+        'inset 0 1px 0 rgba(255, 255, 255, 0.85)',
+        'inset 0 0 0 0.5px rgba(255, 255, 255, 0.4)',
+      ].join(', '),
+    }}>
+      <p style={{
+        fontSize: 10, fontWeight: 700, color: 'rgba(0, 0, 0, 0.45)',
+        textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10,
+      }}>Spread</p>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+        <MicroMetric
+          label="Price"
+          value={price !== null ? m(price) : '—'}
+          color="#0a0a0a"
+        />
+        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(0,0,0,0.06)' }} />
+        <MicroMetric
+          label="Est. Profit"
+          value={estProfit !== null ? m(estProfit) : '—'}
+          color="#06a55a"
+        />
+        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(0,0,0,0.06)' }} />
+        <MicroMetric
+          label="Water"
+          value={water !== null ? m(water) : '—'}
+          color="#dc2626"
+        />
+      </div>
+    </div>
   )
 }
 
