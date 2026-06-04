@@ -1446,6 +1446,10 @@ function MediaCard({
   const [uploadingType, setUploadingType] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
   const [err, setErr] = useState<string | null>(null)
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
+
+  // Flat list of viewable items (photos + videos) in display order, for lightbox nav
+  const viewable = media.filter(m => m.type !== 'doc')
 
   async function uploadFile(file: File, type: string) {
     setErr(null)
@@ -1509,19 +1513,28 @@ function MediaCard({
 
   return (
     <div style={{
-      background: '#ffffff', border: '1px solid var(--border)',
-      borderRadius: 16, padding: 20, boxShadow: 'var(--shadow-sm)', gridColumn: '1 / -1',
+      background: '#ffffff',
+      borderRadius: 20,
+      padding: '24px 24px 8px',
+      gridColumn: '1 / -1',
+      border: '1px solid rgba(0,0,0,0.05)',
+      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
     }}>
-      <div style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Media</h3>
-        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-          {media.length === 0 ? 'No media yet — upload to each section below' : `${media.length} item${media.length === 1 ? '' : 's'} across ${MEDIA_TYPE_ORDER.filter(t => media.some(m => m.type === t)).length} section${MEDIA_TYPE_ORDER.filter(t => media.some(m => m.type === t)).length === 1 ? '' : 's'}`}
+      <div style={{ marginBottom: 8 }}>
+        <h3 style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', color: '#1d1d1f' }}>Media</h3>
+        <p style={{ fontSize: 13, color: '#86868b', marginTop: 4, fontWeight: 400 }}>
+          {media.length === 0 ? 'Drop photos and videos into any section below' : `${media.length} item${media.length === 1 ? '' : 's'}`}
         </p>
       </div>
 
-      {err && <p style={{ color: 'var(--danger)', fontSize: 13, marginBottom: 12 }}>{err}</p>}
+      {err && (
+        <p style={{
+          color: '#d70015', fontSize: 13, marginTop: 12, marginBottom: 4,
+          padding: '8px 12px', background: '#fff1f0', borderRadius: 8,
+        }}>{err}</p>
+      )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         {MEDIA_TYPE_ORDER.map((type) => {
           const items = media.filter(m => m.type === type)
           const isUploading = uploadingType === type
@@ -1537,18 +1550,32 @@ function MediaCard({
               acceptType={acceptType}
               onFiles={(files) => handleFiles(files, type)}
               onDelete={deleteAsset}
+              onOpenLightbox={(asset) => {
+                const idx = viewable.findIndex(v => v.id === asset.id)
+                if (idx >= 0) setLightboxIdx(idx)
+              }}
               currentUserId={currentUserId}
               isAdmin={isAdmin}
             />
           )
         })}
       </div>
+
+      {/* Lightbox */}
+      {lightboxIdx !== null && viewable[lightboxIdx] && (
+        <MediaLightbox
+          items={viewable}
+          startIdx={lightboxIdx}
+          onClose={() => setLightboxIdx(null)}
+          onChangeIdx={setLightboxIdx}
+        />
+      )}
     </div>
   )
 }
 
 function MediaSection({
-  type, items, isUploading, uploadProgress, acceptType, onFiles, onDelete, currentUserId, isAdmin,
+  type, items, isUploading, uploadProgress, acceptType, onFiles, onDelete, onOpenLightbox, currentUserId, isAdmin,
 }: {
   type: string
   items: MediaAsset[]
@@ -1557,6 +1584,7 @@ function MediaSection({
   acceptType: string
   onFiles: (files: FileList | null) => void
   onDelete: (id: string) => void
+  onOpenLightbox: (asset: MediaAsset) => void
   currentUserId: string | null
   isAdmin: boolean
 }) {
@@ -1564,25 +1592,55 @@ function MediaSection({
   const isVideoSection = isVideoType(type)
   const isDocSection = type === 'doc'
   const label = MEDIA_TYPE_LABELS[type] || type
+  const [isDragOver, setIsDragOver] = useState(false)
 
-  // EMPTY: compact one-line row
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!isDragOver) setIsDragOver(true)
+  }
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      onFiles(e.dataTransfer.files)
+    }
+  }
+
+  // EMPTY: minimal one-line — Apple Finder style
   if (isEmpty) {
     return (
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '10px 14px', background: '#f8f8f5', border: '1px dashed var(--border)',
-        borderRadius: 10, gap: 10, flexWrap: 'wrap',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{label}</span>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· empty</span>
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 0', gap: 10, flexWrap: 'wrap',
+          borderBottom: '1px solid rgba(0,0,0,0.06)',
+          background: isDragOver ? 'rgba(0,122,255,0.05)' : 'transparent',
+          transition: 'background 200ms ease',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontSize: 15, fontWeight: 500, color: '#1d1d1f' }}>{label}</span>
+          <span style={{ fontSize: 13, color: '#86868b', fontWeight: 400 }}>
+            {isDragOver ? 'Drop to upload' : 'Empty'}
+          </span>
         </div>
         <label style={{
-          padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-          background: '#ffffff', border: '1px solid var(--border)',
-          color: 'var(--text-secondary)', cursor: isUploading ? 'wait' : 'pointer', minHeight: 'auto',
+          padding: '4px 0', fontSize: 13, fontWeight: 500,
+          color: '#0071e3', background: 'transparent', border: 'none',
+          cursor: isUploading ? 'wait' : 'pointer', minHeight: 'auto',
+          transition: 'opacity 150ms ease',
         }}>
-          {isUploading ? `Uploading ${uploadProgress}%` : `+ Add ${label}`}
+          {isUploading ? `Uploading ${uploadProgress}%` : 'Add'}
           <input
             type="file"
             multiple
@@ -1598,28 +1656,33 @@ function MediaSection({
 
   // POPULATED: full section with gallery
   return (
-    <div style={{
-      background: '#ffffff', border: '1px solid var(--border)',
-      borderRadius: 12, padding: 14,
-    }}>
+    <div
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      style={{
+        padding: '20px 0',
+        borderBottom: '1px solid rgba(0,0,0,0.06)',
+        background: isDragOver ? 'rgba(0,122,255,0.05)' : 'transparent',
+        transition: 'background 200ms ease',
+      }}
+    >
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: 10, gap: 10, flexWrap: 'wrap',
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        marginBottom: 14, gap: 10, flexWrap: 'wrap',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 700 }}>{label}</span>
-          <span style={{
-            fontSize: 11, fontWeight: 700, padding: '2px 8px',
-            background: '#1a1a1a', color: '#dffd6e',
-            borderRadius: 999, lineHeight: 1.4,
-          }}>{items.length}</span>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.01em' }}>{label}</span>
+          <span style={{ fontSize: 13, color: '#86868b', fontWeight: 400 }}>
+            {isDragOver ? 'Drop to add' : `${items.length} ${isVideoSection ? 'video' : isDocSection ? 'document' : 'photo'}${items.length === 1 ? '' : 's'}`}
+          </span>
         </div>
         <label style={{
-          padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600,
-          background: '#1a1a1a', color: '#dffd6e', border: 'none',
+          padding: '4px 0', fontSize: 13, fontWeight: 500,
+          color: '#0071e3', background: 'transparent', border: 'none',
           cursor: isUploading ? 'wait' : 'pointer', minHeight: 'auto',
         }}>
-          {isUploading ? `Uploading ${uploadProgress}%` : `+ Add`}
+          {isUploading ? `Uploading ${uploadProgress}%` : 'Add'}
           <input
             type="file"
             multiple
@@ -1633,45 +1696,256 @@ function MediaSection({
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-        gap: 8,
+        gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
+        gap: 14,
       }}>
         {items.map((m) => {
           const canDelete = isAdmin || m.uploadedBy?.id === currentUserId
           return (
-            <div key={m.id} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', background: '#f0f0ec' }}>
-              {isVideoSection ? (
-                <video src={m.url} controls style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block', background: '#1a1a1a' }} />
-              ) : isDocSection ? (
-                <a href={m.url} target="_blank" rel="noreferrer" style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  aspectRatio: '4/3', background: '#f8f8f5', color: 'var(--text-secondary)',
-                  textDecoration: 'none', fontSize: 12, fontWeight: 600, gap: 4, flexDirection: 'column',
-                  padding: 8, textAlign: 'center',
-                }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Document</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{m.filename || ''}</span>
-                </a>
-              ) : (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={m.url} alt={m.caption || ''} style={{ width: '100%', aspectRatio: '4/3', objectFit: 'cover', display: 'block' }} />
-              )}
-              {canDelete && (
-                <button
-                  onClick={(e) => { e.preventDefault(); onDelete(m.id) }}
-                  style={{
-                    position: 'absolute', top: 4, right: 4,
-                    background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff',
-                    fontSize: 12, lineHeight: 1, padding: '4px 7px', borderRadius: 4,
-                    cursor: 'pointer', minHeight: 'auto',
-                  }}
-                  title="Delete"
-                >×</button>
-              )}
-            </div>
+            <MediaThumb
+              key={m.id}
+              asset={m}
+              isVideo={isVideoSection}
+              isDoc={isDocSection}
+              canDelete={canDelete}
+              onDelete={onDelete}
+              onClick={() => !isDocSection && onOpenLightbox(m)}
+            />
           )
         })}
       </div>
+    </div>
+  )
+}
+
+// Single thumbnail with hover lift + click-to-open
+function MediaThumb({
+  asset, isVideo, isDoc, canDelete, onDelete, onClick,
+}: {
+  asset: MediaAsset
+  isVideo: boolean
+  isDoc: boolean
+  canDelete: boolean
+  onDelete: (id: string) => void
+  onClick: () => void
+}) {
+  const [hovered, setHovered] = useState(false)
+
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        borderRadius: 12,
+        overflow: 'hidden',
+        background: '#f5f5f7',
+        cursor: isDoc ? 'default' : 'pointer',
+        transform: hovered && !isDoc ? 'translateY(-2px)' : 'translateY(0)',
+        boxShadow: hovered && !isDoc
+          ? '0 8px 24px rgba(0,0,0,0.12)'
+          : '0 1px 3px rgba(0,0,0,0.05)',
+        transition: 'transform 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 250ms ease',
+      }}
+      onClick={isVideo ? undefined : onClick}
+    >
+      {isVideo ? (
+        <video
+          src={asset.url}
+          controls
+          style={{
+            width: '100%', aspectRatio: '4/3', objectFit: 'cover',
+            display: 'block', background: '#000',
+          }}
+        />
+      ) : isDoc ? (
+        <a
+          href={asset.url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            aspectRatio: '4/3', background: '#f5f5f7',
+            color: '#1d1d1f', textDecoration: 'none', gap: 6,
+            flexDirection: 'column', padding: 12, textAlign: 'center',
+          }}
+        >
+          <span style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: '#86868b',
+          }}>Document</span>
+          <span style={{
+            fontSize: 13, fontWeight: 500,
+            overflow: 'hidden', textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap', maxWidth: '100%',
+          }}>{asset.filename || 'Open'}</span>
+        </a>
+      ) : (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={asset.url}
+          alt={asset.caption || ''}
+          style={{
+            width: '100%', aspectRatio: '4/3', objectFit: 'cover',
+            display: 'block',
+          }}
+        />
+      )}
+
+      {canDelete && (
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(asset.id) }}
+          style={{
+            position: 'absolute', top: 8, right: 8,
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(8px)',
+            border: 'none', color: '#fff',
+            fontSize: 13, lineHeight: 1,
+            width: 24, height: 24, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', minHeight: 'auto',
+            opacity: hovered ? 1 : 0,
+            transition: 'opacity 200ms ease',
+          }}
+          title="Delete"
+        >×</button>
+      )}
+    </div>
+  )
+}
+
+// Full-screen lightbox with arrow-key navigation
+function MediaLightbox({
+  items, startIdx, onClose, onChangeIdx,
+}: {
+  items: MediaAsset[]
+  startIdx: number
+  onClose: () => void
+  onChangeIdx: (idx: number) => void
+}) {
+  const current = items[startIdx]
+  const hasPrev = startIdx > 0
+  const hasNext = startIdx < items.length - 1
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+      if (e.key === 'ArrowLeft' && hasPrev) onChangeIdx(startIdx - 1)
+      if (e.key === 'ArrowRight' && hasNext) onChangeIdx(startIdx + 1)
+    }
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [startIdx, hasPrev, hasNext, onClose, onChangeIdx])
+
+  if (!current) return null
+
+  const isVideo = isVideoType(current.type)
+  const label = MEDIA_TYPE_LABELS[current.type] || current.type
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0,
+        background: 'rgba(0,0,0,0.92)',
+        backdropFilter: 'blur(40px)',
+        zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 40,
+        animation: 'fadeIn 200ms ease',
+      }}
+    >
+      {/* Top bar */}
+      <div style={{
+        position: 'absolute', top: 20, left: 20, right: 20,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        color: '#fff', pointerEvents: 'none',
+      }}>
+        <div style={{ pointerEvents: 'auto' }}>
+          <p style={{
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+            textTransform: 'uppercase', opacity: 0.6, marginBottom: 2,
+          }}>{label}</p>
+          <p style={{ fontSize: 14, fontWeight: 500 }}>
+            {startIdx + 1} of {items.length}
+          </p>
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); onClose() }}
+          style={{
+            background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
+            width: 36, height: 36, borderRadius: '50%',
+            fontSize: 18, lineHeight: 1, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backdropFilter: 'blur(20px)', pointerEvents: 'auto',
+            minHeight: 'auto',
+          }}
+        >×</button>
+      </div>
+
+      {/* Previous */}
+      {hasPrev && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onChangeIdx(startIdx - 1) }}
+          style={{
+            position: 'absolute', left: 20, top: '50%', transform: 'translateY(-50%)',
+            background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
+            width: 48, height: 48, borderRadius: '50%',
+            fontSize: 22, lineHeight: 1, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backdropFilter: 'blur(20px)', minHeight: 'auto',
+          }}
+        >‹</button>
+      )}
+
+      {/* Next */}
+      {hasNext && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onChangeIdx(startIdx + 1) }}
+          style={{
+            position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)',
+            background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff',
+            width: 48, height: 48, borderRadius: '50%',
+            fontSize: 22, lineHeight: 1, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backdropFilter: 'blur(20px)', minHeight: 'auto',
+          }}
+        >›</button>
+      )}
+
+      {/* Image / Video */}
+      <div onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90vw', maxHeight: '85vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {isVideo ? (
+          <video
+            src={current.url}
+            controls
+            autoPlay
+            style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: 8 }}
+          />
+        ) : (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={current.url}
+            alt={current.caption || ''}
+            style={{ maxWidth: '100%', maxHeight: '85vh', objectFit: 'contain', borderRadius: 8 }}
+          />
+        )}
+      </div>
+
+      {/* Caption */}
+      {current.caption && (
+        <div style={{
+          position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)',
+          color: '#fff', fontSize: 14, textAlign: 'center', pointerEvents: 'none',
+          padding: '8px 16px', background: 'rgba(0,0,0,0.5)', borderRadius: 8,
+          backdropFilter: 'blur(20px)', maxWidth: '80vw',
+        }}>{current.caption}</div>
+      )}
     </div>
   )
 }
