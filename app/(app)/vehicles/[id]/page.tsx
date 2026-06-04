@@ -490,13 +490,10 @@ export default function VehicleDetailV2() {
 
             {/* Floating glass metric panels */}
             {canSeeMoney ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                  <GlassMetric label="Vehicle Cost" value={money(vehicle.vehicleCost)} />
-                  <GlassMetric label="Asking" value={money(vehicle.askingPrice)} />
-                  <GlassMetric label="Days Held" value={days !== null ? `${days}d` : '—'} sub={vehicle.dateInStock ? fmtDate(vehicle.dateInStock) : undefined} />
-                </div>
-                <GlassSpread cost={vehicle.vehicleCost} asking={vehicle.askingPrice} />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                <GlassMetric label="Vehicle Cost" value={money(vehicle.vehicleCost)} />
+                <GlassMetric label="Asking" value={money(vehicle.askingPrice)} />
+                <GlassMetric label="Days Held" value={days !== null ? `${days}d` : '—'} sub={vehicle.dateInStock ? fmtDate(vehicle.dateInStock) : undefined} />
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
@@ -538,6 +535,11 @@ export default function VehicleDetailV2() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, alignItems: 'start' }}>
+
+        {/* Price Info (money — gated to admin / sales_manager) */}
+        {canSeeMoney && (activeSection === 'all' || activeSection === 'inventory') && (
+          <PriceInfoCard vehicle={vehicle} costAdds={costAdds} />
+        )}
 
         {/* Cost Adds (money — gated to admin / sales_manager) */}
         {canSeeMoney && (activeSection === 'all' || activeSection === 'inventory') && (
@@ -1493,63 +1495,78 @@ function GlassMetric({ label, value, sub, accent }: { label: string; value: stri
   )
 }
 
-// Spread tile with three micro-metrics: Price · Est. Profit · Water
-function GlassSpread({ cost, asking }: { cost: number | null; asking: number | null }) {
+// Price Info — full-width section card with 3 prominent metrics:
+// Asking Price · Est. Profit · Water  (Water = cost minus asking when underwater)
+function PriceInfoCard({
+  vehicle, costAdds,
+}: {
+  vehicle: Vehicle
+  costAdds: CostAdd[]
+}) {
   const m = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-  const price = asking
-  const estProfit = asking !== null && cost !== null ? Math.max(0, asking - cost) : null
-  const water = asking !== null && cost !== null ? Math.max(0, cost - asking) : null
+  const totalAddsDollars = costAdds.reduce((s, c) => s + c.amountCents, 0) / 100
+  const trueCost = (vehicle.vehicleCost ?? 0) + totalAddsDollars
+  const askingPrice = vehicle.askingPrice
+  const cost = vehicle.vehicleCost
+  const estProfit = askingPrice !== null && cost !== null ? Math.max(0, askingPrice - trueCost) : null
+  const water = askingPrice !== null && cost !== null ? Math.max(0, trueCost - askingPrice) : null
+  const margin = estProfit !== null && askingPrice !== null && askingPrice > 0 ? (estProfit / askingPrice) * 100 : null
 
-  const MicroMetric = ({ label, value, color }: { label: string; value: string; color: string }) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
+  const PriceTile = ({ label, value, color, accent }: { label: string; value: string; color: string; accent?: string }) => (
+    <div style={{ flex: 1, minWidth: 0, padding: '4px 0' }}>
       <p style={{
-        fontSize: 9, fontWeight: 700, color: 'rgba(0,0,0,0.42)',
-        textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3,
-        whiteSpace: 'nowrap',
+        fontSize: 10, fontWeight: 700, color: 'rgba(0,0,0,0.5)',
+        textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8,
       }}>{label}</p>
       <p style={{
-        fontSize: 13, fontWeight: 700, color,
-        letterSpacing: '-0.015em', lineHeight: 1.15,
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        fontSize: 28, fontWeight: 700, color,
+        letterSpacing: '-0.025em', lineHeight: 1.05,
       }}>{value}</p>
+      {accent && (
+        <p style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)', marginTop: 4, fontWeight: 500 }}>{accent}</p>
+      )}
     </div>
   )
 
   return (
     <div style={{
-      padding: '14px 16px',
-      background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.4) 100%)',
-      backdropFilter: 'blur(20px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      background: '#ffffff',
+      border: '1px solid var(--border)',
       borderRadius: 16,
-      border: '1px solid rgba(255, 255, 255, 0.5)',
-      boxShadow: [
-        '0 4px 16px -4px rgba(31, 38, 135, 0.08)',
-        'inset 0 1px 0 rgba(255, 255, 255, 0.85)',
-        'inset 0 0 0 0.5px rgba(255, 255, 255, 0.4)',
-      ].join(', '),
+      padding: 20,
+      boxShadow: 'var(--shadow-sm)',
+      gridColumn: '1 / -1',
     }}>
-      <p style={{
-        fontSize: 10, fontWeight: 700, color: 'rgba(0, 0, 0, 0.45)',
-        textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 10,
-      }}>Spread</p>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-        <MicroMetric
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div>
+          <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Price Info</h3>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+            {askingPrice === null || cost === null
+              ? 'Set vehicle cost and asking price to see the spread'
+              : `True cost ${m(trueCost)} · vs asking ${m(askingPrice)}`}
+          </p>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
+        <PriceTile
           label="Price"
-          value={price !== null ? m(price) : '—'}
+          value={askingPrice !== null ? m(askingPrice) : '—'}
           color="#0a0a0a"
         />
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(0,0,0,0.06)' }} />
-        <MicroMetric
+        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(0,0,0,0.08)', margin: '0 4px' }} />
+        <PriceTile
           label="Est. Profit"
           value={estProfit !== null ? m(estProfit) : '—'}
           color="#06a55a"
+          accent={margin !== null ? `${margin.toFixed(1)}% margin` : undefined}
         />
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(0,0,0,0.06)' }} />
-        <MicroMetric
+        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(0,0,0,0.08)', margin: '0 4px' }} />
+        <PriceTile
           label="Water"
           value={water !== null ? m(water) : '—'}
-          color="#dc2626"
+          color={water !== null && water > 0 ? '#dc2626' : 'rgba(0,0,0,0.35)'}
+          accent={water !== null && water > 0 ? 'Underwater on cost' : 'Not underwater'}
         />
       </div>
     </div>
