@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
+import { markVehicleAsAtExternal, markVehicleReturnedFromExternal } from '@/lib/external-repair-flow'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -94,43 +95,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
+  // Snapshot the prior status BEFORE the update so we can detect transitions.
+  const prior = await prisma.externalRepair.findUnique({ where: { id }, select: { status: true } })
+  const priorStatus = prior?.status
+
   const updated = await prisma.externalRepair.update({ where: { id }, data })
   await recomputeInventoryStatus(updated.stockNumber).catch(() => {})
 
-  // When an external repair is marked 'returned', the vehicle is ready to come back
-  // into recon. Park it in awaiting_routing so admin reviews + routes it (consistent
-  // with how stage completions are handled). Only flip if THIS vehicle has no other
-  // active external repairs still in progress, and only if it was at status='external'.
-  if (data.status === 'returned') {
-    const stillActive = await prisma.externalRepair.count({
-      where: { stockNumber: updated.stockNumber, status: { not: 'returned' } },
-    })
-    if (stillActive === 0) {
-      const v = await prisma.vehicle.findFirst({
-        where: { stockNumber: updated.stockNumber, status: 'external' },
-        select: { id: true },
+  // Vehicle status side-effects driven by external repair status transitions:
+  if (typeof data.status === 'string' && data.status !== priorStatus) {
+    if (data.status === 'sent' || data.status === 'in_progress') {
+      // Car just left the shop (or got upgraded from pending tracking → sent) — pull
+      // it off the recon board and skip any active stages so they don't orphan.
+      await markVehicleAsAtExternal({
+        stockNumber: updated.stockNumber,
+        externalRepairId: id,
       })
-      if (v) {
-        // Mark any leftover pending/in_progress stages as skipped — they were orphaned
-        // when the vehicle went out for external repair.
-        await prisma.vehicleStage.updateMany({
-          where: { vehicleId: v.id, status: { in: ['pending', 'in_progress'] } },
-          data: { status: 'skipped', completedAt: new Date(), timerStartedAt: null },
-        })
-        await prisma.vehicle.update({
-          where: { id: v.id },
-          data: { status: 'awaiting_routing', currentStageId: null, currentAssigneeId: null },
-        })
-        await prisma.activityLog.create({
-          data: {
-            entityType: 'vehicle',
-            entityId: v.id,
-            action: 'returned_from_external',
-            actorId: null,
-            details: { stockNumber: updated.stockNumber, externalRepairId: id },
-          },
-        }).catch(() => {})
-      }
+    } else if (data.status === 'returned') {
+      // Car came back — park in awaiting_routing for admin to route (only if no other
+      // active externals remain for this stock).
+      await markVehicleReturnedFromExternal({
+        stockNumber: updated.stockNumber,
+        externalRepairId: id,
+      })
     }
   }
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
+import { markVehicleAsAtExternal } from '@/lib/external-repair-flow'
 
 export async function GET() {
   const repairs = await prisma.externalRepair.findMany({
@@ -53,6 +54,17 @@ export async function POST(request: Request) {
   })
 
   await recomputeInventoryStatus(stockNumber).catch(() => {})
+
+  // If the repair is created as 'sent' (car already on its way out, not just being
+  // pre-tracked), pull the vehicle off the recon board and skip orphan stages.
+  // 'pending' repairs are tracking-only and leave the vehicle wherever it is.
+  if (repair.status === 'sent') {
+    await markVehicleAsAtExternal({
+      stockNumber,
+      actorId: user.id,
+      externalRepairId: repair.id,
+    })
+  }
 
   return NextResponse.json({ repair }, { status: 201 })
 }
