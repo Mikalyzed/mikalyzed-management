@@ -273,8 +273,6 @@ export default function VehicleDetailV2() {
   if (!vehicle) return <div style={{ padding: 60, textAlign: 'center', color: 'var(--danger)' }}>Vehicle not found</div>
 
   const days = daysAgo(vehicle.dateInStock)
-  const profit = vehicle.askingPrice !== null && vehicle.vehicleCost !== null ? vehicle.askingPrice - vehicle.vehicleCost : null
-  const margin = profit !== null && vehicle.askingPrice && vehicle.askingPrice > 0 ? (profit / vehicle.askingPrice) * 100 : null
   const flooring = computeFlooring(vehicle)
 
   const totalCostAddsCents = costAdds.reduce((s, c) => s + c.amountCents, 0)
@@ -492,11 +490,13 @@ export default function VehicleDetailV2() {
 
             {/* Floating glass metric panels */}
             {canSeeMoney ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                <GlassMetric label="Vehicle Cost" value={money(vehicle.vehicleCost)} />
-                <GlassMetric label="Asking" value={money(vehicle.askingPrice)} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                  <GlassMetric label="Vehicle Cost" value={money(vehicle.vehicleCost)} />
+                  <GlassMetric label="Asking" value={money(vehicle.askingPrice)} />
+                  <GlassMetric label="Days Held" value={days !== null ? `${days}d` : '—'} sub={vehicle.dateInStock ? fmtDate(vehicle.dateInStock) : undefined} />
+                </div>
                 <GlassSpread cost={vehicle.vehicleCost} asking={vehicle.askingPrice} />
-                <GlassMetric label="Days Held" value={days !== null ? `${days}d` : '—'} sub={vehicle.dateInStock ? fmtDate(vehicle.dateInStock) : undefined} />
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
@@ -1321,31 +1321,6 @@ function Field({ label, value, onChange, type = 'text', mono }: { label: string;
 }
 
 // ─── UI primitives ──────────────────────────────────────────────────
-
-function Stat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'positive' | 'negative' }) {
-  const valueColor = accent === 'positive' ? '#16a34a' : accent === 'negative' ? '#ef4444' : 'var(--text-primary)'
-  return (
-    <div style={{ background: '#f8f8f5', borderRadius: 12, padding: '12px 14px' }}>
-      <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{label}</p>
-      <p style={{ fontSize: 20, fontWeight: 800, color: valueColor, letterSpacing: '-0.02em' }}>{value}</p>
-      {sub && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</p>}
-    </div>
-  )
-}
-
-function V2Chip({ children, mono }: { children: React.ReactNode; mono?: boolean }) {
-  return (
-    <span style={{
-      fontSize: 12,
-      padding: '4px 10px',
-      background: '#f0f0ec',
-      color: 'var(--text-secondary)',
-      borderRadius: 999,
-      fontWeight: 500,
-      fontFamily: mono ? 'ui-monospace, monospace' : undefined,
-    }}>{children}</span>
-  )
-}
 
 function V2StageStatus({ value, active }: { value: string; active: boolean }) {
   const colors: Record<string, { bg: string; color: string }> = {
