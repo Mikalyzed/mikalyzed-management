@@ -109,7 +109,6 @@ const MEDIA_TYPE_LABELS: Record<string, string> = {
   undercarriage: 'Undercarriage',
   walkaround_video: 'Walkaround Video',
   turntable_video: 'Turntable Video',
-  other_video: 'Other Video',
   doc: 'Document',
   other: 'Other',
 }
@@ -1427,7 +1426,7 @@ function v2Btn(variant: 'primary' | 'ghost'): React.CSSProperties {
 
 // ─── Media Card (sectioned by type) ──────────────────────────────────
 
-const MEDIA_TYPE_ORDER = ['exterior', 'interior', 'undercarriage', 'walkaround_video', 'turntable_video', 'other_video', 'doc', 'other'] as const
+const MEDIA_TYPE_ORDER = ['exterior', 'interior', 'undercarriage', 'walkaround_video', 'turntable_video', 'doc', 'other'] as const
 
 
 function MediaCard({
