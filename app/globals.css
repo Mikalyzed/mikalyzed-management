@@ -99,12 +99,22 @@
 
 html, body {
   height: 100%;
-  background: var(--bg-primary);
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Helvetica Neue', sans-serif;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* The warm canvas color sits at the root so glass pages can layer a
+   z-index: -1 mesh gradient on top of it without the body painting a
+   solid color over the gradient.  Flat pages without a gradient still
+   read on this canvas as before. */
+html {
+  background: var(--bg-primary);
+}
+body {
+  background: transparent;
 }
 
 /* iPhone safe-area: dark band behind the notch only.
