@@ -143,7 +143,7 @@ function WeekTabs({
   const activeIdx = Math.max(0, days.findIndex(d => d.value === selectedDay))
 
   return (
-    <div style={{
+    <div className="week-tabs" style={{
       position: 'relative',
       display: 'flex',
       padding: 4,
@@ -185,6 +185,7 @@ function WeekTabs({
           <button
             key={d.value}
             onClick={() => onSelect(d.value)}
+            className={isSelected ? 'week-tab-active' : undefined}
             style={{
               flex: 1,
               position: 'relative',
@@ -192,9 +193,10 @@ function WeekTabs({
               padding: '9px 6px',
               background: 'transparent',
               border: 'none',
+              borderRadius: 14,
               cursor: 'pointer',
               minHeight: 'auto',
-              transition: 'color 220ms ease',
+              transition: 'color 220ms ease, background 220ms ease',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
             }}
           >
@@ -770,22 +772,25 @@ function QueueVehicleCard({ job, onStart, isAdmin, onSchedule, index }: {
       </div>
       <div className="queue-card-actions" style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
         <button onClick={() => onStart(job.id)} style={{
-          padding: '7px 16px', borderRadius: 999, border: 'none',
+          padding: '7px 16px', borderRadius: 999,
+          border: '1px solid rgba(255, 255, 255, 0.18)',
           background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95))',
           color: '#fff',
           fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
           cursor: 'pointer',
+          boxSizing: 'border-box',
           boxShadow: '0 4px 14px -4px rgba(37, 99, 235, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
         }}>Start</button>
         {isAdmin && onSchedule && (
           <button onClick={() => onSchedule(job.id, 'vehicle')} style={{
-            padding: '7px 14px', borderRadius: 999,
+            padding: '7px 16px', borderRadius: 999,
             background: 'rgba(255, 255, 255, 0.55)',
             backdropFilter: 'blur(10px) saturate(180%)',
             WebkitBackdropFilter: 'blur(10px) saturate(180%)',
             border: '1px solid rgba(255, 255, 255, 0.55)',
             color: 'rgba(0, 0, 0, 0.6)', fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
             cursor: 'pointer',
+            boxSizing: 'border-box',
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
           }}>Schedule</button>
         )}
@@ -881,22 +886,25 @@ function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete, onEdit, i
       </div>
       <div className="queue-card-actions" style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
         <button onClick={() => onStart(task.id)} style={{
-          padding: '7px 16px', borderRadius: 999, border: 'none',
+          padding: '7px 16px', borderRadius: 999,
+          border: '1px solid rgba(255, 255, 255, 0.18)',
           background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.95), rgba(124, 58, 237, 0.95))',
           color: '#fff',
           fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
           cursor: 'pointer',
+          boxSizing: 'border-box',
           boxShadow: '0 4px 14px -4px rgba(124, 58, 237, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
         }}>Start</button>
         {isAdmin && onSchedule && (
           <button onClick={() => onSchedule(task.id, 'task')} style={{
-            padding: '7px 14px', borderRadius: 999,
+            padding: '7px 16px', borderRadius: 999,
             background: 'rgba(255, 255, 255, 0.55)',
             backdropFilter: 'blur(10px) saturate(180%)',
             WebkitBackdropFilter: 'blur(10px) saturate(180%)',
             border: '1px solid rgba(255, 255, 255, 0.55)',
             color: 'rgba(0, 0, 0, 0.6)', fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
             cursor: 'pointer',
+            boxSizing: 'border-box',
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
           }}>Schedule</button>
         )}
@@ -1540,7 +1548,27 @@ export default function ContentBoard() {
           to { opacity: 1; }
         }
         @media (max-width: 767px) {
-          .content-stat-active { display: none !important; }
+          /* Header: drop the "Content Board" chip on mobile and let the
+             search pill take the full row width. */
+          .content-board-chip { display: none !important; }
+          .content-board-search { width: 100% !important; }
+
+          /* Day tabs: 7 days don't fit side-by-side at phone widths.
+             Switch to horizontal scroll with fixed per-tab width so each
+             one stays readable; remove the sliding indicator math by
+             pinning each tab to its own size instead of flexing. */
+          .week-tabs { overflow-x: auto !important; scrollbar-width: none; }
+          .week-tabs::-webkit-scrollbar { display: none; }
+          .week-tabs > button { flex: 0 0 78px !important; }
+          .week-tabs > div[aria-hidden] { display: none !important; }
+          .week-tabs > button.week-tab-active {
+            background: linear-gradient(135deg, #1d1d1f, #0a0a0a);
+            box-shadow:
+              0 4px 14px -2px rgba(0,0,0,0.35),
+              inset 0 1px 0 rgba(255,255,255,0.12),
+              inset 0 -1px 0 rgba(0,0,0,0.3);
+          }
+
           .queue-card,
           .active-card {
             transition: transform 0.18s ease, box-shadow 0.18s ease;
@@ -1549,44 +1577,37 @@ export default function ContentBoard() {
           .queue-card:active,
           .active-card:active {
             transform: scale(0.985);
-            box-shadow: 0 1px 2px rgba(0,0,0,0.06) !important;
           }
           .queue-card { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
           .queue-card-info { width: 100%; }
           .queue-card-actions {
             width: 100%;
             display: flex !important;
-            gap: 6px !important;
-            padding-top: 8px;
-            border-top: 1px solid #f0f0ec;
+            gap: 8px !important;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.4);
           }
           .queue-card-actions > button {
             flex: 1 1 0;
-            padding: 6px 12px !important;
-            font-size: 12.5px !important;
-            border-radius: 7px !important;
-            min-height: 36px;
+            min-height: 38px;
           }
-          .queue-card-actions > button.queue-icon-btn { flex: 0 0 36px; min-height: 36px; }
+          .queue-card-actions > button.queue-icon-btn { flex: 0 0 38px; min-height: 38px; }
           .active-card-actions {
             width: 100%;
             display: flex !important;
-            gap: 6px !important;
+            gap: 8px !important;
             margin-top: 4px;
           }
           .active-card-actions > button {
             flex: 1 1 0;
-            padding: 6px 12px !important;
-            font-size: 12.5px !important;
-            border-radius: 7px !important;
-            min-height: 36px;
+            min-height: 38px;
           }
           .content-modal-overlay { animation: content-overlay-in 0.18s ease both; }
           .content-modal-card { animation: content-modal-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
         }
       `}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 22 }}>
-        <span style={{
+        <span className="content-board-chip" style={{
           fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
           padding: '4px 12px', borderRadius: 999,
           background: 'rgba(255, 255, 255, 0.6)',
@@ -1597,6 +1618,7 @@ export default function ContentBoard() {
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.8)',
         }}>Content Board</span>
         <input
+          className="content-board-search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search stock, vehicle, task, assignee…"
@@ -1608,6 +1630,7 @@ export default function ContentBoard() {
             WebkitBackdropFilter: 'blur(20px) saturate(180%)',
             fontSize: 13, fontWeight: 500, color: '#1d1d1f',
             width: 300, outline: 'none',
+            boxSizing: 'border-box',
             boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7), 0 2px 8px -2px rgba(31, 38, 135, 0.08)',
           }}
         />
