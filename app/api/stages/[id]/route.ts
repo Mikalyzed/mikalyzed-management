@@ -176,16 +176,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
-  // Log activity
-  await prisma.activityLog.create({
-    data: {
-      entityType: 'stage',
-      entityId: id,
-      action: body.status ? `status_${body.status}` : 'updated',
-      actorId: user.id,
-      details: body,
-    },
-  })
+  // Activity log — only for prominent changes. Skip checklist toggles, note edits,
+  // and other micro-actions that would flood the Logs tab.
+  const STRUCTURAL_FIELDS = ['assigneeId', 'scopeName', 'dueDate', 'estimatedHours', 'blockNote']
+  const isStatusChange = !!body.status
+  const isStructural = STRUCTURAL_FIELDS.some(f => f in body)
+  if (isStatusChange || isStructural) {
+    await prisma.activityLog.create({
+      data: {
+        entityType: 'stage',
+        entityId: id,
+        action: isStatusChange ? `status_${body.status}` : 'updated',
+        actorId: user.id,
+        details: body,
+      },
+    })
+  }
 
   return NextResponse.json({ stage: updated })
 }

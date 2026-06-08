@@ -45,18 +45,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const allowed = [
     'stockNumber', 'vin', 'year', 'make', 'model', 'color', 'trim', 'notes', 'status',
+    // Pricing & cost (Price & Cost card)
+    'askingPrice', 'vehicleCost', 'dateInStock',
+    // Marketing description (Vehicle Info → Description sub-tab)
+    'vehicleInfo',
+    // Title & Build Studio (Vehicle Info → Build / Title sub-tab)
+    'titleStatus',
     // Phase 2 — flooring
     'floorLender', 'floorPrincipal', 'floorDailyRate', 'floorAdvanceDate', 'floorStatus',
   ]
+  const dateFields = new Set(['floorAdvanceDate', 'dateInStock'])
   const data: Record<string, unknown> = {}
   for (const key of allowed) {
-    if (body[key] !== undefined) {
-      // Coerce floorAdvanceDate string → Date
-      if (key === 'floorAdvanceDate' && typeof body[key] === 'string' && body[key]) {
-        data[key] = new Date(body[key])
-      } else {
-        data[key] = body[key]
-      }
+    if (body[key] === undefined) continue
+    const v = body[key]
+    if (dateFields.has(key)) {
+      // Accept YYYY-MM-DD or ISO datetime; null clears the field
+      data[key] = v === null || v === '' ? null : new Date(v as string)
+    } else {
+      data[key] = v
     }
   }
 

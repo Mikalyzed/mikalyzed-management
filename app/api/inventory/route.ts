@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
+import { presignGet } from '@/lib/r2'
 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser()
@@ -57,7 +58,46 @@ export async function GET(req: NextRequest) {
   }
   countsByStatus.all = allCount
 
-  return NextResponse.json({ vehicles, total, counts: countsByStatus })
+  // Hero-photo enrichment — pull the first photo from the canonical Vehicle for each
+  // inventory row (matched by stockNumber) so the ledger can render a 16:9 thumbnail.
+  // Hardened so a media-join or R2 failure can't take down the whole inventory page.
+  const heroByStock = new Map<string, string>()
+  try {
+    const stockNumbers = vehicles.map(v => v.stockNumber).filter(Boolean)
+    if (stockNumbers.length > 0) {
+      const vehiclesWithMedia = await prisma.vehicle.findMany({
+        where: { stockNumber: { in: stockNumbers } },
+        select: {
+          stockNumber: true,
+          mediaAssets: {
+            where: { type: { in: ['exterior', 'interior', 'undercarriage'] } },
+            orderBy: [{ sortOrder: 'asc' }, { uploadedAt: 'desc' }],
+            take: 1,
+            select: { r2Key: true },
+          },
+        },
+      })
+      await Promise.all(vehiclesWithMedia.map(async (v) => {
+        const hero = v.mediaAssets[0]
+        if (!hero) return
+        try {
+          const url = await presignGet(hero.r2Key, 60 * 60)
+          heroByStock.set(v.stockNumber, url)
+        } catch (presignErr) {
+          console.warn(`[inventory] presign failed for ${v.stockNumber}:`, presignErr)
+        }
+      }))
+    }
+  } catch (enrichErr) {
+    console.error('[inventory] hero enrichment failed (returning rows without heroUrl):', enrichErr)
+  }
+
+  const enriched = vehicles.map(v => ({
+    ...v,
+    heroUrl: heroByStock.get(v.stockNumber) || null,
+  }))
+
+  return NextResponse.json({ vehicles: enriched, total, counts: countsByStatus })
 }
 
 export async function POST(req: NextRequest) {

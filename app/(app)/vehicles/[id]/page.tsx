@@ -58,6 +58,7 @@ type Vehicle = {
 type ActivityEvent = {
   id: string
   entityType: string
+  entityId: string
   action: string
   createdAt: string
   details: Record<string, unknown> | null
@@ -161,6 +162,101 @@ function computeFlooring(vehicle: Vehicle) {
   }
 }
 
+// Activity-log noise filter — checklist toggles, free-text edits, and other micro-actions
+// pollute the audit feed. The Logs tab hides these so prominent events stand out.
+const NOISY_ACTIONS = new Set<string>([
+  'updated',         // generic stage PATCH (checklist toggle, note edit, etc.)
+  'part_updated',    // generic part PATCH
+])
+
+// Human-readable description of an activity-log event, pulling real values
+// from the `details` payload so each row tells a useful story.
+function describeEvent(e: ActivityEvent, stages: ReconStage[] = []): { title: string; meta?: string } {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d: any = e.details || {}
+  const action = e.action
+
+  // Resolve the stage name when the event targets a recon stage on this vehicle
+  const stage = e.entityType === 'stage' ? stages.find(s => s.id === e.entityId) : null
+  const stageName = stage ? (STAGE_LABEL[stage.stage] || stage.stage) : null
+
+  // ── Stage transitions ─────────────────────────────────────────────
+  if (action.startsWith('status_')) {
+    const newStatus = action.slice(7).replace(/_/g, ' ')
+    return { title: stageName ? `${stageName} → ${newStatus}` : `Status → ${newStatus}` }
+  }
+  if (action === 'stage_completed') {
+    const name = stageName || (d.stage && (STAGE_LABEL[d.stage] || d.stage))
+    return { title: name ? `${name} stage completed` : 'Stage completed' }
+  }
+  if (action === 'paused') {
+    const meta = [d.pauseReason, d.pauseDetail].filter(Boolean).join(' · ')
+    return { title: stageName ? `${stageName} paused` : 'Stage paused', meta: meta || undefined }
+  }
+  if (action === 'returned_to_stage') {
+    const to = d.returnedStage ? (STAGE_LABEL[d.returnedStage] || d.returnedStage) : null
+    const from = d.fromStage ? (STAGE_LABEL[d.fromStage] || d.fromStage) : null
+    return { title: to ? `Returned to ${to}` : 'Returned to earlier stage', meta: from ? `from ${from}` : undefined }
+  }
+  if (action === 'stage_moved') {
+    return { title: stageName ? `${stageName} moved` : 'Stage moved' }
+  }
+  if (action === 'routed') {
+    const next = d.nextStage || d.targetStage
+    return { title: next ? `Routed → ${STAGE_LABEL[next] || next}` : 'Routed' }
+  }
+  if (action === 'recon_restarted')      return { title: 'Recon restarted' }
+  if (action === 'inspection_completed') return { title: 'Inspection completed' }
+  if (action.startsWith('timer_')) {
+    const t = action.slice(6).replace(/_/g, ' ')
+    const meta = [d.pauseReason, d.pauseDetail].filter(Boolean).join(' · ')
+    return { title: stageName ? `${stageName} timer ${t}` : `Timer ${t}`, meta: meta || undefined }
+  }
+  if (action === 'updated' && e.entityType === 'stage') {
+    const fields = Object.keys(d).filter(k => k !== 'status').slice(0, 3).join(', ')
+    return { title: stageName ? `${stageName} stage edited` : 'Stage edited', meta: fields || undefined }
+  }
+
+  // ── Money ────────────────────────────────────────────────────────
+  if (action === 'cost_add_created') {
+    const amt = typeof d.amountCents === 'number' ? `$${(d.amountCents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : ''
+    const kind = d.kind ? (COST_KIND_LABELS[d.kind] || d.kind) : 'cost'
+    const meta = [d.description, d.vendor].filter(Boolean).join(' · ')
+    return { title: `${kind} cost added${amt ? ` · ${amt}` : ''}`, meta: meta || undefined }
+  }
+  if (action === 'cost_add_deleted') {
+    const amt = typeof d.amountCents === 'number' ? `$${(d.amountCents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}` : ''
+    const kind = d.kind ? (COST_KIND_LABELS[d.kind] || d.kind) : 'cost'
+    return { title: `${kind} cost removed${amt ? ` · ${amt}` : ''}` }
+  }
+
+  // ── Media ────────────────────────────────────────────────────────
+  if (action === 'media_uploaded') {
+    const label = d.type ? (MEDIA_TYPE_LABELS[d.type] || d.type) : 'Media'
+    return { title: `${label} uploaded`, meta: d.filename || undefined }
+  }
+  if (action === 'media_deleted') {
+    const label = d.type ? (MEDIA_TYPE_LABELS[d.type] || d.type) : 'Media'
+    return { title: `${label} deleted` }
+  }
+
+  // ── Parts ────────────────────────────────────────────────────────
+  if (action.startsWith('part_')) {
+    const verb = action.slice(5).replace(/_/g, ' ')
+    const name = d.partName || 'Part'
+    return { title: `${name} · ${verb}` }
+  }
+
+  // ── Vehicle lifecycle ────────────────────────────────────────────
+  if (action === 'created')                    return { title: 'Vehicle created' }
+  if (action === 'promoted_from_placeholder')  return { title: 'Promoted from placeholder' }
+  if (action === 'returned_from_external')     return { title: 'Returned from external repair' }
+  if (action === 'status_changed')             return { title: 'Status changed' }
+
+  // Fallback — surface the raw action name humanely
+  return { title: action.replace(/_/g, ' ') }
+}
+
 const STAGE_LABEL: Record<string, string> = {
   mechanic: 'Mechanic',
   detailing: 'Detailing',
@@ -182,7 +278,8 @@ export default function VehicleDetailV2() {
   const [costAdds, setCostAdds] = useState<CostAdd[]>([])
   const [media, setMedia] = useState<MediaAsset[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeSection, setActiveSection] = useState<'all' | 'inventory' | 'recon' | 'media' | 'activity'>('all')
+  const [activeTab, setActiveTab] = useState<'general' | 'recon' | 'marketing' | 'media' | 'files' | 'logs'>('general')
+  const [vehicleInfoSubTab, setVehicleInfoSubTab] = useState<'general' | 'build_title' | 'description'>('general')
   const [expandedStageId, setExpandedStageId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [canSeeMoney, setCanSeeMoney] = useState(false)
@@ -274,10 +371,6 @@ export default function VehicleDetailV2() {
 
   const days = daysAgo(vehicle.dateInStock)
   const flooring = computeFlooring(vehicle)
-
-  const totalCostAddsCents = costAdds.reduce((s, c) => s + c.amountCents, 0)
-  const totalCostAdds = totalCostAddsCents / 100
-  const trueCost = (vehicle.vehicleCost || 0) + totalCostAdds
 
   // Stage actions
   async function completeStage(stageId: string) {
@@ -403,7 +496,7 @@ export default function VehicleDetailV2() {
             return heroPhoto ? (
               <button
                 type="button"
-                onClick={() => setActiveSection('media')}
+                onClick={() => setActiveTab('media')}
                 title="View all media"
                 style={{
                   width: '100%',
@@ -425,7 +518,7 @@ export default function VehicleDetailV2() {
             ) : (
               <button
                 type="button"
-                onClick={() => setActiveSection('media')}
+                onClick={() => setActiveTab('media')}
                 title="Upload photos"
                 style={{
                   width: '100%',
@@ -509,235 +602,216 @@ export default function VehicleDetailV2() {
         </div>
       </div>
 
-      {/* ═══ Filter chips ═══ */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 20, overflowX: 'auto' }}>
-        {(['all', 'inventory', 'recon', 'media', 'activity'] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => setActiveSection(s)}
-            style={{
-              padding: '8px 16px',
-              borderRadius: 999,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              border: '1px solid var(--border)',
-              background: activeSection === s ? '#1a1a1a' : '#ffffff',
-              color: activeSection === s ? '#dffd6e' : 'var(--text-secondary)',
-              textTransform: 'capitalize',
-              whiteSpace: 'nowrap',
-              minHeight: 'auto',
-            }}
-          >
-            {s === 'recon' && vehicle.stages && vehicle.stages.length > 0
-              ? `Recon (${vehicle.stages.length})`
-              : s === 'media' && media.length > 0
-                ? `Media (${media.length})`
-                : s}
-          </button>
-        ))}
-      </div>
+      {/* ═══ Workspace Tab Navigation ═══ */}
+      <TabNav
+        tabs={[
+          { id: 'general',   label: 'Vehicle Info' },
+          { id: 'recon',     label: 'Recon',     badge: vehicle.stages && vehicle.stages.length > 0 ? `${vehicle.stages.length}` : undefined },
+          { id: 'marketing', label: 'Marketing' },
+          { id: 'media',     label: 'Media',     badge: (() => { const n = media.filter(m => m.type !== 'doc').length; return n > 0 ? `${n}` : undefined })() },
+          { id: 'files',     label: 'Files',     badge: (() => { const n = media.filter(m => m.type === 'doc').length; return n > 0 ? `${n}` : undefined })() },
+          { id: 'logs',      label: 'Logs' },
+        ]}
+        activeId={activeTab}
+        onChange={(id) => setActiveTab(id as typeof activeTab)}
+      />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, alignItems: 'start' }}>
+      {/* ═══ VEHICLE INFO TAB — 3 sub-tabs: General Info / Build · Title / Description ═══ */}
+      {activeTab === 'general' && (
+        <>
+          {/* Sub-tab nav */}
+          <SubTabNav
+            tabs={[
+              { id: 'general',     label: 'General Info' },
+              { id: 'build_title', label: 'Build / Title' },
+              { id: 'description', label: 'Description' },
+            ]}
+            activeId={vehicleInfoSubTab}
+            onChange={(id) => setVehicleInfoSubTab(id as typeof vehicleInfoSubTab)}
+          />
 
-        {/* Price Info (money — gated to admin / sales_manager) */}
-        {canSeeMoney && (activeSection === 'all' || activeSection === 'inventory') && (
-          <PriceInfoCard vehicle={vehicle} costAdds={costAdds} />
-        )}
+          {/* ─── Sub-tab: General Info (2-col asymmetric) ─── */}
+          {vehicleInfoSubTab === 'general' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, alignItems: 'start', marginBottom: 20 }}>
 
-        {/* Cost Adds (money — gated to admin / sales_manager) */}
-        {canSeeMoney && (activeSection === 'all' || activeSection === 'inventory') && (
-          <div style={{
-            background: '#ffffff', border: '1px solid var(--border)',
-            borderRadius: 16, padding: 20, boxShadow: 'var(--shadow-sm)', gridColumn: '1 / -1',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-              <div>
-                <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Cost Adds</h3>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {costAdds.length === 0 ? 'No cost adds yet — track recon parts, transport, packs, etc.' : `${costAdds.length} item${costAdds.length === 1 ? '' : 's'} · rolls into true cost`}
-                </p>
-              </div>
-              <button onClick={() => setShowAddCost(true)} style={v2Btn('primary')}>+ Add Cost</button>
-            </div>
-
-            {costAdds.length > 0 && (
-              <>
-                {costAdds.map((c) => {
-                  const canDelete = isAdmin || c.addedBy?.id === currentUserId
-                  return (
-                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)', gap: 12 }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
-                          <span style={{
-                            fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
-                            padding: '2px 6px', background: '#f0f0ec', color: 'var(--text-secondary)', borderRadius: 4,
-                          }}>{COST_KIND_LABELS[c.kind] || c.kind}</span>
-                          {c.description && <span style={{ fontSize: 13, fontWeight: 600 }}>{c.description}</span>}
-                        </div>
-                        <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                          {fmtDate(c.addedAt)}
-                          {c.vendor && ` · ${c.vendor}`}
-                          {c.addedBy && ` · added by ${c.addedBy.name}`}
-                        </p>
-                      </div>
-                      <span style={{ fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{money(c.amountCents / 100)}</span>
-                      {canDelete && (
-                        <button
-                          onClick={() => deleteCostAdd(c.id)}
-                          disabled={busy}
-                          style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', minHeight: 'auto' }}
-                          title="Delete"
-                        >×</button>
-                      )}
-                    </div>
-                  )
-                })}
-              </>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0 4px', borderTop: '2px solid #1a1a1a', marginTop: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 700 }}>True cost (vehicle + adds)</span>
-              <span style={{ fontSize: 16, fontWeight: 800 }}>{money(trueCost)}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Flooring (money — gated to admin / sales_manager) */}
-        {canSeeMoney && (activeSection === 'all' || activeSection === 'inventory') && (
-          <div style={{
-            background: '#ffffff', border: '1px solid var(--border)',
-            borderRadius: 16, padding: 20, boxShadow: 'var(--shadow-sm)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-              <div>
-                <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Flooring</h3>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {flooring ? `${flooring.lender} · ${flooring.dailyRate}%/day` : 'No flooring on this vehicle'}
-                </p>
-              </div>
-              {isAdmin && (
-                <button onClick={() => setShowSetFlooring(true)} style={v2Btn(flooring ? 'ghost' : 'primary')}>
-                  {flooring ? 'Edit' : '+ Set Flooring'}
-                </button>
-              )}
-            </div>
-            {flooring ? (
-              <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <V2StatMini label="Principal" value={money(flooring.principal)} />
-                  <V2StatMini label="Accrued" value={money(flooring.accruedInterest)} sub={`${flooring.daysHeld}d held`} />
-                  <V2StatMini label="Cost/Day" value={money(flooring.costPerDay)} accent="negative" />
-                  <V2StatMini label="Payoff Today" value={money(flooring.payoff)} accent="negative" />
-                </div>
-                {vehicle.floorAdvanceDate && (
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12 }}>
-                    Advanced {fmtDate(vehicle.floorAdvanceDate)} · status: {flooring.status}
-                  </p>
+              {/* LEFT COLUMN — Operations & Financials */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
+                {canSeeMoney && (
+                  <PriceAndCostCard
+                    vehicle={vehicle}
+                    costAdds={costAdds}
+                    isAdmin={isAdmin}
+                    currentUserId={currentUserId}
+                    busy={busy}
+                    onAddCost={() => setShowAddCost(true)}
+                    onDeleteCostAdd={deleteCostAdd}
+                    onSavePartial={async (patch) => {
+                      // Optimistic: reflect the change locally before the network round-trip
+                      // so the value updates instantly.  Server response merges in after to
+                      // pick up any derived/canonicalized values; on failure we re-fetch.
+                      setVehicle((prev) => (prev ? { ...prev, ...patch } as Vehicle : prev))
+                      const r = await fetch(`/api/vehicles/${vehicle.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(patch),
+                      })
+                      if (r.ok) {
+                        const data = await r.json().catch(() => null)
+                        if (data?.vehicle) {
+                          setVehicle((prev) => (prev ? { ...prev, ...data.vehicle } : data.vehicle))
+                        }
+                      } else {
+                        await refreshVehicle()
+                      }
+                    }}
+                  />
                 )}
-              </>
-            ) : (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                {vehicle.purchaseType === 'CONSIGNMENT'
-                  ? 'Consignment vehicles are not floored.'
-                  : isAdmin
-                    ? 'Click "Set Flooring" if this vehicle is on a floorplan.'
-                    : 'Not on a floorplan.'}
-              </p>
-            )}
-          </div>
-        )}
 
-        {/* Title & Location */}
-        {(activeSection === 'all' || activeSection === 'inventory') && (
-          <V2Card title="Title & Location">
-            <V2Row label="Title Status" value={vehicle.titleStatus || '—'} />
-            <V2Row label="Location" value={vehicle.location || '—'} />
-            <V2Row label="Inventory Status" value={vehicle.inventoryStatus || '—'} />
-            <V2Row label="Purchase Type" value={vehicle.purchaseType || '—'} />
-          </V2Card>
-        )}
+                {/* Notes (Description has moved to its own sub-tab) */}
+                {vehicle.notes && (
+                  <GlassCard>
+                    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.45)', marginBottom: 12 }}>Notes</p>
+                    <p style={{ fontSize: 15, color: 'rgba(0,0,0,0.72)', lineHeight: 1.7, fontStyle: 'italic' }}>{vehicle.notes}</p>
+                  </GlassCard>
+                )}
+              </div>
 
-        {/* Source */}
-        {(activeSection === 'all' || activeSection === 'inventory') && (vehicle.purchasedFrom || vehicle.dateInStock) && (
-          <V2Card title="Source">
-            <V2Row label="Purchased From" value={vehicle.purchasedFrom || '—'} />
-            <V2Row label="Date in Stock" value={fmtDate(vehicle.dateInStock)} />
-            {vehicle.consignmentCommissionPct !== null && (
-              <V2Row label="Consignment %" value={`${vehicle.consignmentCommissionPct}%`} />
-            )}
-          </V2Card>
-        )}
+              {/* RIGHT COLUMN — Status & Logistics */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
+                {vehicle.vin && <CarfaxCard vin={vehicle.vin} />}
+                <LogisticsHubCard
+                  vehicle={vehicle}
+                  flooring={flooring}
+                  canSeeMoney={canSeeMoney}
+                  isAdmin={isAdmin}
+                  onEditFlooring={() => setShowSetFlooring(true)}
+                />
+                <PrintHubCard />
+              </div>
+            </div>
+          )}
 
-        {/* Description */}
-        {(activeSection === 'all' || activeSection === 'inventory') && vehicle.vehicleInfo && (
-          <V2Card title="Description" wide>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{vehicle.vehicleInfo}</p>
-          </V2Card>
-        )}
+          {/* ─── Sub-tab: Title & Build Studio ─── */}
+          {vehicleInfoSubTab === 'build_title' && (
+            <TitleBuildStudio
+              vehicle={vehicle}
+              isAdmin={isAdmin}
+              onSavePartial={async (patch) => {
+                setVehicle((prev) => (prev ? { ...prev, ...patch } as Vehicle : prev))
+                const r = await fetch(`/api/vehicles/${vehicle.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(patch),
+                })
+                if (r.ok) {
+                  const data = await r.json().catch(() => null)
+                  if (data?.vehicle) {
+                    setVehicle((prev) => (prev ? { ...prev, ...data.vehicle } : data.vehicle))
+                  }
+                } else {
+                  await refreshVehicle()
+                }
+              }}
+            />
+          )}
 
-        {/* ═══ RECON — expandable stages ═══ */}
-        {(activeSection === 'all' || activeSection === 'recon') && (
-          <V2Card
-            title="Recon History"
-            subtitle={vehicle.stages && vehicle.stages.length > 0 ? `${vehicle.stages.length} stage${vehicle.stages.length === 1 ? '' : 's'} · current: ${vehicle.status}` : 'No recon stages yet'}
-            wide
-          >
-            {vehicle.stages && vehicle.stages.length > 0 ? (
-              vehicle.stages.map((s) => {
-                const isActive = s.status !== 'done' && s.status !== 'skipped' && !s.completedAt
-                const isExpanded = expandedStageId === s.id
-                const checkedCount = s.checklist?.filter(c => c.done).length || 0
-                const totalCount = s.checklist?.length || 0
-                const stagePartsOrdered = parts.filter(p => p.sourceStageId === s.id)
+          {/* ─── Sub-tab: Description (marketing copy editor + AI polish) ─── */}
+          {vehicleInfoSubTab === 'description' && (
+            <DescriptionEditor
+              value={vehicle.vehicleInfo || ''}
+              vehicle={vehicle}
+              onSave={async (text) => {
+                const r = await fetch(`/api/vehicles/${vehicle.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ vehicleInfo: text || null }),
+                })
+                if (r.ok) await refreshVehicle()
+              }}
+            />
+          )}
+        </>
+      )}
 
-                return (
-                  <div key={s.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                    {/* Stage header — clickable */}
-                    <button
-                      onClick={() => setExpandedStageId(isExpanded ? null : s.id)}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        gap: 12,
-                        alignItems: 'center',
-                        padding: '14px 0',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        minHeight: 'auto',
-                      }}
-                    >
-                      <div style={{
-                        width: 28, height: 28, borderRadius: '50%',
-                        background: isActive ? '#1a1a1a' : (s.status === 'done' ? '#dffd6e' : 'var(--border)'),
-                        color: isActive ? '#dffd6e' : (s.status === 'done' ? '#1a1a1a' : 'var(--text-muted)'),
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 12, fontWeight: 700, flexShrink: 0,
-                      }}>
-                        {s.status === 'done' || s.completedAt ? '✓' : isActive ? '▶' : '·'}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
-                          <span style={{ fontSize: 15, fontWeight: 700, textTransform: 'capitalize' }}>
-                            {STAGE_LABEL[s.stage] || s.stage}
-                            {s.scopeName && <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6, fontWeight: 500 }}>· {s.scopeName}</span>}
+      {/* ═══ RECON TAB — timeline ═══ */}
+      {activeTab === 'recon' && (
+            <GlassCard>
+              <GlassEyebrow
+                label="Recon History"
+                subtitle={vehicle.stages && vehicle.stages.length > 0
+                  ? `${vehicle.stages.length} stage${vehicle.stages.length === 1 ? '' : 's'} · current: ${vehicle.status?.replace(/_/g, ' ')}`
+                  : 'No recon stages yet'}
+              />
+              {vehicle.stages && vehicle.stages.length > 0 ? (
+                <div style={{ position: 'relative' }}>
+                  {/* Vertical timeline spine */}
+                  <div aria-hidden style={{
+                    position: 'absolute', left: 7, top: 18,
+                    bottom: 18, width: 1,
+                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.06) 100%)',
+                    pointerEvents: 'none',
+                  }} />
+
+                  {vehicle.stages.map((s) => {
+                    const isActive = s.status !== 'done' && s.status !== 'skipped' && !s.completedAt
+                    const isDone = s.status === 'done' || !!s.completedAt
+                    const isExpanded = expandedStageId === s.id
+                    const checkedCount = s.checklist?.filter(c => c.done).length || 0
+                    const totalCount = s.checklist?.length || 0
+                    const stagePartsOrdered = parts.filter(p => p.sourceStageId === s.id)
+
+                    return (
+                      <div key={s.id} style={{ position: 'relative', paddingLeft: 30 }}>
+                        {/* Minimal timeline dot */}
+                        <div aria-hidden style={{
+                          position: 'absolute', left: 1, top: 18,
+                          width: 13, height: 13, borderRadius: '50%',
+                          background: isDone ? '#1d1d1f' : isActive ? '#dffd6e' : 'rgba(255,255,255,0.9)',
+                          border: isActive ? '2px solid #1d1d1f' : '1.5px solid rgba(0,0,0,0.22)',
+                          boxShadow: isActive
+                            ? '0 0 0 4px rgba(223, 253, 110, 0.35)'
+                            : isDone ? '0 1px 3px rgba(0,0,0,0.18)' : 'none',
+                          zIndex: 1,
+                          transition: 'all 200ms ease',
+                        }} />
+
+                        {/* Stage header — clickable */}
+                        <button
+                          onClick={() => setExpandedStageId(isExpanded ? null : s.id)}
+                          style={{
+                            width: '100%',
+                            display: 'flex',
+                            gap: 12,
+                            alignItems: 'center',
+                            padding: '12px 0',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                            minHeight: 'auto',
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: '#1d1d1f', letterSpacing: '-0.005em' }}>
+                                {STAGE_LABEL[s.stage] || s.stage}
+                                {s.scopeName && <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.5)', marginLeft: 8, fontWeight: 500 }}>· {s.scopeName}</span>}
+                              </span>
+                              <V2StageStatus value={s.status} active={isActive} />
+                            </div>
+                            {/* Micro labels: technician + dates + timer */}
+                            <div style={{ display: 'flex', gap: 14, marginTop: 5, fontSize: 11, color: 'rgba(0,0,0,0.55)', flexWrap: 'wrap', fontWeight: 500 }}>
+                              {s.assignee && <span>{s.assignee.name}</span>}
+                              <span>{fmtDate(s.startedAt)}{s.completedAt ? ` → ${fmtDate(s.completedAt)}` : ''}</span>
+                              {totalCount > 0 && <span>{checkedCount}/{totalCount} tasks</span>}
+                              {stagePartsOrdered.length > 0 && <span>{stagePartsOrdered.length} part{stagePartsOrdered.length === 1 ? '' : 's'}</span>}
+                              {s.estimatedHours && <span>~{s.estimatedHours}h</span>}
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.3)', flexShrink: 0 }}>
+                            {isExpanded ? '▲' : '▼'}
                           </span>
-                          <V2StageStatus value={s.status} active={isActive} />
-                        </div>
-                        <div style={{ display: 'flex', gap: 12, marginTop: 4, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-                          {s.assignee && <span>👤 {s.assignee.name}</span>}
-                          <span>📅 {fmtDate(s.startedAt)}{s.completedAt ? ` → ${fmtDate(s.completedAt)}` : ''}</span>
-                          {totalCount > 0 && <span>☑ {checkedCount}/{totalCount}</span>}
-                          {stagePartsOrdered.length > 0 && <span>🔧 {stagePartsOrdered.length} part{stagePartsOrdered.length === 1 ? '' : 's'}</span>}
-                          {s.estimatedHours && <span>⏱ {s.estimatedHours}h</span>}
-                        </div>
-                      </div>
-                      <span style={{ fontSize: 14, color: 'var(--text-muted)', flexShrink: 0 }}>
-                        {isExpanded ? '▲' : '▼'}
-                      </span>
-                    </button>
+                        </button>
 
                     {/* Expanded content */}
                     {isExpanded && (
@@ -894,51 +968,94 @@ export default function VehicleDetailV2() {
                     )}
                   </div>
                 )
-              })
-            ) : (
-              <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-                This vehicle has no recon stages yet. {vehicle.status === 'inventory_only' && '(Inventory-only — never started recon.)'}
-              </p>
-            )}
-          </V2Card>
-        )}
-
-        {/* ═══ MEDIA ═══ */}
-        {(activeSection === 'all' || activeSection === 'media') && (
-          <MediaCard
-            vehicleId={vehicle.id}
-            media={media}
-            onChange={refreshMedia}
-            currentUserId={currentUserId}
-            isAdmin={isAdmin}
-          />
-        )}
-
-        {/* Activity */}
-        {(activeSection === 'all' || activeSection === 'activity') && (
-          <V2Card title="Activity" subtitle={`${activity.length} events`} wide>
-            {activity.slice(0, 15).map((e) => (
-              <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{e.action.replace(/_/g, ' ')}</span>
-                  <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                    {e.entityType} · {e.actor?.name || 'system'}
-                  </p>
+                  })}
                 </div>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{fmtDateTime(e.createdAt)}</span>
-              </div>
-            ))}
-            {activity.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>No activity yet.</p>}
-          </V2Card>
-        )}
+              ) : (
+                <p style={{ color: 'rgba(0,0,0,0.5)', fontSize: 13, fontStyle: 'italic' }}>
+                  This vehicle has no recon stages yet. {vehicle.status === 'inventory_only' && '(Inventory-only — never started recon.)'}
+                </p>
+              )}
+            </GlassCard>
+          )}
+      {/* ═══ MARKETING TAB ═══ */}
+      {activeTab === 'marketing' && <ChannelSyndicationCard />}
 
-        {/* Notes */}
-        {vehicle.notes && (activeSection === 'all') && (
-          <V2Card title="Notes" wide>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, fontStyle: 'italic' }}>{vehicle.notes}</p>
-          </V2Card>
-        )}
-      </div>
+      {/* ═══ MEDIA TAB ═══ */}
+      {activeTab === 'media' && (
+        <MediaStudio
+          vehicleId={vehicle.id}
+          media={media}
+          onChange={refreshMedia}
+          currentUserId={currentUserId}
+          isAdmin={isAdmin}
+        />
+      )}
+
+      {/* ═══ FILES TAB ═══ */}
+      {activeTab === 'files' && (
+        <FilesVault
+          vehicleId={vehicle.id}
+          media={media}
+          onChange={refreshMedia}
+          currentUserId={currentUserId}
+          isAdmin={isAdmin}
+        />
+      )}
+
+      {/* ═══ LOGS TAB ═══ */}
+      {activeTab === 'logs' && (() => {
+        const prominent = activity.filter(e => !NOISY_ACTIONS.has(e.action))
+        const shown = prominent.slice(0, 50)
+        const hiddenCount = activity.length - prominent.length
+        return (
+          <GlassCard>
+            <GlassEyebrow
+              label="Activity Log"
+              subtitle={prominent.length === 0
+                ? hiddenCount > 0
+                  ? `${hiddenCount} minor edit${hiddenCount === 1 ? '' : 's'} hidden`
+                  : 'No activity yet'
+                : `${prominent.length} significant event${prominent.length === 1 ? '' : 's'}${hiddenCount > 0 ? ` · ${hiddenCount} minor edit${hiddenCount === 1 ? '' : 's'} hidden` : ''}`}
+            />
+            {shown.length === 0 ? (
+              <p style={{ color: 'rgba(0,0,0,0.5)', fontSize: 13, fontStyle: 'italic' }}>
+                Nothing significant logged yet. Stage transitions, cost adds, media uploads, and price changes show up here.
+              </p>
+            ) : shown.map((e, i) => {
+              const desc = describeEvent(e, vehicle.stages || [])
+              return (
+                <div key={e.id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                  padding: '12px 0',
+                  borderBottom: i < shown.length - 1 ? '1px solid rgba(0,0,0,0.06)' : 'none',
+                  gap: 12,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, minWidth: 0 }}>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+                      padding: '3px 7px', borderRadius: 4,
+                      background: 'rgba(0,0,0,0.06)', color: 'rgba(0,0,0,0.55)',
+                      marginTop: 2, flexShrink: 0,
+                    }}>{e.entityType}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f' }}>{desc.title}</span>
+                      {desc.meta && (
+                        <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.55)', marginTop: 3, fontWeight: 500 }}>
+                          {desc.meta}
+                        </p>
+                      )}
+                      <p style={{ fontSize: 11, color: 'rgba(0,0,0,0.45)', marginTop: 3 }}>
+                        by {e.actor?.name || 'system'}
+                      </p>
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', flexShrink: 0 }}>{fmtDateTime(e.createdAt)}</span>
+                </div>
+              )
+            })}
+          </GlassCard>
+        )
+      })()}
 
       {/* ═══ EDIT MODAL ═══ */}
       {showEdit && (
@@ -1501,79 +1618,716 @@ function GlassMetric({ label, value, sub, accent }: { label: string; value: stri
 
 // Price Info — full-width section card with 3 prominent metrics:
 // Asking Price · Est. Profit · Water  (Water = cost minus asking when underwater)
-function PriceInfoCard({
-  vehicle, costAdds,
+// ─── Glass section primitives ───────────────────────────────────────
+
+function GlassCard({ children, padding = 22 }: { children: React.ReactNode; padding?: number }) {
+  return (
+    <div style={{
+      background: 'rgba(255, 255, 255, 0.55)',
+      backdropFilter: 'blur(20px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      borderRadius: 20,
+      border: '1px solid rgba(255, 255, 255, 0.5)',
+      padding,
+      boxShadow: [
+        '0 8px 28px -10px rgba(31, 38, 135, 0.12)',
+        '0 1px 3px rgba(0, 0, 0, 0.03)',
+        'inset 0 1px 0 rgba(255, 255, 255, 0.75)',
+        'inset 0 0 0 0.5px rgba(255, 255, 255, 0.35)',
+      ].join(', '),
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function GlassEyebrow({ label, subtitle, action }: { label: string; subtitle?: string; action?: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
+      <div>
+        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.45)', marginBottom: subtitle ? 4 : 0 }}>{label}</p>
+        {subtitle && <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.5)', fontWeight: 500 }}>{subtitle}</p>}
+      </div>
+      {action}
+    </div>
+  )
+}
+
+// Cost Tracking — merged Price Info + Cost Adds + True Cost
+// ─── Price & Cost card — compact 2-col grid, inline underline fields, perf ribbon ─
+
+function PriceAndCostCard({
+  vehicle, costAdds, isAdmin, currentUserId, busy,
+  onSavePartial, onAddCost, onDeleteCostAdd,
 }: {
   vehicle: Vehicle
   costAdds: CostAdd[]
+  isAdmin: boolean
+  currentUserId: string | null
+  busy: boolean
+  onSavePartial: (patch: Record<string, unknown>) => Promise<void>
+  onAddCost: () => void
+  onDeleteCostAdd: (id: string) => void
 }) {
-  const m = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-  const totalAddsDollars = costAdds.reduce((s, c) => s + c.amountCents, 0) / 100
-  const trueCost = (vehicle.vehicleCost ?? 0) + totalAddsDollars
-  const askingPrice = vehicle.askingPrice
-  const cost = vehicle.vehicleCost
-  const estProfit = askingPrice !== null && cost !== null ? Math.max(0, askingPrice - trueCost) : null
-  const water = askingPrice !== null && cost !== null ? Math.max(0, trueCost - askingPrice) : null
-  const margin = estProfit !== null && askingPrice !== null && askingPrice > 0 ? (estProfit / askingPrice) * 100 : null
+  const [tab, setTab] = useState<'retail' | 'wholesale'>('retail')
 
-  const PriceTile = ({ label, value, color, accent }: { label: string; value: string; color: string; accent?: string }) => (
-    <div style={{ flex: 1, minWidth: 0, padding: '4px 0' }}>
-      <p style={{
-        fontSize: 10, fontWeight: 700, color: 'rgba(0,0,0,0.5)',
-        textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8,
-      }}>{label}</p>
-      <p style={{
-        fontSize: 28, fontWeight: 700, color,
-        letterSpacing: '-0.025em', lineHeight: 1.05,
-      }}>{value}</p>
-      {accent && (
-        <p style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)', marginTop: 4, fontWeight: 500 }}>{accent}</p>
-      )}
-    </div>
-  )
+  // Local-only fields (no schema yet — preserved across this session)
+  const [specialPrice, setSpecialPrice] = useState(0)
+  const [minDown, setMinDown] = useState(0)
+  const [minDeposit, setMinDeposit] = useState(0)
+  const [packs, setPacks] = useState(0)
+
+  // Persisted fields (committed via onSavePartial)
+  const askingPrice = vehicle.askingPrice ?? 0
+  const vehicleCost = vehicle.vehicleCost ?? 0
+  const purchaseDateStr = vehicle.dateInStock
+    ? new Date(vehicle.dateInStock).toISOString().slice(0, 10)
+    : ''
+
+  const costAddsTotal = costAdds.reduce((s, c) => s + c.amountCents, 0) / 100
+  const costTotal = vehicleCost + costAddsTotal + packs
+  const vehiclePrice = askingPrice - specialPrice
+  const potentialProfit = Math.max(0, vehiclePrice - costTotal)
+  const water = Math.max(0, costTotal - vehiclePrice)
 
   return (
-    <div style={{
-      background: '#ffffff',
-      border: '1px solid var(--border)',
-      borderRadius: 16,
-      padding: 20,
-      boxShadow: 'var(--shadow-sm)',
-      gridColumn: '1 / -1',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+    <GlassCard padding={22}>
+      {/* Header: eyebrow + active-calc subtitle + Retail/Wholesale toggle */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: 18, gap: 14, flexWrap: 'wrap',
+      }}>
         <div>
-          <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>Price Info</h3>
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-            {askingPrice === null || cost === null
-              ? 'Set vehicle cost and asking price to see the spread'
-              : `True cost ${m(trueCost)} · vs asking ${m(askingPrice)}`}
+          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.45)', marginBottom: 3 }}>Price &amp; Cost</p>
+          <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.5)', fontWeight: 500 }}>
+            True cost {money(costTotal)} · {costAdds.length} cost add{costAdds.length === 1 ? '' : 's'}
           </p>
         </div>
+        <SegmentedToggle
+          options={[
+            { id: 'retail',    label: 'Retail' },
+            { id: 'wholesale', label: 'Wholesale', disabled: true },
+          ]}
+          active={tab}
+          onChange={(id) => setTab(id as 'retail' | 'wholesale')}
+        />
       </div>
 
-      <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
-        <PriceTile
-          label="Price"
-          value={askingPrice !== null ? m(askingPrice) : '—'}
-          color="#0a0a0a"
-        />
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(0,0,0,0.08)', margin: '0 4px' }} />
-        <PriceTile
-          label="Est. Profit"
-          value={estProfit !== null ? m(estProfit) : '—'}
-          color="#06a55a"
-          accent={margin !== null ? `${margin.toFixed(1)}% margin` : undefined}
-        />
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(0,0,0,0.08)', margin: '0 4px' }} />
-        <PriceTile
-          label="Water"
-          value={water !== null ? m(water) : '—'}
-          color={water !== null && water > 0 ? '#dc2626' : 'rgba(0,0,0,0.35)'}
-          accent={water !== null && water > 0 ? 'Underwater on cost' : 'Not underwater'}
-        />
+      {/* ─── Stacked body: Price Info above Cost Info — each in its own glass sub-panel ─── */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 14,
+      }}>
+        {/* Price Info sub-panel */}
+        <SubPanel>
+          <SectionLabel>Price Info</SectionLabel>
+          <FieldGrid>
+            <InlineField
+              label="Asking Price"
+              value={askingPrice}
+              onCommit={(v) => onSavePartial({ askingPrice: v })}
+            />
+            <InlineField
+              label="Special Price"
+              value={specialPrice}
+              onChange={setSpecialPrice}
+              locked
+            />
+            <InlineField
+              label="Min. Down"
+              value={minDown}
+              onChange={setMinDown}
+              locked
+            />
+            <InlineField
+              label="Min. Deposit"
+              value={minDeposit}
+              onChange={setMinDeposit}
+              locked
+            />
+          </FieldGrid>
+        </SubPanel>
+
+        {/* Cost Info sub-panel */}
+        <SubPanel>
+          <SectionLabel>Cost Info</SectionLabel>
+          <FieldGrid>
+            <InlineField
+              label="Purchase Date"
+              type="date"
+              stringValue={purchaseDateStr}
+              onCommitString={(v) => onSavePartial({ dateInStock: v || null })}
+            />
+            <InlineField
+              label="Vehicle Cost"
+              value={vehicleCost}
+              onCommit={(v) => onSavePartial({ vehicleCost: v })}
+            />
+            <InlineField
+              label="Cost Adds"
+              value={costAddsTotal}
+              readonly
+              accent
+              trailing={
+                <button
+                  onClick={(e) => { e.stopPropagation(); onAddCost() }}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: '#0071e3', fontSize: 11, fontWeight: 600,
+                    padding: 0, minHeight: 'auto',
+                    letterSpacing: '-0.005em',
+                  }}
+                >+ Add</button>
+              }
+            />
+            <InlineField label="Packs"      value={packs}      onChange={setPacks}      accent />
+          </FieldGrid>
+
+          {/* Total — sits inside the Cost Info sub-panel; whitespace separates, no rules */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            paddingTop: 18, marginTop: 4,
+          }}>
+            <span style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.12em',
+              textTransform: 'uppercase', color: 'rgba(0,0,0,0.55)',
+            }}>Total</span>
+            <span style={{
+              fontSize: 17, fontWeight: 800, letterSpacing: '-0.015em',
+              color: '#0a0a0a', fontVariantNumeric: 'tabular-nums',
+            }}>{money(costTotal)}</span>
+          </div>
+        </SubPanel>
+      </div>
+
+      {/* Itemized cost adds (only when present) — compact tinted strip */}
+      {costAdds.length > 0 && (
+        <div style={{
+          marginTop: 16, padding: '10px 12px',
+          background: 'rgba(0, 113, 227, 0.04)',
+          borderRadius: 10,
+          border: '1px solid rgba(0, 113, 227, 0.1)',
+        }}>
+          <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.5)', marginBottom: 6 }}>
+            Cost adds breakdown
+          </p>
+          {costAdds.map((c, i) => {
+            const canDelete = isAdmin || c.addedBy?.id === currentUserId
+            return (
+              <div key={c.id} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '8px 0', gap: 10,
+                borderBottom: i < costAdds.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none',
+              }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+                      padding: '2px 6px', background: 'rgba(0,0,0,0.06)',
+                      color: 'rgba(0,0,0,0.62)', borderRadius: 4,
+                    }}>{COST_KIND_LABELS[c.kind] || c.kind}</span>
+                    {c.description && <span style={{ fontSize: 12, fontWeight: 600, color: '#1d1d1f' }}>{c.description}</span>}
+                  </div>
+                  <p style={{ fontSize: 11, color: 'rgba(0,0,0,0.45)', marginTop: 2 }}>
+                    {fmtDate(c.addedAt)}
+                    {c.vendor && ` · ${c.vendor}`}
+                    {c.addedBy && ` · ${c.addedBy.name}`}
+                  </p>
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#1d1d1f', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                  {money(c.amountCents / 100)}
+                </span>
+                {canDelete && (
+                  <button
+                    onClick={() => onDeleteCostAdd(c.id)}
+                    disabled={busy}
+                    title="Delete"
+                    style={{ background: 'none', border: 'none', fontSize: 14, cursor: 'pointer', color: 'rgba(0,0,0,0.35)', padding: '2px 6px', minHeight: 'auto' }}
+                  >×</button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ─── Performance Ribbon — tightly integrated footer with soft translucent dividers ─── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1px 1fr 1px 1fr',
+        alignItems: 'center',
+        marginTop: 16, paddingTop: 14,
+      }}>
+        <RibbonStat label="Vehicle Price"    value={money(vehiclePrice)}    color="#0a0a0a" />
+        <SoftDivider />
+        <RibbonStat label="Potential Profit" value={money(potentialProfit)} color="#06a55a" />
+        <SoftDivider />
+        <RibbonStat label="Water"            value={money(water)}           color={water > 0 ? '#dc2626' : 'rgba(0,0,0,0.3)'} />
+      </div>
+    </GlassCard>
+  )
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <h4 style={{
+      fontSize: 14, fontWeight: 700, letterSpacing: '-0.012em',
+      color: '#0a0a0a',
+      lineHeight: 1,
+      marginBottom: 16,
+    }}>{children}</h4>
+  )
+}
+
+// Subtly tinted glass sub-panel — softer than the parent card so sections cluster
+// visually without needing horizontal rules.
+function SubPanel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      padding: '16px 18px',
+      background: 'rgba(255, 255, 255, 0.45)',
+      backdropFilter: 'blur(20px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      borderRadius: 12,
+      border: '1px solid rgba(255, 255, 255, 0.55)',
+      boxShadow: [
+        '0 2px 8px -4px rgba(31, 38, 135, 0.06)',
+        'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
+        'inset 0 0 0 0.5px rgba(255, 255, 255, 0.4)',
+      ].join(', '),
+    }}>
+      {children}
+    </div>
+  )
+}
+
+// 2-col field grid with generous vertical breathing room — no dividers, just whitespace.
+function FieldGrid({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      columnGap: 28,
+      rowGap: 16,
+    }}>
+      {children}
+    </div>
+  )
+}
+
+function SegmentedToggle({
+  options, active, onChange,
+}: {
+  options: { id: string; label: string; disabled?: boolean }[]
+  active: string
+  onChange: (id: string) => void
+}) {
+  const activeIdx = Math.max(0, options.findIndex(o => o.id === active))
+  return (
+    <div style={{
+      position: 'relative', display: 'flex', padding: 3,
+      background: 'rgba(0,0,0,0.05)',
+      borderRadius: 999,
+      border: '1px solid rgba(0,0,0,0.06)',
+    }}>
+      <div aria-hidden style={{
+        position: 'absolute',
+        top: 3, bottom: 3, left: 3,
+        width: `calc((100% - 6px) / ${options.length})`,
+        transform: `translateX(${activeIdx * 100}%)`,
+        background: '#ffffff',
+        borderRadius: 999,
+        boxShadow: '0 2px 6px -2px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.9)',
+        transition: 'transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+        pointerEvents: 'none',
+        zIndex: 0,
+      }} />
+      {options.map(o => (
+        <button
+          key={o.id}
+          onClick={() => !o.disabled && onChange(o.id)}
+          disabled={o.disabled}
+          style={{
+            position: 'relative', zIndex: 1,
+            padding: '5px 14px',
+            background: 'transparent', border: 'none',
+            fontSize: 12, fontWeight: 600, letterSpacing: '-0.005em',
+            color: o.id === active ? '#1d1d1f' : 'rgba(0,0,0,0.5)',
+            cursor: o.disabled ? 'not-allowed' : 'pointer',
+            opacity: o.disabled ? 0.4 : 1,
+            minHeight: 'auto',
+            transition: 'color 200ms ease',
+          }}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Borderless inline field: label LEFT (muted gray) + value RIGHT (bold, integrated text).
+// No frame, no underline. The VALUE alone shows a soft translucent capsule on hover
+// to telegraph "click me to edit inline".
+function InlineField({
+  label, value, stringValue, onChange, onCommit, onCommitString,
+  type = 'money', locked, readonly, accent, placeholderEmpty, trailing,
+}: {
+  label: string
+  value?: number
+  stringValue?: string
+  onChange?: (v: number) => void
+  onCommit?: (v: number) => void | Promise<void>
+  onCommitString?: (v: string) => void | Promise<void>
+  type?: 'money' | 'date'
+  locked?: boolean
+  readonly?: boolean
+  accent?: boolean
+  placeholderEmpty?: boolean
+  trailing?: React.ReactNode
+}) {
+  const isReadonly = !!(locked || readonly)
+  const isEditable = !isReadonly || !!onChange
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<string>('')
+  const [saving, setSaving] = useState(false)
+  const [hover, setHover] = useState(false)
+
+  function startEdit() {
+    if (!isEditable) return
+    if (type === 'date') setDraft(stringValue ?? '')
+    else setDraft(value && value > 0 ? String(value) : '')
+    setEditing(true)
+  }
+
+  async function commit() {
+    setEditing(false)
+    if (type === 'date') {
+      if (onCommitString) {
+        setSaving(true)
+        try { await onCommitString(draft) } finally { setSaving(false) }
+      }
+      return
+    }
+    const n = draft === '' ? 0 : parseFloat(draft)
+    if (!Number.isFinite(n)) return
+    if (onCommit) {
+      setSaving(true)
+      try { await onCommit(n) } finally { setSaving(false) }
+    } else if (onChange) {
+      onChange(n)
+    }
+  }
+
+  const display = type === 'date'
+    ? (stringValue
+        ? new Date(stringValue + 'T00:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
+        : '—')
+    : (placeholderEmpty
+        ? '—'
+        : `$${(value ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`)
+
+  const valueColor = accent ? '#0071e3'
+    : (placeholderEmpty && !value ? 'rgba(0,0,0,0.3)' : '#0a0a0a')
+
+  const lineColor = rowLineColor(editing, hover, isEditable)
+
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        gap: 10,
+        opacity: saving ? 0.55 : 1,
+        paddingBottom: 7,
+        borderBottom: `1px solid ${lineColor}`,
+        transition: 'border-color 180ms ease',
+      }}>
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        fontSize: 11, fontWeight: 500,
+        color: 'rgba(0,0,0,0.5)',
+        letterSpacing: '-0.005em',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden', textOverflow: 'ellipsis',
+        minWidth: 0,
+      }}>
+        {label}
+        {locked && <span aria-hidden style={{ fontSize: 11, color: 'rgba(0,0,0,0.28)', lineHeight: 1 }}>⋮</span>}
+      </span>
+
+      <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, flexShrink: 0 }}>
+        {trailing}
+        {editing ? (
+          <input
+            type={type === 'date' ? 'date' : 'text'}
+            inputMode={type === 'date' ? undefined : 'decimal'}
+            value={draft}
+            autoFocus
+            size={type === 'date' ? undefined : Math.max(3, draft.length || 1)}
+            onChange={(e) => {
+              if (type === 'date') setDraft(e.target.value)
+              else setDraft(e.target.value.replace(/[^0-9.]/g, ''))
+            }}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit()
+              if (e.key === 'Escape') setEditing(false)
+            }}
+            style={{
+              border: 'none', outline: 'none',
+              background: 'transparent',
+              padding: '1px 0',
+              margin: 0,
+              fontSize: 14, fontWeight: 700, letterSpacing: '-0.005em',
+              color: valueColor,
+              textAlign: 'right',
+              fontVariantNumeric: 'tabular-nums',
+              width: 'auto',
+              boxSizing: 'content-box',
+            }}
+          />
+        ) : (
+          <button
+            onClick={startEdit}
+            disabled={!isEditable}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '1px 0',
+              margin: 0,
+              fontSize: 14, fontWeight: 700, letterSpacing: '-0.005em',
+              color: valueColor,
+              fontVariantNumeric: 'tabular-nums',
+              cursor: isEditable ? 'pointer' : 'default',
+              minHeight: 'auto',
+            }}
+          >
+            {display}
+          </button>
+        )}
       </div>
     </div>
+  )
+}
+
+// Compact horizontal performance ribbon stat — used 3-up at the card base.
+function RibbonStat({ label, value, color }: {
+  label: string
+  value: string
+  color: string
+}) {
+  return (
+    <div style={{
+      padding: '4px 18px',
+      display: 'flex', flexDirection: 'column', gap: 3,
+    }}>
+      <p style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: '0.14em',
+        textTransform: 'uppercase', color: 'rgba(0,0,0,0.45)',
+      }}>{label}</p>
+      <p style={{
+        fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em',
+        color, fontVariantNumeric: 'tabular-nums',
+        lineHeight: 1.1,
+      }}>{value}</p>
+    </div>
+  )
+}
+
+// Soft translucent vertical divider — fades at top and bottom for the polished look.
+function SoftDivider() {
+  return (
+    <div aria-hidden style={{
+      width: 1, height: 32,
+      background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.12) 25%, rgba(0,0,0,0.12) 75%, transparent)',
+      justifySelf: 'center',
+    }} />
+  )
+}
+
+// Logistics Hub — merged Title & Location + Source + Floorplan
+function LogisticsHubCard({
+  vehicle, flooring, canSeeMoney, isAdmin, onEditFlooring,
+}: {
+  vehicle: Vehicle
+  flooring: ReturnType<typeof computeFlooring>
+  canSeeMoney: boolean
+  isAdmin: boolean
+  onEditFlooring: () => void
+}) {
+  const rows: { label: string; value: string }[] = [
+    { label: 'Title', value: vehicle.titleStatus || '—' },
+    { label: 'Location', value: vehicle.location || '—' },
+    { label: 'Inventory', value: vehicle.inventoryStatus || '—' },
+    { label: 'Purchase Type', value: vehicle.purchaseType || '—' },
+  ]
+  if (vehicle.purchasedFrom) rows.push({ label: 'Source', value: vehicle.purchasedFrom })
+  if (vehicle.dateInStock) rows.push({ label: 'Date In', value: fmtDate(vehicle.dateInStock) })
+  if (vehicle.consignmentCommissionPct !== null) rows.push({ label: 'Consign %', value: `${vehicle.consignmentCommissionPct}%` })
+
+  return (
+    <GlassCard>
+      <GlassEyebrow label="Logistics" subtitle="Title · Location · Floorplan" />
+
+      <div style={{ borderRadius: 12, overflow: 'hidden' }}>
+        {rows.map((r, i) => (
+          <div key={r.label} style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            padding: '10px 12px',
+            background: i % 2 === 0 ? 'rgba(0,0,0,0.025)' : 'transparent',
+            gap: 12,
+          }}>
+            <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.55)', fontWeight: 500 }}>{r.label}</span>
+            <span style={{ fontSize: 13, color: '#1d1d1f', fontWeight: 600, textAlign: 'right' }}>{r.value}</span>
+          </div>
+        ))}
+      </div>
+
+      {canSeeMoney && (
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Floorplan</span>
+            {isAdmin && (
+              <button onClick={onEditFlooring} style={{ background: 'none', border: 'none', color: '#0071e3', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0, minHeight: 'auto' }}>
+                {flooring ? 'Edit' : '+ Set'}
+              </button>
+            )}
+          </div>
+          {flooring ? (
+            <div style={{ borderRadius: 12, overflow: 'hidden' }}>
+              {[
+                { label: 'Lender', value: flooring.lender },
+                { label: 'Principal', value: money(flooring.principal) },
+                { label: 'Rate', value: `${flooring.dailyRate}% / day` },
+                { label: 'Cost / Day', value: money(flooring.costPerDay), accent: '#dc2626' },
+                { label: 'Accrued', value: `${money(flooring.accruedInterest)} · ${flooring.daysHeld}d` },
+                { label: 'Payoff', value: money(flooring.payoff), accent: '#dc2626' },
+              ].map((r, i) => (
+                <div key={r.label} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                  padding: '10px 12px',
+                  background: i % 2 === 0 ? 'rgba(0,0,0,0.025)' : 'transparent',
+                  gap: 12,
+                }}>
+                  <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.55)', fontWeight: 500 }}>{r.label}</span>
+                  <span style={{ fontSize: 13, color: r.accent || '#1d1d1f', fontWeight: 600, textAlign: 'right' }}>{r.value}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.5)', fontStyle: 'italic' }}>
+              {vehicle.purchaseType === 'CONSIGNMENT' ? 'Consignment — not floored.' : 'Not on a floorplan.'}
+            </p>
+          )}
+        </div>
+      )}
+    </GlassCard>
+  )
+}
+
+// Premium CARFAX button card — glow on hover
+function CarfaxCard({ vin }: { vin: string }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <a
+      href={`https://www.carfax.com/VehicleHistory/p/Report.cfx?partner=DVW_1&vin=${encodeURIComponent(vin)}`}
+      target="_blank"
+      rel="noreferrer"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        textDecoration: 'none', gap: 16,
+        padding: '18px 22px',
+        background: 'rgba(255, 255, 255, 0.55)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderRadius: 20,
+        border: '1px solid rgba(255, 255, 255, 0.5)',
+        boxShadow: hovered
+          ? [
+              '0 14px 40px -10px rgba(31, 38, 135, 0.22)',
+              '0 0 0 1px rgba(220, 38, 38, 0.22)',
+              '0 0 36px -6px rgba(220, 38, 38, 0.28)',
+              'inset 0 1px 0 rgba(255, 255, 255, 0.85)',
+            ].join(', ')
+          : [
+              '0 8px 28px -10px rgba(31, 38, 135, 0.12)',
+              '0 1px 3px rgba(0, 0, 0, 0.03)',
+              'inset 0 1px 0 rgba(255, 255, 255, 0.75)',
+              'inset 0 0 0 0.5px rgba(255, 255, 255, 0.35)',
+            ].join(', '),
+        transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+        transition: 'transform 220ms cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 220ms ease',
+        cursor: 'pointer',
+        color: '#1d1d1f',
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#dc2626', marginBottom: 4 }}>CARFAX</p>
+        <p style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', color: '#1d1d1f' }}>View Vehicle History</p>
+        <p style={{ fontSize: 11, color: 'rgba(0,0,0,0.45)', marginTop: 3, fontFamily: 'ui-monospace, SFMono-Regular, monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{vin}</p>
+      </div>
+      <div style={{
+        width: 36, height: 36, borderRadius: '50%',
+        background: hovered ? 'linear-gradient(135deg, #dc2626, #991b1b)' : 'rgba(220, 38, 38, 0.08)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: hovered ? '#fff' : '#dc2626',
+        fontSize: 15, fontWeight: 700,
+        flexShrink: 0,
+        boxShadow: hovered ? '0 4px 12px -2px rgba(220, 38, 38, 0.4)' : 'none',
+        transition: 'all 220ms ease',
+      }}>→</div>
+    </a>
+  )
+}
+
+function PrintHubCard() {
+  return (
+    <GlassCard>
+      <GlassEyebrow label="Print Hub" subtitle="Generate dealer documents" />
+      <PrintRow label="Window Sticker" subtitle="Compliance + pricing layout" />
+      <PrintRow label="Buyer's Guide" subtitle="FTC As-Is / Warranty" />
+    </GlassCard>
+  )
+}
+
+function PrintRow({ label, subtitle }: { label: string; subtitle: string }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      onClick={() => alert(`${label} — coming soon`)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        width: '100%', textAlign: 'left',
+        padding: '12px 14px', marginBottom: 8,
+        background: hovered ? 'rgba(0, 113, 227, 0.06)' : 'rgba(0,0,0,0.025)',
+        border: hovered ? '1px solid rgba(0, 113, 227, 0.25)' : '1px solid rgba(0,0,0,0.05)',
+        borderRadius: 12, cursor: 'pointer',
+        minHeight: 'auto',
+        transition: 'background 180ms ease, border-color 180ms ease',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{
+          width: 28, height: 28, borderRadius: 8,
+          background: 'rgba(255,255,255,0.7)',
+          border: '1px solid rgba(0,0,0,0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 13,
+        }} aria-hidden>⎙</span>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#1d1d1f' }}>{label}</p>
+          <p style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)', marginTop: 2 }}>{subtitle}</p>
+        </div>
+      </div>
+      <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.4)', flexShrink: 0 }}>↗</span>
+    </button>
   )
 }
 
@@ -1597,48 +2351,6 @@ function V2StatusPill({ value }: { value: string }) {
   )
 }
 
-function V2Card({ title, subtitle, children, action, wide }: { title: string; subtitle?: string; children: React.ReactNode; action?: string; wide?: boolean }) {
-  return (
-    <div style={{
-      background: '#ffffff',
-      border: '1px solid var(--border)',
-      borderRadius: 16,
-      padding: 20,
-      boxShadow: 'var(--shadow-sm)',
-      gridColumn: wide ? '1 / -1' : undefined,
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-        <div>
-          <h3 style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em' }}>{title}</h3>
-          {subtitle && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{subtitle}</p>}
-        </div>
-        {action && <button style={v2Btn('ghost')}>{action}</button>}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function V2Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 0', borderBottom: '1px solid var(--border)', gap: 12 }}>
-      <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{label}</span>
-      <span style={{ fontSize: 14, color: 'var(--text-primary)', fontWeight: 600, textAlign: 'right' }}>{value}</span>
-    </div>
-  )
-}
-
-function V2StatMini({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'positive' | 'negative' }) {
-  const valueColor = accent === 'positive' ? '#16a34a' : accent === 'negative' ? '#ef4444' : 'var(--text-primary)'
-  return (
-    <div style={{ background: '#f8f8f5', borderRadius: 10, padding: '10px 12px' }}>
-      <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 3 }}>{label}</p>
-      <p style={{ fontSize: 16, fontWeight: 700, color: valueColor }}>{value}</p>
-      {sub && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{sub}</p>}
-    </div>
-  )
-}
-
 function v2Btn(variant: 'primary' | 'ghost'): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: '8px 14px',
@@ -1652,21 +2364,30 @@ function v2Btn(variant: 'primary' | 'ghost'): React.CSSProperties {
   return { ...base, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border)' }
 }
 
-// ─── Media Card (sectioned by type) ──────────────────────────────────
+// ─── Media & Marketing Studio ───────────────────────────────────────
 
-const MEDIA_TYPE_ORDER = ['exterior', 'interior', 'undercarriage', 'walkaround_video', 'turntable_video', 'doc', 'other'] as const
+type StudioCategory = {
+  id: string
+  label: string
+  types: string[]
+  accept: string
+  defaultType: string
+  variant: 'photo' | 'video' | 'doc'
+}
 
+const STUDIO_CATEGORIES: StudioCategory[] = [
+  { id: 'exterior',      label: 'Exterior',      types: ['exterior'],                            accept: 'image/*', defaultType: 'exterior',         variant: 'photo' },
+  { id: 'interior',      label: 'Interior',      types: ['interior'],                            accept: 'image/*', defaultType: 'interior',         variant: 'photo' },
+  { id: 'undercarriage', label: 'Undercarriage', types: ['undercarriage'],                       accept: 'image/*', defaultType: 'undercarriage',    variant: 'photo' },
+  { id: 'videos',        label: 'Videos',        types: ['walkaround_video', 'turntable_video'], accept: 'video/*', defaultType: 'walkaround_video', variant: 'video' },
+]
 
-function MediaCard({
-  vehicleId,
-  media,
-  onChange,
-  currentUserId,
-  isAdmin,
+function MediaStudio({
+  vehicleId, media, onChange, currentUserId, isAdmin,
 }: {
   vehicleId: string
   media: MediaAsset[]
-  onChange: () => void
+  onChange: () => void | Promise<void>
   currentUserId: string | null
   isAdmin: boolean
 }) {
@@ -1675,7 +2396,6 @@ function MediaCard({
   const [err, setErr] = useState<string | null>(null)
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
 
-  // Flat list of viewable items (photos + videos) in display order, for lightbox nav
   const viewable = media.filter(m => m.type !== 'doc')
 
   async function uploadFile(file: File, type: string) {
@@ -1739,45 +2459,40 @@ function MediaCard({
   }
 
   return (
-    <div style={{
-      background: '#ffffff',
-      borderRadius: 20,
-      padding: '24px 24px 8px',
-      gridColumn: '1 / -1',
-      border: '1px solid rgba(0,0,0,0.05)',
-      boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-    }}>
-      <div style={{ marginBottom: 8 }}>
-        <h3 style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.01em', color: '#1d1d1f' }}>Media</h3>
-        <p style={{ fontSize: 13, color: '#86868b', marginTop: 4, fontWeight: 400 }}>
-          {media.length === 0 ? 'Drop photos and videos into any section below' : `${media.length} item${media.length === 1 ? '' : 's'}`}
-        </p>
-      </div>
+    <GlassCard padding={24}>
+      <GlassEyebrow
+        label="Visual Asset Studio"
+        subtitle={media.length === 0
+          ? 'Drop or click any tile to upload photos, videos, documents'
+          : `${media.length} asset${media.length === 1 ? '' : 's'} across ${STUDIO_CATEGORIES.length} categories`}
+      />
 
       {err && (
         <p style={{
-          color: '#d70015', fontSize: 13, marginTop: 12, marginBottom: 4,
-          padding: '8px 12px', background: '#fff1f0', borderRadius: 8,
+          color: '#d70015', fontSize: 13, marginBottom: 14,
+          padding: '8px 12px', background: 'rgba(255, 59, 48, 0.08)', borderRadius: 10,
+          border: '1px solid rgba(255, 59, 48, 0.18)',
         }}>{err}</p>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {MEDIA_TYPE_ORDER.map((type) => {
-          const items = media.filter(m => m.type === type)
-          const isUploading = uploadingType === type
-          const acceptType = type === 'doc' ? '' : type.endsWith('_video') ? 'video/*' : 'image/*'
-
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+        gap: 16,
+      }}>
+        {STUDIO_CATEGORIES.map((cat) => {
+          const items = media.filter(m => cat.types.includes(m.type))
+          const isUploading = uploadingType === cat.defaultType
           return (
-            <MediaSection
-              key={type}
-              type={type}
+            <AssetTile
+              key={cat.id}
+              category={cat}
               items={items}
               isUploading={isUploading}
               uploadProgress={progress}
-              acceptType={acceptType}
-              onFiles={(files) => handleFiles(files, type)}
+              onFiles={(files) => handleFiles(files, cat.defaultType)}
               onDelete={deleteAsset}
-              onOpenLightbox={(asset) => {
+              onOpen={(asset) => {
                 const idx = viewable.findIndex(v => v.id === asset.id)
                 if (idx >= 0) setLightboxIdx(idx)
               }}
@@ -1788,7 +2503,6 @@ function MediaCard({
         })}
       </div>
 
-      {/* Lightbox */}
       {lightboxIdx !== null && viewable[lightboxIdx] && (
         <MediaLightbox
           items={viewable}
@@ -1797,41 +2511,41 @@ function MediaCard({
           onChangeIdx={setLightboxIdx}
         />
       )}
-    </div>
+    </GlassCard>
   )
 }
 
-function MediaSection({
-  type, items, isUploading, uploadProgress, acceptType, onFiles, onDelete, onOpenLightbox, currentUserId, isAdmin,
+function AssetTile({
+  category, items, isUploading, uploadProgress, onFiles, onDelete, onOpen, currentUserId, isAdmin,
 }: {
-  type: string
+  category: StudioCategory
   items: MediaAsset[]
   isUploading: boolean
   uploadProgress: number
-  acceptType: string
   onFiles: (files: FileList | null) => void
   onDelete: (id: string) => void
-  onOpenLightbox: (asset: MediaAsset) => void
+  onOpen: (asset: MediaAsset) => void
   currentUserId: string | null
   isAdmin: boolean
 }) {
-  const isEmpty = items.length === 0
-  const isVideoSection = isVideoType(type)
-  const isDocSection = type === 'doc'
-  const label = MEDIA_TYPE_LABELS[type] || type
   const [isDragOver, setIsDragOver] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const isEmpty = items.length === 0
+  const hero = items[0]
+  const isDoc = category.variant === 'doc'
+  const canDeleteHero = !!hero && (isAdmin || hero.uploadedBy?.id === currentUserId)
 
-  function handleDragOver(e: React.DragEvent) {
+  function onDragOver(e: React.DragEvent) {
     e.preventDefault()
     e.stopPropagation()
     if (!isDragOver) setIsDragOver(true)
   }
-  function handleDragLeave(e: React.DragEvent) {
+  function onDragLeave(e: React.DragEvent) {
     e.preventDefault()
     e.stopPropagation()
     setIsDragOver(false)
   }
-  function handleDrop(e: React.DragEvent) {
+  function onDrop(e: React.DragEvent) {
     e.preventDefault()
     e.stopPropagation()
     setIsDragOver(false)
@@ -1840,204 +2554,1934 @@ function MediaSection({
     }
   }
 
-  // EMPTY: minimal one-line — Apple Finder style
-  if (isEmpty) {
-    return (
-      <div
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 0', gap: 10, flexWrap: 'wrap',
-          borderBottom: '1px solid rgba(0,0,0,0.06)',
-          background: isDragOver ? 'rgba(0,122,255,0.05)' : 'transparent',
-          transition: 'background 200ms ease',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span style={{ fontSize: 15, fontWeight: 500, color: '#1d1d1f' }}>{label}</span>
-          <span style={{ fontSize: 13, color: '#86868b', fontWeight: 400 }}>
-            {isDragOver ? 'Drop to upload' : 'Empty'}
-          </span>
-        </div>
-        <label style={{
-          padding: '4px 0', fontSize: 13, fontWeight: 500,
-          color: '#0071e3', background: 'transparent', border: 'none',
-          cursor: isUploading ? 'wait' : 'pointer', minHeight: 'auto',
-          transition: 'opacity 150ms ease',
-        }}>
-          {isUploading ? `Uploading ${uploadProgress}%` : 'Add'}
-          <input
-            type="file"
-            multiple
-            accept={acceptType}
-            disabled={isUploading}
-            onChange={(e) => onFiles(e.target.files)}
-            style={{ display: 'none' }}
-          />
-        </label>
-      </div>
-    )
-  }
+  const overlay = hero
+    ? 'linear-gradient(180deg, rgba(0,0,0,0) 50%, rgba(0,0,0,0.5) 100%)'
+    : 'transparent'
 
-  // POPULATED: full section with gallery
   return (
     <div
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onClick={!isEmpty && !isDoc ? () => onOpen(hero!) : undefined}
       style={{
-        padding: '20px 0',
-        borderBottom: '1px solid rgba(0,0,0,0.06)',
-        background: isDragOver ? 'rgba(0,122,255,0.05)' : 'transparent',
-        transition: 'background 200ms ease',
+        position: 'relative',
+        aspectRatio: '1 / 1',
+        borderRadius: 12,
+        overflow: 'hidden',
+        background: hero && category.variant !== 'doc' ? '#1d1d1f' : 'rgba(255, 255, 255, 0.5)',
+        backdropFilter: hero && category.variant !== 'doc' ? undefined : 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: hero && category.variant !== 'doc' ? undefined : 'blur(20px) saturate(180%)',
+        border: '1px solid rgba(255, 255, 255, 0.55)',
+        boxShadow: hovered
+          ? [
+              '0 12px 32px -10px rgba(31, 38, 135, 0.22)',
+              'inset 0 1px 0 rgba(255, 255, 255, 0.75)',
+              'inset 0 0 0 0.5px rgba(255, 255, 255, 0.35)',
+            ].join(', ')
+          : [
+              '0 4px 14px -6px rgba(31, 38, 135, 0.1)',
+              'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
+              'inset 0 0 0 0.5px rgba(255, 255, 255, 0.3)',
+            ].join(', '),
+        transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+        transition: 'transform 240ms cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 240ms ease',
+        cursor: isEmpty || isDoc ? 'default' : 'pointer',
       }}
     >
-      <div style={{
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        marginBottom: 14, gap: 10, flexWrap: 'wrap',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.01em' }}>{label}</span>
-          <span style={{ fontSize: 13, color: '#86868b', fontWeight: 400 }}>
-            {isDragOver ? 'Drop to add' : `${items.length} ${isVideoSection ? 'video' : isDocSection ? 'document' : 'photo'}${items.length === 1 ? '' : 's'}`}
-          </span>
-        </div>
-        <label style={{
-          padding: '4px 0', fontSize: 13, fontWeight: 500,
-          color: '#0071e3', background: 'transparent', border: 'none',
-          cursor: isUploading ? 'wait' : 'pointer', minHeight: 'auto',
+      {/* Hero media — fills edge-to-edge */}
+      {hero && category.variant === 'photo' && (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img
+          src={hero.url}
+          alt={hero.caption || category.label}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+        />
+      )}
+      {hero && category.variant === 'video' && (
+        <video
+          src={hero.url}
+          muted
+          playsInline
+          preload="metadata"
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block', background: '#000' }}
+        />
+      )}
+      {hero && category.variant === 'doc' && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 8, padding: 20, textAlign: 'center',
+          background: 'linear-gradient(145deg, rgba(255,255,255,0.85), rgba(255,255,255,0.5))',
         }}>
-          {isUploading ? `Uploading ${uploadProgress}%` : 'Add'}
-          <input
-            type="file"
-            multiple
-            accept={acceptType}
-            disabled={isUploading}
-            onChange={(e) => onFiles(e.target.files)}
-            style={{ display: 'none' }}
-          />
-        </label>
+          <CategoryIcon variant={category.variant} size={42} muted />
+          <span style={{
+            fontSize: 12, fontWeight: 600, color: '#1d1d1f',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%',
+          }}>{hero.filename || 'Document'}</span>
+        </div>
+      )}
+
+      {/* Empty-state icon */}
+      {isEmpty && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <CategoryIcon variant={category.variant} size={44} muted />
+        </div>
+      )}
+
+      {/* Bottom gradient overlay (only when hero present, for label legibility) */}
+      <div style={{ position: 'absolute', inset: 0, background: overlay, pointerEvents: 'none' }} />
+
+      {/* Top-left category label */}
+      <div style={{ position: 'absolute', top: 12, left: 12, pointerEvents: 'none', zIndex: 2 }}>
+        <p style={{
+          fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase',
+          color: hero && category.variant !== 'doc' ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.55)',
+          textShadow: hero && category.variant !== 'doc' ? '0 1px 2px rgba(0,0,0,0.4)' : 'none',
+        }}>{category.label}</p>
       </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-        gap: 14,
-      }}>
-        {items.map((m) => {
-          const canDelete = isAdmin || m.uploadedBy?.id === currentUserId
-          return (
-            <MediaThumb
-              key={m.id}
-              asset={m}
-              isVideo={isVideoSection}
-              isDoc={isDocSection}
-              canDelete={canDelete}
-              onDelete={onDelete}
-              onClick={() => !isDocSection && onOpenLightbox(m)}
-            />
-          )
-        })}
-      </div>
+      {/* Multi-asset count badge */}
+      {items.length > 1 && (
+        <div style={{
+          position: 'absolute', top: 10, right: 10,
+          zIndex: 2,
+          padding: '4px 10px', borderRadius: 999,
+          background: 'rgba(0, 0, 0, 0.55)',
+          backdropFilter: 'blur(14px)',
+          WebkitBackdropFilter: 'blur(14px)',
+          color: '#fff',
+          fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.15)',
+        }}>+{items.length - 1}</div>
+      )}
+
+      {/* Document hero — clickable to open in new tab */}
+      {hero && isDoc && (
+        <a
+          href={hero.url}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Open ${hero.filename || 'document'}`}
+          style={{ position: 'absolute', inset: 0, zIndex: 3, display: 'block' }}
+        />
+      )}
+
+      {/* Hover delete on hero */}
+      {canDeleteHero && hovered && (
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(hero!.id) }}
+          title="Delete"
+          style={{
+            position: 'absolute', top: 10,
+            right: items.length > 1 ? 60 : 10,
+            zIndex: 4,
+            background: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(8px)',
+            border: 'none', color: '#fff',
+            fontSize: 13, lineHeight: 1,
+            width: 26, height: 26, borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', minHeight: 'auto',
+          }}
+        >×</button>
+      )}
+
+      {/* "+ Add" pill — bottom-right */}
+      <label
+        onClick={(e) => e.stopPropagation()}
+        onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.04)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)' }}
+        style={{
+          position: 'absolute', bottom: 10, right: 10,
+          zIndex: 3,
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          padding: '6px 12px',
+          background: 'rgba(255, 255, 255, 0.88)',
+          backdropFilter: 'blur(14px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(14px) saturate(180%)',
+          border: '1px solid rgba(255, 255, 255, 0.6)',
+          color: '#1d1d1f',
+          fontSize: 11, fontWeight: 600, letterSpacing: '-0.005em',
+          borderRadius: 999,
+          cursor: isUploading ? 'wait' : 'pointer',
+          minHeight: 'auto',
+          boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+          transition: 'transform 160ms ease',
+        }}
+      >
+        {isUploading ? `${uploadProgress}%` : isEmpty ? '+ Add' : '+ More'}
+        <input
+          type="file"
+          multiple
+          accept={category.accept}
+          disabled={isUploading}
+          onChange={(e) => { onFiles(e.target.files); e.currentTarget.value = '' }}
+          style={{ display: 'none' }}
+        />
+      </label>
+
+      {/* Drag-over hint */}
+      {isDragOver && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          zIndex: 5,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0, 113, 227, 0.12)',
+          border: '2px dashed rgba(0, 113, 227, 0.65)',
+          borderRadius: 12,
+          pointerEvents: 'none',
+        }}>
+          <span style={{
+            fontSize: 12, fontWeight: 700, color: '#0071e3',
+            textTransform: 'uppercase', letterSpacing: '0.12em',
+            background: 'rgba(255,255,255,0.92)', padding: '6px 14px', borderRadius: 999,
+            boxShadow: '0 4px 12px rgba(0, 113, 227, 0.22)',
+          }}>Drop to upload</span>
+        </div>
+      )}
     </div>
   )
 }
 
-// Single thumbnail with hover lift + click-to-open
-function MediaThumb({
-  asset, isVideo, isDoc, canDelete, onDelete, onClick,
+function CategoryIcon({ variant, size = 44, muted = false }: { variant: 'photo' | 'video' | 'doc'; size?: number; muted?: boolean }) {
+  const stroke = muted ? 'rgba(0,0,0,0.32)' : '#1d1d1f'
+  const sw = 1.4
+
+  if (variant === 'video') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+        <rect x="6" y="10" width="36" height="28" rx="4" stroke={stroke} strokeWidth={sw} />
+        <path d="M21 19l8 5-8 5v-10z" fill={stroke} />
+      </svg>
+    )
+  }
+  if (variant === 'doc') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+        <path d="M12 6h18l8 8v28a2 2 0 0 1-2 2H12a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
+        <path d="M30 6v8h8" stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
+        <path d="M16 24h14M16 30h14M16 36h8" stroke={stroke} strokeWidth={sw} strokeLinecap="round" />
+      </svg>
+    )
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+      <rect x="6" y="10" width="36" height="28" rx="4" stroke={stroke} strokeWidth={sw} />
+      <circle cx="17" cy="20" r="3" stroke={stroke} strokeWidth={sw} />
+      <path d="M6 32l10-10 10 10 6-6 10 10" stroke={stroke} strokeWidth={sw} strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+// ─── Channel Distribution (marketplace syndication) ─────────────────
+
+type SyndicationChannel = {
+  id: string
+  name: string
+  initials: string
+  subtitle: string
+}
+
+const SYNDICATION_CHANNELS: SyndicationChannel[] = [
+  { id: 'ebay',        name: 'eBay Motors',      initials: 'eB', subtitle: 'Auction + Buy It Now' },
+  { id: 'hemmings',    name: 'Hemmings',         initials: 'Hm', subtitle: 'Classic + collector' },
+  { id: 'carsforsale', name: 'CarsForSale',      initials: 'CF', subtitle: 'National retail' },
+  { id: 'craigslist',  name: 'Craigslist',       initials: 'CL', subtitle: 'Local listings' },
+  { id: 'mikalyzed',   name: 'Mikalyzed Retail', initials: 'Mk', subtitle: 'Dealer site' },
+]
+
+function ChannelSyndicationCard() {
+  // UI-only state for demo. Persist via a ChannelListing model in a follow-up.
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({})
+
+  function toggle(id: string) {
+    setEnabled(cur => ({ ...cur, [id]: !cur[id] }))
+  }
+
+  const liveCount = Object.values(enabled).filter(Boolean).length
+
+  return (
+    <GlassCard padding={24}>
+      <GlassEyebrow
+        label="Channel Distribution"
+        subtitle={liveCount > 0
+          ? `Live on ${liveCount} of ${SYNDICATION_CHANNELS.length} marketplaces`
+          : `Ready to syndicate to ${SYNDICATION_CHANNELS.length} marketplaces`}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {SYNDICATION_CHANNELS.map(ch => (
+          <SyndicationRow
+            key={ch.id}
+            channel={ch}
+            enabled={!!enabled[ch.id]}
+            onToggle={() => toggle(ch.id)}
+          />
+        ))}
+      </div>
+    </GlassCard>
+  )
+}
+
+function SyndicationRow({
+  channel, enabled, onToggle,
 }: {
-  asset: MediaAsset
-  isVideo: boolean
-  isDoc: boolean
-  canDelete: boolean
-  onDelete: (id: string) => void
-  onClick: () => void
+  channel: SyndicationChannel
+  enabled: boolean
+  onToggle: () => void
 }) {
   const [hovered, setHovered] = useState(false)
+  const status = enabled ? 'Live' : 'Ready'
+  const statusColor = enabled ? '#06a55a' : 'rgba(0,0,0,0.4)'
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        position: 'relative',
-        borderRadius: 12,
-        overflow: 'hidden',
-        background: '#f5f5f7',
-        cursor: isDoc ? 'default' : 'pointer',
-        transform: hovered && !isDoc ? 'translateY(-2px)' : 'translateY(0)',
-        boxShadow: hovered && !isDoc
-          ? '0 8px 24px rgba(0,0,0,0.12)'
-          : '0 1px 3px rgba(0,0,0,0.05)',
-        transition: 'transform 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 250ms ease',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 16, padding: '14px 18px',
+        background: hovered ? 'rgba(255, 255, 255, 0.68)' : 'rgba(255, 255, 255, 0.45)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderRadius: 14,
+        border: '1px solid rgba(255, 255, 255, 0.55)',
+        boxShadow: [
+          '0 2px 8px -2px rgba(31, 38, 135, 0.07)',
+          'inset 0 1px 0 rgba(255, 255, 255, 0.75)',
+        ].join(', '),
+        transition: 'background 180ms ease',
       }}
-      onClick={isVideo ? undefined : onClick}
     >
-      {isVideo ? (
-        <video
-          src={asset.url}
-          controls
+      {/* Left: Logo + name + status */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+        <ChannelLogo channel={channel} enabled={enabled} />
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#1d1d1f', letterSpacing: '-0.005em' }}>{channel.name}</p>
+          <p style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)', marginTop: 2, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              display: 'inline-block', width: 5, height: 5, borderRadius: '50%',
+              background: statusColor,
+              boxShadow: enabled ? '0 0 6px rgba(6, 165, 90, 0.7)' : 'none',
+              flexShrink: 0,
+            }} />
+            <span style={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700, color: statusColor }}>{status}</span>
+            <span style={{ color: 'rgba(0,0,0,0.4)' }}>· {channel.subtitle}</span>
+          </p>
+        </div>
+      </div>
+
+      {/* Right: Switch + settings gear */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <FluidSwitch checked={enabled} onChange={onToggle} />
+        <button
+          onClick={() => alert(`${channel.name} — pricing overrides & notes (coming soon)`)}
+          aria-label={`${channel.name} settings`}
           style={{
-            width: '100%', aspectRatio: '4/3', objectFit: 'cover',
-            display: 'block', background: '#000',
-          }}
-        />
-      ) : isDoc ? (
-        <a
-          href={asset.url}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          style={{
+            width: 28, height: 28, borderRadius: '50%',
+            background: 'transparent', border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            aspectRatio: '4/3', background: '#f5f5f7',
-            color: '#1d1d1f', textDecoration: 'none', gap: 6,
-            flexDirection: 'column', padding: 12, textAlign: 'center',
+            color: 'rgba(0,0,0,0.4)', minHeight: 'auto',
+            transition: 'color 180ms ease, background 180ms ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'rgba(0,0,0,0.7)'; e.currentTarget.style.background = 'rgba(0,0,0,0.05)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'rgba(0,0,0,0.4)'; e.currentTarget.style.background = 'transparent' }}
+        >
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ChannelLogo({ channel, enabled }: { channel: SyndicationChannel; enabled: boolean }) {
+  return (
+    <div style={{
+      width: 38, height: 38, borderRadius: 10,
+      background: enabled ? '#1d1d1f' : 'rgba(0, 0, 0, 0.05)',
+      color: enabled ? '#fff' : 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: 13, fontWeight: 800, letterSpacing: '-0.01em',
+      flexShrink: 0,
+      border: '1px solid rgba(0, 0, 0, 0.06)',
+      boxShadow: enabled
+        ? '0 2px 8px -2px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)'
+        : 'inset 0 1px 0 rgba(255, 255, 255, 0.65)',
+      transition: 'background 220ms ease, color 220ms ease, box-shadow 220ms ease',
+    }}>
+      {channel.initials}
+    </div>
+  )
+}
+
+function FluidSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      style={{
+        position: 'relative',
+        width: 44, height: 26, borderRadius: 999,
+        background: checked ? '#06a55a' : 'rgba(0, 0, 0, 0.18)',
+        boxShadow: checked
+          ? '0 0 0 1px rgba(6, 165, 90, 0.35), 0 0 14px rgba(6, 165, 90, 0.45), inset 0 1px 2px rgba(0,0,0,0.12)'
+          : 'inset 0 1px 2px rgba(0,0,0,0.18)',
+        border: 'none', cursor: 'pointer', padding: 0,
+        transition: 'background 240ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 240ms ease',
+        minHeight: 'auto',
+        flexShrink: 0,
+      }}
+    >
+      <span style={{
+        position: 'absolute', top: 2,
+        left: checked ? 20 : 2,
+        width: 22, height: 22, borderRadius: '50%',
+        background: '#ffffff',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.22), 0 0 0 0.5px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.85)',
+        transition: 'left 280ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+      }} />
+    </button>
+  )
+}
+
+// ─── Workspace Tab Navigation (fluid satin capsule) ─────────────────
+
+type TabId = 'general' | 'recon' | 'marketing' | 'media' | 'files' | 'logs'
+type TabDef = { id: TabId; label: string; badge?: string }
+
+function TabNav({ tabs, activeId, onChange }: {
+  tabs: TabDef[]
+  activeId: TabId
+  onChange: (id: TabId) => void
+}) {
+  const activeIdx = Math.max(0, tabs.findIndex(t => t.id === activeId))
+  return (
+    <div style={{
+      position: 'relative',
+      display: 'flex',
+      padding: 4,
+      marginBottom: 24,
+      background: 'rgba(255, 255, 255, 0.5)',
+      backdropFilter: 'blur(20px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      borderRadius: 999,
+      border: '1px solid rgba(255, 255, 255, 0.55)',
+      boxShadow: [
+        '0 4px 14px -4px rgba(31, 38, 135, 0.1)',
+        'inset 0 1px 0 rgba(255, 255, 255, 0.75)',
+        'inset 0 0 0 0.5px rgba(255, 255, 255, 0.35)',
+      ].join(', '),
+    }}>
+      {/* Sliding satin indicator */}
+      <div aria-hidden style={{
+        position: 'absolute',
+        top: 4, bottom: 4, left: 4,
+        width: `calc((100% - 8px) / ${tabs.length})`,
+        transform: `translateX(${activeIdx * 100}%)`,
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.72) 100%)',
+        backdropFilter: 'blur(14px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(14px) saturate(180%)',
+        borderRadius: 999,
+        border: '1px solid rgba(255, 255, 255, 0.6)',
+        boxShadow: [
+          '0 4px 10px -2px rgba(0, 0, 0, 0.08)',
+          'inset 0 1px 0 rgba(255, 255, 255, 0.92)',
+          'inset 0 -1px 0 rgba(0, 0, 0, 0.03)',
+        ].join(', '),
+        transition: 'transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+        pointerEvents: 'none',
+        zIndex: 0,
+      }} />
+
+      {tabs.map(tab => {
+        const isActive = tab.id === activeId
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onChange(tab.id)}
+            style={{
+              flex: 1,
+              position: 'relative',
+              zIndex: 1,
+              padding: '10px 14px',
+              background: 'transparent',
+              border: 'none',
+              fontSize: 13,
+              fontWeight: 600,
+              color: isActive ? '#1d1d1f' : 'rgba(0, 0, 0, 0.55)',
+              cursor: 'pointer',
+              minHeight: 'auto',
+              letterSpacing: '-0.005em',
+              transition: 'color 200ms ease',
+              whiteSpace: 'nowrap',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+            }}
+          >
+            {tab.label}
+            {tab.badge && (
+              <span style={{
+                fontSize: 10, fontWeight: 700,
+                padding: '1px 6px', borderRadius: 999,
+                background: isActive ? 'rgba(0,0,0,0.08)' : 'rgba(0,0,0,0.06)',
+                color: isActive ? '#1d1d1f' : 'rgba(0,0,0,0.5)',
+                letterSpacing: '-0.005em',
+                lineHeight: 1.5,
+              }}>{tab.badge}</span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Compact sub-tab nav for the Vehicle Info tab (fluid satin capsule) ────
+
+type SubTabId = 'general' | 'build_title' | 'description'
+
+function SubTabNav({
+  tabs, activeId, onChange,
+}: {
+  tabs: { id: SubTabId; label: string }[]
+  activeId: SubTabId
+  onChange: (id: SubTabId) => void
+}) {
+  const activeIdx = Math.max(0, tabs.findIndex(t => t.id === activeId))
+  return (
+    <div style={{
+      position: 'relative',
+      display: 'inline-flex',
+      padding: 3,
+      marginBottom: 18,
+      background: 'rgba(255, 255, 255, 0.45)',
+      backdropFilter: 'blur(16px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+      borderRadius: 999,
+      border: '1px solid rgba(255, 255, 255, 0.5)',
+      boxShadow: [
+        '0 2px 8px -2px rgba(31, 38, 135, 0.08)',
+        'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
+      ].join(', '),
+    }}>
+      {/* Sliding indicator */}
+      <div aria-hidden style={{
+        position: 'absolute',
+        top: 3, bottom: 3, left: 3,
+        width: `calc((100% - 6px) / ${tabs.length})`,
+        transform: `translateX(${activeIdx * 100}%)`,
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.72) 100%)',
+        borderRadius: 999,
+        border: '1px solid rgba(255, 255, 255, 0.6)',
+        boxShadow: '0 2px 6px -2px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)',
+        transition: 'transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+        pointerEvents: 'none',
+        zIndex: 0,
+      }} />
+
+      {tabs.map(tab => {
+        const isActive = tab.id === activeId
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onChange(tab.id)}
+            style={{
+              position: 'relative', zIndex: 1,
+              padding: '7px 16px',
+              background: 'transparent', border: 'none',
+              fontSize: 12, fontWeight: 600, letterSpacing: '-0.005em',
+              color: isActive ? '#1d1d1f' : 'rgba(0,0,0,0.55)',
+              cursor: 'pointer', minHeight: 'auto',
+              transition: 'color 200ms ease',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {tab.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Marketing-copy description editor ─────────────────────────────
+
+function DescriptionEditor({
+  value, vehicle, onSave,
+}: {
+  value: string
+  vehicle: Vehicle
+  onSave: (text: string) => Promise<void>
+}) {
+  const [draft, setDraft] = useState(value)
+  const [saving, setSaving] = useState(false)
+  const [savedAt, setSavedAt] = useState<Date | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [polishing, setPolishing] = useState(false)
+  // Snapshot of the user's text right before an AI polish — enables undo.
+  const [prePolish, setPrePolish] = useState<string | null>(null)
+
+  // Sync if the underlying vehicle.vehicleInfo changes from elsewhere
+  useEffect(() => { setDraft(value) }, [value])
+
+  const dirty = draft !== (value || '')
+  const canPolish = draft.trim().length >= 10 && !polishing
+
+  async function save() {
+    if (!dirty) return
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave(draft)
+      setSavedAt(new Date())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function polish() {
+    if (!canPolish) return
+    setPolishing(true)
+    setError(null)
+    const snapshot = draft
+    try {
+      const r = await fetch('/api/ai/polish-description', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: draft,
+          vehicle: {
+            year: vehicle.year,
+            make: vehicle.make,
+            model: vehicle.model,
+            trim: vehicle.trim,
+            mileage: vehicle.mileage,
+            color: vehicle.color,
+          },
+        }),
+      })
+      const text = await r.text()
+      const data = text ? JSON.parse(text) : {}
+      if (!r.ok || !data.polished) {
+        setError(data.error || `AI request failed (${r.status})`)
+        return
+      }
+      setPrePolish(snapshot)
+      setDraft(data.polished)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setPolishing(false)
+    }
+  }
+
+  function revertPolish() {
+    if (prePolish === null) return
+    setDraft(prePolish)
+    setPrePolish(null)
+  }
+
+  const charCount = draft.length
+  const wordCount = draft.trim() ? draft.trim().split(/\s+/).length : 0
+
+  return (
+    <GlassCard padding={28}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 12, flexWrap: 'wrap', paddingLeft: 18, paddingRight: 18 }}>
+        <h3 style={{
+          fontSize: 17, fontWeight: 700, letterSpacing: '-0.015em',
+          color: '#0a0a0a', lineHeight: 1,
+        }}>Description</h3>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {dirty && !saving && (
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#b45309' }}>Unsaved changes</span>
+          )}
+          {!dirty && savedAt && !saving && (
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#06a55a' }}>
+              Saved {savedAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+            </span>
+          )}
+          {prePolish !== null && (
+            <button
+              onClick={revertPolish}
+              style={{
+                padding: '6px 14px', borderRadius: 999,
+                background: 'rgba(255,255,255,0.5)',
+                backdropFilter: 'blur(10px) saturate(180%)',
+                border: '1px solid rgba(255,255,255,0.6)',
+                color: 'rgba(0,0,0,0.7)',
+                fontSize: 11, fontWeight: 600, letterSpacing: '-0.005em',
+                cursor: 'pointer', minHeight: 'auto',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.8)',
+              }}
+            >Restore original</button>
+          )}
+          <button
+            onClick={polish}
+            disabled={!canPolish}
+            title={canPolish ? 'Rewrite as a polished marketing description' : 'Write a few notes first'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '7px 16px', borderRadius: 999, border: 'none',
+              background: canPolish
+                ? 'linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%)'
+                : 'rgba(0,0,0,0.06)',
+              color: canPolish ? '#fff' : 'rgba(0,0,0,0.4)',
+              fontSize: 12, fontWeight: 700, letterSpacing: '-0.005em',
+              cursor: canPolish ? 'pointer' : 'not-allowed',
+              minHeight: 'auto',
+              boxShadow: canPolish
+                ? '0 4px 14px -4px rgba(124, 58, 237, 0.5), inset 0 1px 0 rgba(255,255,255,0.18)'
+                : 'none',
+              transition: 'transform 160ms ease, box-shadow 160ms ease',
+            }}
+          >
+            <SparkleIcon spinning={polishing} />
+            {polishing ? 'Polishing…' : 'Polish with AI'}
+          </button>
+          <button
+            onClick={save}
+            disabled={!dirty || saving}
+            style={{
+              padding: '7px 18px', borderRadius: 999, border: 'none',
+              background: dirty && !saving ? '#1d1d1f' : 'rgba(0,0,0,0.08)',
+              color: dirty && !saving ? '#dffd6e' : 'rgba(0,0,0,0.4)',
+              fontSize: 12, fontWeight: 700, letterSpacing: '-0.005em',
+              cursor: dirty && !saving ? 'pointer' : 'not-allowed',
+              minHeight: 'auto',
+              boxShadow: dirty && !saving ? '0 2px 8px -2px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.12)' : 'none',
+              transition: 'transform 160ms ease',
+            }}
+          >{saving ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+
+      <textarea
+        value={draft}
+        onChange={(e) => { setDraft(e.target.value); if (prePolish !== null) setPrePolish(null) }}
+        onBlur={() => { if (dirty) save() }}
+        placeholder="Drop your notes about the vehicle here — condition, options, history, why it stands out. Then click Polish with AI to rewrite into clean marketing copy."
+        rows={14}
+        disabled={polishing}
+        style={{
+          width: '100%',
+          padding: '16px 18px',
+          background: 'rgba(255, 255, 255, 0.4)',
+          backdropFilter: 'blur(14px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(14px) saturate(180%)',
+          border: '1px solid rgba(255, 255, 255, 0.55)',
+          borderRadius: 14,
+          fontSize: 15, lineHeight: 1.7,
+          fontFamily: 'inherit',
+          color: 'rgba(0,0,0,0.82)',
+          letterSpacing: '-0.005em',
+          outline: 'none',
+          resize: 'vertical',
+          minHeight: 240,
+          opacity: polishing ? 0.6 : 1,
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.7)',
+          transition: 'opacity 180ms ease',
+        }}
+      />
+
+      {/* Footer: counts + autosave hint */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginTop: 10, gap: 12,
+      }}>
+        <p style={{ fontSize: 11, color: 'rgba(0,0,0,0.4)', fontWeight: 500 }}>
+          {prePolish !== null
+            ? 'AI rewrote your notes. Click Save to keep it or Restore original to undo.'
+            : 'Auto-saves on blur'}
+        </p>
+        <p style={{
+          fontSize: 11, color: 'rgba(0,0,0,0.45)', fontWeight: 600,
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {wordCount} word{wordCount === 1 ? '' : 's'} · {charCount} char{charCount === 1 ? '' : 's'}
+        </p>
+      </div>
+
+      {error && (
+        <p style={{
+          marginTop: 10, padding: '8px 12px',
+          background: 'rgba(255, 59, 48, 0.08)',
+          color: '#d70015', fontSize: 12,
+          borderRadius: 8,
+        }}>{error}</p>
+      )}
+    </GlassCard>
+  )
+}
+
+// Sparkle icon for the AI polish button — spins while polishing.
+function SparkleIcon({ spinning }: { spinning?: boolean }) {
+  return (
+    <svg
+      width="13" height="13" viewBox="0 0 24 24" fill="currentColor"
+      style={{
+        flexShrink: 0,
+        animation: spinning ? 'mm-spin 900ms linear infinite' : 'none',
+      }}
+    >
+      <path d="M12 2l1.7 4.8L18 8.5l-4.3 1.7L12 15l-1.7-4.8L6 8.5l4.3-1.7L12 2z" />
+      <path d="M19 14l.9 2.5L22 17.5l-2.1.9L19 21l-.9-2.6L16 17.5l2.1-1L19 14z" opacity="0.8" />
+      <style>{`@keyframes mm-spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
+    </svg>
+  )
+}
+
+// ─── Title & Build Studio (Vehicle Info → Build / Title sub-tab) ──────
+
+function TitleBuildStudio({
+  vehicle, onSavePartial,
+}: {
+  vehicle: Vehicle
+  isAdmin: boolean
+  onSavePartial: (patch: Record<string, unknown>) => Promise<void>
+}) {
+  // Local-only build fields (no schema yet — visual scaffolding for the demo)
+  const inferredCondition: 'new' | 'used' = (vehicle.mileage && vehicle.mileage > 200) ? 'used' : 'new'
+  const [newUsed, setNewUsed] = useState<'new' | 'used'>(inferredCondition)
+  const [bodyType, setBodyType] = useState('')
+  const [engine, setEngine] = useState('')
+  const [cylinder, setCylinder] = useState('')
+  const [transmission, setTransmission] = useState('')
+  const [driveTrain, setDriveTrain] = useState('')
+  const [fuelType, setFuelType] = useState('')
+  const [horsePower, setHorsePower] = useState('')
+  const [doors, setDoors] = useState('')
+
+  // VIN decode (NHTSA vPIC) — runs when user clicks the Auto pill on the VIN field
+  const [decoding, setDecoding] = useState(false)
+  const [decoded, setDecoded] = useState(false)
+  const [decodeError, setDecodeError] = useState<string | null>(null)
+
+  async function runVinDecode(vinValue: string) {
+    const clean = vinValue.trim().toUpperCase()
+    if (!clean || clean.length < 11) {
+      setDecodeError('Enter a complete VIN before decoding')
+      setTimeout(() => setDecodeError(null), 3500)
+      return
+    }
+    setDecoding(true)
+    setDecodeError(null)
+    try {
+      const r = await fetch(`/api/vehicles/decode-vin?vin=${encodeURIComponent(clean)}`)
+      const text = await r.text()
+      const data = text ? JSON.parse(text) : {}
+      if (!r.ok || !data.decoded) {
+        setDecodeError(data.error || `Decode failed (${r.status})`)
+        setTimeout(() => setDecodeError(null), 4500)
+        return
+      }
+      const d = data.decoded
+
+      // Persist fields that live on the Vehicle record — only fill blanks, never
+      // overwrite values the user typed manually.
+      const patch: Record<string, unknown> = {}
+      if (d.year && !vehicle.year)   patch.year  = d.year
+      if (d.make && !vehicle.make)   patch.make  = d.make
+      if (d.model && !vehicle.model) patch.model = d.model
+      if (d.trim && !vehicle.trim)   patch.trim  = d.trim
+      if (Object.keys(patch).length > 0) await onSavePartial(patch)
+
+      // Local visual fields — fill the blanks the user hasn't touched.
+      if (d.bodyType && !bodyType)         setBodyType(d.bodyType)
+      if (d.engine && !engine)             setEngine(d.engine)
+      if (d.cylinder && !cylinder)         setCylinder(String(d.cylinder))
+      if (d.transmission && !transmission) setTransmission(d.transmission)
+      if (d.driveTrain && !driveTrain)     setDriveTrain(d.driveTrain)
+      if (d.fuelType && !fuelType)         setFuelType(d.fuelType)
+      if (d.horsepower && !horsePower)     setHorsePower(String(d.horsepower))
+      if (d.doors && !doors)               setDoors(String(d.doors))
+
+      setDecoded(true)
+    } catch (e) {
+      setDecodeError(e instanceof Error ? e.message : String(e))
+      setTimeout(() => setDecodeError(null), 4500)
+    } finally {
+      setDecoding(false)
+    }
+  }
+
+  // Local-only title fields (no schema yet)
+  const [rosTitle, setRosTitle] = useState('')
+  const [titleState, setTitleState] = useState('')
+  const [brand, setBrand] = useState('')
+  const [titleReceiveDate, setTitleReceiveDate] = useState('')
+  const [titleIssueDate, setTitleIssueDate] = useState('')
+  const [titleOutDate, setTitleOutDate] = useState('')
+  const [titleTransferredDate, setTitleTransferredDate] = useState('')
+  const [titleAppNo, setTitleAppNo] = useState('')
+
+  // Public-facing inventory URL — derived from stock # for now
+  const liveUrl = `https://mikalyzed.com/inventory/${vehicle.stockNumber}`
+
+  return (
+    <GlassCard padding={24}>
+      <div style={{ marginBottom: 18 }}>
+        <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.45)', marginBottom: 3 }}>Title &amp; Build Studio</p>
+        <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.5)', fontWeight: 500 }}>
+          Mechanical blueprint &middot; title registration &middot; public listing
+        </p>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '40fr 60fr',
+        gap: 16,
+        alignItems: 'stretch',
+      }}>
+
+        {/* ─── COL 1: Vertical Mechanical Blueprint ─── */}
+        <SubPanel>
+          <SectionLabel>Mechanical Blueprint</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <BlueprintRow>
+              <InlineTextField
+                label="New / Used"
+                value={newUsed}
+                options={[{ id: 'new', label: 'New' }, { id: 'used', label: 'Used' }]}
+                onChange={(v) => setNewUsed(v as 'new' | 'used')}
+              />
+            </BlueprintRow>
+            <BlueprintRow>
+              <VinField
+                vin={vehicle.vin || ''}
+                decoding={decoding}
+                decoded={decoded}
+                onDecode={() => runVinDecode(vehicle.vin || '')}
+                onCommit={async (v) => {
+                  await onSavePartial({ vin: v || null })
+                  // Reset the "decoded" badge when the VIN itself changes
+                  setDecoded(false)
+                }}
+              />
+            </BlueprintRow>
+            {decodeError && (
+              <div style={{
+                padding: '6px 10px',
+                background: 'rgba(255, 59, 48, 0.08)',
+                color: '#b42318',
+                fontSize: 11, fontWeight: 600,
+                borderRadius: 6,
+                border: '1px solid rgba(255, 59, 48, 0.18)',
+              }}>{decodeError}</div>
+            )}
+            <BlueprintRow>
+              <InlineTextField
+                label="Year"
+                value={vehicle.year ? String(vehicle.year) : ''}
+                numeric
+                onCommit={(v) => onSavePartial({ year: v ? parseInt(v, 10) : null })}
+              />
+            </BlueprintRow>
+            <BlueprintRow>
+              <InlineTextField
+                label="Make"
+                value={vehicle.make || ''}
+                onCommit={(v) => onSavePartial({ make: v })}
+              />
+            </BlueprintRow>
+            <BlueprintRow>
+              <InlineTextField
+                label="Model"
+                value={vehicle.model || ''}
+                onCommit={(v) => onSavePartial({ model: v })}
+              />
+            </BlueprintRow>
+            <BlueprintRow>
+              <InlineTextField
+                label="Trim"
+                value={vehicle.trim || ''}
+                onCommit={(v) => onSavePartial({ trim: v || null })}
+              />
+            </BlueprintRow>
+            <BlueprintRow>
+              <InlineTextField label="Body Type"    value={bodyType}    onChange={setBodyType} />
+            </BlueprintRow>
+            <BlueprintRow>
+              <InlineTextField label="Engine"       value={engine}      onChange={setEngine} />
+            </BlueprintRow>
+            <BlueprintRow>
+              <InlineTextField label="Cylinder"     value={cylinder}    onChange={setCylinder} numeric />
+            </BlueprintRow>
+            <BlueprintRow>
+              <InlineTextField label="Transmission" value={transmission} onChange={setTransmission} />
+            </BlueprintRow>
+            <BlueprintRow>
+              <InlineTextField label="Drive Train"  value={driveTrain}  onChange={setDriveTrain} />
+            </BlueprintRow>
+            <BlueprintRow>
+              <InlineTextField label="Fuel Type"    value={fuelType}    onChange={setFuelType} />
+            </BlueprintRow>
+            <BlueprintRow>
+              <InlineTextField label="Horse Power"  value={horsePower}  onChange={setHorsePower} numeric />
+            </BlueprintRow>
+            <BlueprintRow>
+              <InlineTextField label="Door"         value={doors}       onChange={setDoors} numeric />
+            </BlueprintRow>
+          </div>
+        </SubPanel>
+
+        {/* ─── COL 2: Live Web + Title Registration + Compliance & Assets ─── */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+          <LiveLinkBanner url={liveUrl} />
+
+          <SubPanel>
+            <SectionLabel>Title Registration</SectionLabel>
+
+            {/* Top: status fields — opened-up 2-col grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              columnGap: 32, rowGap: 14,
+            }}>
+              <InlineTextField label="ROS / Title"  value={rosTitle}    onChange={setRosTitle} />
+              <InlineTextField label="Title State"  value={titleState}  onChange={setTitleState} />
+              <InlineTextField label="Brand"        value={brand}       onChange={setBrand} />
+              <InlineTextField
+                label="Title Status"
+                value={vehicle.titleStatus || ''}
+                onCommit={(v) => onSavePartial({ titleStatus: v || null })}
+              />
+            </div>
+
+            <div style={{ height: 14 }} />
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              columnGap: 32, rowGap: 14,
+            }}>
+              <InlineDateField label="Title Receive Date"     value={titleReceiveDate}     onChange={setTitleReceiveDate} />
+              <InlineDateField label="Title Issue Date"       value={titleIssueDate}       onChange={setTitleIssueDate} />
+              <InlineDateField label="Title Out Date"         value={titleOutDate}         onChange={setTitleOutDate} />
+              <InlineDateField label="Title Transferred Date" value={titleTransferredDate} onChange={setTitleTransferredDate} />
+            </div>
+
+            <div style={{ height: 14 }} />
+
+            <InlineTextField label="Title App. No." value={titleAppNo} onChange={setTitleAppNo} />
+          </SubPanel>
+        </div>
+      </div>
+    </GlassCard>
+  )
+}
+
+// Soft floating row container — translucent white over the SubPanel for vertical-stack fields.
+function BlueprintRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      padding: '8px 12px',
+      background: 'rgba(255, 255, 255, 0.15)',
+      borderRadius: 6,
+      border: '1px solid rgba(255, 255, 255, 0.3)',
+      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.45)',
+    }}>
+      {children}
+    </div>
+  )
+}
+
+// Borderless inline text field — label LEFT, value RIGHT, hover capsule on value.
+// Mirrors InlineField but for plain text / numeric / option-pill variants.
+function InlineTextField({
+  label, value, onChange, onCommit, numeric, placeholder, trailing, options, fullWidth,
+}: {
+  label: string
+  value: string
+  onChange?: (v: string) => void
+  onCommit?: (v: string) => void | Promise<void>
+  numeric?: boolean
+  placeholder?: string
+  trailing?: React.ReactNode
+  options?: { id: string; label: string }[]
+  fullWidth?: boolean
+}) {
+  const isEditable = !!(onChange || onCommit)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [hover, setHover] = useState(false)
+
+  function startEdit() {
+    if (!isEditable || options) return
+    setDraft(value || '')
+    setEditing(true)
+  }
+
+  async function commit() {
+    setEditing(false)
+    const cleaned = numeric ? draft.replace(/[^0-9.]/g, '') : draft
+    if (cleaned === (value || '')) return
+    if (onCommit) {
+      setSaving(true)
+      try { await onCommit(cleaned) } finally { setSaving(false) }
+    } else if (onChange) {
+      onChange(cleaned)
+    }
+  }
+
+  const lineColor = rowLineColor(editing, hover, isEditable)
+
+  const isPlaceholder = !value
+  const display = value || (placeholder ?? '—')
+
+  // Option-pill variant (e.g. New / Used)
+  if (options) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+        gridColumn: fullWidth ? '1 / -1' : undefined,
+      }}>
+        <span style={labelStyle}>{label}</span>
+        <div style={{
+          display: 'inline-flex', gap: 2, padding: 2,
+          background: 'rgba(0,0,0,0.04)',
+          borderRadius: 999,
+          border: '1px solid rgba(0,0,0,0.06)',
+        }}>
+          {options.map(o => (
+            <button
+              key={o.id}
+              onClick={() => onChange?.(o.id)}
+              style={{
+                padding: '3px 11px', borderRadius: 999, border: 'none',
+                background: o.id === value ? '#ffffff' : 'transparent',
+                boxShadow: o.id === value ? '0 1px 2px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)' : 'none',
+                color: o.id === value ? '#1d1d1f' : 'rgba(0,0,0,0.55)',
+                fontSize: 11, fontWeight: 600, letterSpacing: '-0.005em',
+                cursor: 'pointer', minHeight: 'auto',
+                transition: 'background 200ms ease, color 200ms ease',
+              }}
+            >{o.label}</button>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        gap: 10,
+        opacity: saving ? 0.55 : 1,
+        gridColumn: fullWidth ? '1 / -1' : undefined,
+        minWidth: 0,
+        paddingBottom: 7,
+        borderBottom: `1px solid ${lineColor}`,
+        transition: 'border-color 180ms ease',
+      }}>
+      <span style={labelStyle}>{label}</span>
+
+      <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, flexShrink: 0, minWidth: 0 }}>
+        {trailing}
+        {editing ? (
+          <input
+            type="text"
+            inputMode={numeric ? 'decimal' : 'text'}
+            value={draft}
+            autoFocus
+            size={Math.max(3, draft.length || 1)}
+            onChange={(e) => setDraft(numeric ? e.target.value.replace(/[^0-9.]/g, '') : e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit()
+              if (e.key === 'Escape') setEditing(false)
+            }}
+            style={textInputStyle('transparent', false)}
+          />
+        ) : (
+          <button
+            onClick={startEdit}
+            disabled={!isEditable}
+            style={{
+              ...valueButtonStyle('transparent', isPlaceholder, isEditable),
+              maxWidth: 220,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}
+          >{display}</button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Borderless inline date field with a micro calendar glyph next to the value.
+function InlineDateField({
+  label, value, onChange,
+}: {
+  label: string
+  value: string
+  onChange?: (v: string) => void
+}) {
+  const isEditable = !!onChange
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [hover, setHover] = useState(false)
+
+  function startEdit() {
+    if (!isEditable) return
+    setDraft(value || '')
+    setEditing(true)
+  }
+
+  function commit() {
+    setEditing(false)
+    if (draft !== (value || '') && onChange) onChange(draft)
+  }
+
+  const display = value
+    ? new Date(value + 'T00:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
+    : '—'
+
+  const lineColor = rowLineColor(editing, hover, isEditable)
+
+  const isPlaceholder = !value
+
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        gap: 10, minWidth: 0,
+        paddingBottom: 7,
+        borderBottom: `1px solid ${lineColor}`,
+        transition: 'border-color 180ms ease',
+      }}>
+      <span style={labelStyle}>{label}</span>
+      <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, flexShrink: 0 }}>
+        {editing ? (
+          <input
+            type="date"
+            value={draft}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
+            style={textInputStyle('transparent', false)}
+          />
+        ) : (
+          <button
+            onClick={startEdit}
+            disabled={!isEditable}
+            style={valueButtonStyle('transparent', isPlaceholder, isEditable)}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <CalendarMicroIcon />
+              {display}
+            </span>
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// VIN-specific inline field: label left + Auto toggle, value, copy icon all right-aligned.
+function VinField({
+  vin, decoding, decoded, onDecode, onCommit,
+}: {
+  vin: string
+  decoding: boolean
+  decoded: boolean
+  onDecode: () => void
+  onCommit: (v: string) => void | Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [hover, setHover] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  function startEdit() {
+    setDraft(vin)
+    setEditing(true)
+  }
+
+  async function commit() {
+    setEditing(false)
+    const v = draft.trim().toUpperCase()
+    if (v !== vin) await onCommit(v)
+  }
+
+  async function copyVin(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!vin) return
+    try {
+      await navigator.clipboard.writeText(vin)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1400)
+    } catch { /* clipboard not available */ }
+  }
+
+  const lineColor = rowLineColor(editing, hover, true)
+
+  const display = vin || '—'
+  const isPlaceholder = !vin
+
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        gap: 10, minWidth: 0,
+        paddingBottom: 7,
+        borderBottom: `1px solid ${lineColor}`,
+        transition: 'border-color 180ms ease',
+      }}>
+      <span style={labelStyle}>VIN</span>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, flexShrink: 0, minWidth: 0 }}>
+        {/* Auto-decode action pill — runs NHTSA vPIC decode on click */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDecode() }}
+          disabled={decoding || !vin}
+          title={
+            decoding ? 'Decoding VIN…'
+              : !vin ? 'Enter a VIN first'
+              : decoded ? 'Decoded — click to re-run' : 'Auto-decode VIN to fill build fields'
+          }
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            padding: '2px 7px', borderRadius: 999,
+            background: decoded || decoding ? '#1d1d1f' : 'rgba(0,0,0,0.05)',
+            border: '1px solid rgba(0,0,0,0.06)',
+            color: decoded || decoding ? '#dffd6e' : 'rgba(0,0,0,0.5)',
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+            cursor: decoding ? 'wait' : (!vin ? 'not-allowed' : 'pointer'),
+            opacity: !vin ? 0.5 : 1,
+            minHeight: 'auto',
+            transition: 'background 200ms ease, color 200ms ease',
           }}
         >
-          <span style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
-            textTransform: 'uppercase', color: '#86868b',
-          }}>Document</span>
-          <span style={{
-            fontSize: 13, fontWeight: 500,
-            overflow: 'hidden', textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap', maxWidth: '100%',
-          }}>{asset.filename || 'Open'}</span>
-        </a>
-      ) : (
-        /* eslint-disable-next-line @next/next/no-img-element */
-        <img
-          src={asset.url}
-          alt={asset.caption || ''}
-          style={{
-            width: '100%', aspectRatio: '4/3', objectFit: 'cover',
-            display: 'block',
-          }}
-        />
-      )}
+          {decoding ? <SparkleIcon spinning /> : decoded ? <CheckMicroIcon /> : null}
+          {decoding ? 'Decoding' : 'Auto'}
+        </button>
 
-      {canDelete && (
+        {/* VIN value / inline editor */}
+        {editing ? (
+          <input
+            type="text"
+            value={draft}
+            autoFocus
+            size={Math.max(3, draft.length || 1)}
+            maxLength={17}
+            onChange={(e) => setDraft(e.target.value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/gi, ''))}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit()
+              if (e.key === 'Escape') setEditing(false)
+            }}
+            style={{
+              ...textInputStyle('transparent', true),
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              letterSpacing: '0.02em',
+            }}
+          />
+        ) : (
+          <button
+            onClick={startEdit}
+            style={{
+              ...valueButtonStyle('transparent', isPlaceholder, true),
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              letterSpacing: '0.02em',
+              maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}
+          >{display}</button>
+        )}
+
+        {/* Copy icon */}
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(asset.id) }}
+          onClick={copyVin}
+          disabled={!vin}
+          title={copied ? 'Copied' : 'Copy VIN'}
           style={{
-            position: 'absolute', top: 8, right: 8,
-            background: 'rgba(0,0,0,0.55)',
-            backdropFilter: 'blur(8px)',
-            border: 'none', color: '#fff',
-            fontSize: 13, lineHeight: 1,
-            width: 24, height: 24, borderRadius: '50%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', minHeight: 'auto',
-            opacity: hovered ? 1 : 0,
-            transition: 'opacity 200ms ease',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 20, height: 20, borderRadius: 6,
+            background: copied ? 'rgba(6,165,90,0.12)' : 'transparent',
+            border: 'none', cursor: vin ? 'pointer' : 'default',
+            color: copied ? '#06a55a' : 'rgba(0,0,0,0.4)',
+            opacity: vin ? 1 : 0.3,
+            minHeight: 'auto',
+            transition: 'background 160ms ease, color 160ms ease',
           }}
-          title="Delete"
-        >×</button>
+          onMouseEnter={(e) => { if (vin && !copied) e.currentTarget.style.color = 'rgba(0,0,0,0.7)' }}
+          onMouseLeave={(e) => { if (!copied) e.currentTarget.style.color = 'rgba(0,0,0,0.4)' }}
+        >
+          {copied ? <CheckMicroIcon /> : <CopyMicroIcon />}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Live-listing banner — left URL, right "View Website" pill with arrow.
+function LiveLinkBanner({ url }: { url: string }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        gap: 14, padding: '14px 16px',
+        background: hovered ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.45)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderRadius: 14,
+        border: '1px solid rgba(255, 255, 255, 0.55)',
+        boxShadow: hovered
+          ? '0 10px 30px -10px rgba(31, 38, 135, 0.18), inset 0 1px 0 rgba(255,255,255,0.85)'
+          : '0 4px 14px -6px rgba(31, 38, 135, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.7)',
+        textDecoration: 'none', color: 'inherit',
+        transform: hovered ? 'translateY(-1px)' : 'translateY(0)',
+        transition: 'transform 220ms cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 220ms ease, background 220ms ease',
+        minWidth: 0,
+      }}
+    >
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <p style={{
+          fontSize: 9, fontWeight: 700, letterSpacing: '0.14em',
+          textTransform: 'uppercase', color: 'rgba(0,0,0,0.5)',
+          marginBottom: 4,
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+        }}>
+          <span aria-hidden style={{
+            width: 6, height: 6, borderRadius: '50%',
+            background: '#06a55a',
+            boxShadow: '0 0 6px rgba(6,165,90,0.6)',
+          }} />
+          Live on Web
+        </p>
+        <p style={{
+          fontSize: 12, fontWeight: 500,
+          color: 'rgba(0,0,0,0.65)',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          letterSpacing: '-0.005em',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{url}</p>
+      </div>
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '7px 14px', borderRadius: 999,
+        background: '#1d1d1f',
+        color: '#dffd6e',
+        fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
+        whiteSpace: 'nowrap', flexShrink: 0,
+        boxShadow: hovered
+          ? '0 4px 12px -2px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.15)'
+          : '0 2px 6px -2px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.1)',
+        transition: 'box-shadow 220ms ease',
+      }}>
+        View Website
+        <ArrowMicroIcon />
+      </span>
+    </a>
+  )
+}
+
+// ─── Studio styling helpers ────────────────────────────────────────
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 11, fontWeight: 500,
+  color: 'rgba(0,0,0,0.5)',
+  letterSpacing: '-0.005em',
+  whiteSpace: 'nowrap',
+  overflow: 'hidden', textOverflow: 'ellipsis',
+  minWidth: 0,
+}
+
+// Row-level baseline: a hairline that runs the full width of the row (label + value)
+// so the value visually connects to its label across the gap.  Always faintly visible
+// at rest, darkens on hover (editable rows only), solidifies further while editing.
+// The value button/input itself carries no border — the row line is the single
+// connecting element.
+function rowLineColor(editing: boolean, hover: boolean, isEditable: boolean): string {
+  if (editing) return 'rgba(0, 0, 0, 0.42)'
+  if (hover && isEditable) return 'rgba(0, 0, 0, 0.16)'
+  return 'rgba(0, 0, 0, 0.07)'
+}
+
+function valueButtonStyle(_underline: string, isPlaceholder: boolean, isEditable: boolean): React.CSSProperties {
+  return {
+    background: 'transparent',
+    border: 'none',
+    padding: '1px 0',
+    margin: 0,
+    borderRadius: 0,
+    fontSize: 14, fontWeight: 700, letterSpacing: '-0.005em',
+    color: isPlaceholder ? 'rgba(0,0,0,0.3)' : '#0a0a0a',
+    fontVariantNumeric: 'tabular-nums',
+    cursor: isEditable ? 'pointer' : 'default',
+    minHeight: 'auto',
+  }
+}
+
+function textInputStyle(_underline: string, mono: boolean): React.CSSProperties {
+  return {
+    border: 'none', outline: 'none',
+    background: 'transparent',
+    padding: '1px 0',
+    margin: 0,
+    borderRadius: 0,
+    fontSize: 14, fontWeight: 700, letterSpacing: '-0.005em',
+    color: '#0a0a0a',
+    textAlign: 'right',
+    fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : 'inherit',
+    fontVariantNumeric: 'tabular-nums',
+    width: 'auto',
+    boxSizing: 'content-box',
+  }
+}
+
+// ─── Studio micro-icons ────────────────────────────────────────────
+
+function CalendarMicroIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.45 }}>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
+  )
+}
+
+function CopyMicroIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  )
+}
+
+function CheckMicroIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+}
+
+function ArrowMicroIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14M13 5l7 7-7 7" />
+    </svg>
+  )
+}
+
+// ─── Files Vault (internal document storage) ────────────────────────
+
+const FILE_CATEGORIES = [
+  'Signed Contract',
+  'Purchase Receipt',
+  'Title Paperwork',
+  'Other',
+] as const
+
+function FilesVault({ vehicleId, media, onChange, currentUserId, isAdmin }: {
+  vehicleId: string
+  media: MediaAsset[]
+  onChange: () => void | Promise<void>
+  currentUserId: string | null
+  isAdmin: boolean
+}) {
+  const [category, setCategory] = useState<string>(FILE_CATEGORIES[0])
+  const [isUploading, setIsUploading] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [err, setErr] = useState<string | null>(null)
+
+  const files = media.filter(m => m.type === 'doc')
+
+  async function uploadFile(file: File) {
+    setErr(null)
+    setIsUploading(true)
+    setProgress(0)
+    try {
+      const presignRes = await fetch('/api/media/presign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId, filename: file.name, contentType: file.type }),
+      })
+      if (!presignRes.ok) throw new Error(`Presign failed (${presignRes.status})`)
+      const { uploadUrl, r2Key } = await presignRes.json()
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100))
+        })
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve()
+          else reject(new Error(`R2 upload failed (${xhr.status})`))
+        })
+        xhr.addEventListener('error', () => reject(new Error('R2 network error')))
+        xhr.open('PUT', uploadUrl)
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+        xhr.send(file)
+      })
+
+      const confirmRes = await fetch('/api/media/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicleId, r2Key, type: 'doc',
+          contentType: file.type, sizeBytes: file.size, filename: file.name,
+          caption: category,
+        }),
+      })
+      if (!confirmRes.ok) throw new Error(`Confirm failed (${confirmRes.status})`)
+      await onChange()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setIsUploading(false)
+      setProgress(0)
+    }
+  }
+
+  async function handleFiles(filesList: FileList | null) {
+    if (!filesList || filesList.length === 0) return
+    for (const f of Array.from(filesList)) {
+      await uploadFile(f)
+    }
+  }
+
+  async function deleteFile(id: string) {
+    if (!confirm('Delete this file from the vault?')) return
+    await fetch(`/api/media/${id}`, { method: 'DELETE' })
+    await onChange()
+  }
+
+  return (
+    <GlassCard padding={24}>
+      <GlassEyebrow
+        label="Files Vault"
+        subtitle={files.length === 0
+          ? 'Internal documents — hidden from public inventory'
+          : `${files.length} internal document${files.length === 1 ? '' : 's'} · hidden from public inventory`}
+      />
+
+      <FilesTable
+        files={files}
+        onDelete={deleteFile}
+        isAdmin={isAdmin}
+        currentUserId={currentUserId}
+      />
+
+      <FileDropzone
+        category={category}
+        onCategoryChange={setCategory}
+        onFiles={handleFiles}
+        isUploading={isUploading}
+        progress={progress}
+        err={err}
+      />
+    </GlassCard>
+  )
+}
+
+function FilesTable({ files, onDelete, isAdmin, currentUserId }: {
+  files: MediaAsset[]
+  onDelete: (id: string) => void
+  isAdmin: boolean
+  currentUserId: string | null
+}) {
+  if (files.length === 0) {
+    return (
+      <div style={{
+        padding: '22px 16px', marginBottom: 22,
+        borderRadius: 12,
+        background: 'rgba(0,0,0,0.025)',
+        color: 'rgba(0,0,0,0.5)', fontSize: 13, fontStyle: 'italic',
+        textAlign: 'center',
+      }}>
+        No files in the vault yet. Drop one below to get started.
+      </div>
+    )
+  }
+
+  const cols = 'minmax(0, 2.2fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) 32px'
+
+  return (
+    <div style={{ marginBottom: 22 }}>
+      {/* Header */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: cols, gap: 14,
+        padding: '10px 14px', marginBottom: 4,
+      }}>
+        {['File Name', 'Category', 'Uploaded By', 'Date Uploaded'].map((label) => (
+          <span key={label} style={{
+            fontSize: 10, fontWeight: 700,
+            letterSpacing: '0.12em', textTransform: 'uppercase',
+            color: 'rgba(0,0,0,0.45)',
+          }}>{label}</span>
+        ))}
+        <span />
+      </div>
+
+      {/* Rows */}
+      <div style={{ borderRadius: 12, overflow: 'hidden' }}>
+        {files.map((f, i) => (
+          <FileRow
+            key={f.id}
+            file={f}
+            alt={i % 2 === 1}
+            canDelete={isAdmin || f.uploadedBy?.id === currentUserId}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function FileRow({ file, alt, canDelete, onDelete }: {
+  file: MediaAsset
+  alt: boolean
+  canDelete: boolean
+  onDelete: (id: string) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 2.2fr) minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) 32px',
+        gap: 14,
+        padding: '14px',
+        background: hovered
+          ? 'rgba(0, 113, 227, 0.04)'
+          : alt ? 'rgba(0,0,0,0.025)' : 'transparent',
+        alignItems: 'center',
+        transition: 'background 160ms ease',
+      }}
+    >
+      <a
+        href={file.url}
+        target="_blank"
+        rel="noreferrer"
+        title={file.filename || 'Open file'}
+        style={{
+          fontSize: 13, fontWeight: 600,
+          color: '#1d1d1f', textDecoration: 'none',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}
+      >
+        {file.filename || 'Unnamed file'}
+      </a>
+      <span style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+        padding: '3px 8px', borderRadius: 999,
+        background: 'rgba(0,0,0,0.06)', color: 'rgba(0,0,0,0.62)',
+        justifySelf: 'start',
+      }}>
+        {file.caption || 'Other'}
+      </span>
+      <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {file.uploadedBy?.name || 'Unknown'}
+      </span>
+      <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.6)' }}>
+        {fmtDate(file.uploadedAt)}
+      </span>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        {canDelete && (
+          <button
+            onClick={() => onDelete(file.id)}
+            aria-label="Delete file"
+            title="Delete"
+            style={{
+              width: 24, height: 24, borderRadius: 6,
+              background: hovered ? 'rgba(220, 38, 38, 0.1)' : 'transparent',
+              border: 'none', cursor: 'pointer',
+              color: hovered ? '#dc2626' : 'rgba(0,0,0,0)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              minHeight: 'auto',
+              transition: 'background 160ms ease, color 160ms ease',
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18" />
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FileDropzone({ category, onCategoryChange, onFiles, isUploading, progress, err }: {
+  category: string
+  onCategoryChange: (c: string) => void
+  onFiles: (files: FileList | null) => void
+  isUploading: boolean
+  progress: number
+  err: string | null
+}) {
+  const [isDragOver, setIsDragOver] = useState(false)
+
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!isDragOver) setIsDragOver(true)
+  }
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      onFiles(e.dataTransfer.files)
+    }
+  }
+
+  return (
+    <div
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      style={{
+        position: 'relative',
+        padding: '36px 24px',
+        background: isDragOver
+          ? 'rgba(0, 113, 227, 0.07)'
+          : 'rgba(255, 255, 255, 0.45)',
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderRadius: 16,
+        border: isDragOver
+          ? '1.5px dashed rgba(0, 113, 227, 0.65)'
+          : '1.5px dashed rgba(0, 0, 0, 0.18)',
+        boxShadow: [
+          '0 4px 16px -6px rgba(31, 38, 135, 0.08)',
+          'inset 0 1px 0 rgba(255, 255, 255, 0.75)',
+        ].join(', '),
+        textAlign: 'center',
+        transition: 'background 200ms ease, border-color 200ms ease',
+      }}
+    >
+      <CloudUploadIcon />
+
+      <p style={{
+        fontSize: 16, fontWeight: 700, color: '#1d1d1f',
+        letterSpacing: '-0.01em', marginTop: 14,
+      }}>
+        Drop your business files here, or{' '}
+        <label style={{
+          color: '#0071e3', cursor: isUploading ? 'wait' : 'pointer',
+          textDecoration: 'underline', textUnderlineOffset: 3,
+        }}>
+          Browse
+          <input
+            type="file"
+            multiple
+            disabled={isUploading}
+            onChange={(e) => { onFiles(e.target.files); e.currentTarget.value = '' }}
+            style={{ display: 'none' }}
+          />
+        </label>
+      </p>
+
+      <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+        <span style={{
+          fontSize: 10, fontWeight: 700, color: 'rgba(0,0,0,0.5)',
+          textTransform: 'uppercase', letterSpacing: '0.1em',
+        }}>Category</span>
+        <select
+          value={category}
+          onChange={(e) => onCategoryChange(e.target.value)}
+          style={{
+            padding: '6px 32px 6px 12px',
+            borderRadius: 999,
+            border: '1px solid rgba(0,0,0,0.12)',
+            background: 'rgba(255,255,255,0.85)',
+            fontSize: 12, fontWeight: 600, color: '#1d1d1f',
+            cursor: 'pointer',
+            appearance: 'none',
+            WebkitAppearance: 'none',
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%231d1d1f' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")`,
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'right 10px center',
+          }}
+        >
+          {FILE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
+
+      <p style={{
+        marginTop: 16, fontSize: 11, color: 'rgba(0,0,0,0.45)',
+        fontWeight: 500, letterSpacing: '-0.005em',
+      }}>
+        Supported: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG · Max 25MB per file
+      </p>
+      <p style={{
+        marginTop: 4, fontSize: 11, color: 'rgba(0,0,0,0.45)',
+        fontWeight: 500, fontStyle: 'italic',
+      }}>
+        Internal storage only — strictly hidden from public inventory pages.
+      </p>
+
+      {isUploading && (
+        <div style={{
+          marginTop: 16, padding: '8px 14px', borderRadius: 999,
+          background: 'rgba(0, 113, 227, 0.08)',
+          color: '#0071e3', fontSize: 12, fontWeight: 600,
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+        }}>
+          Uploading… {progress}%
+        </div>
       )}
+      {err && (
+        <p style={{
+          marginTop: 16, color: '#d70015', fontSize: 12,
+          padding: '6px 12px', background: 'rgba(255, 59, 48, 0.08)',
+          borderRadius: 8, display: 'inline-block',
+        }}>{err}</p>
+      )}
+    </div>
+  )
+}
+
+function CloudUploadIcon() {
+  return (
+    <div style={{
+      display: 'inline-flex', padding: 14, borderRadius: '50%',
+      background: 'rgba(0,113,227,0.06)',
+      boxShadow: 'inset 0 0 0 1px rgba(0,113,227,0.1)',
+    }}>
+      <svg width="32" height="32" viewBox="0 0 48 48" fill="none" stroke="#0071e3" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 38a8 8 0 0 1-1-15.9 12 12 0 0 1 22-7.2 9 9 0 0 1 4 17.1" />
+        <path d="M24 26v14" />
+        <path d="M18 32l6-6 6 6" />
+      </svg>
     </div>
   )
 }
