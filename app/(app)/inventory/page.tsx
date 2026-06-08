@@ -202,20 +202,8 @@ export default function InventoryPage() {
   }
 
   return (
-    <div style={{ maxWidth: 1500, margin: '0 auto', padding: '16px 24px', position: 'relative' }}>
-      {/* Soft mesh-gradient backdrop */}
-      <div aria-hidden style={{
-        position: 'fixed', inset: 0,
-        background: [
-          'radial-gradient(at 12% 14%, hsla(220, 90%, 72%, 0.18) 0px, transparent 55%)',
-          'radial-gradient(at 88% 6%, hsla(280, 80%, 68%, 0.16) 0px, transparent 55%)',
-          'radial-gradient(at 74% 82%, hsla(190, 70%, 78%, 0.12) 0px, transparent 50%)',
-          'radial-gradient(at 6% 92%, hsla(340, 75%, 72%, 0.14) 0px, transparent 55%)',
-        ].join(', '),
-        filter: 'blur(80px) saturate(110%)',
-        zIndex: -1,
-        pointerEvents: 'none',
-      }} />
+    <div style={{ maxWidth: 1500, margin: '0 auto', position: 'relative' }}>
+
 
       {/* ─── Header row ─────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 22, flexWrap: 'wrap' }}>

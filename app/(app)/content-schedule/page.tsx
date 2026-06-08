@@ -454,11 +454,17 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
         {job.status === 'in_progress' && (
           <button onClick={() => onComplete(job.id)} disabled={!allDone} style={{
             padding: '9px 22px', borderRadius: 999, border: 'none',
-            background: allDone ? '#1d1d1f' : 'rgba(0, 0, 0, 0.08)',
-            color: allDone ? '#dffd6e' : 'rgba(0, 0, 0, 0.4)',
+            background: allDone
+              ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(22, 163, 74, 0.95))'
+              : 'rgba(255, 255, 255, 0.5)',
+            color: allDone ? '#fff' : 'rgba(0, 0, 0, 0.35)',
             fontSize: 12, fontWeight: 700, letterSpacing: '-0.005em',
             cursor: allDone ? 'pointer' : 'default',
-            boxShadow: allDone ? '0 4px 14px -4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)' : 'none',
+            boxShadow: allDone
+              ? '0 6px 18px -6px rgba(22, 163, 74, 0.45), inset 0 1px 0 rgba(255,255,255,0.25)'
+              : 'inset 0 1px 0 rgba(255,255,255,0.7)',
+            backdropFilter: allDone ? 'none' : 'blur(10px) saturate(180%)',
+            WebkitBackdropFilter: allDone ? 'none' : 'blur(10px) saturate(180%)',
             transition: 'transform 160ms ease',
           }}>Complete</button>
         )}
@@ -653,11 +659,17 @@ function ActiveTaskCard({ task, onComplete, onToggleSubtask, onEdit, adminAction
         {task.status === 'in_progress' && (
           <button onClick={() => onComplete(task.id)} disabled={!canComplete} style={{
             padding: '9px 22px', borderRadius: 999, border: 'none',
-            background: canComplete ? '#1d1d1f' : 'rgba(0, 0, 0, 0.08)',
-            color: canComplete ? '#dffd6e' : 'rgba(0, 0, 0, 0.4)',
+            background: canComplete
+              ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(22, 163, 74, 0.95))'
+              : 'rgba(255, 255, 255, 0.5)',
+            color: canComplete ? '#fff' : 'rgba(0, 0, 0, 0.35)',
             fontSize: 12, fontWeight: 700, letterSpacing: '-0.005em',
             cursor: canComplete ? 'pointer' : 'default',
-            boxShadow: canComplete ? '0 4px 14px -4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)' : 'none',
+            boxShadow: canComplete
+              ? '0 6px 18px -6px rgba(22, 163, 74, 0.45), inset 0 1px 0 rgba(255,255,255,0.25)'
+              : 'inset 0 1px 0 rgba(255,255,255,0.7)',
+            backdropFilter: canComplete ? 'none' : 'blur(10px) saturate(180%)',
+            WebkitBackdropFilter: canComplete ? 'none' : 'blur(10px) saturate(180%)',
             transition: 'transform 160ms ease',
           }}>Complete</button>
         )}
@@ -741,11 +753,7 @@ function QueueVehicleCard({ job, onStart, isAdmin, onSchedule, index }: {
               letterSpacing: '-0.01em', color: '#0a0a0a',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
-              <span style={{
-                fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase',
-                color: 'rgba(0, 0, 0, 0.45)', marginRight: 6,
-              }}>Stock</span>
-              {v.stockNumber}
+              #{v.stockNumber}
               <span style={{ color: 'rgba(0, 0, 0, 0.35)', margin: '0 8px' }}>·</span>
               {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}
             </p>
@@ -763,10 +771,11 @@ function QueueVehicleCard({ job, onStart, isAdmin, onSchedule, index }: {
       <div className="queue-card-actions" style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
         <button onClick={() => onStart(job.id)} style={{
           padding: '7px 16px', borderRadius: 999, border: 'none',
-          background: '#1d1d1f', color: '#dffd6e',
+          background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95))',
+          color: '#fff',
           fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
           cursor: 'pointer',
-          boxShadow: '0 3px 10px -3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.1)',
+          boxShadow: '0 4px 14px -4px rgba(37, 99, 235, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
         }}>Start</button>
         {isAdmin && onSchedule && (
           <button onClick={() => onSchedule(job.id, 'vehicle')} style={{
@@ -873,10 +882,11 @@ function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete, onEdit, i
       <div className="queue-card-actions" style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
         <button onClick={() => onStart(task.id)} style={{
           padding: '7px 16px', borderRadius: 999, border: 'none',
-          background: '#1d1d1f', color: '#dffd6e',
+          background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.95), rgba(124, 58, 237, 0.95))',
+          color: '#fff',
           fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
           cursor: 'pointer',
-          boxShadow: '0 3px 10px -3px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.1)',
+          boxShadow: '0 4px 14px -4px rgba(124, 58, 237, 0.4), inset 0 1px 0 rgba(255,255,255,0.2)',
         }}>Start</button>
         {isAdmin && onSchedule && (
           <button onClick={() => onSchedule(task.id, 'task')} style={{
@@ -929,29 +939,76 @@ function ScheduleModal({ onConfirm, onCancel }: {
   }
 
   return (
-    <div className="content-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-      onClick={onCancel}>
-      <div className="content-modal-card" style={{ background: '#fff', borderRadius: 16, padding: '24px', width: '100%', maxWidth: 360 }}
-        onClick={e => e.stopPropagation()}>
-        <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>Schedule for</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-          {days.map(d => (
-            <button key={d.value} onClick={() => setDate(d.value)} style={{
-              padding: '8px 14px', borderRadius: 8, border: `1px solid ${date === d.value ? '#3b82f6' : '#e8e8e8'}`,
-              background: date === d.value ? '#3b82f618' : '#fff',
-              color: date === d.value ? '#3b82f6' : 'var(--text-secondary)',
-              fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            }}>{d.label}</button>
-          ))}
+    <div className="content-modal-overlay" style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(20, 22, 30, 0.42)',
+      backdropFilter: 'blur(14px) saturate(140%)',
+      WebkitBackdropFilter: 'blur(14px) saturate(140%)',
+      zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }} onClick={onCancel}>
+      <div className="content-modal-card" style={{
+        width: '100%', maxWidth: 380,
+        padding: '22px 22px 20px',
+        borderRadius: 22,
+        background: 'rgba(255, 255, 255, 0.72)',
+        backdropFilter: 'blur(28px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+        border: '1px solid rgba(255, 255, 255, 0.55)',
+        boxShadow: [
+          '0 24px 60px -20px rgba(31, 38, 135, 0.32)',
+          '0 8px 24px -8px rgba(0, 0, 0, 0.18)',
+          'inset 0 1px 0 rgba(255, 255, 255, 0.85)',
+          'inset 0 0 0 0.5px rgba(255, 255, 255, 0.4)',
+        ].join(', '),
+      }} onClick={e => e.stopPropagation()}>
+        <p style={{
+          fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase',
+          color: 'rgba(0, 0, 0, 0.5)', margin: '0 0 4px',
+        }}>Schedule for</p>
+        <h3 style={{
+          fontSize: 18, fontWeight: 800, margin: '0 0 16px',
+          letterSpacing: '-0.02em', color: '#0a0a0a',
+        }}>Pick a day</h3>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
+          {days.map(d => {
+            const isActive = date === d.value
+            return (
+              <button key={d.value} onClick={() => setDate(d.value)} style={{
+                padding: '7px 12px', borderRadius: 999,
+                border: isActive ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid rgba(255, 255, 255, 0.55)',
+                background: isActive
+                  ? 'rgba(59, 130, 246, 0.12)'
+                  : 'rgba(255, 255, 255, 0.55)',
+                backdropFilter: 'blur(10px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(10px) saturate(180%)',
+                color: isActive ? '#1d4ed8' : 'rgba(0, 0, 0, 0.6)',
+                fontSize: 12, fontWeight: 700, letterSpacing: '-0.005em',
+                cursor: 'pointer',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+                transition: 'background 180ms ease, color 180ms ease, border-color 180ms ease',
+              }}>{d.label}</button>
+            )
+          })}
         </div>
+
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => onConfirm(date)} style={{
-            flex: 1, padding: '10px 0', borderRadius: 10, border: 'none',
-            background: '#3b82f6', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            flex: 1, padding: '11px 0', borderRadius: 999, border: 'none',
+            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95))',
+            color: '#fff', fontSize: 13, fontWeight: 700, letterSpacing: '-0.005em',
+            cursor: 'pointer',
+            boxShadow: '0 6px 18px -6px rgba(37, 99, 235, 0.45), inset 0 1px 0 rgba(255,255,255,0.2)',
           }}>Confirm</button>
           <button onClick={onCancel} style={{
-            padding: '10px 20px', borderRadius: 10, border: '1px solid #e8e8e8',
-            background: '#fff', color: 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            padding: '11px 22px', borderRadius: 999,
+            background: 'rgba(255, 255, 255, 0.55)',
+            backdropFilter: 'blur(10px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(10px) saturate(180%)',
+            border: '1px solid rgba(255, 255, 255, 0.55)',
+            color: 'rgba(0, 0, 0, 0.6)', fontSize: 13, fontWeight: 700, letterSpacing: '-0.005em',
+            cursor: 'pointer',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
           }}>Cancel</button>
         </div>
       </div>
@@ -1433,6 +1490,11 @@ export default function ContentBoard() {
     const k = dayKey(t.scheduledDate)
     if (k) scheduledByDay[k] = (scheduledByDay[k] || 0) + 1
   }
+  // Active (in_progress) items always belong on the Today tab, so fold them into
+  // today's count for the tab badge + the Today stat box.
+  if (data.active.length + data.activeTasks.length > 0) {
+    scheduledByDay[todayET] = (scheduledByDay[todayET] || 0) + data.active.length + data.activeTasks.length
+  }
   // Overdue = scheduled for any day before today and not done.  These auto-roll
   // into the Today tab so nothing slips through the cracks.
   const overdueVehicles = data.scheduled.filter(j => {
@@ -1445,12 +1507,18 @@ export default function ContentBoard() {
   })
   const overdueCount = overdueVehicles.length + overdueTasks.length
   // The slice of items shown in the selected day's panel.
+  // Today's panel pulls in three buckets in priority order: anything in_progress
+  // (work happening right now), past-due unfinished items (overdue rollover),
+  // then items scheduled for today.  Other day tabs only show items scheduled
+  // for that specific day — in_progress always belongs on today.
   const isViewingToday = selectedDay === todayET
   const dayVehicles = [
+    ...(isViewingToday ? data.active : []),
     ...(isViewingToday ? overdueVehicles : []),
     ...data.scheduled.filter(j => dayKey(j.scheduledDate) === selectedDay),
   ]
   const dayTasks = [
+    ...(isViewingToday ? data.activeTasks : []),
     ...(isViewingToday ? overdueTasks : []),
     ...data.scheduledTasks.filter(t => dayKey(t.scheduledDate) === selectedDay),
   ]
@@ -1461,20 +1529,7 @@ export default function ContentBoard() {
   })()
 
   return (
-    <div style={{ maxWidth: 1500, margin: '0 auto', padding: '16px 24px', position: 'relative' }}>
-      {/* Soft mesh-gradient backdrop (matches the inventory + vehicle pages) */}
-      <div aria-hidden style={{
-        position: 'fixed', inset: 0,
-        background: [
-          'radial-gradient(at 12% 14%, hsla(220, 90%, 72%, 0.18) 0px, transparent 55%)',
-          'radial-gradient(at 88% 6%, hsla(280, 80%, 68%, 0.16) 0px, transparent 55%)',
-          'radial-gradient(at 74% 82%, hsla(190, 70%, 78%, 0.12) 0px, transparent 50%)',
-          'radial-gradient(at 6% 92%, hsla(340, 75%, 72%, 0.14) 0px, transparent 55%)',
-        ].join(', '),
-        filter: 'blur(80px) saturate(110%)',
-        zIndex: -1,
-        pointerEvents: 'none',
-      }} />
+    <div style={{ maxWidth: 1500, margin: '0 auto', position: 'relative' }}>
       <style>{`
         @keyframes content-modal-in {
           from { opacity: 0; transform: scale(0.96) translateY(8px); }
@@ -1558,35 +1613,17 @@ export default function ContentBoard() {
         />
       </div>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 28, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
         <StatBox label="Total" value={data.stats.total} />
-        <div className="content-stat-active" style={{ display: 'contents' }}>
-          <StatBox label="Active" value={data.stats.activeCount} color="#f59e0b" />
-        </div>
-        <StatBox label="Today" value={data.stats.todayCount} color="#3b82f6" />
+        <StatBox label="Today" value={(scheduledByDay[todayET] || 0) + overdueCount} color="#3b82f6" />
         <StatBox label="Done Today" value={data.stats.completedToday} color="#22c55e" />
         <StatBox label="Done This Week" value={data.stats.completedThisWeek} color="#8b5cf6"
           onClick={() => setShowWeekCompleted(!showWeekCompleted)} active={showWeekCompleted} />
       </div>
 
-      {/* Active */}
-      <div style={{ marginBottom: 28 }}>
-        <SectionHeader label="Active" count={data.active.length + data.activeTasks.length} color="#f59e0b" />
-        {data.active.length === 0 && data.activeTasks.length === 0 ? (
-          <EmptyHint>Nothing in progress right now</EmptyHint>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-            {data.active.map(job => (
-              <ActiveVehicleCard key={job.id} job={job} onToggleTask={toggleTask} onComplete={completeVehicle} />
-            ))}
-            {data.activeTasks.map(task => (
-              <ActiveTaskCard key={task.id} task={task} onComplete={completeTask} onToggleSubtask={toggleSubtask} onEdit={setEditTask} />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Schedule — day tabs for the next 7 days */}
+      {/* Schedule — day tabs for the next 7 days.  Active (in_progress) items
+          live in the Today tab automatically so they share a viewport with the
+          rest of today's work. */}
       <div style={{ marginBottom: 28 }}>
         <WeekTabs
           selectedDay={selectedDay}
@@ -1672,11 +1709,12 @@ export default function ContentBoard() {
           {isAdmin && (
             <button onClick={() => setShowAddTask(true)} style={{
               padding: '8px 16px', borderRadius: 999, border: 'none',
-              background: '#1d1d1f', color: '#dffd6e',
+              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.95), rgba(124, 58, 237, 0.95))',
+              color: '#fff',
               fontSize: 12, fontWeight: 700, letterSpacing: '-0.005em',
               cursor: 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 6,
-              boxShadow: '0 4px 14px -4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
+              boxShadow: '0 6px 18px -6px rgba(124, 58, 237, 0.45), inset 0 1px 0 rgba(255,255,255,0.2)',
               transition: 'transform 160ms ease',
             }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
