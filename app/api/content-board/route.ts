@@ -71,23 +71,29 @@ export async function GET() {
     orderBy: { updatedAt: 'desc' },
   })
 
-  const isScheduledToday = (d: Date | null) => {
-    if (!d) return false
-    return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) === today
+  const dayInET = (d: Date | null) => {
+    if (!d) return null
+    return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
   }
-
+  const isScheduledToday = (d: Date | null) => dayInET(d) === today
 
   // Active = in_progress
   const activeVehicles = stages.filter(s => s.status === 'in_progress')
   const activeTasks = contentTasks.filter(t => t.status === 'in_progress')
 
-  // Today = scheduled for today but NOT in_progress
-  const todayVehicles = stages.filter(s => s.status !== 'in_progress' && isScheduledToday(s.scheduledDate))
-  const todayTasks = contentTasks.filter(t => t.status !== 'in_progress' && isScheduledToday(t.scheduledDate))
+  // Scheduled = has a scheduledDate, not in_progress (any day, past or future).
+  // Client groups by day for the week-tab view; past-due items roll into the Today tab.
+  const scheduledVehicles = stages.filter(s => s.status !== 'in_progress' && s.scheduledDate)
+  const scheduledTasks = contentTasks.filter(t => t.status !== 'in_progress' && t.scheduledDate)
 
-  // Queue = not in_progress and not scheduled today
-  const queuedVehicles = stages.filter(s => s.status !== 'in_progress' && !isScheduledToday(s.scheduledDate))
-  const queuedTasks = contentTasks.filter(t => t.status !== 'in_progress' && !isScheduledToday(t.scheduledDate))
+  // Queue = unscheduled only (no scheduledDate), not in_progress.
+  const queuedVehicles = stages.filter(s => s.status !== 'in_progress' && !s.scheduledDate)
+  const queuedTasks = contentTasks.filter(t => t.status !== 'in_progress' && !t.scheduledDate)
+
+  // Count scheduled for *today* for the stat header (kept stable for any dashboards).
+  const todayCount =
+    scheduledVehicles.filter(s => isScheduledToday(s.scheduledDate)).length +
+    scheduledTasks.filter(t => isScheduledToday(t.scheduledDate)).length
 
   const formatStage = (s: typeof stages[number]) => ({
     id: s.id, vehicleId: s.vehicle.id,
@@ -109,8 +115,8 @@ export async function GET() {
   return NextResponse.json({
     active: activeVehicles.map(formatStage),
     activeTasks: activeTasks.map(formatTask),
-    today: todayVehicles.map(formatStage),
-    todayTasks: todayTasks.map(formatTask),
+    scheduled: scheduledVehicles.map(formatStage),
+    scheduledTasks: scheduledTasks.map(formatTask),
     queuedVehicles: queuedVehicles.map(formatStage),
     queuedTasks: queuedTasks.map(formatTask),
     completedToday: completedToday.map(formatStage),
@@ -120,7 +126,7 @@ export async function GET() {
     stats: {
       total: stages.length + contentTasks.length,
       activeCount: activeVehicles.length + activeTasks.length,
-      todayCount: todayVehicles.length + todayTasks.length,
+      todayCount,
       completedToday: completedToday.length + completedTasks.length,
       completedThisWeek: completedToday.length + completedTasks.length + completedThisWeek.length + completedTasksThisWeek.length,
     },

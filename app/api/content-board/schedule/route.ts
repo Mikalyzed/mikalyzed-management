@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getSessionUser } from '@/lib/auth'
+import { getSessionUser, requireRole } from '@/lib/auth'
 
 // POST: assign items to a date
 // body: { items: [{ id, type: 'vehicle'|'task', date: 'YYYY-MM-DD' | null }] }
 export async function POST(request: Request) {
   const user = await getSessionUser()
-  if (!user || user.role !== 'admin') return NextResponse.json({ error: 'Admin only' }, { status: 403 })
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Content team owns this board's workflow alongside admins (same parity as the UI).
+  if (!requireRole(user.role, ['admin', 'content'])) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { items } = await request.json()
   if (!Array.isArray(items)) return NextResponse.json({ error: 'items required' }, { status: 400 })

@@ -51,7 +51,7 @@ type ContentTask = {
 }
 type BoardData = {
   active: VehicleJob[]; activeTasks: ContentTask[]
-  today: VehicleJob[]; todayTasks: ContentTask[]
+  scheduled: VehicleJob[]; scheduledTasks: ContentTask[]
   queuedVehicles: VehicleJob[]; queuedTasks: ContentTask[]
   completedToday: VehicleJob[]; completedTasks: ContentTask[]
   completedThisWeek: VehicleJob[]; completedTasksThisWeek: ContentTask[]
@@ -68,6 +68,86 @@ function StatBox({ label, value, color, onClick, active }: { label: string; valu
     }}>
       <p style={{ fontSize: 11, color: active ? '#999' : 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>{label}</p>
       <p style={{ fontSize: 28, fontWeight: 800, margin: '4px 0 0', color: active ? '#dffd6e' : (color || 'var(--text-primary)') }}>{value}</p>
+    </div>
+  )
+}
+
+/* ── Week Day Tabs ──
+   Horizontal strip of 7 day-buttons starting from today.  Each shows the day
+   abbreviation + numeric date, plus an item count badge if anything is scheduled
+   for that day.  The Today tab also gets a small "overdue" indicator when there
+   are past-due unfinished items that roll forward. */
+function WeekTabs({
+  selectedDay, onSelect, scheduledByDay, todayDay, overdueCount,
+}: {
+  selectedDay: string
+  onSelect: (day: string) => void
+  scheduledByDay: Record<string, number>
+  todayDay: string
+  overdueCount: number
+}) {
+  const days = useMemo(() => {
+    const out: { value: string; label: string; sub: string; isToday: boolean }[] = []
+    for (let i = 0; i < 7; i++) {
+      const d = new Date()
+      d.setDate(d.getDate() + i)
+      const value = d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+      const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/New_York' })
+      const sub = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' })
+      out.push({ value, label, sub, isToday: value === todayDay })
+    }
+    return out
+  }, [todayDay])
+
+  return (
+    <div style={{
+      display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto',
+      paddingBottom: 4, scrollbarWidth: 'thin',
+    }}>
+      {days.map(d => {
+        const count = scheduledByDay[d.value] || 0
+        // Today tab pulls in overdue items too, so its badge reflects scheduled-for-today + overdue.
+        const badgeCount = d.isToday ? count + overdueCount : count
+        const isSelected = selectedDay === d.value
+        return (
+          <button
+            key={d.value}
+            onClick={() => onSelect(d.value)}
+            style={{
+              flex: '0 0 auto',
+              minWidth: 78,
+              padding: '8px 14px',
+              borderRadius: 10,
+              border: `1px solid ${isSelected ? '#1a1a1a' : '#e8e8e8'}`,
+              background: isSelected ? '#1a1a1a' : '#fff',
+              color: isSelected ? '#fff' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'all 0.15s',
+              display: 'flex', flexDirection: 'column', gap: 1,
+              position: 'relative',
+            }}>
+            <span style={{
+              fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase',
+              color: isSelected ? '#dffd6e' : (d.isToday ? '#3b82f6' : 'var(--text-muted)'),
+            }}>{d.label}</span>
+            <span style={{
+              fontSize: 13, fontWeight: 700,
+              color: isSelected ? '#fff' : 'var(--text-primary)',
+            }}>{d.sub}</span>
+            {badgeCount > 0 && (
+              <span style={{
+                position: 'absolute', top: 6, right: 8,
+                fontSize: 10, fontWeight: 800,
+                padding: '1px 6px', borderRadius: 100,
+                background: isSelected ? '#dffd6e' : '#3b82f618',
+                color: isSelected ? '#1a1a1a' : '#3b82f6',
+                minWidth: 18, textAlign: 'center',
+              }}>{badgeCount}</span>
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -700,6 +780,9 @@ export default function ContentBoard() {
   const [editTask, setEditTask] = useState<ContentTask | null>(null)
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
   const [search, setSearch] = useState('')
+  // Week-tab state: which day's schedule the user is viewing.  Defaults to today in ET.
+  const todayET = useMemo(() => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }), [])
+  const [selectedDay, setSelectedDay] = useState<string>(todayET)
   const dragItem = useRef<number | null>(null)
   const dragOver = useRef<number | null>(null)
 
@@ -726,8 +809,8 @@ export default function ContentBoard() {
       ...rawData,
       active: rawData.active.filter(matchVehicle),
       activeTasks: rawData.activeTasks.filter(matchTask),
-      today: rawData.today.filter(matchVehicle),
-      todayTasks: rawData.todayTasks.filter(matchTask),
+      scheduled: rawData.scheduled.filter(matchVehicle),
+      scheduledTasks: rawData.scheduledTasks.filter(matchTask),
       queuedVehicles: rawData.queuedVehicles.filter(matchVehicle),
       queuedTasks: rawData.queuedTasks.filter(matchTask),
       completedToday: rawData.completedToday.filter(matchVehicle),
@@ -755,8 +838,8 @@ export default function ContentBoard() {
       updated[taskIdx] = { ...updated[taskIdx], done: !updated[taskIdx].done }
       return { ...j, checklist: updated }
     })
-    setData({ ...rawData, today: updateJobs(rawData.today), queuedVehicles: updateJobs(rawData.queuedVehicles) })
-    const job = [...rawData.today, ...rawData.queuedVehicles].find(j => j.id === jobId)
+    setData({ ...rawData, scheduled: updateJobs(rawData.scheduled), queuedVehicles: updateJobs(rawData.queuedVehicles) })
+    const job = [...rawData.scheduled, ...rawData.queuedVehicles].find(j => j.id === jobId)
     if (!job) return
     const updated = [...job.checklist]
     updated[taskIdx] = { ...updated[taskIdx], done: !updated[taskIdx].done }
@@ -853,10 +936,10 @@ export default function ContentBoard() {
     setData({
       ...rawData,
       activeTasks: updateTasks(rawData.activeTasks),
-      todayTasks: updateTasks(rawData.todayTasks),
+      scheduledTasks: updateTasks(rawData.scheduledTasks),
     })
     // Find the task to get current subtasks
-    const task = [...rawData.activeTasks, ...rawData.todayTasks].find(t => t.id === taskId)
+    const task = [...rawData.activeTasks, ...rawData.scheduledTasks].find(t => t.id === taskId)
     if (!task?.subtasks) return
     const updated = [...task.subtasks]
     updated[subIdx] = { ...updated[subIdx], done: !updated[subIdx].done }
@@ -874,6 +957,49 @@ export default function ContentBoard() {
   const hiddenVehicles = data.queuedVehicles.length - LIMIT
   const visibleTasks = showAllTasks ? data.queuedTasks : data.queuedTasks.slice(0, LIMIT)
   const hiddenTasks = data.queuedTasks.length - LIMIT
+
+  // Group scheduled items by the YYYY-MM-DD in ET that their scheduledDate falls on,
+  // so the day tabs know how many items live on each day and the section below can
+  // pull just the selected day's slice.
+  const dayKey = (iso: string | null): string | null => {
+    if (!iso) return null
+    return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
+  }
+  const scheduledByDay: Record<string, number> = {}
+  for (const j of data.scheduled) {
+    const k = dayKey(j.scheduledDate)
+    if (k) scheduledByDay[k] = (scheduledByDay[k] || 0) + 1
+  }
+  for (const t of data.scheduledTasks) {
+    const k = dayKey(t.scheduledDate)
+    if (k) scheduledByDay[k] = (scheduledByDay[k] || 0) + 1
+  }
+  // Overdue = scheduled for any day before today and not done.  These auto-roll
+  // into the Today tab so nothing slips through the cracks.
+  const overdueVehicles = data.scheduled.filter(j => {
+    const k = dayKey(j.scheduledDate)
+    return k !== null && k < todayET
+  })
+  const overdueTasks = data.scheduledTasks.filter(t => {
+    const k = dayKey(t.scheduledDate)
+    return k !== null && k < todayET
+  })
+  const overdueCount = overdueVehicles.length + overdueTasks.length
+  // The slice of items shown in the selected day's panel.
+  const isViewingToday = selectedDay === todayET
+  const dayVehicles = [
+    ...(isViewingToday ? overdueVehicles : []),
+    ...data.scheduled.filter(j => dayKey(j.scheduledDate) === selectedDay),
+  ]
+  const dayTasks = [
+    ...(isViewingToday ? overdueTasks : []),
+    ...data.scheduledTasks.filter(t => dayKey(t.scheduledDate) === selectedDay),
+  ]
+  const dayLabel = (() => {
+    if (selectedDay === todayET) return 'Today'
+    const d = new Date(selectedDay + 'T12:00:00-04:00')
+    return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'America/New_York' })
+  })()
 
   return (
     <div>
@@ -975,20 +1101,42 @@ export default function ContentBoard() {
         )}
       </div>
 
-      {/* Today */}
+      {/* Schedule — day tabs for the next 7 days */}
       <div style={{ marginBottom: 28 }}>
-        <SectionHeader label="Today" count={data.today.length + data.todayTasks.length} color="#3b82f6" />
-        {data.today.length === 0 && data.todayTasks.length === 0 ? (
+        <WeekTabs
+          selectedDay={selectedDay}
+          onSelect={setSelectedDay}
+          scheduledByDay={scheduledByDay}
+          todayDay={todayET}
+          overdueCount={overdueCount}
+        />
+        <SectionHeader
+          label={`Schedule · ${dayLabel}`}
+          count={dayVehicles.length + dayTasks.length}
+          color="#3b82f6"
+        />
+        {isViewingToday && overdueCount > 0 && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: 11, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase',
+            color: '#b42318', background: '#fee2e2', border: '1px solid #fecaca',
+            padding: '4px 10px', borderRadius: 100, marginBottom: 10,
+          }}>
+            <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: '#b42318' }} />
+            {overdueCount} overdue rolled in
+          </div>
+        )}
+        {dayVehicles.length === 0 && dayTasks.length === 0 ? (
           <div style={{ background: '#f9fafb', borderRadius: 12, padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>
-            Nothing scheduled for today{isAdmin ? '. Use the Schedule button on queue items.' : '.'}
+            Nothing scheduled for {isViewingToday ? 'today' : dayLabel}{isAdmin ? '. Use the Schedule button on queue items below.' : '.'}
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-            {data.today.map(job => (
+            {dayVehicles.map(job => (
               <ActiveVehicleCard key={job.id} job={job} onToggleTask={toggleTask} onComplete={completeVehicle}
                 adminAction={isAdmin ? () => unschedule(job.id, 'vehicle') : undefined} />
             ))}
-            {data.todayTasks.map(task => (
+            {dayTasks.map(task => (
               <ActiveTaskCard key={task.id} task={task} onComplete={completeTask} onToggleSubtask={toggleSubtask} onEdit={setEditTask}
                 adminAction={isAdmin ? () => unschedule(task.id, 'task') : undefined} />
             ))}
