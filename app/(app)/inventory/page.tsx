@@ -631,12 +631,15 @@ function ColumnValue({ label, value, suffix, mono }: { label: string; value: str
   )
 }
 
-// Soft satin capsule for status / type tags
+// Soft satin capsule for status / type tags.
+// minWidth keeps short labels (Sold, External) the same visual size as longer
+// ones (In Recon, In Stock) so the column reads as a clean stack of equal pills.
 function SatinTag({ children, tone }: { children: React.ReactNode; tone: { bg: string; fg: string; dot?: string } }) {
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
       padding: '5px 11px',
+      minWidth: 92,
       fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
       textTransform: 'uppercase',
       color: tone.fg,
@@ -649,6 +652,7 @@ function SatinTag({ children, tone }: { children: React.ReactNode; tone: { bg: s
         '0 1px 3px rgba(0, 0, 0, 0.04)',
         'inset 0 1px 0 rgba(255, 255, 255, 0.6)',
       ].join(', '),
+      boxSizing: 'border-box',
     }}>
       {tone.dot && <span aria-hidden style={{ width: 5, height: 5, borderRadius: '50%', background: tone.dot, flexShrink: 0 }} />}
       {children}
@@ -659,7 +663,7 @@ function SatinTag({ children, tone }: { children: React.ReactNode; tone: { bg: s
 // ─── Status / Type tone palettes ───────────────────────────────────
 
 function statusLabel(s: string): string {
-  if (s === 'external_repair') return 'External Repair'
+  if (s === 'external_repair') return 'External'
   if (s === 'in_recon')        return 'In Recon'
   if (s === 'sold')            return 'Sold'
   if (s === 'in_stock')        return 'In Stock'
