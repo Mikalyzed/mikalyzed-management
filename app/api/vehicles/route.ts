@@ -286,6 +286,12 @@ export async function POST(request: Request) {
         return updated
       })
 
+      // Keep the inventory-side badge in sync — recompute reads the just-created
+      // mechanic stage and flips InventoryVehicle.status to 'in_recon' (was
+      // skipped before this line was added, leaving promoted cars stuck on
+      // their prior badge: in_stock / external_repair / sold).
+      await recomputeInventoryStatus(stockNumber).catch(() => {})
+
       return NextResponse.json({ vehicle }, { status: 201 })
     }
     if (existing.status === 'completed') {

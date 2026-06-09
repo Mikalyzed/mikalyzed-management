@@ -17,15 +17,22 @@ export async function recomputeInventoryStatus(stockNumber: string) {
   if (inv.status === 'sold' || inv.status === 'removed') return
 
   const [activeRecon, activeExternal] = await Promise.all([
+    // "Active recon" = a Vehicle row that (a) isn't a placeholder/terminal and
+    // (b) has at least one stage record that's still pending/in_progress/blocked.
+    // Driving this off the stages directly avoids depending on Vehicle.completedAt
+    // staying in sync — which it doesn't, in cases where a completed car was
+    // restarted or moved back into a stage and the completedAt timestamp didn't
+    // get cleared.  See #N514814 (2026-06-05): status='mechanic', completedAt
+    // set, live mechanic stage — the old `completedAt: null` check missed it.
     prisma.vehicle.findFirst({
       where: {
         stockNumber,
-        completedAt: null,
         // 'inventory_only' = car exists in the inventory feed but never actually
-        //   started recon.  'archived' = placeholder Vehicle created when adding a
-        //   part to a non-recon car.  Neither is a real recon line, so they must
-        //   not flip InventoryVehicle.status to 'in_recon'.
+        //   started recon.  'archived' = placeholder Vehicle created when adding
+        //   a part to a non-recon car.  Neither is a real recon line, so they
+        //   must not flip InventoryVehicle.status to 'in_recon'.
         status: { notIn: ['completed', 'inventory_only', 'archived'] },
+        stages: { some: { status: { notIn: ['done', 'skipped'] } } },
       },
       select: { id: true },
     }),
