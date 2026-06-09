@@ -215,15 +215,18 @@ function WeekTabs({
               lineHeight: 1.2,
             }}>{d.sub}</span>
             {badgeCount > 0 && (
-              <span style={{
-                position: 'absolute', top: 5, right: 6,
-                fontSize: 9, fontWeight: 800,
-                padding: '1px 6px', borderRadius: 999,
-                background: isSelected ? 'rgba(255,255,255,0.18)' : 'rgba(0, 0, 0, 0.06)',
-                color: isSelected ? '#dffd6e' : 'rgba(0, 0, 0, 0.55)',
-                letterSpacing: '-0.005em', lineHeight: 1.6,
-                transition: 'background 220ms ease, color 220ms ease',
-              }}>{badgeCount}</span>
+              // Small dot indicator instead of a numeric chip — the chip was
+              // overlapping the day label inside the tab's tight footprint.
+              // The actual count is always visible in the section header below.
+              <span aria-hidden style={{
+                position: 'absolute', top: 5, right: 5,
+                width: 6, height: 6, borderRadius: '50%',
+                background: isSelected ? '#dffd6e' : 'rgba(59, 130, 246, 0.85)',
+                boxShadow: isSelected
+                  ? '0 0 8px rgba(223, 253, 110, 0.65)'
+                  : '0 0 6px rgba(59, 130, 246, 0.45)',
+                transition: 'background 220ms ease, box-shadow 220ms ease',
+              }} />
             )}
           </button>
         )
@@ -1562,11 +1565,17 @@ export default function ContentBoard() {
           .week-tabs > button { flex: 0 0 78px !important; }
           .week-tabs > div[aria-hidden] { display: none !important; }
           .week-tabs > button.week-tab-active {
-            background: linear-gradient(135deg, #1d1d1f, #0a0a0a);
+            background: linear-gradient(135deg, #1d1d1f, #0a0a0a) !important;
             box-shadow:
               0 4px 14px -2px rgba(0,0,0,0.35),
               inset 0 1px 0 rgba(255,255,255,0.12),
-              inset 0 -1px 0 rgba(0,0,0,0.3);
+              inset 0 -1px 0 rgba(0,0,0,0.3) !important;
+          }
+          /* Active cards span full width on mobile — the desktop maxWidth
+             was capping them at 420px on tablet/wide-phone viewports. */
+          .active-card {
+            max-width: none !important;
+            flex: 1 1 100% !important;
           }
 
           .queue-card,
