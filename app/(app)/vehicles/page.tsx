@@ -473,6 +473,40 @@ export default function VehiclesPage() {
     setModalSaving(false)
   }, [modalChecklist, getCurrentStage])
 
+  const addChecklistItem = useCallback(async (taskText: string) => {
+    const trimmed = taskText.trim()
+    if (!trimmed) return
+    const stage = getCurrentStage()
+    if (!stage) return
+    const updated = [...modalChecklist, { item: trimmed, done: false, note: '' }]
+    setModalChecklist(updated)
+    setModalSaving(true)
+    try {
+      await fetch(`/api/stages/${stage.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: updated }),
+      })
+    } catch { /* ignore */ }
+    setModalSaving(false)
+  }, [modalChecklist, getCurrentStage])
+
+  const removeChecklistItem = useCallback(async (index: number) => {
+    const stage = getCurrentStage()
+    if (!stage) return
+    const updated = modalChecklist.filter((_, i) => i !== index)
+    setModalChecklist(updated)
+    setModalSaving(true)
+    try {
+      await fetch(`/api/stages/${stage.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: updated }),
+      })
+    } catch { /* ignore */ }
+    setModalSaving(false)
+  }, [modalChecklist, getCurrentStage])
+
   const handleAdvanceStage = useCallback(async () => {
     const stage = getCurrentStage()
     if (!stage) return
@@ -1490,14 +1524,82 @@ export default function VehiclesPage() {
                               )}
                             </div>
                             <span style={{
+                              flex: 1, minWidth: 0,
                               fontSize: 14, color: item.done ? 'var(--text-muted)' : 'var(--text-primary)',
                               textDecoration: item.done ? 'line-through' : 'none',
                             }}>
                               {item.item}
                             </span>
+                            {/* Admin remove — small × on the right of each item */}
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                title="Remove this task"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (confirm(`Remove "${item.item}" from this checklist?`)) {
+                                    removeChecklistItem(i)
+                                  }
+                                }}
+                                style={{
+                                  flexShrink: 0,
+                                  width: 24, height: 24, borderRadius: 6,
+                                  border: 'none', background: 'transparent',
+                                  color: 'rgba(0,0,0,0.35)', cursor: 'pointer',
+                                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                  padding: 0, minHeight: 'auto',
+                                  transition: 'background 140ms ease, color 140ms ease',
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'
+                                  e.currentTarget.style.color = '#dc2626'
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'transparent'
+                                  e.currentTarget.style.color = 'rgba(0,0,0,0.35)'
+                                }}
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                                  <path d="M18 6L6 18M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
+                    )}
+
+                    {/* Admin: + Add Task — inline form right under the checklist. */}
+                    {isAdmin && (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          const input = e.currentTarget.elements.namedItem('newTask') as HTMLInputElement
+                          if (!input.value.trim()) return
+                          addChecklistItem(input.value)
+                          input.value = ''
+                        }}
+                        style={{ display: 'flex', gap: 8, marginTop: 10 }}
+                      >
+                        <input
+                          name="newTask"
+                          placeholder="+ Add task..."
+                          style={{
+                            flex: 1, padding: '9px 12px', borderRadius: 10,
+                            border: '1px solid #e5e5e5', fontSize: 13, background: '#fff',
+                            outline: 'none',
+                          }}
+                        />
+                        <button
+                          type="submit"
+                          style={{
+                            padding: '9px 16px', borderRadius: 10, border: 'none',
+                            background: '#1a1a1a', color: '#dffd6e',
+                            fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                            whiteSpace: 'nowrap', minHeight: 'auto',
+                          }}
+                        >Add</button>
+                      </form>
                     )}
                   </div>
 
