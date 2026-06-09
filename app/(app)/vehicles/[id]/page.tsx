@@ -296,7 +296,7 @@ export default function VehicleDetailV2() {
   const [media, setMedia] = useState<MediaAsset[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'general' | 'recon' | 'marketing' | 'media' | 'files' | 'logs'>('general')
-  const [vehicleInfoSubTab, setVehicleInfoSubTab] = useState<'general' | 'build_title' | 'description'>('general')
+  const [vehicleInfoSubTab, setVehicleInfoSubTab] = useState<'general' | 'build_title' | 'description' | 'purchase_info'>('general')
   const [expandedStageId, setExpandedStageId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [canSeeMoney, setCanSeeMoney] = useState(false)
@@ -654,9 +654,11 @@ export default function VehicleDetailV2() {
           {/* Sub-tab nav */}
           <SubTabNav
             tabs={[
-              { id: 'general',     label: 'General Info' },
-              { id: 'build_title', label: 'Build / Title' },
-              { id: 'description', label: 'Description' },
+              { id: 'general',       label: 'General Info' },
+              { id: 'build_title',   label: 'Build / Title' },
+              { id: 'description',   label: 'Description' },
+              // Purchase Info holds money + lien data — admin / sales_manager only.
+              ...(canSeeMoney ? [{ id: 'purchase_info' as const, label: 'Purchase Info' }] : []),
             ]}
             activeId={vehicleInfoSubTab}
             onChange={(id) => setVehicleInfoSubTab(id as typeof vehicleInfoSubTab)}
@@ -759,6 +761,28 @@ export default function VehicleDetailV2() {
                   body: JSON.stringify({ vehicleInfo: text || null }),
                 })
                 if (r.ok) await refreshVehicle()
+              }}
+            />
+          )}
+
+          {/* ─── Sub-tab: Purchase Info (admin / sales_manager only) ─── */}
+          {vehicleInfoSubTab === 'purchase_info' && canSeeMoney && (
+            <PurchaseInfoStudio
+              vehicle={vehicle}
+              isAdmin={isAdmin}
+              onSavePartial={async (patch: Record<string, unknown>) => {
+                setVehicle((prev) => (prev ? { ...prev, ...patch } as Vehicle : prev))
+                const r = await fetch(`/api/vehicles/${vehicle.id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(patch),
+                })
+                if (r.ok) {
+                  const data = await r.json().catch(() => null)
+                  if (data?.vehicle) setVehicle((prev) => (prev ? { ...prev, ...data.vehicle } : data.vehicle))
+                } else {
+                  await refreshVehicle()
+                }
               }}
             />
           )}
@@ -3188,7 +3212,7 @@ function TabNav({ tabs, activeId, onChange }: {
 
 // ─── Compact sub-tab nav for the Vehicle Info tab (fluid satin capsule) ────
 
-type SubTabId = 'general' | 'build_title' | 'description'
+type SubTabId = 'general' | 'build_title' | 'description' | 'purchase_info'
 
 function SubTabNav({
   tabs, activeId, onChange,
@@ -3735,6 +3759,697 @@ function TitleBuildStudio({
         </div>
       </div>
     </GlassCard>
+  )
+}
+
+// ─── Purchase Info Studio (Vehicle Info → Purchase Info sub-tab) ────────
+// 60/40 asymmetric two-column layout:
+//   LEFT (60%): operational financials — Purchase Info + How Did You Pay
+//   RIGHT (40%): external legal entities — Lienholder + Previous Owner
+// All four parent containers use GlassCard so they share the same translucent
+// frosted surface; sub-content uses SubPanel + custom mini-helpers below.
+
+const ACQUIRED_MILEAGE_STATUS_OPTIONS = [
+  { value: 'actual',   label: 'Actual' },
+  { value: 'not_actual', label: 'Not Actual' },
+  { value: 'exceeds',  label: 'Exceeds Mechanical Limits' },
+]
+
+const PAYMENT_METHOD_OPTIONS = [
+  { value: 'cash',    label: 'Cash' },
+  { value: 'check',   label: 'Check' },
+  { value: 'wire',    label: 'Wire' },
+  { value: 'ach',     label: 'ACH' },
+  { value: 'card',    label: 'Card' },
+  { value: 'other',   label: 'Other' },
+]
+
+const PRINCIPAL_USE_OPTIONS = [
+  { value: 'personal',   label: 'Personal' },
+  { value: 'commercial', label: 'Commercial' },
+  { value: 'rental',     label: 'Rental' },
+  { value: 'lease',      label: 'Lease' },
+  { value: 'demo',       label: 'Demo' },
+  { value: 'police',     label: 'Police' },
+  { value: 'taxi',       label: 'Taxi' },
+]
+
+function PurchaseInfoStudio({
+  vehicle, isAdmin, onSavePartial,
+}: {
+  vehicle: Vehicle
+  isAdmin: boolean
+  onSavePartial: (patch: Record<string, unknown>) => Promise<void>
+}) {
+  // Persisted fields from Vehicle (the ones we already have columns for)
+  const vehicleCost = vehicle.vehicleCost ?? 0
+  const purchaseDateStr = vehicle.dateInStock
+    ? new Date(vehicle.dateInStock).toISOString().slice(0, 10)
+    : ''
+  const mileage = vehicle.mileage ?? 0
+
+  // Local-only state for the Purchase Info fields that don't yet have columns.
+  // Pending the persistence decision; the studio still saves to local state so
+  // an admin can fill it out within a session and validate the layout.
+  const [acquiredMileageStatus, setAcquiredMileageStatus] = useState('')
+  const [readyToSell, setReadyToSell] = useState('')
+  const [purchaseDetail, setPurchaseDetail] = useState('')
+
+  // Card 2 — How Did You Pay
+  const [howPaidMemo, setHowPaidMemo] = useState('')
+
+  // Card 3 — Lienholder
+  const [lienholderSearch, setLienholderSearch] = useState('')
+  const [lienAccountNo, setLienAccountNo] = useState('')
+  const [lienPayoffAmount, setLienPayoffAmount] = useState(0)
+  const [lienDueDate, setLienDueDate] = useState('')
+  const [lienPaymentMethod, setLienPaymentMethod] = useState('')
+  const [lienPerDiem, setLienPerDiem] = useState(0)
+  const [lienDatePaidOff, setLienDatePaidOff] = useState('')
+  const [paidViaFlooring, setPaidViaFlooring] = useState(false)
+  const [lienMemo, setLienMemo] = useState('')
+
+  // Card 4 — Previous Owner
+  const [prevOwnerName, setPrevOwnerName] = useState('')
+  const [prevOwnerPhone, setPrevOwnerPhone] = useState('')
+  const [prevOwnerAddress, setPrevOwnerAddress] = useState('')
+  const [prevOwnerDealerLicense, setPrevOwnerDealerLicense] = useState('')
+  const [prevOwnerPrincipalUse, setPrevOwnerPrincipalUse] = useState('')
+
+  // Days in Inventory — computed from dateInStock so the admin doesn't
+  // have to maintain it.  Defaults to '—' when no purchase date is set.
+  const daysInInv = vehicle.dateInStock
+    ? Math.max(0, Math.floor((Date.now() - new Date(vehicle.dateInStock).getTime()) / 86400000))
+    : null
+
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: '3fr 2fr',
+      gap: 18,
+      alignItems: 'start',
+      minWidth: 0,
+    }}>
+      {/* ─── LEFT COLUMN (60%) ───────────────────────────────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
+        {/* CARD 1 — Purchase Info */}
+        <GlassCard padding={22}>
+          <GlassEyebrow label="Purchase Info" />
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 14,
+            alignItems: 'stretch',
+            minWidth: 0,
+          }}>
+            {/* LEFT MINI-GRID — acquisition financials */}
+            <SubPanel>
+              <SectionLabel>Acquisition</SectionLabel>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                <InlineField
+                  label="Purchase Date"
+                  type="date"
+                  stringValue={purchaseDateStr}
+                  onCommitString={(v) => onSavePartial({ dateInStock: v || null })}
+                />
+                <InlineField
+                  label="Purchase Cost"
+                  value={vehicleCost}
+                  onCommit={(v) => onSavePartial({ vehicleCost: v })}
+                />
+                <InlineField
+                  label="Acquired Mileage In"
+                  value={mileage}
+                  onCommit={(v) => onSavePartial({ mileage: v })}
+                  placeholderEmpty={!vehicle.mileage}
+                />
+                <InlineSelectField
+                  label="Acquired Mileage Status"
+                  value={acquiredMileageStatus}
+                  onChange={setAcquiredMileageStatus}
+                  options={ACQUIRED_MILEAGE_STATUS_OPTIONS}
+                  placeholder="—"
+                />
+                <InlineField
+                  label="Date in Stock"
+                  type="date"
+                  stringValue={purchaseDateStr}
+                  locked
+                />
+                <InlineDateField
+                  label="Ready to Sell"
+                  value={readyToSell}
+                  onChange={setReadyToSell}
+                />
+                {/* Days in Inventory — read-only computed */}
+                <div style={{
+                  display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+                  gap: 10, paddingBottom: 7,
+                  borderBottom: '1px solid rgba(0,0,0,0.07)',
+                }}>
+                  <span style={labelStyle}>Days in Inventory</span>
+                  <span style={{
+                    fontSize: 14, fontWeight: 700,
+                    color: '#0a0a0a', letterSpacing: '-0.005em',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>{daysInInv !== null ? `${daysInInv}d` : '—'}</span>
+                </div>
+              </div>
+            </SubPanel>
+
+            {/* RIGHT MINI-GRID — Buyer & Source / Contact Badge */}
+            <SubPanel>
+              <SectionLabel>Buyer &amp; Source</SectionLabel>
+              <ContactBadge
+                name="Yoan Perez Gutierrez"
+                cell="(305) 555-0142"
+                email="yoan.perez@example.com"
+                address="1234 Coral Way, Miami FL 33145"
+              />
+              <div style={{ marginTop: 12 }}>
+                <button
+                  type="button"
+                  onClick={() => { /* placeholder for contact selector */ }}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: 10,
+                    border: '1px dashed rgba(0, 0, 0, 0.12)',
+                    background: 'rgba(255, 255, 255, 0.35)',
+                    backdropFilter: 'blur(10px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(10px) saturate(180%)',
+                    fontSize: 12, fontWeight: 600, color: 'rgba(0, 0, 0, 0.55)',
+                    cursor: 'pointer',
+                    transition: 'background 160ms ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.55)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.35)' }}
+                >
+                  Change contact…
+                </button>
+              </div>
+            </SubPanel>
+          </div>
+
+          {/* Base — Purchase Detail textarea */}
+          <div style={{ marginTop: 14 }}>
+            <p style={{
+              fontSize: 11, fontWeight: 600, letterSpacing: '-0.005em',
+              color: 'rgba(0, 0, 0, 0.5)', marginBottom: 6,
+            }}>Purchase Detail</p>
+            <GlassTextArea
+              value={purchaseDetail}
+              onChange={setPurchaseDetail}
+              placeholder="Auction lot, condition notes, contingencies, side agreements…"
+              minRows={3}
+            />
+          </div>
+        </GlassCard>
+
+        {/* CARD 2 — How Did You Pay */}
+        <GlassCard padding={22}>
+          <GlassEyebrow
+            label="How Did You Pay"
+            action={
+              <button
+                type="button"
+                style={{
+                  padding: '6px 12px', borderRadius: 999,
+                  border: '1px solid rgba(0, 113, 227, 0.2)',
+                  background: 'rgba(255, 255, 255, 0.55)',
+                  backdropFilter: 'blur(10px) saturate(180%)',
+                  WebkitBackdropFilter: 'blur(10px) saturate(180%)',
+                  color: '#0071e3', fontSize: 11, fontWeight: 700,
+                  letterSpacing: '-0.005em', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  minHeight: 'auto',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                Add Payment Type
+              </button>
+            }
+          />
+
+          {/* Floating satin floorplan tile */}
+          <FloorplanTile
+            lenderName={vehicle.floorLender || 'Mikalyzed (in-house)'}
+            payOffAmount={vehicle.floorPrincipal ?? 0}
+            amountFloored={vehicle.floorPrincipal ?? 0}
+            dailyRate={vehicle.floorDailyRate ?? 0}
+            status={vehicle.floorStatus || 'pending'}
+          />
+
+          {/* Base — Memo textarea */}
+          <div style={{ marginTop: 14 }}>
+            <p style={{
+              fontSize: 11, fontWeight: 600, letterSpacing: '-0.005em',
+              color: 'rgba(0, 0, 0, 0.5)', marginBottom: 6,
+            }}>Memo</p>
+            <GlassTextArea
+              value={howPaidMemo}
+              onChange={setHowPaidMemo}
+              placeholder="Payment splits, transaction IDs, deposit confirmations…"
+              minRows={3}
+            />
+          </div>
+        </GlassCard>
+      </div>
+
+      {/* ─── RIGHT COLUMN (40%) ──────────────────────────────────── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
+        {/* CARD 3 — Lienholder */}
+        <GlassCard padding={22}>
+          <GlassEyebrow label="Lienholder" />
+
+          {/* Inline search selector */}
+          <div style={{ marginBottom: 12 }}>
+            <input
+              type="text"
+              value={lienholderSearch}
+              onChange={(e) => setLienholderSearch(e.target.value)}
+              placeholder="Search lienholders…"
+              style={{
+                width: '100%', padding: '10px 14px',
+                borderRadius: 12, border: 'none',
+                background: 'rgba(255, 255, 255, 0.45)',
+                backdropFilter: 'blur(15px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(15px) saturate(180%)',
+                fontSize: 13, fontWeight: 500, color: '#0a0a0a',
+                outline: 'none', boxSizing: 'border-box',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7), inset 0 0 0 1px rgba(255,255,255,0.4)',
+              }}
+            />
+          </div>
+
+          {/* 2-col grid of tracking rows */}
+          <SubPanel>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              columnGap: 22, rowGap: 0,
+            }}>
+              <InlineTextField label="Lien Account No." value={lienAccountNo} onChange={setLienAccountNo} />
+              <InlineField label="Payoff Amount" value={lienPayoffAmount} onChange={setLienPayoffAmount} />
+              <InlineDateField label="Due Date" value={lienDueDate} onChange={setLienDueDate} />
+              <InlineSelectField
+                label="Payment Method"
+                value={lienPaymentMethod}
+                onChange={setLienPaymentMethod}
+                options={PAYMENT_METHOD_OPTIONS}
+                placeholder="—"
+              />
+              <InlineField label="Per Diem" value={lienPerDiem} onChange={setLienPerDiem} />
+              <InlineDateField label="Date Paid Off" value={lienDatePaidOff} onChange={setLienDatePaidOff} />
+            </div>
+          </SubPanel>
+
+          {/* Custom Paid Via Flooring toggle pill */}
+          <div style={{ marginTop: 12 }}>
+            <FlooringTogglePill
+              checked={paidViaFlooring}
+              onChange={setPaidViaFlooring}
+              label="Paid Via Flooring"
+            />
+          </div>
+
+          {/* Base — Memo textarea */}
+          <div style={{ marginTop: 14 }}>
+            <p style={{
+              fontSize: 11, fontWeight: 600, letterSpacing: '-0.005em',
+              color: 'rgba(0, 0, 0, 0.5)', marginBottom: 6,
+            }}>Memo</p>
+            <GlassTextArea
+              value={lienMemo}
+              onChange={setLienMemo}
+              placeholder="Lien payoff context, communications, payoff letter ref…"
+              minRows={3}
+            />
+          </div>
+        </GlassCard>
+
+        {/* CARD 4 — Previous Owner */}
+        <GlassCard padding={22}>
+          <GlassEyebrow label="Previous Owner" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <AnchorRow label="Owner Name" value={prevOwnerName} onChange={setPrevOwnerName} placeholder="—" />
+            <AnchorRow label="Phone No." value={prevOwnerPhone} onChange={setPrevOwnerPhone} placeholder="—" />
+            <AnchorRow label="Address" value={prevOwnerAddress} onChange={setPrevOwnerAddress} placeholder="—" />
+            <AnchorRow label="Dealer License No." value={prevOwnerDealerLicense} onChange={setPrevOwnerDealerLicense} placeholder="—" />
+            <AnchorRowSelect
+              label="Principal Use of Vehicle"
+              value={prevOwnerPrincipalUse}
+              onChange={setPrevOwnerPrincipalUse}
+              options={PRINCIPAL_USE_OPTIONS}
+              placeholder="—"
+            />
+          </div>
+        </GlassCard>
+      </div>
+    </div>
+  )
+}
+
+// ─── Purchase Info mini-helpers ────────────────────────────────────────
+
+// Translucent textarea — borderless, glass-tinted, no harsh rectangle.
+function GlassTextArea({
+  value, onChange, placeholder, minRows = 3,
+}: { value: string; onChange: (v: string) => void; placeholder?: string; minRows?: number }) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={minRows}
+      style={{
+        width: '100%',
+        padding: '11px 14px',
+        borderRadius: 12,
+        border: 'none',
+        background: 'rgba(255, 255, 255, 0.35)',
+        backdropFilter: 'blur(15px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(15px) saturate(180%)',
+        fontSize: 13, fontWeight: 500, color: '#0a0a0a',
+        lineHeight: 1.55, fontFamily: 'inherit',
+        outline: 'none', resize: 'vertical',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7), inset 0 0 0 0.5px rgba(255,255,255,0.4)',
+        boxSizing: 'border-box',
+      }}
+    />
+  )
+}
+
+// Floating contact badge — name in a softly tinted capsule, contact details below.
+function ContactBadge({ name, cell, email, address }: {
+  name: string; cell?: string; email?: string; address?: string
+}) {
+  return (
+    <div>
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        padding: '6px 12px',
+        background: 'rgba(255, 255, 255, 0.55)',
+        backdropFilter: 'blur(15px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(15px) saturate(180%)',
+        border: '1px solid rgba(255, 255, 255, 0.6)',
+        borderRadius: 999,
+        boxShadow: [
+          '0 4px 12px -4px rgba(31, 38, 135, 0.12)',
+          'inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+        ].join(', '),
+      }}>
+        <span aria-hidden style={{
+          width: 22, height: 22, borderRadius: '50%',
+          background: 'linear-gradient(135deg, #1d1d1f 0%, #404040 100%)',
+          color: '#dffd6e',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 10, fontWeight: 800, letterSpacing: '-0.005em',
+          flexShrink: 0,
+        }}>{name.split(' ').map(p => p[0]).slice(0, 2).join('')}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#0a0a0a', letterSpacing: '-0.005em' }}>{name}</span>
+      </div>
+      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {cell && <ContactLine label="Cell" value={cell} />}
+        {email && <ContactLine label="Email" value={email} />}
+        {address && <ContactLine label="Address" value={address} />}
+      </div>
+    </div>
+  )
+}
+
+function ContactLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 11 }}>
+      <span style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+        color: 'rgba(0, 0, 0, 0.4)', minWidth: 48,
+      }}>{label}</span>
+      <span style={{ fontWeight: 600, color: 'rgba(0, 0, 0, 0.78)' }}>{value}</span>
+    </div>
+  )
+}
+
+// Floorplan balance tile — independent floating satin dashboard inside the
+// How Did You Pay card.  Big numbers, micro-action buttons.
+function FloorplanTile({ lenderName, payOffAmount, amountFloored, dailyRate, status }: {
+  lenderName: string
+  payOffAmount: number
+  amountFloored: number
+  dailyRate: number
+  status: string
+}) {
+  const fmtMoney = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+  const isPaidOff = status === 'paid_off'
+  return (
+    <div style={{
+      padding: '16px 18px',
+      borderRadius: 16,
+      background: 'linear-gradient(135deg, rgba(255,255,255,0.62) 0%, rgba(245,245,245,0.42) 100%)',
+      backdropFilter: 'blur(20px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      border: '1px solid rgba(255, 255, 255, 0.55)',
+      boxShadow: [
+        '0 8px 24px -10px rgba(31, 38, 135, 0.18)',
+        'inset 0 1px 0 rgba(255, 255, 255, 0.85)',
+        'inset 0 0 0 0.5px rgba(255, 255, 255, 0.4)',
+      ].join(', '),
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+        <div>
+          <p style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.45)' }}>Floorplan</p>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#0a0a0a', marginTop: 2, letterSpacing: '-0.01em' }}>{lenderName}</p>
+        </div>
+        <span style={{
+          fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase',
+          padding: '3px 9px', borderRadius: 999,
+          background: isPaidOff ? 'rgba(34, 197, 94, 0.12)' : 'rgba(180, 83, 9, 0.12)',
+          color: isPaidOff ? '#16a34a' : '#92400e',
+          border: `1px solid ${isPaidOff ? 'rgba(34, 197, 94, 0.25)' : 'rgba(180, 83, 9, 0.25)'}`,
+        }}>{status.replace(/_/g, ' ')}</span>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+        <div>
+          <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.45)' }}>Pay Off Amount</p>
+          <p style={{ fontSize: 22, fontWeight: 800, color: '#0a0a0a', marginTop: 2, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(payOffAmount)}</p>
+        </div>
+        <div>
+          <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(0,0,0,0.45)' }}>Amount Floored</p>
+          <p style={{ fontSize: 18, fontWeight: 700, color: 'rgba(0,0,0,0.72)', marginTop: 2, letterSpacing: '-0.015em', fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(amountFloored)}</p>
+        </div>
+      </div>
+
+      {dailyRate > 0 && (
+        <p style={{ fontSize: 11, color: 'rgba(0,0,0,0.55)', marginBottom: 10, fontWeight: 500 }}>
+          Per-diem rate: {(dailyRate).toFixed(3)}% / day
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="button" style={{
+          flex: 1, padding: '8px 0', borderRadius: 999, border: 'none',
+          background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95))',
+          color: '#fff', fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
+          cursor: 'pointer', boxShadow: '0 4px 14px -4px rgba(37, 99, 235, 0.4)',
+        }}>Make Payment</button>
+        <button type="button" style={{
+          flex: 1, padding: '8px 0', borderRadius: 999, border: 'none',
+          background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.95), rgba(22, 163, 74, 0.95))',
+          color: '#fff', fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
+          cursor: 'pointer', boxShadow: '0 4px 14px -4px rgba(22, 163, 74, 0.4)',
+        }}>Pay Off</button>
+      </div>
+    </div>
+  )
+}
+
+// Custom Paid Via Flooring toggle pill — satin pill switch.
+function FlooringTogglePill({ checked, onChange, label }: {
+  checked: boolean; onChange: (v: boolean) => void; label: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 10,
+        padding: '7px 14px 7px 8px',
+        borderRadius: 999,
+        background: checked ? 'linear-gradient(135deg, #1d1d1f 0%, #0a0a0a 100%)' : 'rgba(255, 255, 255, 0.5)',
+        backdropFilter: 'blur(10px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(10px) saturate(180%)',
+        border: `1px solid ${checked ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.55)'}`,
+        boxShadow: checked
+          ? '0 4px 14px -4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.12)'
+          : 'inset 0 1px 0 rgba(255,255,255,0.75)',
+        cursor: 'pointer', minHeight: 'auto',
+        transition: 'background 220ms ease',
+      }}
+    >
+      <span style={{
+        width: 18, height: 18, borderRadius: '50%',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        background: checked ? '#dffd6e' : 'rgba(0,0,0,0.06)',
+        color: checked ? '#0a0a0a' : 'transparent',
+        transition: 'background 220ms ease, color 220ms ease',
+        flexShrink: 0,
+      }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      </span>
+      <span style={{
+        fontSize: 11, fontWeight: 700, letterSpacing: '0.02em',
+        color: checked ? '#fff' : 'rgba(0, 0, 0, 0.65)',
+        transition: 'color 220ms ease',
+      }}>{label}</span>
+    </button>
+  )
+}
+
+// Anchor row — borderless inline input with a translucent rounded background.
+// Used in the Previous Owner card so each field reads as its own soft floating chip.
+function AnchorRow({ label, value, onChange, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder?: string
+}) {
+  const [hover, setHover] = useState(false)
+  const [focused, setFocused] = useState(false)
+  return (
+    <label
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        gap: 12,
+        padding: '10px 14px',
+        borderRadius: 12,
+        background: focused
+          ? 'rgba(255, 255, 255, 0.65)'
+          : hover ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.32)',
+        border: '1px solid rgba(255, 255, 255, 0.5)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+        cursor: 'text',
+        transition: 'background 180ms ease',
+      }}
+    >
+      <span style={labelStyle}>{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        placeholder={placeholder}
+        style={{
+          flex: 1, minWidth: 0, textAlign: 'right',
+          background: 'transparent', border: 'none', outline: 'none',
+          fontSize: 14, fontWeight: 700, color: '#0a0a0a',
+          letterSpacing: '-0.005em', fontFamily: 'inherit',
+        }}
+      />
+    </label>
+  )
+}
+
+// Same anchor-row shell but for a dropdown value.  Uses a popover pattern
+// instead of an input to stay in the no-native-select rule.
+function AnchorRowSelect({ label, value, onChange, options, placeholder }: {
+  label: string; value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+  placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [hover, setHover] = useState(false)
+  const ref = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    function onClick(e: MouseEvent) {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [open])
+  const selected = options.find(o => o.value === value)
+  return (
+    <div
+      ref={ref}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{ position: 'relative' }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        style={{
+          width: '100%',
+          display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+          gap: 12,
+          padding: '10px 14px',
+          borderRadius: 12,
+          background: open
+            ? 'rgba(255, 255, 255, 0.65)'
+            : hover ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.32)',
+          border: '1px solid rgba(255, 255, 255, 0.5)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+          cursor: 'pointer',
+          transition: 'background 180ms ease',
+          minHeight: 'auto',
+        }}
+      >
+        <span style={labelStyle}>{label}</span>
+        <span style={{
+          fontSize: 14, fontWeight: 700, color: selected ? '#0a0a0a' : 'rgba(0,0,0,0.3)',
+          letterSpacing: '-0.005em', display: 'inline-flex', alignItems: 'center', gap: 5,
+        }}>
+          {selected?.label || placeholder || '—'}
+          <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" style={{ opacity: 0.5 }}>
+            <path d="M3 5l3 3 3-3" />
+          </svg>
+        </span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', right: 0, marginTop: 6,
+          minWidth: 200, maxHeight: 240,
+          borderRadius: 12,
+          background: 'rgba(255, 255, 255, 0.78)',
+          backdropFilter: 'blur(28px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+          border: '1px solid rgba(255, 255, 255, 0.55)',
+          boxShadow: '0 20px 50px -12px rgba(31, 38, 135, 0.28), inset 0 1px 0 rgba(255,255,255,0.8)',
+          overflow: 'hidden', overflowY: 'auto',
+          padding: 4, zIndex: 100,
+        }}>
+          {options.map(o => {
+            const isSelected = o.value === value
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => { onChange(o.value); setOpen(false) }}
+                style={{
+                  width: '100%', textAlign: 'left',
+                  padding: '7px 10px', borderRadius: 8,
+                  background: isSelected ? 'rgba(29, 29, 31, 0.08)' : 'transparent',
+                  border: 'none',
+                  fontSize: 13, fontWeight: isSelected ? 700 : 500,
+                  color: '#0a0a0a', cursor: 'pointer', minHeight: 'auto',
+                  transition: 'background 120ms ease',
+                }}
+                onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(0,0,0,0.045)' }}
+                onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
+              >
+                {o.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
