@@ -3865,93 +3865,98 @@ function PurchaseInfoStudio({
             gap: 14,
             minWidth: 0,
           }}>
-            {/* TOP MINI-GRID — acquisition financials */}
-            <SubPanel>
+            {/* TOP — acquisition financials.  All AnchorRow* variants so the
+                row chips match Previous Owner's visual weight. */}
+            <div>
               <SectionLabel>Acquisition</SectionLabel>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                <InlineField
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <AnchorRowDate
                   label="Purchase Date"
-                  type="date"
-                  stringValue={purchaseDateStr}
-                  onCommitString={(v) => onSavePartial({ dateInStock: v || null })}
+                  value={purchaseDateStr}
+                  onChange={(v) => onSavePartial({ dateInStock: v || null })}
                 />
-                <InlineField
+                <AnchorRowMoney
                   label="Purchase Cost"
                   value={vehicleCost}
                   onCommit={(v) => onSavePartial({ vehicleCost: v })}
                 />
-                <InlineField
+                <AnchorRowMoney
                   label="Acquired Mileage In"
                   value={mileage}
                   onCommit={(v) => onSavePartial({ mileage: v })}
                   placeholderEmpty={!vehicle.mileage}
                 />
-                <InlineSelectField
+                <AnchorRowSelect
                   label="Acquired Mileage Status"
                   value={acquiredMileageStatus}
                   onChange={setAcquiredMileageStatus}
                   options={ACQUIRED_MILEAGE_STATUS_OPTIONS}
                   placeholder="—"
                 />
-                <InlineField
+                <AnchorRowReadonly
                   label="Date in Stock"
-                  type="date"
-                  stringValue={purchaseDateStr}
-                  locked
+                  value={purchaseDateStr ? new Date(purchaseDateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' }) : '—'}
                 />
-                <InlineDateField
+                <AnchorRowDate
                   label="Ready to Sell"
                   value={readyToSell}
                   onChange={setReadyToSell}
                 />
-                {/* Days in Inventory — read-only computed */}
-                <div style={{
-                  display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-                  gap: 10, paddingBottom: 7,
-                  borderBottom: '1px solid rgba(0,0,0,0.07)',
-                }}>
-                  <span style={labelStyle}>Days in Inventory</span>
-                  <span style={{
-                    fontSize: 14, fontWeight: 700,
-                    color: '#0a0a0a', letterSpacing: '-0.005em',
-                    fontVariantNumeric: 'tabular-nums',
-                  }}>{daysInInv !== null ? `${daysInInv}d` : '—'}</span>
-                </div>
+                <AnchorRowReadonly
+                  label="Days in Inventory"
+                  value={daysInInv !== null ? `${daysInInv}d` : '—'}
+                />
               </div>
-            </SubPanel>
+            </div>
 
-            {/* RIGHT MINI-GRID — Buyer & Source / Contact Badge */}
-            <SubPanel>
+            {/* BOTTOM — Buyer & Source.  Contact details ride the same chip
+                pattern so they match Previous Owner in size and density. */}
+            <div>
               <SectionLabel>Buyer &amp; Source</SectionLabel>
-              <ContactBadge
-                name="Yoan Perez Gutierrez"
-                cell="(305) 555-0142"
-                email="yoan.perez@example.com"
-                address="1234 Coral Way, Miami FL 33145"
-              />
-              <div style={{ marginTop: 12 }}>
+              <ContactBadge name="Yoan Perez Gutierrez" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+                <AnchorRow
+                  label="Cell"
+                  value="(305) 555-0142"
+                  onChange={() => { /* placeholder until contact picker is wired */ }}
+                  placeholder="—"
+                />
+                <AnchorRow
+                  label="Email"
+                  value="yoan.perez@example.com"
+                  onChange={() => { /* placeholder until contact picker is wired */ }}
+                  placeholder="—"
+                />
+                <AnchorRow
+                  label="Address"
+                  value="1234 Coral Way, Miami FL 33145"
+                  onChange={() => { /* placeholder until contact picker is wired */ }}
+                  placeholder="—"
+                />
+              </div>
+              <div style={{ marginTop: 10 }}>
                 <button
                   type="button"
                   onClick={() => { /* placeholder for contact selector */ }}
                   style={{
                     width: '100%',
                     padding: '9px 12px',
-                    borderRadius: 10,
-                    border: '1px dashed rgba(0, 0, 0, 0.12)',
-                    background: 'rgba(255, 255, 255, 0.35)',
+                    borderRadius: 12,
+                    border: '1px dashed rgba(0, 0, 0, 0.14)',
+                    background: 'rgba(255, 255, 255, 0.32)',
                     backdropFilter: 'blur(10px) saturate(180%)',
                     WebkitBackdropFilter: 'blur(10px) saturate(180%)',
                     fontSize: 12, fontWeight: 600, color: 'rgba(0, 0, 0, 0.55)',
                     cursor: 'pointer',
                     transition: 'background 160ms ease',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.55)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.35)' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.5)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.32)' }}
                 >
                   Change contact…
                 </button>
               </div>
-            </SubPanel>
+            </div>
           </div>
 
           {/* Base — Purchase Detail textarea */}
@@ -4046,25 +4051,23 @@ function PurchaseInfoStudio({
             />
           </div>
 
-          {/* Single-column vertical stack — at 40% page width the 2-col grid
-              compressed the values into ~80px slots; vertical gives each field
-              the full SubPanel width and matches the rest of the studio. */}
-          <SubPanel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              <InlineTextField label="Lien Account No." value={lienAccountNo} onChange={setLienAccountNo} />
-              <InlineField label="Payoff Amount" value={lienPayoffAmount} onChange={setLienPayoffAmount} />
-              <InlineDateField label="Due Date" value={lienDueDate} onChange={setLienDueDate} />
-              <InlineSelectField
-                label="Payment Method"
-                value={lienPaymentMethod}
-                onChange={setLienPaymentMethod}
-                options={PAYMENT_METHOD_OPTIONS}
-                placeholder="—"
-              />
-              <InlineField label="Per Diem" value={lienPerDiem} onChange={setLienPerDiem} />
-              <InlineDateField label="Date Paid Off" value={lienDatePaidOff} onChange={setLienDatePaidOff} />
-            </div>
-          </SubPanel>
+          {/* AnchorRow chip stack so the lien tracking fields read the same as
+              Previous Owner — full-width chips with translucent backgrounds,
+              label-left / value-right. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <AnchorRow label="Lien Account No." value={lienAccountNo} onChange={setLienAccountNo} placeholder="—" />
+            <AnchorRowMoney label="Payoff Amount" value={lienPayoffAmount} onChange={setLienPayoffAmount} />
+            <AnchorRowDate label="Due Date" value={lienDueDate} onChange={setLienDueDate} />
+            <AnchorRowSelect
+              label="Payment Method"
+              value={lienPaymentMethod}
+              onChange={setLienPaymentMethod}
+              options={PAYMENT_METHOD_OPTIONS}
+              placeholder="—"
+            />
+            <AnchorRowMoney label="Per Diem" value={lienPerDiem} onChange={setLienPerDiem} />
+            <AnchorRowDate label="Date Paid Off" value={lienDatePaidOff} onChange={setLienDatePaidOff} />
+          </div>
 
           {/* Custom Paid Via Flooring toggle pill */}
           <div style={{ marginTop: 12 }}>
@@ -4351,6 +4354,179 @@ function AnchorRow({ label, value, onChange, placeholder }: {
         }}
       />
     </label>
+  )
+}
+
+// Date variant of AnchorRow.  Click anywhere on the chip to open the native
+// calendar (showPicker) — same UX as the new InlineDateField behavior.  User
+// can also type digits to fill the date in.
+function AnchorRowDate({ label, value, onChange, placeholder }: {
+  label: string; value: string; onChange?: (v: string) => void; placeholder?: string
+}) {
+  const [hover, setHover] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const display = value
+    ? new Date(value + 'T00:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
+    : (placeholder || '—')
+  function openPicker() {
+    const el = inputRef.current
+    if (!el) return
+    el.focus()
+    try { el.showPicker?.() } catch { /* not supported */ }
+  }
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={openPicker}
+      style={{
+        position: 'relative',
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        gap: 12,
+        padding: '10px 14px',
+        borderRadius: 12,
+        background: focused
+          ? 'rgba(255, 255, 255, 0.65)'
+          : hover ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.32)',
+        border: '1px solid rgba(255, 255, 255, 0.5)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+        cursor: 'pointer',
+        transition: 'background 180ms ease',
+      }}
+    >
+      <span style={labelStyle}>{label}</span>
+      <span style={{
+        fontSize: 14, fontWeight: 700,
+        color: value ? '#0a0a0a' : 'rgba(0,0,0,0.3)',
+        letterSpacing: '-0.005em',
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+      }}>
+        <CalendarMicroIcon />
+        {display}
+      </span>
+      {/* Hidden-but-focusable native date input layered on top.  Captures click + typing. */}
+      <input
+        ref={inputRef}
+        type="date"
+        value={value}
+        onChange={(e) => onChange?.(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          position: 'absolute', inset: 0,
+          opacity: 0, cursor: 'pointer',
+          width: '100%', height: '100%',
+        }}
+      />
+    </div>
+  )
+}
+
+// Money variant of AnchorRow.  Display formats as $X,XXX; editing reveals a
+// raw numeric input that auto-sizes to draft length, mirroring InlineField.
+function AnchorRowMoney({ label, value, onChange, onCommit, placeholderEmpty }: {
+  label: string; value: number
+  onChange?: (v: number) => void
+  onCommit?: (v: number) => void | Promise<void>
+  placeholderEmpty?: boolean
+}) {
+  const isEditable = !!(onChange || onCommit)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [hover, setHover] = useState(false)
+  const display = placeholderEmpty && !value
+    ? '—'
+    : `$${(value ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+  function startEdit() {
+    if (!isEditable) return
+    setDraft(value && value > 0 ? String(value) : '')
+    setEditing(true)
+  }
+  async function commit() {
+    setEditing(false)
+    const n = draft === '' ? 0 : parseFloat(draft)
+    if (!Number.isFinite(n)) return
+    if (onCommit) {
+      setSaving(true)
+      try { await onCommit(n) } finally { setSaving(false) }
+    } else if (onChange) {
+      onChange(n)
+    }
+  }
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        gap: 12,
+        padding: '10px 14px',
+        borderRadius: 12,
+        background: editing
+          ? 'rgba(255, 255, 255, 0.65)'
+          : hover ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.32)',
+        border: '1px solid rgba(255, 255, 255, 0.5)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+        cursor: isEditable ? 'text' : 'default',
+        transition: 'background 180ms ease',
+        opacity: saving ? 0.55 : 1,
+      }}
+      onClick={() => { if (isEditable && !editing) startEdit() }}
+    >
+      <span style={labelStyle}>{label}</span>
+      {editing ? (
+        <input
+          type="text"
+          inputMode="decimal"
+          value={draft}
+          autoFocus
+          size={Math.max(3, draft.length || 1)}
+          onChange={(e) => setDraft(e.target.value.replace(/[^0-9.]/g, ''))}
+          onBlur={commit}
+          onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
+          style={{
+            border: 'none', outline: 'none', background: 'transparent',
+            fontSize: 14, fontWeight: 700, color: '#0a0a0a',
+            textAlign: 'right', letterSpacing: '-0.005em',
+            fontVariantNumeric: 'tabular-nums',
+            padding: 0, width: 'auto', boxSizing: 'content-box',
+          }}
+        />
+      ) : (
+        <span style={{
+          fontSize: 14, fontWeight: 700,
+          color: placeholderEmpty && !value ? 'rgba(0,0,0,0.3)' : '#0a0a0a',
+          letterSpacing: '-0.005em',
+          fontVariantNumeric: 'tabular-nums',
+        }}>{display}</span>
+      )}
+    </div>
+  )
+}
+
+// Read-only display variant.  Used for computed values like Days in Inventory
+// and locked values like Date in Stock (which mirrors the editable Purchase
+// Date above it).
+function AnchorRowReadonly({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+      gap: 12,
+      padding: '10px 14px',
+      borderRadius: 12,
+      background: 'rgba(255, 255, 255, 0.22)',
+      border: '1px solid rgba(255, 255, 255, 0.4)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.55)',
+    }}>
+      <span style={labelStyle}>{label}</span>
+      <span style={{
+        fontSize: 14, fontWeight: 700, color: 'rgba(0, 0, 0, 0.6)',
+        letterSpacing: '-0.005em',
+        fontVariantNumeric: 'tabular-nums',
+      }}>{value}</span>
+    </div>
   )
 }
 
