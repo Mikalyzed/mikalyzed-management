@@ -80,14 +80,17 @@ type FilterKey = 'all' | 'in_recon' | 'consignment' | 'retail'
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all',         label: 'All' },
-  { key: 'in_recon',    label: 'In Recon' },
+  // "In Recon" bucket now folds in cars at external repair too — the user
+  // treats both as "off the lot getting work done."  Each vehicle still has
+  // a single InventoryVehicle.status, so there's no double-counting.
+  { key: 'in_recon',    label: 'Recon + External' },
   { key: 'consignment', label: 'Consignment' },
   { key: 'retail',      label: 'Retail' },
 ]
 
 function matchesFilter(v: Vehicle, key: FilterKey): boolean {
   if (key === 'all') return true
-  if (key === 'in_recon') return v.status === 'in_recon'
+  if (key === 'in_recon') return v.status === 'in_recon' || v.status === 'external_repair'
   const pt = (v.purchaseType || '').trim().toUpperCase()
   if (key === 'consignment') return pt === 'CONSIGNMENT'
   if (key === 'retail') return pt.length > 0 && pt !== 'CONSIGNMENT'
