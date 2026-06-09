@@ -184,10 +184,14 @@ export async function POST(request: Request) {
   // Check for duplicate stock number
   const existing = await prisma.vehicle.findUnique({ where: { stockNumber } })
   if (existing) {
-    // 'archived' = placeholder Vehicle created when adding a part to a non-recon vehicle
-    // (see /api/vehicles/resolve). Treat the same as 'external' so it can be promoted
-    // into active recon when sent in.
-    if (existing.status === 'external' || existing.status === 'archived') {
+    // 'archived'        = placeholder Vehicle created when adding a part to a
+    //                     non-recon car (see /api/vehicles/resolve).
+    // 'inventory_only'  = car present in the inventory feed that never actually
+    //                     started recon — the admin is now sending it in.
+    // 'external'        = car out at an external shop coming back in.
+    // All three are "not actually in active recon yet" — treat them the same way
+    // and promote into active recon when the admin re-adds the stock number.
+    if (existing.status === 'external' || existing.status === 'archived' || existing.status === 'inventory_only') {
       // Vehicle returning from external repair / promoted from placeholder — re-enter recon
       let stageAssignee = assigneeId
       if (!stageAssignee) {

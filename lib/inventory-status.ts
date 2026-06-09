@@ -21,7 +21,11 @@ export async function recomputeInventoryStatus(stockNumber: string) {
       where: {
         stockNumber,
         completedAt: null,
-        status: { notIn: ['completed'] },
+        // 'inventory_only' = car exists in the inventory feed but never actually
+        //   started recon.  'archived' = placeholder Vehicle created when adding a
+        //   part to a non-recon car.  Neither is a real recon line, so they must
+        //   not flip InventoryVehicle.status to 'in_recon'.
+        status: { notIn: ['completed', 'inventory_only', 'archived'] },
       },
       select: { id: true },
     }),
