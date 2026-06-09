@@ -4110,11 +4110,23 @@ function InlineDateField({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [hover, setHover] = useState(false)
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
   function startEdit() {
     if (!isEditable) return
     setDraft(value || '')
     setEditing(true)
+    // Open the native calendar immediately on click instead of waiting for the
+    // user to click the small calendar glyph inside the input.  The
+    // requestAnimationFrame preserves the user-activation gesture so the
+    // browser's showPicker() security check passes.  Typing still works
+    // normally if the user prefers entering digits directly.
+    requestAnimationFrame(() => {
+      const el = inputRef.current
+      if (!el) return
+      el.focus()
+      try { el.showPicker?.() } catch { /* not supported on this browser */ }
+    })
   }
 
   function commit() {
@@ -4145,9 +4157,9 @@ function InlineDateField({
       <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, flexShrink: 0 }}>
         {editing ? (
           <input
+            ref={inputRef}
             type="date"
             value={draft}
-            autoFocus
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commit}
             onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
