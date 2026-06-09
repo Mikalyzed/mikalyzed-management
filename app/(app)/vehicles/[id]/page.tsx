@@ -3856,14 +3856,16 @@ function PurchaseInfoStudio({
         <GlassCard padding={22}>
           <GlassEyebrow label="Purchase Info" />
 
+          {/* Stack the two mini-grids vertically so each field gets the full
+              card width — the prior side-by-side layout squeezed the values
+              into the right rail of each SubPanel, making them feel cramped. */}
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
+            display: 'flex',
+            flexDirection: 'column',
             gap: 14,
-            alignItems: 'stretch',
             minWidth: 0,
           }}>
-            {/* LEFT MINI-GRID — acquisition financials */}
+            {/* TOP MINI-GRID — acquisition financials */}
             <SubPanel>
               <SectionLabel>Acquisition</SectionLabel>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -4044,13 +4046,11 @@ function PurchaseInfoStudio({
             />
           </div>
 
-          {/* 2-col grid of tracking rows */}
+          {/* Single-column vertical stack — at 40% page width the 2-col grid
+              compressed the values into ~80px slots; vertical gives each field
+              the full SubPanel width and matches the rest of the studio. */}
           <SubPanel>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              columnGap: 22, rowGap: 0,
-            }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               <InlineTextField label="Lien Account No." value={lienAccountNo} onChange={setLienAccountNo} />
               <InlineField label="Payoff Amount" value={lienPayoffAmount} onChange={setLienPayoffAmount} />
               <InlineDateField label="Due Date" value={lienDueDate} onChange={setLienDueDate} />
