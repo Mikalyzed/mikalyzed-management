@@ -4315,17 +4315,8 @@ function AnchorRow({ label, value, onChange, placeholder }: {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        gap: 12,
-        padding: '10px 14px',
-        borderRadius: 12,
-        background: focused
-          ? 'rgba(255, 255, 255, 0.65)'
-          : hover ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.32)',
-        border: '1px solid rgba(255, 255, 255, 0.5)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+        ...chipBoxStyle(focused, hover, true),
         cursor: 'text',
-        transition: 'background 180ms ease',
       }}
     >
       <span style={labelStyle}>{label}</span>
@@ -4371,18 +4362,8 @@ function AnchorRowDate({ label, value, onChange, placeholder }: {
       onMouseLeave={() => setHover(false)}
       onClick={openPicker}
       style={{
+        ...chipBoxStyle(focused, hover, true),
         position: 'relative',
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        gap: 12,
-        padding: '10px 14px',
-        borderRadius: 12,
-        background: focused
-          ? 'rgba(255, 255, 255, 0.65)'
-          : hover ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.32)',
-        border: '1px solid rgba(255, 255, 255, 0.5)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
-        cursor: 'pointer',
-        transition: 'background 180ms ease',
       }}
     >
       <span style={labelStyle}>{label}</span>
@@ -4450,17 +4431,8 @@ function AnchorRowMoney({ label, value, onChange, onCommit, placeholderEmpty }: 
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        gap: 12,
-        padding: '10px 14px',
-        borderRadius: 12,
-        background: editing
-          ? 'rgba(255, 255, 255, 0.65)'
-          : hover ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.32)',
-        border: '1px solid rgba(255, 255, 255, 0.5)',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+        ...chipBoxStyle(editing, hover, isEditable),
         cursor: isEditable ? 'text' : 'default',
-        transition: 'background 180ms ease',
         opacity: saving ? 0.55 : 1,
       }}
       onClick={() => { if (isEditable && !editing) startEdit() }}
@@ -4501,15 +4473,7 @@ function AnchorRowMoney({ label, value, onChange, onCommit, placeholderEmpty }: 
 // Date above it).
 function AnchorRowReadonly({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div style={{
-      display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-      gap: 12,
-      padding: '10px 14px',
-      borderRadius: 12,
-      background: 'rgba(255, 255, 255, 0.22)',
-      border: '1px solid rgba(255, 255, 255, 0.4)',
-      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.55)',
-    }}>
+    <div style={chipBoxStyle(false, false, false)}>
       <span style={labelStyle}>{label}</span>
       <span style={{
         fontSize: 14, fontWeight: 700, color: 'rgba(0, 0, 0, 0.6)',
@@ -4551,18 +4515,8 @@ function AnchorRowSelect({ label, value, onChange, options, placeholder }: {
         type="button"
         onClick={() => setOpen(o => !o)}
         style={{
+          ...chipBoxStyle(open, hover, true),
           width: '100%',
-          display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-          gap: 12,
-          padding: '10px 14px',
-          borderRadius: 12,
-          background: open
-            ? 'rgba(255, 255, 255, 0.65)'
-            : hover ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.32)',
-          border: '1px solid rgba(255, 255, 255, 0.5)',
-          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
-          cursor: 'pointer',
-          transition: 'background 180ms ease',
           minHeight: 'auto',
         }}
       >
@@ -5271,22 +5225,31 @@ function rowLineColor(editing: boolean, hover: boolean, isEditable: boolean): st
 // value-right.  Shared by InlineField, InlineTextField, InlineSelectField,
 // InlineDateField so the General Info + Build / Title surfaces render with
 // the same AnchorRow visual language used in Purchase Info.
+//
+// Definition bumped per user feedback — chips now hold up against the
+// SubPanel substrate they often sit on (e.g., inside Price & Cost,
+// Mechanical Blueprint).  Higher idle opacity + stronger perimeter so the
+// rounded rectangle reads as its own surface, not as faint tinted air.
 function chipBoxStyle(editing: boolean, hover: boolean, isEditable: boolean): React.CSSProperties {
   const bg = editing
-    ? 'rgba(255, 255, 255, 0.65)'
+    ? 'rgba(255, 255, 255, 0.72)'
     : hover && isEditable
-      ? 'rgba(255, 255, 255, 0.5)'
+      ? 'rgba(255, 255, 255, 0.6)'
       : isEditable
-        ? 'rgba(255, 255, 255, 0.32)'
-        : 'rgba(255, 255, 255, 0.22)'
+        ? 'rgba(255, 255, 255, 0.46)'
+        : 'rgba(255, 255, 255, 0.32)'
   return {
     display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
     gap: 12,
     padding: '10px 14px',
     borderRadius: 12,
     background: bg,
-    border: '1px solid rgba(255, 255, 255, 0.5)',
-    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+    border: '1px solid rgba(255, 255, 255, 0.65)',
+    boxShadow: [
+      '0 1px 2px rgba(31, 38, 135, 0.04)',
+      'inset 0 1px 0 rgba(255,255,255,0.85)',
+      'inset 0 0 0 0.5px rgba(255, 255, 255, 0.45)',
+    ].join(', '),
     cursor: isEditable ? 'pointer' : 'default',
     transition: 'background 180ms ease',
   }
