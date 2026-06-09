@@ -96,7 +96,44 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const tasks = soldDelivery
     ? (customTasks && customTasks.length > 0 ? customTasks : SOLD_DELIVERY_TASKS)
     : baseTasks
-  const checklist = tasks.map((item: string) => ({ item, done: false, note: '' }))
+  const templateChecklist = tasks.map((item: string) => ({ item, done: false, note: '' }))
+
+  // RESUME-FROM-EXTERNAL: when a vehicle returns from external repair (or any
+  // other awaiting_routing state) and the admin routes it back to the same
+  // stage type it was at before being skipped, restore the prior stage's
+  // checklist + scope rather than building a fresh one from the template.
+  // Preserves done state on the items the worker had already finished.
+  //
+  // Skip the resume when:
+  //  - The admin supplied customTasks (explicit override wins).
+  //  - The admin chose soldDelivery (a different stage shape entirely).
+  //  - The prior skipped stage is older than 60 days (safety hatch: don't
+  //    accidentally resurrect a stage from months ago).
+  type ChecklistEntry = { item: string; done: boolean; note: string; type?: string }
+  let resumedFromStageId: string | null = null
+  let checklist: ChecklistEntry[] = templateChecklist
+  let resumedScopeName: string | null = null
+
+  const adminGaveCustom = customTasks && customTasks.length > 0
+  const isAwaitingRouting = vehicle.status === 'awaiting_routing'
+  if (isAwaitingRouting && !adminGaveCustom && !soldDelivery) {
+    const prior = await prisma.vehicleStage.findFirst({
+      where: { vehicleId: id, stage: nextStage, status: 'skipped' },
+      orderBy: { completedAt: 'desc' },
+      select: { id: true, checklist: true, scopeName: true, completedAt: true },
+    })
+    if (prior && Array.isArray(prior.checklist) && prior.checklist.length > 0) {
+      const skippedAt = prior.completedAt?.getTime() ?? 0
+      const sixtyDaysMs = 1000 * 60 * 60 * 24 * 60
+      const skippedRecently = !prior.completedAt || (Date.now() - skippedAt) < sixtyDaysMs
+      if (skippedRecently) {
+        resumedFromStageId = prior.id
+        // Cast through unknown — Prisma JSON arrays don't carry the entry shape.
+        checklist = prior.checklist as unknown as ChecklistEntry[]
+        resumedScopeName = prior.scopeName
+      }
+    }
+  }
 
   const newAssigneeId = config?.defaultAssigneeId || null
 
@@ -115,7 +152,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         checklist,
         priority: (maxPriority._max.priority ?? -1) + 1,
         estimatedHours,
-        scopeName: soldDelivery ? 'Sold Delivery' : null,
+        scopeName: soldDelivery ? 'Sold Delivery' : resumedScopeName,
+        notes: resumedFromStageId ? 'Resumed from prior stage on return' : null,
       },
     })
 
@@ -134,7 +172,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         entityId: id,
         action: 'routed',
         actorId: user.id,
-        details: { to: nextStage, reason },
+        details: { to: nextStage, reason, resumedFrom: resumedFromStageId },
       },
     }).catch(() => {})
 
