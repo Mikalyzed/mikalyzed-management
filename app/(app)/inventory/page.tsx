@@ -445,7 +445,9 @@ function VehicleLedgerRow({
     : v.purchaseType || null
   const typeTone = typeTone1(typeKey)
 
-  const vinShort = v.vin && v.vin.length > 6 ? `${v.vin.slice(0, 3)}…${v.vin.slice(-4)}` : (v.vin || '—')
+  // VIN now has its own line in the title block, so we render the full 17-char
+  // value. CSS overflow/ellipsis still handles narrow viewports.
+  const vinDisplay = v.vin || '—'
 
   // Title gets a hard 32-char cap so wide screens don't show a sprawling
   // "1985 Mercedes-Benz 380SL Convertible Roadster…" line.  CSS still handles
@@ -516,7 +518,7 @@ function VehicleLedgerRow({
           fontSize: 11, color: 'rgba(0,0,0,0.5)', fontWeight: 500, marginTop: 4,
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>{vinShort}</p>
+        }}>{vinDisplay}</p>
         {typeLabelText && (
           <p style={{
             fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
