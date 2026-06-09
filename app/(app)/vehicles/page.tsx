@@ -1611,6 +1611,10 @@ export default function VehiclesPage() {
                     fetch('/api/vehicles').then(r => r.json()).then(d => setVehicles(d.vehicles || [])).catch(() => {})
                   }} />
 
+                  {/* Breathing room before the sticky footer so the parts area
+                      doesn't crash into the action buttons below. */}
+                  <div style={{ height: 24 }} />
+
                   </div>
                   {/* Advance Stage Button — sticky footer */}
                   <div style={{ padding: '12px 20px 20px', borderTop: '1px solid #e5e5e5', flexShrink: 0 }}>

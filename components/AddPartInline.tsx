@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /**
  * Inline part-add form used on both the recon board modal and the mechanic
@@ -27,6 +27,17 @@ export default function AddPartInline({
   const [assigneeId, setAssigneeId] = useState('')
   const [saving, setSaving] = useState(false)
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
+  const expandedRef = useRef<HTMLDivElement | null>(null)
+
+  // When the form expands, the new fields can be off-screen inside a small
+  // modal scroll container — scroll them into view so the user sees them
+  // appear instead of wondering why nothing visibly happened.
+  useEffect(() => {
+    if (!expanded) return
+    requestAnimationFrame(() => {
+      expandedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }, [expanded])
 
   // Load assignable users only when the form expands — keeps the initial
   // network hit off the modal-open path for vehicles that never add parts.
@@ -131,6 +142,7 @@ export default function AddPartInline({
 
       {expanded && (
         <div
+          ref={expandedRef}
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -139,6 +151,7 @@ export default function AddPartInline({
             background: '#f8f8f6',
             border: '1px solid #e5e5e5',
             borderRadius: 10,
+            scrollMarginBottom: 24,
           }}
         >
           <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>

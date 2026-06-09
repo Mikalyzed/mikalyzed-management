@@ -1912,6 +1912,51 @@ export default function MechanicBoard() {
 
                 </div>
 
+                {/* Admin: inline + Add Task — appends to the current stage's
+                    checklist directly (no admin-approval round-trip). */}
+                {isAdmin && (
+                  <div style={{ padding: '0 24px 14px' }}>
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault()
+                        const input = e.currentTarget.elements.namedItem('newTask') as HTMLInputElement
+                        const trimmed = input.value.trim()
+                        if (!trimmed) return
+                        const updated = [...modalChecklist, { item: trimmed, done: false, note: '' }]
+                        setModalChecklist(updated)
+                        input.value = ''
+                        try {
+                          await fetch(`/api/stages/${selectedJob.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ checklist: updated }),
+                          })
+                        } catch { /* ignore */ }
+                      }}
+                      style={{ display: 'flex', gap: 8 }}
+                    >
+                      <input
+                        name="newTask"
+                        placeholder="+ Add task..."
+                        style={{
+                          flex: 1, padding: '9px 12px', borderRadius: 10,
+                          border: '1px solid #e5e5e5', fontSize: 13, background: '#fff',
+                          outline: 'none',
+                        }}
+                      />
+                      <button
+                        type="submit"
+                        style={{
+                          padding: '9px 16px', borderRadius: 10, border: 'none',
+                          background: '#1a1a1a', color: '#dffd6e',
+                          fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                          whiteSpace: 'nowrap', minHeight: 'auto',
+                        }}
+                      >Add</button>
+                    </form>
+                  </div>
+                )}
+
                 {/* Parts Section */}
                 <div style={{ padding: '0 24px 16px' }}>
                   <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
