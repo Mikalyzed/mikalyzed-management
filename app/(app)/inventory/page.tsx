@@ -447,6 +447,12 @@ function VehicleLedgerRow({
 
   const vinShort = v.vin && v.vin.length > 6 ? `${v.vin.slice(0, 3)}…${v.vin.slice(-4)}` : (v.vin || '—')
 
+  // Title gets a hard 32-char cap so wide screens don't show a sprawling
+  // "1985 Mercedes-Benz 380SL Convertible Roadster…" line.  CSS still handles
+  // narrower viewports via overflow/ellipsis; this just caps the upper bound.
+  const fullTitle = `${v.year ? `${v.year} ` : ''}${v.make} ${v.model}`.trim()
+  const titleText = fullTitle.length > 32 ? `${fullTitle.slice(0, 32).trim()}…` : fullTitle
+
   return (
     <div
       onClick={onOpen}
@@ -458,10 +464,15 @@ function VehicleLedgerRow({
       style={{
         position: 'relative',
         display: 'grid',
+        // Column layout (left -> right):
+        //   hero | title block (year/make/model + VIN + type below)
+        //        | stock | color | mileage | days held
+        //        | cost | asking (money roles only)
+        //        | status pill (right-aligned)
         gridTemplateColumns: canSeeMoney
-          ? '156px minmax(0, 1.8fr) 86px 110px 88px 104px 112px 116px'
-          : '156px minmax(0, 2.1fr) 100px 120px 100px 116px',
-        gap: 18,
+          ? '156px minmax(0, 1.6fr) 104px 96px 108px 96px 108px 124px 136px'
+          : '156px minmax(0, 2fr) 110px 104px 112px 100px 136px',
+        gap: 22,
         alignItems: 'center',
         padding: '14px 18px',
         background: hovered ? 'rgba(255, 255, 255, 0.62)' : 'rgba(255, 255, 255, 0.4)',
@@ -492,29 +503,30 @@ function VehicleLedgerRow({
       {/* ─── Hero 16:9 thumbnail ─── */}
       <HeroThumb url={v.heroUrl} alt={`${v.year || ''} ${v.make} ${v.model}`} />
 
-      {/* ─── Title block: Year Make Model / Stock · VIN · Type ─── */}
+      {/* ─── Title block: Year Make Model / VIN / Type ─── */}
       <div style={{ minWidth: 0 }}>
         <p style={{
           fontSize: 16, fontWeight: 700, letterSpacing: '-0.015em',
           color: '#0a0a0a', lineHeight: 1.2,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
-          {v.year ? `${v.year} ` : ''}{v.make} {v.model}
+          {titleText}
         </p>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 4, fontSize: 11, color: 'rgba(0,0,0,0.5)', fontWeight: 500, flexWrap: 'wrap' }}>
-          <span><span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>Stock</span> {v.stockNumber}</span>
-          <span style={{ width: 1, height: 10, background: 'rgba(0,0,0,0.15)' }} aria-hidden />
-          <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{vinShort}</span>
-          {typeLabelText && (
-            <>
-              <span style={{ width: 1, height: 10, background: 'rgba(0,0,0,0.15)' }} aria-hidden />
-              <span style={{ letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700, color: typeTone.fg }}>
-                {typeLabelText}
-              </span>
-            </>
-          )}
-        </div>
+        <p style={{
+          fontSize: 11, color: 'rgba(0,0,0,0.5)', fontWeight: 500, marginTop: 4,
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{vinShort}</p>
+        {typeLabelText && (
+          <p style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: typeTone.fg, marginTop: 4,
+          }}>{typeLabelText}</p>
+        )}
       </div>
+
+      {/* ─── Stock number ─── */}
+      <ColumnValue label="Stock" value={v.stockNumber} mono={false} />
 
       {/* ─── Color ─── */}
       <ColumnValue label="Color" value={v.color || '—'} mono={false} />
