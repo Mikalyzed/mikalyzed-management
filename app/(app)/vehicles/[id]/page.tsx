@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
 // ─── Types ─────────────────────────────────────────────────────────
@@ -3690,12 +3690,28 @@ function TitleBuildStudio({
               columnGap: 32, rowGap: 14,
             }}>
               <InlineTextField label="ROS / Title"  value={rosTitle}    onChange={setRosTitle} />
-              <InlineTextField label="Title State"  value={titleState}  onChange={setTitleState} />
-              <InlineTextField label="Brand"        value={brand}       onChange={setBrand} />
-              <InlineTextField
+              <InlineSelectField
+                label="Title State"
+                value={titleState}
+                onChange={setTitleState}
+                options={US_STATES}
+                searchable
+                placeholder="—"
+              />
+              <InlineSelectField
+                label="Brand"
+                value={brand}
+                onChange={setBrand}
+                options={BRAND_OPTIONS}
+                searchable
+                placeholder="—"
+              />
+              <InlineSelectField
                 label="Title Status"
                 value={vehicle.titleStatus || ''}
                 onCommit={(v) => onSavePartial({ titleStatus: v || null })}
+                options={TITLE_STATUS_OPTIONS}
+                placeholder="—"
               />
             </div>
 
@@ -3860,6 +3876,224 @@ function InlineTextField({
           >{display}</button>
         )}
       </div>
+    </div>
+  )
+}
+
+// US states + DC + Puerto Rico — 52 entries, two-letter codes + full names.
+// Used by the Title State dropdown.  Listing here (rather than a shared lib) so
+// changes stay local to the title-registration UI for now.
+const US_STATES: { value: string; label: string; sub: string }[] = [
+  ['AL', 'Alabama'], ['AK', 'Alaska'], ['AZ', 'Arizona'], ['AR', 'Arkansas'],
+  ['CA', 'California'], ['CO', 'Colorado'], ['CT', 'Connecticut'], ['DE', 'Delaware'],
+  ['FL', 'Florida'], ['GA', 'Georgia'], ['HI', 'Hawaii'], ['ID', 'Idaho'],
+  ['IL', 'Illinois'], ['IN', 'Indiana'], ['IA', 'Iowa'], ['KS', 'Kansas'],
+  ['KY', 'Kentucky'], ['LA', 'Louisiana'], ['ME', 'Maine'], ['MD', 'Maryland'],
+  ['MA', 'Massachusetts'], ['MI', 'Michigan'], ['MN', 'Minnesota'], ['MS', 'Mississippi'],
+  ['MO', 'Missouri'], ['MT', 'Montana'], ['NE', 'Nebraska'], ['NV', 'Nevada'],
+  ['NH', 'New Hampshire'], ['NJ', 'New Jersey'], ['NM', 'New Mexico'], ['NY', 'New York'],
+  ['NC', 'North Carolina'], ['ND', 'North Dakota'], ['OH', 'Ohio'], ['OK', 'Oklahoma'],
+  ['OR', 'Oregon'], ['PA', 'Pennsylvania'], ['RI', 'Rhode Island'], ['SC', 'South Carolina'],
+  ['SD', 'South Dakota'], ['TN', 'Tennessee'], ['TX', 'Texas'], ['UT', 'Utah'],
+  ['VT', 'Vermont'], ['VA', 'Virginia'], ['WA', 'Washington'], ['WV', 'West Virginia'],
+  ['WI', 'Wisconsin'], ['WY', 'Wyoming'],
+  ['DC', 'District of Columbia'],
+  ['PR', 'Puerto Rico'],
+].map(([code, name]) => ({ value: code, label: code, sub: name }))
+
+const BRAND_OPTIONS: { value: string; label: string }[] = [
+  'Salvage', 'Junk', 'Totaled', 'Lemon', 'Flood', 'Rebuilt',
+  'Water Damage', 'Storm Damage', 'Crash Test Vehicle', 'TMU', 'Clean',
+  'Police', 'Taxi', 'Hail Damage', 'Fire Damage', 'Vandalism',
+  'Stripped', 'Collision', 'Grey Market', 'Recycled',
+  'Commercial Vehicle', 'Municipal Vehicle',
+].map(v => ({ value: v, label: v }))
+
+const TITLE_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: 'Received', label: 'Received' },
+  { value: 'Not received', label: 'Not received' },
+]
+
+// Custom inline dropdown — popover with optional type-ahead filter.
+// Matches the InlineTextField visual language (label-left, value-right, hover
+// row underline) so the title registration panel reads as one consistent stack.
+// Uses a glass popover instead of the native <select> per the project UI standard.
+function InlineSelectField({
+  label, value, options, onCommit, onChange, placeholder, searchable, fullWidth,
+}: {
+  label: string
+  value: string
+  options: { value: string; label: string; sub?: string }[]
+  onCommit?: (v: string) => void | Promise<void>
+  onChange?: (v: string) => void
+  placeholder?: string
+  searchable?: boolean
+  fullWidth?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [hover, setHover] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onClick(e: MouseEvent) {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    function onEsc(e: KeyboardEvent) { if (e.key === 'Escape') { setOpen(false); setSearch('') } }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onEsc)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }, [open])
+
+  const selected = options.find(o => o.value === value)
+  // Preserve legacy values that aren't in the option list — surface them as-is
+  // in the trigger so existing data isn't visually lost when the user opens the
+  // dropdown.  Picking a new value commits the canonical option.
+  const display = selected?.label || value || placeholder || '—'
+  const isPlaceholder = !value
+
+  const q = search.trim().toLowerCase()
+  const filtered = searchable && q
+    ? options.filter(o =>
+        o.label.toLowerCase().includes(q) ||
+        o.value.toLowerCase().includes(q) ||
+        (o.sub?.toLowerCase().includes(q) ?? false))
+    : options
+
+  async function pick(v: string) {
+    setOpen(false)
+    setSearch('')
+    if (v === value) return
+    if (onCommit) {
+      setSaving(true)
+      try { await onCommit(v) } finally { setSaving(false) }
+    } else if (onChange) {
+      onChange(v)
+    }
+  }
+
+  const lineColor = rowLineColor(open, hover, true)
+
+  return (
+    <div
+      ref={containerRef}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        gap: 10,
+        opacity: saving ? 0.55 : 1,
+        gridColumn: fullWidth ? '1 / -1' : undefined,
+        minWidth: 0,
+        paddingBottom: 7,
+        borderBottom: `1px solid ${lineColor}`,
+        transition: 'border-color 180ms ease',
+        position: 'relative',
+      }}>
+      <span style={labelStyle}>{label}</span>
+      <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, flexShrink: 0, minWidth: 0 }}>
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          style={{
+            ...valueButtonStyle('transparent', isPlaceholder, true),
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            maxWidth: 220,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}
+        >
+          {display}
+          <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5, marginLeft: 2 }}>
+            <path d="M3 5l3 3 3-3" />
+          </svg>
+        </button>
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute',
+          top: '100%', right: 0, marginTop: 6,
+          minWidth: 220, maxWidth: 320,
+          maxHeight: 280,
+          borderRadius: 14,
+          background: 'rgba(255, 255, 255, 0.78)',
+          backdropFilter: 'blur(28px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+          border: '1px solid rgba(255, 255, 255, 0.55)',
+          boxShadow: [
+            '0 20px 50px -12px rgba(31, 38, 135, 0.28)',
+            '0 4px 12px -4px rgba(0, 0, 0, 0.12)',
+            'inset 0 1px 0 rgba(255, 255, 255, 0.85)',
+          ].join(', '),
+          overflow: 'hidden',
+          display: 'flex', flexDirection: 'column',
+          zIndex: 100,
+        }}>
+          {searchable && (
+            <div style={{ padding: '8px 10px', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+              <input
+                autoFocus
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Type to filter…"
+                style={{
+                  width: '100%', padding: '6px 10px', borderRadius: 8,
+                  border: '1px solid rgba(0,0,0,0.08)', fontSize: 12,
+                  background: 'rgba(255,255,255,0.7)', outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          )}
+          <div style={{ overflowY: 'auto', flex: 1, padding: 4 }}>
+            {filtered.length === 0 ? (
+              <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.5)', textAlign: 'center', padding: 16, margin: 0 }}>No match</p>
+            ) : (
+              filtered.map(opt => {
+                const isSelected = opt.value === value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => pick(opt.value)}
+                    style={{
+                      width: '100%', textAlign: 'left',
+                      padding: '7px 10px', borderRadius: 8,
+                      background: isSelected ? 'rgba(29, 29, 31, 0.08)' : 'transparent',
+                      border: 'none',
+                      fontSize: 13,
+                      fontWeight: isSelected ? 700 : 500,
+                      color: '#0a0a0a',
+                      cursor: 'pointer',
+                      minHeight: 'auto',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      gap: 10,
+                      transition: 'background 120ms ease',
+                    }}
+                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(0, 0, 0, 0.045)' }}
+                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+                      <span style={{ fontWeight: 700, fontSize: 12, color: isSelected ? '#0a0a0a' : 'rgba(0,0,0,0.7)' }}>{opt.label}</span>
+                      {opt.sub && <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{opt.sub}</span>}
+                    </span>
+                    {isSelected && (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0a0a0a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
