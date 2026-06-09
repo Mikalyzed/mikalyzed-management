@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 type Vehicle = {
@@ -310,11 +310,32 @@ function FilterPills({
   active: FilterKey
   onChange: (k: FilterKey) => void
 }) {
-  const activeIdx = Math.max(0, filters.findIndex(f => f.key === active))
+  // Each pill auto-sizes to its content (was flex: 1 = equal widths, which
+  // forced labels longer than the slot — like "Recon + External 45" — to
+  // overflow leftward into the dark indicator where their gray text became
+  // invisible).  Indicator position + width is measured from the active
+  // button's actual offsetLeft / offsetWidth so the dark capsule always sits
+  // exactly under the active label, regardless of label length.
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null)
+
+  useLayoutEffect(() => {
+    function measure() {
+      const idx = filters.findIndex(f => f.key === active)
+      const btn = buttonRefs.current[idx >= 0 ? idx : 0]
+      if (!btn) return
+      setIndicator({ left: btn.offsetLeft, width: btn.offsetWidth })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [active, filters])
+
   return (
-    <div style={{
+    <div ref={containerRef} style={{
       position: 'relative',
-      display: 'flex',
+      display: 'inline-flex',
       padding: 4,
       marginBottom: 24,
       background: 'rgba(255, 255, 255, 0.5)',
@@ -327,38 +348,40 @@ function FilterPills({
         'inset 0 1px 0 rgba(255, 255, 255, 0.75)',
         'inset 0 0 0 0.5px rgba(255, 255, 255, 0.35)',
       ].join(', '),
-      maxWidth: 540,
+      maxWidth: '100%',
     }}>
-      {/* Dark satin sliding indicator */}
-      <div aria-hidden style={{
-        position: 'absolute',
-        top: 4, bottom: 4, left: 4,
-        width: `calc((100% - 8px) / ${filters.length})`,
-        transform: `translateX(${activeIdx * 100}%)`,
-        background: 'linear-gradient(135deg, #1d1d1f 0%, #0a0a0a 100%)',
-        borderRadius: 999,
-        boxShadow: [
-          '0 4px 14px -2px rgba(0, 0, 0, 0.35)',
-          'inset 0 1px 0 rgba(255, 255, 255, 0.12)',
-          'inset 0 -1px 0 rgba(0, 0, 0, 0.3)',
-        ].join(', '),
-        transition: 'transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-        pointerEvents: 'none',
-        zIndex: 0,
-      }} />
+      {/* Dark satin sliding indicator — left/width measured from the active button */}
+      {indicator && (
+        <div aria-hidden style={{
+          position: 'absolute',
+          top: 4, bottom: 4,
+          left: indicator.left,
+          width: indicator.width,
+          background: 'linear-gradient(135deg, #1d1d1f 0%, #0a0a0a 100%)',
+          borderRadius: 999,
+          boxShadow: [
+            '0 4px 14px -2px rgba(0, 0, 0, 0.35)',
+            'inset 0 1px 0 rgba(255, 255, 255, 0.12)',
+            'inset 0 -1px 0 rgba(0, 0, 0, 0.3)',
+          ].join(', '),
+          transition: 'left 380ms cubic-bezier(0.34, 1.56, 0.64, 1), width 380ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }} />
+      )}
 
-      {filters.map(f => {
+      {filters.map((f, i) => {
         const isActive = f.key === active
         const count = counts[f.key]
         return (
           <button
             key={f.key}
+            ref={(el) => { buttonRefs.current[i] = el }}
             onClick={() => onChange(f.key)}
             style={{
-              flex: 1,
               position: 'relative',
               zIndex: 1,
-              padding: '10px 16px',
+              padding: '10px 18px',
               background: 'transparent',
               border: 'none',
               fontSize: 13,
@@ -373,6 +396,7 @@ function FilterPills({
               alignItems: 'center',
               justifyContent: 'center',
               gap: 7,
+              flexShrink: 0,
             }}
           >
             {f.label}
