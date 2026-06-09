@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
-import { DEFAULT_CHECKLISTS } from '@/lib/constants'
 import type { Stage } from '@/lib/constants'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
 
@@ -24,14 +23,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Vehicle is not completed' }, { status: 400 })
   }
 
-  let body: { reason?: string; newInventory?: boolean; mechanicChecklist?: (string | { item: string; type?: string })[] } = {}
+  let body: { reason?: string; mechanicChecklist?: (string | { item: string; type?: string })[] } = {}
   try { body = await request.json() } catch { /* ok */ }
 
   const firstStage: Stage = 'mechanic'
   const config = await prisma.stageConfig.findUnique({ where: { stage: firstStage } })
-  const fallback = (config?.defaultChecklist as string[] | undefined)?.length
+  // No more legacy DEFAULT_CHECKLISTS fallback — mechanic templates live in the DB
+  // ("New Vehicle Inspection", "Sold Vehicle Inspection").  If the request doesn't
+  // send a checklist, fall through to the DB stage config or a single placeholder.
+  const fallback: string[] = (config?.defaultChecklist as string[] | undefined)?.length
     ? config!.defaultChecklist as string[]
-    : DEFAULT_CHECKLISTS[firstStage] || []
+    : ['Inspect & clear']
   const rawChecklist = body.mechanicChecklist && body.mechanicChecklist.length > 0
     ? body.mechanicChecklist
     : fallback
@@ -49,7 +51,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: 'pending',
         assigneeId: config?.defaultAssigneeId || null,
         checklist,
-        scopeName: body.newInventory ? 'New Inventory' : null,
       },
     })
 

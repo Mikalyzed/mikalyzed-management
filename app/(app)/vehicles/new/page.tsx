@@ -9,20 +9,6 @@ type InventoryPick = {
   year: number | null; make: string; model: string; color: string | null
 }
 
-const DEFAULT_INSPECTION: { item: string; type?: string }[] = [
-  { item: 'Test drive' },
-  { item: 'Oil & fluids check', type: 'fluids' },
-  { item: 'Brake inspection', type: 'brakePads' },
-  { item: 'Tire condition', type: 'tirePsi' },
-  { item: 'Engine check', type: 'engineCheck' },
-  { item: 'AC system' },
-  { item: 'Electrical systems', type: 'electrical' },
-  { item: 'Steering check', type: 'steeringCheck' },
-  { item: 'Suspension check', type: 'suspensionCheck' },
-  { item: 'Transmission check' },
-  { item: 'Body assessment' },
-]
-
 type Template = {
   id: string
   stage: string
@@ -35,7 +21,6 @@ export default function AddVehiclePage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [fullInspection, setFullInspection] = useState(false)
   const [startingStage, setStartingStage] = useState('mechanic')
   const [customTasks, setCustomTasks] = useState<string[]>([])
   const [newTask, setNewTask] = useState('')
@@ -103,10 +88,6 @@ export default function AddVehiclePage() {
         }
       }
       mechanicChecklist = [...combined, ...customTasks]
-    } else if (soldDelivery) {
-      mechanicChecklist = customTasks
-    } else if (fullInspection) {
-      mechanicChecklist = [...DEFAULT_INSPECTION, ...customTasks]
     } else if (customTasks.length > 0) {
       mechanicChecklist = customTasks
     } else {
@@ -126,7 +107,6 @@ export default function AddVehiclePage() {
       mechanicChecklist,
       estimatedHours: form.get('estimatedHours') ? parseFloat(form.get('estimatedHours') as string) : null,
       soldDelivery: startingStage === 'detailing' ? soldDelivery : false,
-      newInventory: startingStage === 'mechanic' && fullInspection,
     }
 
     try {
@@ -147,7 +127,6 @@ export default function AddVehiclePage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 reason,
-                newInventory: startingStage === 'mechanic' && fullInspection,
                 mechanicChecklist,
               }),
             })
@@ -370,37 +349,6 @@ export default function AddVehiclePage() {
             </div>
           )}
 
-          {/* General Inspection Toggle (mechanic only, hidden if any template selected) */}
-          {startingStage === 'mechanic' && selectedTemplateIds.length === 0 && (
-            <label style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              padding: '14px 16px', borderRadius: '12px',
-              border: fullInspection ? '2px solid #1a1a1a' : '1px solid var(--border)',
-              background: fullInspection ? '#fafaf8' : '#ffffff',
-              cursor: 'pointer', marginBottom: '20px', transition: 'all 0.15s ease',
-            }}>
-              <span style={{
-                width: '22px', height: '22px', borderRadius: '6px',
-                border: fullInspection ? 'none' : '2px solid #d4d4d4',
-                background: fullInspection ? '#1a1a1a' : 'transparent',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-              }}>
-                {fullInspection && <span style={{ color: '#dffd6e', fontSize: '13px', fontWeight: 700 }}>✓</span>}
-              </span>
-              <input
-                type="checkbox" checked={fullInspection}
-                onChange={(e) => setFullInspection(e.target.checked)}
-                style={{ display: 'none' }}
-              />
-              <div>
-                <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>New Inventory Vehicle</p>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Add full general inspection: oil, brakes, tires, engine, AC, electrical, test drive, body
-                </p>
-              </div>
-            </label>
-          )}
-
           {/* Sold Delivery Toggle (detailing only) */}
           {startingStage === 'detailing' && (
             <label style={{
@@ -505,7 +453,7 @@ export default function AddVehiclePage() {
             </div>
           )}
 
-          {!fullInspection && customTasks.length === 0 && (
+          {customTasks.length === 0 && selectedTemplateIds.length === 0 && (
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
               No tasks added — mechanic will just need to inspect and clear
             </p>

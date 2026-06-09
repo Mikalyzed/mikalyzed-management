@@ -199,9 +199,14 @@ export async function POST(request: Request) {
       const configChecklist = (stageConfig?.defaultChecklist as string[] | undefined)?.length
         ? stageConfig!.defaultChecklist as string[]
         : null
+      // Default order: explicit checklist from the request -> DB stage config -> single
+      // 'Inspect & clear' placeholder.  No more legacy DEFAULT_CHECKLISTS fallback —
+      // that was producing the old 8-item "New Inventory" template on stages that
+      // shouldn't get it (see the 1973 Camaro case 2026-06-09).  Mechanic templates
+      // ("New Vehicle Inspection", "Sold Vehicle Inspection") live in the DB now.
       let checklistItems: ChecklistInput[] = mechanicChecklist && mechanicChecklist.length > 0
         ? mechanicChecklist
-        : (configChecklist || DEFAULT_CHECKLISTS[startingStage as keyof typeof DEFAULT_CHECKLISTS] || ['Inspect & clear'])
+        : (configChecklist || ['Inspect & clear'])
       if (soldDelivery) {
         checklistItems = mechanicChecklist && mechanicChecklist.length > 0
           ? mechanicChecklist
