@@ -1999,27 +1999,41 @@ export default function MechanicBoard() {
 
                 {/* Admin actions */}
                 {isAdmin && (
-                  <div style={{ padding: '0 24px 16px', display: 'flex', gap: 10 }}>
+                  <div style={{ padding: '0 24px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <button
-                      onClick={() => { setExternalModal(selectedJob); closeModal() }}
+                      onClick={() => setAddTaskJob(selectedJob)}
                       style={{
-                        flex: 1, padding: '10px 0', borderRadius: 10,
-                        border: '1px solid #f59e0b', background: '#fffbeb',
-                        fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#b45309',
+                        padding: '10px 0', borderRadius: 10, border: '1px solid #c4b5fd',
+                        background: '#f5f3ff', color: '#6d28d9',
+                        fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                       }}
                     >
-                      Send to External Repair
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                      Add Task
                     </button>
-                    <button
-                      onClick={() => { setDeleteConfirm(selectedJob); closeModal() }}
-                      style={{
-                        flex: 1, padding: '10px 0', borderRadius: 10,
-                        border: '1px solid #fca5a5', background: '#fef2f2',
-                        fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#dc2626',
-                      }}
-                    >
-                      Delete Vehicle
-                    </button>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button
+                        onClick={() => { setExternalModal(selectedJob); closeModal() }}
+                        style={{
+                          flex: 1, padding: '10px 0', borderRadius: 10,
+                          border: '1px solid #f59e0b', background: '#fffbeb',
+                          fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#b45309',
+                        }}
+                      >
+                        Send to External Repair
+                      </button>
+                      <button
+                        onClick={() => { setDeleteConfirm(selectedJob); closeModal() }}
+                        style={{
+                          flex: 1, padding: '10px 0', borderRadius: 10,
+                          border: '1px solid #fca5a5', background: '#fef2f2',
+                          fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#dc2626',
+                        }}
+                      >
+                        Delete Vehicle
+                      </button>
+                    </div>
                   </div>
                 )}
               </>

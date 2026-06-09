@@ -437,6 +437,21 @@ export default function VehicleDetailV2() {
     })
   }
 
+  async function removeChecklistTask(stageId: string, index: number) {
+    setVehicle((cur) => {
+      if (!cur || !cur.stages) return cur
+      const stage = cur.stages.find(s => s.id === stageId)
+      if (!stage || !stage.checklist) return cur
+      const updated = stage.checklist.filter((_, i) => i !== index)
+      fetch(`/api/stages/${stageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: updated }),
+      }).catch(() => {})
+      return { ...cur, stages: cur.stages.map(s => s.id === stageId ? { ...s, checklist: updated } : s) }
+    })
+  }
+
   async function advanceStage(stageId: string) {
     if (!confirm('Advance to the next stage?')) return
     setBusy(true)
@@ -854,6 +869,40 @@ export default function VehicleDetailV2() {
                                     <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontStyle: 'italic' }}>↳ {item.note}</p>
                                   )}
                                 </div>
+                                {/* Admin remove — small X next to each item on the active stage. */}
+                                {isAdmin && isActive && (
+                                  <button
+                                    type="button"
+                                    title="Remove this task"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (confirm(`Remove "${item.item}" from this checklist?`)) {
+                                        removeChecklistTask(s.id, i)
+                                      }
+                                    }}
+                                    style={{
+                                      flexShrink: 0,
+                                      width: 22, height: 22, borderRadius: 6,
+                                      border: 'none', background: 'transparent',
+                                      color: 'rgba(0,0,0,0.35)', cursor: 'pointer',
+                                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                      padding: 0, minHeight: 'auto',
+                                      transition: 'background 140ms ease, color 140ms ease',
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'
+                                      e.currentTarget.style.color = '#dc2626'
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.currentTarget.style.background = 'transparent'
+                                      e.currentTarget.style.color = 'rgba(0,0,0,0.35)'
+                                    }}
+                                  >
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                                      <path d="M18 6L6 18M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                )}
                               </div>
                             ))}
 
