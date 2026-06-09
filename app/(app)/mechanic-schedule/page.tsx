@@ -5,6 +5,7 @@ import ScheduleView from './ScheduleView'
 import PlanView from './PlanView'
 import OrderPartModal from '@/components/OrderPartModal'
 import AddPartModal from '@/components/AddPartModal'
+import AddPartInline from '@/components/AddPartInline'
 import { fieldsForItem } from '@/lib/checklist-fields'
 
 type ChecklistItem = {
@@ -185,8 +186,6 @@ export default function MechanicBoard() {
   const [deleting, setDeleting] = useState(false)
   const [externalModal, setExternalModal] = useState<JobCard | null>(null)
   const [mechParts, setMechParts] = useState<any[]>([])
-  const [mechPartsAddId, setMechPartsAddId] = useState<string | null>(null)
-  const [mechPartsNewName, setMechPartsNewName] = useState('')
   const [mechPartsUrlId, setMechPartsUrlId] = useState<string | null>(null)
   const [mechPartsUrlInput, setMechPartsUrlInput] = useState('')
   const [mechPartsSaving, setMechPartsSaving] = useState(false)
@@ -1915,19 +1914,9 @@ export default function MechanicBoard() {
 
                 {/* Parts Section */}
                 <div style={{ padding: '0 24px 16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', margin: 0 }}>Parts {mechParts.length > 0 ? `(${mechParts.length})` : ''}</p>
-                    <button onClick={() => setMechPartsAddId(mechPartsAddId ? null : selectedJob.vehicle.id)} style={{ padding: '3px 10px', borderRadius: 5, border: '1px solid #1a1a1a', background: '#1a1a1a', color: '#dffd6e', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>+ Add</button>
-                  </div>
-                  {mechPartsAddId && (
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-                      <input type="text" value={mechPartsNewName} onChange={e => setMechPartsNewName(e.target.value)} placeholder="Part name..." autoFocus
-                        onKeyDown={async e => { if (e.key === 'Enter' && mechPartsNewName.trim()) { e.preventDefault(); setMechPartsSaving(true); await fetch('/api/parts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: selectedJob.vehicle.id, name: mechPartsNewName }) }); setMechPartsNewName(''); setMechPartsAddId(null); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) } }}
-                        style={{ flex: 1, padding: '6px 8px', border: '1px solid var(--border)', borderRadius: 5, fontSize: 12 }} />
-                      <button onClick={async () => { if (!mechPartsNewName.trim()) return; setMechPartsSaving(true); await fetch('/api/parts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vehicleId: selectedJob.vehicle.id, name: mechPartsNewName }) }); setMechPartsNewName(''); setMechPartsAddId(null); setMechPartsSaving(false); fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`).then(r => r.json()).then(d => setMechParts(d.parts || [])) }}
-                        disabled={mechPartsSaving || !mechPartsNewName.trim()} style={{ padding: '6px 10px', borderRadius: 5, border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: mechPartsSaving || !mechPartsNewName.trim() ? 0.5 : 1 }}>Add</button>
-                    </div>
-                  )}
+                  <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+                    Parts {mechParts.length > 0 ? `(${mechParts.length})` : ''}
+                  </p>
                   {mechParts.filter(p => p.status !== 'received').map(part => {
                     const sLabels: Record<string,string> = { requested: 'Requested', sourced: 'Pending Approval', ready_to_order: 'Ready to Order', ordered: 'Ordered' }
                     const sColors: Record<string,{bg:string;color:string}> = { requested: {bg:'#fef2f2',color:'#ef4444'}, sourced: {bg:'#fef9c3',color:'#a16207'}, ready_to_order: {bg:'#eff6ff',color:'#2563eb'}, ordered: {bg:'#fefce8',color:'#eab308'} }
@@ -1976,8 +1965,24 @@ export default function MechanicBoard() {
                       </div>
                     )
                   })}
-                  {mechParts.filter(p => p.status !== 'received').length === 0 && !mechPartsAddId && (
+                  {mechParts.filter(p => p.status !== 'received').length === 0 && (
                     <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '6px 0' }}>No pending parts</p>
+                  )}
+
+                  {/* Inline add — type a name, press Add, optional link + assignee
+                      appear, Save commits. Replaces the old toggle/inline form. */}
+                  {isAdmin && (
+                    <div style={{ marginTop: 8 }}>
+                      <AddPartInline
+                        vehicleId={selectedJob.vehicle.id}
+                        onAdded={() => {
+                          fetch(`/api/parts?vehicleId=${selectedJob.vehicle.id}`)
+                            .then(r => r.json())
+                            .then(d => setMechParts(d.parts || []))
+                            .catch(() => {})
+                        }}
+                      />
+                    </div>
                   )}
                 </div>
 

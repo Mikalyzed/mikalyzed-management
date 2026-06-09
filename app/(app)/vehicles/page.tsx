@@ -7,6 +7,7 @@ import VehicleCard from '@/components/VehicleCard'
 import KanbanScrollbar from '@/components/KanbanScrollbar'
 import { STAGE_LABELS } from '@/lib/constants'
 import OrderPartModal from '@/components/OrderPartModal'
+import AddPartInline from '@/components/AddPartInline'
 import VendorSearch, { VendorResult } from '@/components/VendorSearch'
 import RichTypeReadout from '@/components/RichTypeReadout'
 import { summarizeReview, extractIssueFixTasks } from '@/lib/inspection-issues'
@@ -2180,15 +2181,14 @@ export default function VehiclesPage() {
 function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
   vehicleId: string; parts: any[]; isAdmin: boolean; onPartsChange: () => void
 }) {
-  const [showAdd, setShowAdd] = useState(false)
-  const [newPartName, setNewPartName] = useState('')
-  const [newPartAssignee, setNewPartAssignee] = useState('')
   const [addingUrlId, setAddingUrlId] = useState<string | null>(null)
   const [urlInput, setUrlInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [orderModalPart, setOrderModalPart] = useState<{ id: string; name: string } | null>(null)
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
 
+  // Used by the per-part "assign to find" dropdown on rows that are still
+  // in `requested` state.  Loaded once when the section first mounts.
   useEffect(() => {
     fetch('/api/users').then(r => r.json()).then((d) => {
       setUsers((d.users || d).filter((u: { isActive?: boolean }) => u.isActive !== false).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })))
@@ -2205,16 +2205,6 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
     ready_to_order: { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
     ordered: { bg: '#fefce8', color: '#eab308', border: '#fde047' },
     received: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' }
-  }
-
-  async function addPart() {
-    if (!newPartName.trim()) return
-    setSaving(true)
-    await fetch('/api/parts', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vehicleId, name: newPartName, assignedToId: newPartAssignee || null })
-    })
-    setNewPartName(''); setNewPartAssignee(''); setShowAdd(false); setSaving(false); onPartsChange()
   }
 
   async function submitUrl(partId: string) {
@@ -2238,41 +2228,11 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
 
   return (
     <div style={{ marginTop: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <h4 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>Parts {parts.length > 0 ? `(${parts.length})` : ''}</h4>
-        <button onClick={() => setShowAdd(!showAdd)} style={{
-          padding: '4px 12px', borderRadius: 6, border: '1px solid #1a1a1a', background: '#1a1a1a',
-          color: '#dffd6e', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-        }}>+ Add Part</button>
-      </div>
+      <h4 style={{ fontSize: 14, fontWeight: 700, margin: '0 0 10px' }}>
+        Parts {parts.length > 0 ? `(${parts.length})` : ''}
+      </h4>
 
-      {showAdd && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-          <input
-            type="text" value={newPartName} onChange={e => setNewPartName(e.target.value)}
-            placeholder="Part name..." autoFocus
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addPart() } }}
-            style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
-          />
-          <select
-            value={newPartAssignee}
-            onChange={e => setNewPartAssignee(e.target.value)}
-            style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, background: '#fff' }}
-          >
-            <option value="">Assign to find part — Unassigned (admin handles)</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button onClick={() => setShowAdd(false)} style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: '#fff', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
-            <button onClick={addPart} disabled={saving || !newPartName.trim()} style={{
-              padding: '8px 12px', borderRadius: 6, border: 'none', background: '#1a1a1a', color: '#dffd6e',
-              fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: saving || !newPartName.trim() ? 0.5 : 1,
-            }}>{saving ? '...' : 'Add'}</button>
-          </div>
-        </div>
-      )}
-
-      {parts.length === 0 && !showAdd && (
+      {parts.length === 0 && (
         <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>No parts requested</p>
       )}
 
@@ -2394,6 +2354,15 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
           </div>
         )
       })}
+
+      {/* Admin-only inline add (replaces the old "+ Add Part" / expanded form).
+          Type a name, press Add, optional link + assignee appear, Save commits. */}
+      {isAdmin && (
+        <div style={{ marginTop: 10 }}>
+          <AddPartInline vehicleId={vehicleId} onAdded={onPartsChange} />
+        </div>
+      )}
+
       {orderModalPart && (
         <OrderPartModal partId={orderModalPart.id} partName={orderModalPart.name} onClose={() => setOrderModalPart(null)} onComplete={onPartsChange} />
       )}
