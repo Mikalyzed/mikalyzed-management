@@ -11,6 +11,10 @@ type Vehicle = {
   purchaseType: string | null; purchasedFrom: string | null; titleStatus: string | null
   dateInStock: string | null; status: string
   heroUrl: string | null
+  // Flags from the API so the card can render both badges when a car is
+  // simultaneously on the recon board AND out at an external repair shop.
+  inRecon?: boolean
+  atExternal?: boolean
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -540,9 +544,20 @@ function VehicleLedgerRow({
         </>
       )}
 
-      {/* ─── Status capsule ─── */}
-      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-        <SatinTag tone={statusTone}>{status}</SatinTag>
+      {/* ─── Status capsule(s) ───
+          When both flags are set (live recon stage AND open external repair),
+          render BOTH chips so the dealer can see at a glance the car is in two
+          buckets at once.  Otherwise fall back to the single canonical badge
+          driven by InventoryVehicle.status. */}
+      <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 4, flexWrap: 'wrap' }}>
+        {v.inRecon && v.atExternal ? (
+          <>
+            <SatinTag tone={statusTone1('in_recon')}>In Recon</SatinTag>
+            <SatinTag tone={statusTone1('external_repair')}>External</SatinTag>
+          </>
+        ) : (
+          <SatinTag tone={statusTone}>{status}</SatinTag>
+        )}
       </div>
 
       {/* ─── Type capsule ─── */}

@@ -30,7 +30,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 })
   }
 
-  return NextResponse.json({ vehicle })
+  // External repair runs alongside recon (separate table, keyed by stockNumber
+  // not vehicleId).  Pulled here so the detail page can weave it into the
+  // recon timeline as part of the vehicle jacket.
+  const externalRepairs = await prisma.externalRepair.findMany({
+    where: { stockNumber: vehicle.stockNumber },
+    orderBy: { createdAt: 'asc' },
+    include: { vendor: { select: { id: true, name: true } } },
+  })
+
+  return NextResponse.json({ vehicle: { ...vehicle, externalRepairs } })
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

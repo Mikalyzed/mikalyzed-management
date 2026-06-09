@@ -92,9 +92,45 @@ export async function GET(req: NextRequest) {
     console.error('[inventory] hero enrichment failed (returning rows without heroUrl):', enrichErr)
   }
 
+  // Per-row "is this car actively in recon AND/OR at external repair" flags.
+  // The InventoryVehicle.status is single-valued (priority: external > recon >
+  // in_stock), so the badge can't show both states.  These boolean flags let
+  // the card render two chips when both apply (e.g., car is at the external
+  // shop AND a mechanic stage is still live on the recon board).
+  const reconStockSet = new Set<string>()
+  const externalStockSet = new Set<string>()
+  try {
+    const stockNumbers = vehicles.map(v => v.stockNumber).filter(Boolean)
+    if (stockNumbers.length > 0) {
+      const [activeReconRows, activeExternalRows] = await Promise.all([
+        prisma.vehicle.findMany({
+          where: {
+            stockNumber: { in: stockNumbers },
+            status: { notIn: ['completed', 'inventory_only', 'archived'] },
+            stages: { some: { status: { notIn: ['done', 'skipped'] } } },
+          },
+          select: { stockNumber: true },
+        }),
+        prisma.externalRepair.findMany({
+          where: {
+            stockNumber: { in: stockNumbers },
+            status: { not: 'returned' },
+          },
+          select: { stockNumber: true },
+        }),
+      ])
+      for (const r of activeReconRows) reconStockSet.add(r.stockNumber)
+      for (const r of activeExternalRows) externalStockSet.add(r.stockNumber)
+    }
+  } catch (flagsErr) {
+    console.warn('[inventory] recon/external flag enrichment failed:', flagsErr)
+  }
+
   const enriched = vehicles.map(v => ({
     ...v,
     heroUrl: heroByStock.get(v.stockNumber) || null,
+    inRecon: reconStockSet.has(v.stockNumber),
+    atExternal: externalStockSet.has(v.stockNumber),
   }))
 
   return NextResponse.json({ vehicles: enriched, total, counts: countsByStatus })

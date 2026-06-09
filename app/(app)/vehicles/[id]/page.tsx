@@ -21,6 +21,22 @@ type ReconStage = {
   checklist?: ChecklistItem[]
 }
 
+type ExternalRepairRecord = {
+  id: string
+  shopName: string
+  shopPhone: string | null
+  atDealership: boolean
+  repairDescription: string
+  estimatedDays: number | null
+  sentDate: string | null
+  expectedReturn: string | null
+  status: string
+  notes: string | null
+  createdAt: string
+  updatedAt: string
+  vendor: { id: string; name: string } | null
+}
+
 type Vehicle = {
   id: string
   stockNumber: string
@@ -52,6 +68,7 @@ type Vehicle = {
   floorAdvanceDate: string | null
   floorStatus: string | null // pending | active | paid_off
   stages?: ReconStage[]
+  externalRepairs?: ExternalRepairRecord[]
   currentAssignee?: { id: string; name: string } | null
 }
 
@@ -749,15 +766,37 @@ export default function VehicleDetailV2() {
       )}
 
       {/* ═══ RECON TAB — timeline ═══ */}
-      {activeTab === 'recon' && (
+      {activeTab === 'recon' && (() => {
+        // The vehicle jacket weaves recon stages + external repair tickets
+        // into one chronological timeline.  Stages own the "in-house work"
+        // story (mechanic / detailing / content / publish); externals are
+        // the chunks where the car was off-site at a vendor shop.
+        type TimelineEntry =
+          | { kind: 'stage'; date: number; stage: ReconStage }
+          | { kind: 'external'; date: number; external: ExternalRepairRecord }
+        const stageEntries: TimelineEntry[] = (vehicle.stages || []).map((s) => ({
+          kind: 'stage',
+          date: s.startedAt ? new Date(s.startedAt).getTime() : 0,
+          stage: s,
+        }))
+        const externalEntries: TimelineEntry[] = (vehicle.externalRepairs || []).map((er) => ({
+          kind: 'external',
+          date: new Date(er.sentDate || er.createdAt).getTime(),
+          external: er,
+        }))
+        const entries = [...stageEntries, ...externalEntries].sort((a, b) => a.date - b.date)
+        const stageCount = stageEntries.length
+        const externalCount = externalEntries.length
+
+        return (
             <GlassCard>
               <GlassEyebrow
                 label="Recon History"
-                subtitle={vehicle.stages && vehicle.stages.length > 0
-                  ? `${vehicle.stages.length} stage${vehicle.stages.length === 1 ? '' : 's'} · current: ${vehicle.status?.replace(/_/g, ' ')}`
-                  : 'No recon stages yet'}
+                subtitle={entries.length > 0
+                  ? `${stageCount} stage${stageCount === 1 ? '' : 's'}${externalCount > 0 ? ` · ${externalCount} external repair${externalCount === 1 ? '' : 's'}` : ''} · current: ${vehicle.status?.replace(/_/g, ' ')}`
+                  : 'No recon history yet'}
               />
-              {vehicle.stages && vehicle.stages.length > 0 ? (
+              {entries.length > 0 ? (
                 <div style={{ position: 'relative' }}>
                   {/* Vertical timeline spine */}
                   <div aria-hidden style={{
@@ -767,7 +806,59 @@ export default function VehicleDetailV2() {
                     pointerEvents: 'none',
                   }} />
 
-                  {vehicle.stages.map((s) => {
+                  {entries.map((entry) => {
+                    if (entry.kind === 'external') {
+                      const er = entry.external
+                      const isOpen = er.status !== 'returned'
+                      return (
+                        <div key={`er-${er.id}`} style={{ position: 'relative', paddingLeft: 30 }}>
+                          {/* Amber dot — external repair lives off-site */}
+                          <div aria-hidden style={{
+                            position: 'absolute', left: 1, top: 18,
+                            width: 13, height: 13, borderRadius: '50%',
+                            background: isOpen ? '#fef3c7' : '#1d1d1f',
+                            border: isOpen ? '2px solid #b45309' : '1.5px solid rgba(0,0,0,0.22)',
+                            boxShadow: isOpen ? '0 0 0 4px rgba(180, 83, 9, 0.18)' : '0 1px 3px rgba(0,0,0,0.18)',
+                            zIndex: 1,
+                            transition: 'all 200ms ease',
+                          }} />
+                          <div style={{ padding: '12px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: '#1d1d1f', letterSpacing: '-0.005em' }}>
+                                External Repair
+                                <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.5)', marginLeft: 8, fontWeight: 500 }}>
+                                  · {er.vendor?.name || er.shopName}
+                                </span>
+                              </span>
+                              <span style={{
+                                fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
+                                padding: '3px 9px', borderRadius: 999,
+                                background: isOpen ? 'rgba(180, 83, 9, 0.12)' : 'rgba(0, 0, 0, 0.05)',
+                                color: isOpen ? '#92400e' : 'rgba(0,0,0,0.55)',
+                                border: `1px solid ${isOpen ? 'rgba(180, 83, 9, 0.25)' : 'rgba(0,0,0,0.1)'}`,
+                                whiteSpace: 'nowrap',
+                              }}>{er.status.replace(/_/g, ' ')}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 14, marginTop: 5, fontSize: 11, color: 'rgba(0,0,0,0.55)', flexWrap: 'wrap', fontWeight: 500 }}>
+                              <span>{fmtDate(er.sentDate || er.createdAt)}{er.expectedReturn ? ` → ${fmtDate(er.expectedReturn)} (est.)` : ''}</span>
+                              {er.estimatedDays && <span>~{er.estimatedDays} days</span>}
+                              {er.shopPhone && <span>{er.shopPhone}</span>}
+                            </div>
+                            {er.repairDescription && (
+                              <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.65)', marginTop: 8, lineHeight: 1.5 }}>
+                                {er.repairDescription}
+                              </p>
+                            )}
+                            {er.notes && (
+                              <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.55)', marginTop: 6, fontStyle: 'italic' }}>
+                                ↳ {er.notes}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
+                    const s = entry.stage
                     const isActive = s.status !== 'done' && s.status !== 'skipped' && !s.completedAt
                     const isDone = s.status === 'done' || !!s.completedAt
                     const isExpanded = expandedStageId === s.id
@@ -1021,11 +1112,12 @@ export default function VehicleDetailV2() {
                 </div>
               ) : (
                 <p style={{ color: 'rgba(0,0,0,0.5)', fontSize: 13, fontStyle: 'italic' }}>
-                  This vehicle has no recon stages yet. {vehicle.status === 'inventory_only' && '(Inventory-only — never started recon.)'}
+                  This vehicle has no recon history yet. {vehicle.status === 'inventory_only' && '(Inventory-only — never started recon.)'}
                 </p>
               )}
             </GlassCard>
-          )}
+        )
+      })()}
       {/* ═══ MARKETING TAB ═══ */}
       {activeTab === 'marketing' && <ChannelSyndicationCard />}
 
