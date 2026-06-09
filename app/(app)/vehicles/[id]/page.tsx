@@ -2037,7 +2037,7 @@ function PriceAndCostCard({
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <h4 style={{
-      fontSize: 14, fontWeight: 700, letterSpacing: '-0.012em',
+      fontSize: 14, fontWeight: 800, letterSpacing: '-0.014em',
       color: '#0a0a0a',
       lineHeight: 1,
       marginBottom: 16,
@@ -2196,28 +2196,18 @@ function InlineField({
   const valueColor = accent ? '#0071e3'
     : (placeholderEmpty && !value ? 'rgba(0,0,0,0.3)' : '#0a0a0a')
 
-  const lineColor = rowLineColor(editing, hover, isEditable)
-
   return (
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onClick={() => { if (isEditable && !editing) startEdit() }}
       style={{
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        gap: 10,
+        ...chipBoxStyle(editing, hover, isEditable),
         opacity: saving ? 0.55 : 1,
-        paddingBottom: 7,
-        borderBottom: `1px solid ${lineColor}`,
-        transition: 'border-color 180ms ease',
       }}>
       <span style={{
         display: 'inline-flex', alignItems: 'center', gap: 5,
-        fontSize: 11, fontWeight: 500,
-        color: 'rgba(0,0,0,0.5)',
-        letterSpacing: '-0.005em',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden', textOverflow: 'ellipsis',
-        minWidth: 0,
+        ...labelStyle,
       }}>
         {label}
         {locked && <span aria-hidden style={{ fontSize: 11, color: 'rgba(0,0,0,0.28)', lineHeight: 1 }}>⋮</span>}
@@ -4630,18 +4620,11 @@ function AnchorRowSelect({ label, value, onChange, options, placeholder }: {
 }
 
 // Soft floating row container — translucent white over the SubPanel for vertical-stack fields.
+// Pass-through wrapper now that InlineTextField provides its own chip
+// styling.  Kept as a component so the TitleBuildStudio JSX doesn't need
+// to be rewritten — and so callers can adjust spacing in one place later.
 function BlueprintRow({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      padding: '8px 12px',
-      background: 'rgba(255, 255, 255, 0.15)',
-      borderRadius: 6,
-      border: '1px solid rgba(255, 255, 255, 0.3)',
-      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.45)',
-    }}>
-      {children}
-    </div>
-  )
+  return <>{children}</>
 }
 
 // Borderless inline text field — label LEFT, value RIGHT, hover capsule on value.
@@ -4682,8 +4665,6 @@ function InlineTextField({
       onChange(cleaned)
     }
   }
-
-  const lineColor = rowLineColor(editing, hover, isEditable)
 
   const isPlaceholder = !value
   const display = value || (placeholder ?? '—')
@@ -4726,15 +4707,12 @@ function InlineTextField({
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onClick={() => { if (isEditable && !editing) startEdit() }}
       style={{
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        gap: 10,
+        ...chipBoxStyle(editing, hover, isEditable),
         opacity: saving ? 0.55 : 1,
         gridColumn: fullWidth ? '1 / -1' : undefined,
         minWidth: 0,
-        paddingBottom: 7,
-        borderBottom: `1px solid ${lineColor}`,
-        transition: 'border-color 180ms ease',
       }}>
       <span style={labelStyle}>{label}</span>
 
@@ -4868,31 +4846,27 @@ function InlineSelectField({
     }
   }
 
-  const lineColor = rowLineColor(open, hover, true)
-
   return (
     <div
       ref={containerRef}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onClick={() => setOpen(o => !o)}
       style={{
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        gap: 10,
+        ...chipBoxStyle(open, hover, true),
         opacity: saving ? 0.55 : 1,
         gridColumn: fullWidth ? '1 / -1' : undefined,
         minWidth: 0,
-        paddingBottom: 7,
-        borderBottom: `1px solid ${lineColor}`,
-        transition: 'border-color 180ms ease',
         position: 'relative',
       }}>
       <span style={labelStyle}>{label}</span>
       <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, flexShrink: 0, minWidth: 0 }}>
         <button
           type="button"
-          onClick={() => setOpen(o => !o)}
+          onClick={(e) => { e.stopPropagation(); setOpen(o => !o) }}
           style={{
             ...valueButtonStyle('transparent', isPlaceholder, true),
+            background: 'transparent', border: 'none', padding: 0,
             display: 'inline-flex', alignItems: 'center', gap: 5,
             maxWidth: 220,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -5029,20 +5003,16 @@ function InlineDateField({
     ? new Date(value + 'T00:00:00').toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' })
     : '—'
 
-  const lineColor = rowLineColor(editing, hover, isEditable)
-
   const isPlaceholder = !value
 
   return (
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onClick={() => { if (isEditable && !editing) startEdit() }}
       style={{
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        gap: 10, minWidth: 0,
-        paddingBottom: 7,
-        borderBottom: `1px solid ${lineColor}`,
-        transition: 'border-color 180ms ease',
+        ...chipBoxStyle(editing, hover, isEditable),
+        minWidth: 0,
       }}>
       <span style={labelStyle}>{label}</span>
       <div style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8, flexShrink: 0 }}>
@@ -5057,16 +5027,15 @@ function InlineDateField({
             style={textInputStyle('transparent', false)}
           />
         ) : (
-          <button
-            onClick={startEdit}
-            disabled={!isEditable}
-            style={valueButtonStyle('transparent', isPlaceholder, isEditable)}
-          >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <CalendarMicroIcon />
-              {display}
-            </span>
-          </button>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            fontSize: 14, fontWeight: 700,
+            color: isPlaceholder ? 'rgba(0,0,0,0.3)' : '#0a0a0a',
+            letterSpacing: '-0.005em',
+          }}>
+            <CalendarMicroIcon />
+            {display}
+          </span>
         )}
       </div>
     </div>
@@ -5281,23 +5250,46 @@ function LiveLinkBanner({ url }: { url: string }) {
 // ─── Studio styling helpers ────────────────────────────────────────
 
 const labelStyle: React.CSSProperties = {
-  fontSize: 11, fontWeight: 500,
-  color: 'rgba(0,0,0,0.5)',
+  fontSize: 11, fontWeight: 700,
+  color: 'rgba(0,0,0,0.55)',
   letterSpacing: '-0.005em',
   whiteSpace: 'nowrap',
   overflow: 'hidden', textOverflow: 'ellipsis',
   minWidth: 0,
 }
 
-// Row-level baseline: a hairline that runs the full width of the row (label + value)
-// so the value visually connects to its label across the gap.  Always faintly visible
-// at rest, darkens on hover (editable rows only), solidifies further while editing.
-// The value button/input itself carries no border — the row line is the single
-// connecting element.
+// Legacy hairline-underline helper, still referenced by some older inline
+// fields not converted yet.  Kept so the file compiles; new fields use the
+// chip style below.
 function rowLineColor(editing: boolean, hover: boolean, isEditable: boolean): string {
   if (editing) return 'rgba(0, 0, 0, 0.42)'
   if (hover && isEditable) return 'rgba(0, 0, 0, 0.16)'
   return 'rgba(0, 0, 0, 0.07)'
+}
+
+// Chip-style row container — translucent rounded background, label-left /
+// value-right.  Shared by InlineField, InlineTextField, InlineSelectField,
+// InlineDateField so the General Info + Build / Title surfaces render with
+// the same AnchorRow visual language used in Purchase Info.
+function chipBoxStyle(editing: boolean, hover: boolean, isEditable: boolean): React.CSSProperties {
+  const bg = editing
+    ? 'rgba(255, 255, 255, 0.65)'
+    : hover && isEditable
+      ? 'rgba(255, 255, 255, 0.5)'
+      : isEditable
+        ? 'rgba(255, 255, 255, 0.32)'
+        : 'rgba(255, 255, 255, 0.22)'
+  return {
+    display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+    gap: 12,
+    padding: '10px 14px',
+    borderRadius: 12,
+    background: bg,
+    border: '1px solid rgba(255, 255, 255, 0.5)',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+    cursor: isEditable ? 'pointer' : 'default',
+    transition: 'background 180ms ease',
+  }
 }
 
 function valueButtonStyle(_underline: string, isPlaceholder: boolean, isEditable: boolean): React.CSSProperties {
