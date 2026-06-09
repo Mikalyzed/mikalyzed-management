@@ -459,8 +459,8 @@ function VehicleLedgerRow({
         position: 'relative',
         display: 'grid',
         gridTemplateColumns: canSeeMoney
-          ? '156px minmax(0, 1.8fr) 86px 110px 88px 104px 112px 108px 108px'
-          : '156px minmax(0, 2.1fr) 100px 120px 100px 112px 112px',
+          ? '156px minmax(0, 1.8fr) 86px 110px 88px 104px 112px 116px'
+          : '156px minmax(0, 2.1fr) 100px 120px 100px 116px',
         gap: 18,
         alignItems: 'center',
         padding: '14px 18px',
@@ -492,7 +492,7 @@ function VehicleLedgerRow({
       {/* ─── Hero 16:9 thumbnail ─── */}
       <HeroThumb url={v.heroUrl} alt={`${v.year || ''} ${v.make} ${v.model}`} />
 
-      {/* ─── Title block: Year Make Model / Stock · VIN ─── */}
+      {/* ─── Title block: Year Make Model / Stock · VIN · Type ─── */}
       <div style={{ minWidth: 0 }}>
         <p style={{
           fontSize: 16, fontWeight: 700, letterSpacing: '-0.015em',
@@ -501,10 +501,18 @@ function VehicleLedgerRow({
         }}>
           {v.year ? `${v.year} ` : ''}{v.make} {v.model}
         </p>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 4, fontSize: 11, color: 'rgba(0,0,0,0.5)', fontWeight: 500 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 4, fontSize: 11, color: 'rgba(0,0,0,0.5)', fontWeight: 500, flexWrap: 'wrap' }}>
           <span><span style={{ letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700 }}>Stock</span> {v.stockNumber}</span>
           <span style={{ width: 1, height: 10, background: 'rgba(0,0,0,0.15)' }} aria-hidden />
           <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{vinShort}</span>
+          {typeLabelText && (
+            <>
+              <span style={{ width: 1, height: 10, background: 'rgba(0,0,0,0.15)' }} aria-hidden />
+              <span style={{ letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 700, color: typeTone.fg }}>
+                {typeLabelText}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -544,12 +552,12 @@ function VehicleLedgerRow({
         </>
       )}
 
-      {/* ─── Status capsule(s) ───
+      {/* ─── Status capsule(s) — right-aligned, last column.
           When both flags are set (live recon stage AND open external repair),
-          render BOTH chips so the dealer can see at a glance the car is in two
-          buckets at once.  Otherwise fall back to the single canonical badge
+          render BOTH chips stacked so the dealer can see at a glance the car
+          is in two buckets at once.  Otherwise the single canonical badge
           driven by InventoryVehicle.status. */}
-      <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 4, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
         {v.inRecon && v.atExternal ? (
           <>
             <SatinTag tone={statusTone1('in_recon')}>In Recon</SatinTag>
@@ -558,13 +566,6 @@ function VehicleLedgerRow({
         ) : (
           <SatinTag tone={statusTone}>{status}</SatinTag>
         )}
-      </div>
-
-      {/* ─── Type capsule ─── */}
-      <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-        {typeLabelText
-          ? <SatinTag tone={typeTone}>{typeLabelText}</SatinTag>
-          : <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.35)' }}>—</span>}
       </div>
     </div>
   )
