@@ -36,13 +36,34 @@ export async function GET(req: NextRequest) {
     ]
   }
 
+  // When the user is searching and no specific status is requested, fetch
+  // non-sold and sold matches separately so non-sold cars always appear at
+  // the top of the suggestion list — sold/removed match get pushed to the
+  // bottom so the picker isn't dominated by historical inventory.  Other
+  // cases keep the existing single-query behavior.
+  const sortSoldLast = !!search && (!status || status === 'all')
   const [vehicles, total, counts] = await Promise.all([
-    prisma.inventoryVehicle.findMany({
-      where,
-      orderBy: { dateInStock: 'desc' },
-      take: limit,
-      skip: offset,
-    }),
+    sortSoldLast
+      ? Promise.all([
+          prisma.inventoryVehicle.findMany({
+            where: { ...where, status: { notIn: ['sold', 'removed'] } },
+            orderBy: { dateInStock: 'desc' },
+            take: limit,
+            skip: offset,
+          }),
+          prisma.inventoryVehicle.findMany({
+            where: { ...where, status: { in: ['sold', 'removed'] } },
+            orderBy: { dateInStock: 'desc' },
+            take: limit,
+            skip: offset,
+          }),
+        ]).then(([active, soldOrRemoved]) => [...active, ...soldOrRemoved].slice(0, limit))
+      : prisma.inventoryVehicle.findMany({
+          where,
+          orderBy: { dateInStock: 'desc' },
+          take: limit,
+          skip: offset,
+        }),
     prisma.inventoryVehicle.count({ where }),
     prisma.inventoryVehicle.groupBy({
       by: ['status'],
