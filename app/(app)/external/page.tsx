@@ -1512,7 +1512,7 @@ export default function ExternalRepairsPage() {
                     color: '#1d4ed8', fontSize: 13, fontWeight: 700, cursor: 'pointer',
                     minHeight: 0,
                   }}
-                >Move to Recon</button>
+                >Move Vehicle</button>
               )}
 
               {/* Delete as slim text link — tapping opens a confirmation, never deletes directly */}
