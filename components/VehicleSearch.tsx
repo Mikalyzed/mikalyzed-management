@@ -5,6 +5,9 @@ import { useState, useEffect, useRef } from 'react'
 type InventoryResult = {
   id: string; stockNumber: string; vin: string | null
   year: number | null; make: string; model: string; color: string | null
+  // InventoryVehicle.status — exposed so callers can prompt the admin when
+  // a sold or otherwise-non-active car is picked.
+  status?: string
 }
 
 type Props = {
@@ -72,11 +75,25 @@ export default function VehicleSearch({ onSelect, placeholder = 'Search by stock
               onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
               onMouseLeave={e => e.currentTarget.style.background = 'none'}
             >
-              <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 14, fontWeight: 600 }}>
                   {v.year ? `${v.year} ` : ''}{v.make} {v.model}
                 </span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 8 }}>#{v.stockNumber}</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>#{v.stockNumber}</span>
+                {v.status === 'sold' && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+                    padding: '2px 8px', borderRadius: 999,
+                    background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca',
+                  }}>Sold</span>
+                )}
+                {(v.status === 'in_recon' || v.status === 'external_repair') && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+                    padding: '2px 8px', borderRadius: 999,
+                    background: '#ede9fe', color: '#6d28d9', border: '1px solid #ddd6fe',
+                  }}>{v.status === 'in_recon' ? 'In Recon' : 'External'}</span>
+                )}
               </div>
               {v.color && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>{v.color}</span>}
             </button>

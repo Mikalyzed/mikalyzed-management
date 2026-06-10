@@ -712,16 +712,6 @@ export default function ExternalRepairsPage() {
                     <div className="ext-actions">
                       <button
                         className="ext-action-extra"
-                        onClick={() => openVehicleDetail(r.stockNumber)}
-                        disabled={resolving === r.stockNumber}
-                        style={{
-                          ...actionBtn('#eff6ff', '#1d4ed8'),
-                          cursor: resolving === r.stockNumber ? 'wait' : 'pointer',
-                          opacity: resolving === r.stockNumber ? 0.6 : 1,
-                        }}
-                      >View Vehicle</button>
-                      <button
-                        className="ext-action-extra"
                         onClick={() => setAddPartFor({
                           stockNumber: r.stockNumber,
                           vehicleDesc: `${r.year || ''} ${r.make} ${r.model}`.trim(),
@@ -765,14 +755,6 @@ export default function ExternalRepairsPage() {
                           onClick={() => { setReconModal(r); setReconStage('mechanic'); setReconCloseExternal(true) }}
                           style={actionBtn('#f0fdf4', '#16a34a')}
                         >Mark Returned</button>
-                      )}
-                      {/* Admin shortcut — start recon while the car is still at the shop.
-                          Defaults to "keep external open" so the two states can live in parallel. */}
-                      {isAdmin && (r.status === 'sent' || r.status === 'in_progress') && (
-                        <button
-                          onClick={() => { setReconModal(r); setReconStage('mechanic'); setReconCloseExternal(false) }}
-                          style={actionBtn('#eff6ff', '#1d4ed8')}
-                        >Move to Recon</button>
                       )}
                     </div>
                   )
@@ -1494,6 +1476,28 @@ export default function ExternalRepairsPage() {
                 background: editRepairSaving ? '#e5e5e5' : '#1a1a1a', color: '#dffd6e',
                 fontSize: 14, fontWeight: 700, cursor: 'pointer',
               }}>{editRepairSaving ? 'Saving…' : 'Save'}</button>
+
+              {/* Admin shortcut — start recon while the car is still at the shop.
+                  Opens the recon modal pre-set to "keep external open" so the
+                  two states can run in parallel. Available on sent / in_progress
+                  cards (ready already exposes its own 'Mark Returned' flow). */}
+              {isAdmin && (editRepairModal.status === 'sent' || editRepairModal.status === 'in_progress') && (
+                <button
+                  onClick={() => {
+                    setReconModal(editRepairModal)
+                    setReconStage('mechanic')
+                    setReconCloseExternal(false)
+                    setEditRepairModal(null)
+                    setEditReason('')
+                  }}
+                  style={{
+                    padding: '11px 14px', borderRadius: 10,
+                    border: '1px solid #bfdbfe', background: '#eff6ff',
+                    color: '#1d4ed8', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    minHeight: 0,
+                  }}
+                >Move to Recon</button>
+              )}
 
               {/* Delete as slim text link — tapping opens a confirmation, never deletes directly */}
               <button onClick={() => {

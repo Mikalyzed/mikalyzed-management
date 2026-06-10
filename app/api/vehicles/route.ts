@@ -157,7 +157,11 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist, startingStage: rawStartingStage, estimatedHours, soldDelivery: rawSoldDelivery, newInventory: rawNewInventory } = body
+  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist, startingStage: rawStartingStage, estimatedHours, soldDelivery: rawSoldDelivery, newInventory: rawNewInventory, reason: rawReason } = body
+  // Optional reason — used when the admin is re-routing a sold or otherwise
+  // unusual vehicle back into recon.  Surfaces on the new stage's notes so
+  // the explanation lives with the work that's about to happen.
+  const reason = typeof rawReason === 'string' && rawReason.trim() ? rawReason.trim() : null
   const validStages = ['mechanic', 'detailing', 'content', 'publish']
   const startingStage = validStages.includes(rawStartingStage) ? rawStartingStage : 'mechanic'
   const soldDelivery = !!rawSoldDelivery && startingStage === 'detailing'
@@ -260,6 +264,7 @@ export async function POST(request: Request) {
             priority: nextPriority,
             estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
             scopeName: soldDelivery ? 'Sold Delivery' : newInventory ? 'New Inventory' : null,
+            notes: reason,
           },
         })
 
@@ -362,6 +367,7 @@ export async function POST(request: Request) {
         priority: nextPriority,
         estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
         scopeName: soldDelivery ? 'Sold Delivery' : newInventory ? 'New Inventory' : null,
+        notes: reason,
       },
     })
 

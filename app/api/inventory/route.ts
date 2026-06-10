@@ -16,8 +16,11 @@ export async function GET(req: NextRequest) {
   const where: any = { isActive: true }
   if (status && status !== 'all') {
     where.status = status
-  } else {
-    // "All" tab should exclude sold/removed — those live in their own tabs
+  } else if (!search) {
+    // Default 'all' view excludes sold/removed — those live in their own tabs.
+    // BUT when the user is explicitly searching by stock # / VIN / name, we
+    // want every matching record so an admin can find a sold car they need
+    // to send back through recon.  No exclusion if a search query is present.
     where.status = { notIn: ['sold', 'removed'] }
   }
 

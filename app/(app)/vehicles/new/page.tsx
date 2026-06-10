@@ -7,6 +7,9 @@ import VehicleSearch from '@/components/VehicleSearch'
 type InventoryPick = {
   stockNumber: string; vin: string | null
   year: number | null; make: string; model: string; color: string | null
+  // InventoryVehicle.status — surfaced from search so we can prompt the admin
+  // for a reason when re-routing a sold car back through recon.
+  status?: string
 }
 
 type Template = {
@@ -94,7 +97,23 @@ export default function AddVehiclePage() {
       mechanicChecklist = ['Inspect & clear']
     }
 
-    const data = {
+    // Sold-car gate: if the admin is sending a car that's already marked Sold
+    // back into recon, ask why first so the answer is captured on the new
+    // stage and visible later in the vehicle jacket / activity log.
+    let soldReason: string | null = null
+    if (selectedInv?.status === 'sold') {
+      const desc = `${selectedInv.year ?? ''} ${selectedInv.make} ${selectedInv.model}`.trim()
+      const answer = window.prompt(
+        `${desc} (#${selectedInv.stockNumber}) is marked Sold.\n\nWhy is it going back to recon?`
+      )
+      if (!answer || !answer.trim()) {
+        setLoading(false)
+        return
+      }
+      soldReason = answer.trim()
+    }
+
+    const data: Record<string, unknown> = {
       stockNumber: form.get('stockNumber'),
       vin: form.get('vin'),
       year: form.get('year'),
@@ -107,6 +126,7 @@ export default function AddVehiclePage() {
       mechanicChecklist,
       estimatedHours: form.get('estimatedHours') ? parseFloat(form.get('estimatedHours') as string) : null,
       soldDelivery: startingStage === 'detailing' ? soldDelivery : false,
+      ...(soldReason ? { reason: soldReason } : {}),
     }
 
     try {
