@@ -310,7 +310,10 @@ export default function ExternalRepairsPage() {
 
         @media (min-width: 768px) {
           .ext-header { flex-direction: row; align-items: flex-start; justify-content: space-between; }
-          .ext-header h1 { font-size: 28px; }
+          /* Hide the page heading on web — the user's nav rail already labels
+             the page and the heading is redundant.  Stays on mobile where the
+             nav is collapsed. */
+          .ext-header h1 { display: none; }
           .ext-add-btn { min-height: 44px !important; padding: 10px 20px !important; border-radius: 12px !important; }
           .ext-add-btn span { display: inline; }
           .ext-card-padding { padding: 20px 24px 16px; }
