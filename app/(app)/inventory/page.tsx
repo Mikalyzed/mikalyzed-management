@@ -80,7 +80,7 @@ function mapRow(row: Record<string, string>) {
 
 // ─── Filter pills (All / In Recon / Consignment / Retail) ──────────
 
-type FilterKey = 'all' | 'in_recon' | 'consignment' | 'retail'
+type FilterKey = 'all' | 'in_recon' | 'consignment' | 'retail' | 'sold'
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all',         label: 'All' },
@@ -90,11 +90,16 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'in_recon',    label: 'Recon + External' },
   { key: 'consignment', label: 'Consignment' },
   { key: 'retail',      label: 'Retail' },
+  // Sold lives in its own tab — these cars are excluded from the API default
+  // (and the All count) but admins still need to be able to find them, e.g.,
+  // to send a sold car back through recon for a quick fix before delivery.
+  { key: 'sold',        label: 'Sold' },
 ]
 
 function matchesFilter(v: Vehicle, key: FilterKey): boolean {
   if (key === 'all') return true
   if (key === 'in_recon') return v.status === 'in_recon' || v.status === 'external_repair'
+  if (key === 'sold') return v.status === 'sold'
   const pt = (v.purchaseType || '').trim().toUpperCase()
   if (key === 'consignment') return pt === 'CONSIGNMENT'
   if (key === 'retail') return pt.length > 0 && pt !== 'CONSIGNMENT'
@@ -130,11 +135,20 @@ export default function InventoryPage() {
     return () => clearTimeout(t)
   }, [search])
 
+  // API counts per status — used as the source of truth for the Sold pill
+  // count, which can't be derived from `vehicles` (sold cars aren't in the
+  // default fetch).  Kept separately from the client-side purchaseType
+  // counts (Consignment / Retail) so each pill stays accurate.
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({})
+
   async function load() {
     setLoading(true)
     try {
       const params = new URLSearchParams()
       if (searchDebounced) params.set('search', searchDebounced)
+      // When the Sold tab is active, fetch sold rows directly — they're
+      // excluded from the API default for everything else.
+      if (filter === 'sold') params.set('status', 'sold')
       const r = await fetch(`/api/inventory?${params}`)
       const text = await r.text()
       if (!r.ok) {
@@ -146,6 +160,7 @@ export default function InventoryPage() {
       const d = text ? JSON.parse(text) : null
       setVehicles(d?.vehicles || [])
       setTotal(d?.total || 0)
+      setStatusCounts(d?.counts || {})
     } catch (e) {
       console.error('[inventory] load error', e)
       setVehicles([])
@@ -156,18 +171,24 @@ export default function InventoryPage() {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load() }, [searchDebounced])
+  useEffect(() => { load() }, [searchDebounced, filter])
 
   const filterCounts = useMemo(() => {
-    const counts: Record<FilterKey, number> = { all: 0, in_recon: 0, consignment: 0, retail: 0 }
+    const counts: Record<FilterKey, number> = { all: 0, in_recon: 0, consignment: 0, retail: 0, sold: 0 }
+    // Status-driven counts come from the API so they stay accurate even when
+    // a status-specific tab (Sold) is selected and the vehicles array no
+    // longer reflects the rest of inventory.
+    counts.all = statusCounts.all ?? 0
+    counts.in_recon = (statusCounts.in_recon ?? 0) + (statusCounts.external_repair ?? 0)
+    counts.sold = statusCounts.sold ?? 0
+    // purchaseType counts still come from the loaded vehicles — when Sold is
+    // active these get zeroed, but that's the right answer for the Sold view.
     for (const v of vehicles) {
-      counts.all++
-      if (matchesFilter(v, 'in_recon'))    counts.in_recon++
       if (matchesFilter(v, 'consignment')) counts.consignment++
       if (matchesFilter(v, 'retail'))      counts.retail++
     }
     return counts
-  }, [vehicles])
+  }, [vehicles, statusCounts])
 
   const filtered = useMemo(() => vehicles.filter(v => matchesFilter(v, filter)), [vehicles, filter])
 
