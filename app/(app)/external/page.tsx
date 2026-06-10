@@ -102,6 +102,12 @@ export default function ExternalRepairsPage() {
   const [reconNotes, setReconNotes] = useState('')
   const [reconEstHours, setReconEstHours] = useState('')
   const [reconError, setReconError] = useState('')
+  // When true (default), submitting marks the external repair as 'returned'
+  // and the car comes off external entirely.  When false, the external repair
+  // stays open and the car is on BOTH the recon board AND the external list
+  // simultaneously — useful when work needs to start while the shop still has
+  // a part offsite, etc.
+  const [reconCloseExternal, setReconCloseExternal] = useState(true)
   const [showAnotherShopForm, setShowAnotherShopForm] = useState(false)
   const [anotherShopName, setAnotherShopName] = useState('')
   const [anotherShopPhone, setAnotherShopPhone] = useState('')
@@ -756,9 +762,17 @@ export default function ExternalRepairsPage() {
                       )}
                       {r.status === 'ready' && (
                         <button
-                          onClick={() => { setReconModal(r); setReconStage('mechanic') }}
+                          onClick={() => { setReconModal(r); setReconStage('mechanic'); setReconCloseExternal(true) }}
                           style={actionBtn('#f0fdf4', '#16a34a')}
                         >Mark Returned</button>
+                      )}
+                      {/* Admin shortcut — start recon while the car is still at the shop.
+                          Defaults to "keep external open" so the two states can live in parallel. */}
+                      {isAdmin && (r.status === 'sent' || r.status === 'in_progress') && (
+                        <button
+                          onClick={() => { setReconModal(r); setReconStage('mechanic'); setReconCloseExternal(false) }}
+                          style={actionBtn('#eff6ff', '#1d4ed8')}
+                        >Move to Recon</button>
                       )}
                     </div>
                   )
@@ -930,6 +944,48 @@ export default function ExternalRepairsPage() {
                 />
               </div>
 
+              {/* External handling toggle — controls whether the external
+                  repair is closed when this submit fires.  Default state is set
+                  by the trigger button (Mark Returned = closed, Move to Recon
+                  = parallel). */}
+              <div style={{ marginTop: 18, padding: '12px 14px', borderRadius: 10, background: '#f9fafb', border: '1px solid var(--border)' }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                  External repair handling
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="externalHandling"
+                      checked={reconCloseExternal}
+                      onChange={() => setReconCloseExternal(true)}
+                      style={{ marginTop: 2, cursor: 'pointer' }}
+                    />
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 600 }}>Remove from external</p>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                        Mark this external repair as returned. Car leaves the external list and only shows on the recon board.
+                      </p>
+                    </div>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="externalHandling"
+                      checked={!reconCloseExternal}
+                      onChange={() => setReconCloseExternal(false)}
+                      style={{ marginTop: 2, cursor: 'pointer' }}
+                    />
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 600 }}>Keep external open, also add to recon</p>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                        External repair stays active. Car shows on BOTH the external list AND the recon board.
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               {reconError && (
                 <div style={{ padding: '10px 14px', borderRadius: 10, fontSize: 13, background: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger-border)', marginTop: 12 }}>
                   {reconError}
@@ -984,12 +1040,13 @@ export default function ExternalRepairsPage() {
                   }
 
                   try {
-                    // Mark as returned first
-                    await fetch(`/api/external/${(reconModal as any).id}`, {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ status: 'returned' })
-                    })
+                    // POST vehicle FIRST — when the prior flow PATCHed external
+                    // to 'returned' first, the helper flipped Vehicle.status to
+                    // 'awaiting_routing' before this call ran, which made the
+                    // POST hit the catch-all "already exists in recon" error.
+                    // Promoting first leaves the external close-out as a clean
+                    // no-op tail (it sees no Vehicle in 'external' so it just
+                    // updates the ExternalRepair row).
                     const res = await fetch('/api/vehicles', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
@@ -1001,6 +1058,16 @@ export default function ExternalRepairsPage() {
                       setSendingToRecon(false)
                       return
                     }
+                    // Optionally close the external repair AFTER the promote
+                    // succeeded.  Skipping this call leaves the external open
+                    // so the car shows on both lists in parallel.
+                    if (reconCloseExternal) {
+                      await fetch(`/api/external/${(reconModal as any).id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'returned' })
+                      })
+                    }
                     // Reset form state
                     setReconModal(null)
                     setReconStage('mechanic')
@@ -1010,6 +1077,7 @@ export default function ExternalRepairsPage() {
                     setReconNotes('')
                     setReconEstHours('')
                     setReconError('')
+                    setReconCloseExternal(true)
                     load()
                   } catch {
                     setReconError('Network error')
@@ -1024,7 +1092,9 @@ export default function ExternalRepairsPage() {
                   opacity: sendingToRecon ? 0.5 : 1,
                 }}
               >
-                {sendingToRecon ? 'Sending...' : 'Send to Recon'}
+                {sendingToRecon
+                  ? 'Sending...'
+                  : reconCloseExternal ? 'Send to Recon' : 'Add to Recon + Keep External'}
               </button>
               <button
                 type="button"
