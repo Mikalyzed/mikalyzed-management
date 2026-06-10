@@ -46,17 +46,6 @@ const RECON_STAGES = [
   { value: 'publish', label: 'Publish' },
 ]
 
-const DEFAULT_INSPECTION = [
-  'Oil & fluids check',
-  'Brake inspection',
-  'Tire condition',
-  'Engine check',
-  'AC system',
-  'Electrical systems',
-  'Test drive',
-  'Body assessment',
-]
-
 export default function ExternalRepairsPage() {
   const router = useRouter()
   const [repairs, setRepairs] = useState<ExternalRepair[]>([])
@@ -96,7 +85,12 @@ export default function ExternalRepairsPage() {
   const [reconModal, setReconModal] = useState<ExternalRepair | null>(null)
   const [reconStage, setReconStage] = useState('mechanic')
   const [sendingToRecon, setSendingToRecon] = useState(false)
-  const [reconFullInspection, setReconFullInspection] = useState(false)
+  // Template multi-select for the Send-to-Recon modal — same shape as the
+  // new-vehicle page.  Lets the admin pick the New Vehicle Inspection / Sold
+  // Vehicle Inspection templates instead of the legacy hardcoded list.
+  type ReconTemplate = { id: string; name: string; items: { item: string; type?: string }[] }
+  const [reconTemplates, setReconTemplates] = useState<ReconTemplate[]>([])
+  const [reconSelectedTemplateIds, setReconSelectedTemplateIds] = useState<string[]>([])
   const [reconCustomTasks, setReconCustomTasks] = useState<string[]>([])
   const [reconNewTask, setReconNewTask] = useState('')
   const [reconNotes, setReconNotes] = useState('')
@@ -150,6 +144,21 @@ export default function ExternalRepairsPage() {
       .catch(() => setIsAdmin(false))
     load()
   }, [])
+
+  // Load templates whenever the recon modal opens against a stage that has
+  // template options.  Pre-selects the default template if one is marked.
+  useEffect(() => {
+    if (!reconModal) return
+    fetch(`/api/checklist-templates?stage=${reconStage}`)
+      .then(r => r.ok ? r.json() : { templates: [] })
+      .then((d: { templates?: (ReconTemplate & { isDefault?: boolean })[] }) => {
+        const list = d.templates || []
+        setReconTemplates(list)
+        const def = list.find(t => t.isDefault)
+        setReconSelectedTemplateIds(def ? [def.id] : [])
+      })
+      .catch(() => { setReconTemplates([]); setReconSelectedTemplateIds([]) })
+  }, [reconModal, reconStage])
 
   const filtered = (() => {
     const q = search.toLowerCase().trim()
@@ -850,19 +859,47 @@ export default function ExternalRepairsPage() {
                 <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
                   Tasks / Checklist
                 </p>
-                {reconStage === 'mechanic' && (
-                  <label style={{
-                    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
-                    cursor: 'pointer', fontSize: 14,
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={reconFullInspection}
-                      onChange={e => setReconFullInspection(e.target.checked)}
-                      style={{ width: 18, height: 18, cursor: 'pointer' }}
-                    />
-                    Full inspection checklist ({DEFAULT_INSPECTION.length} items)
-                  </label>
+                {/* Checklist template multi-select — same options as the
+                    recon board's send-to-recon flow.  Mechanic stage exposes
+                    New Vehicle Inspection / Sold Vehicle Inspection. */}
+                {reconTemplates.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                      Check the inspection(s) needed for this vehicle.
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {reconTemplates.map(t => {
+                        const checked = reconSelectedTemplateIds.includes(t.id)
+                        return (
+                          <label
+                            key={t.id}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 12,
+                              padding: '10px 14px', borderRadius: 10,
+                              border: checked ? '2px solid #1a1a1a' : '1px solid var(--border)',
+                              background: checked ? '#fafaf8' : '#fff',
+                              cursor: 'pointer', transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => setReconSelectedTemplateIds(prev =>
+                                prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id]
+                              )}
+                              style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#1a1a1a' }}
+                            />
+                            <div style={{ flex: 1 }}>
+                              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{t.name}</p>
+                              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                                {t.items.length} item{t.items.length === 1 ? '' : 's'}
+                              </p>
+                            </div>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
                 )}
 
                 {/* Custom tasks */}
@@ -987,10 +1024,25 @@ export default function ExternalRepairsPage() {
                   setSendingToRecon(true)
                   setReconError('')
 
-                  // Build checklist
-                  let mechanicChecklist: string[] = []
-                  if (reconFullInspection) {
-                    mechanicChecklist = [...DEFAULT_INSPECTION, ...reconCustomTasks]
+                  // Build checklist — combine items from all selected templates
+                  // (dedupe by item name), then append custom tasks.  Mirrors
+                  // the new-vehicle page's checklist build path so both entry
+                  // points behave identically.
+                  type ChecklistInput = string | { item: string; type?: string }
+                  let mechanicChecklist: ChecklistInput[] = []
+                  const selectedTemplates = reconTemplates.filter(t => reconSelectedTemplateIds.includes(t.id))
+                  if (selectedTemplates.length > 0) {
+                    const seen = new Set<string>()
+                    const combined: ChecklistInput[] = []
+                    for (const tpl of selectedTemplates) {
+                      for (const it of tpl.items) {
+                        const key = it.item.trim().toLowerCase()
+                        if (seen.has(key)) continue
+                        seen.add(key)
+                        combined.push(it)
+                      }
+                    }
+                    mechanicChecklist = [...combined, ...reconCustomTasks]
                   } else if (reconCustomTasks.length > 0) {
                     mechanicChecklist = reconCustomTasks
                   }
@@ -1039,7 +1091,7 @@ export default function ExternalRepairsPage() {
                     // Reset form state
                     setReconModal(null)
                     setReconStage('mechanic')
-                    setReconFullInspection(false)
+                    setReconSelectedTemplateIds([])
                     setReconCustomTasks([])
                     setReconNewTask('')
                     setReconNotes('')
