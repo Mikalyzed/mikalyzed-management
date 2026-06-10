@@ -1492,11 +1492,12 @@ export default function ExternalRepairsPage() {
                 fontSize: 14, fontWeight: 700, cursor: 'pointer',
               }}>{editRepairSaving ? 'Saving…' : 'Save'}</button>
 
-              {/* Admin shortcut — start recon while the car is still at the shop.
-                  Opens the recon modal pre-set to "keep external open" so the
-                  two states can run in parallel. Available on sent / in_progress
-                  cards (ready already exposes its own 'Mark Returned' flow). */}
-              {isAdmin && (editRepairModal.status === 'sent' || editRepairModal.status === 'in_progress') && (
+              {/* Admin shortcut — start recon while the external repair is
+                  active.  Opens the recon modal pre-set to "keep external open"
+                  so the two states can run in parallel.  Available on pending /
+                  sent / in_progress cards (ready already exposes its own
+                  'Mark Returned' flow). */}
+              {isAdmin && (editRepairModal.status === 'pending' || editRepairModal.status === 'sent' || editRepairModal.status === 'in_progress') && (
                 <button
                   onClick={() => {
                     setReconModal(editRepairModal)
