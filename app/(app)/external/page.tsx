@@ -978,27 +978,10 @@ export default function ExternalRepairsPage() {
               )}
             </div>
 
-            {/* Footer buttons */}
-            <div style={{ padding: '16px 24px 24px', display: 'flex', gap: 10 }}>
-              <button
-                onClick={async () => {
-                  await fetch(`/api/external/${(reconModal as any).id}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: 'returned' })
-                  })
-                  setReconModal(null)
-                  setReconError('')
-                  load()
-                }}
-                style={{
-                  flex: 1, padding: '12px 0', borderRadius: 12,
-                  border: '1px solid var(--border)', background: '#fff',
-                  fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                Skip (just returned)
-              </button>
+            {/* Footer buttons —
+                  Primary action (Send / Add to Recon) on top, full-width.
+                  Secondary row below splits Skip and Send to Another Shop 50/50. */}
+            <div style={{ padding: '16px 24px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <button
                 onClick={async () => {
                   setSendingToRecon(true)
@@ -1071,34 +1054,63 @@ export default function ExternalRepairsPage() {
                 }}
                 disabled={sendingToRecon}
                 style={{
-                  flex: 1, padding: '12px 0', borderRadius: 12, border: 'none',
-                  background: '#1a1a1a', color: '#dffd6e',
-                  fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                  width: '100%', padding: '14px 0', borderRadius: 12, border: 'none',
+                  background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)',
+                  color: '#fff',
+                  fontSize: 14, fontWeight: 700, letterSpacing: '-0.005em',
+                  cursor: 'pointer',
                   opacity: sendingToRecon ? 0.5 : 1,
+                  boxShadow: '0 4px 14px -4px rgba(30, 64, 175, 0.45), inset 0 1px 0 rgba(255,255,255,0.18)',
                 }}
               >
                 {sendingToRecon
                   ? 'Sending...'
                   : reconCloseExternal ? 'Send to Recon' : 'Add to Recon + Keep External'}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowAnotherShopForm(true)
-                  setAnotherShopName('')
-                  setAnotherShopPhone('')
-                  setAnotherRepairDesc('')
-                  setAnotherEstDays('')
-                  setAnotherNotes('')
-                }}
-                style={{
-                  flex: 1, padding: '12px 0', borderRadius: 12, border: '1px solid #f59e0b',
-                  background: '#fff', color: '#f59e0b',
-                  fontSize: 14, fontWeight: 700, cursor: 'pointer'
-                }}
-              >
-                Send to Another Shop
-              </button>
+
+              {/* Secondary row — 50/50 split below the primary action */}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={async () => {
+                    await fetch(`/api/external/${(reconModal as any).id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: 'returned' })
+                    })
+                    setReconModal(null)
+                    setReconError('')
+                    load()
+                  }}
+                  style={{
+                    flex: 1, padding: '11px 0', borderRadius: 12,
+                    border: '1px solid var(--border)', background: '#fff',
+                    fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Skip (just returned)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAnotherShopForm(true)
+                    setAnotherShopName('')
+                    setAnotherShopPhone('')
+                    setAnotherRepairDesc('')
+                    setAnotherEstDays('')
+                    setAnotherNotes('')
+                  }}
+                  style={{
+                    flex: 1, padding: '11px 0', borderRadius: 12,
+                    border: '1px solid rgba(245, 158, 11, 0.35)',
+                    background: 'rgba(254, 243, 199, 0.45)',
+                    color: '#b45309',
+                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  Send to Another Shop
+                </button>
+              </div>
             </div>
           </div>
         </div>
