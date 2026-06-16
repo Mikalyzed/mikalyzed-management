@@ -1,0 +1,1379 @@
+{
+  "capturedAt": "2026-06-16T20:00:09.615Z",
+  "counts": {
+    "vehicleCount": 152,
+    "inventoryVehicleCount": 144,
+    "opportunityWithVehicleCount": 0
+  },
+  "opportunitySamples": [],
+  "vehiclePreImageSample": [
+    {
+      "id": "f9590fe7-45a4-4b6f-b0bd-d06bc2bf9ebc",
+      "stockNumber": "N075899",
+      "vin": "WDB46322717075899",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "detailing"
+    },
+    {
+      "id": "c3ddf854-30d2-445c-ba28-a2bcda4395f6",
+      "stockNumber": "N340471",
+      "vin": "1GNES13H062340471",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "mechanic"
+    },
+    {
+      "id": "3febb2e4-a7d0-4da2-be31-ed56e3a1f1d6",
+      "stockNumber": "N369458",
+      "vin": "1C4PJLAB9GW369458",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "mechanic"
+    },
+    {
+      "id": "7ce42c79-ecdf-4b16-845d-ce6646f0c88c",
+      "stockNumber": "N101146",
+      "vin": "1GCDC14H6RZ101146",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "external"
+    },
+    {
+      "id": "9b8e6bb9-aa2f-4df4-b847-ecdabdc363d2",
+      "stockNumber": "N801774",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "mechanic"
+    },
+    {
+      "id": "7ee83405-9965-45ca-ae69-c662116aecb6",
+      "stockNumber": "N177931",
+      "vin": "WDBFA76F6XF177931",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "external"
+    },
+    {
+      "id": "be276283-bf8e-4618-bf09-4785ca7fbddc",
+      "stockNumber": "NA03002",
+      "vin": "ZPBUA1ZL1KLA03002",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "archived"
+    },
+    {
+      "id": "1d832411-6c48-41bc-bde2-3d1eab4d768d",
+      "stockNumber": "N137914",
+      "vin": "5GAKRAKD7EJ137914",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "archived"
+    },
+    {
+      "id": "68a2de81-7432-4e48-b51d-07a61bdac06f",
+      "stockNumber": "N191822",
+      "vin": "136378B191822",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "detailing"
+    },
+    {
+      "id": "ed6e9806-b8e3-45c4-8f21-b9901e04ff4d",
+      "stockNumber": "N723130",
+      "vin": "1G6DW5470LR723130",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "mechanic"
+    },
+    {
+      "id": "1376803c-c720-4de3-9f98-b515e9d21a43",
+      "stockNumber": "N157139",
+      "vin": "A2157139",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "publish"
+    },
+    {
+      "id": "5bff992d-501f-4aff-9b61-db12cbb45d3d",
+      "stockNumber": "N101451",
+      "vin": "NCS101451",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "detailing"
+    },
+    {
+      "id": "c5c3fb8b-ee4e-474d-bf08-bf2761436fb3",
+      "stockNumber": "N514814",
+      "vin": "1GTDC14K0LZ514814",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "mechanic"
+    },
+    {
+      "id": "f400cb12-c46f-437b-9e59-8019ba507e63",
+      "stockNumber": "N531554",
+      "vin": "12487ON531554",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "archived"
+    },
+    {
+      "id": "5df15cf4-c46a-40fa-b029-6c16570f2180",
+      "stockNumber": "N184967",
+      "vin": "WDBFA68F8XF184967",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "mechanic"
+    },
+    {
+      "id": "39f3fbf6-ea00-41ac-a0e7-cff51fcbd895",
+      "stockNumber": "N412316",
+      "vin": "CC0145F412316",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": null,
+      "inventoryStatus": null,
+      "status": "completed"
+    },
+    {
+      "id": "66706bc7-6f08-4ff3-b3fd-b6c168a16422",
+      "stockNumber": "NC48505",
+      "vin": "1FT8W2BT9NEC48505",
+      "legacyInventoryVehicleId": "4625ba52-c3fb-427a-bd2f-1f471ad4e86a",
+      "legacyVehicleId": "66706bc7-6f08-4ff3-b3fd-b6c168a16422",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "0efe4ad7-530a-4bfe-81b5-f65180931bae",
+      "stockNumber": "NA35914",
+      "vin": "1FTFW1EF6BFA35914",
+      "legacyInventoryVehicleId": "79e1cde1-9b74-4fd0-81fc-279ffd38f6df",
+      "legacyVehicleId": "0efe4ad7-530a-4bfe-81b5-f65180931bae",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "912ed9cc-e4fe-427c-b892-a17a58cbdc6a",
+      "stockNumber": "NA32576",
+      "vin": "WP1AL2AY2RDA32576",
+      "legacyInventoryVehicleId": "1d131275-3196-4042-9a97-92a2f356bc57",
+      "legacyVehicleId": "912ed9cc-e4fe-427c-b892-a17a58cbdc6a",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "0f96abf6-d245-4a94-abc7-f8ee41f78fd6",
+      "stockNumber": "NA09738",
+      "vin": "ZHWUN6ZD7LLA09738",
+      "legacyInventoryVehicleId": "e63242e5-b691-4441-83a4-6f8f8eefbe0b",
+      "legacyVehicleId": "0f96abf6-d245-4a94-abc7-f8ee41f78fd6",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "21a4f5e3-987c-40cf-ad4c-45a40ab3521c",
+      "stockNumber": "N997401",
+      "vin": "WMWXM9C58GT997401",
+      "legacyInventoryVehicleId": "4df44584-b68e-48e7-8828-3bc3bf15a24c",
+      "legacyVehicleId": "21a4f5e3-987c-40cf-ad4c-45a40ab3521c",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "c76181b9-27e4-4137-954c-c34bbf9efbcd",
+      "stockNumber": "N892503",
+      "vin": "7SAYGDEE0PF892503",
+      "legacyInventoryVehicleId": "6627e599-784e-49ff-a811-7a3b63c4d2c6",
+      "legacyVehicleId": "c76181b9-27e4-4137-954c-c34bbf9efbcd",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "6d889408-acd8-4620-a733-40eb3c13c025",
+      "stockNumber": "N709822",
+      "vin": "1G6DW52P1SR709822",
+      "legacyInventoryVehicleId": "d4b4653a-420a-4e0d-8dcf-a9fb9750c86a",
+      "legacyVehicleId": "6d889408-acd8-4620-a733-40eb3c13c025",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "bd13049f-db02-445b-9073-719cd17d836e",
+      "stockNumber": "N628794",
+      "vin": "124379N628794",
+      "legacyInventoryVehicleId": "25393146-9004-432e-9453-14ad604d53c4",
+      "legacyVehicleId": "bd13049f-db02-445b-9073-719cd17d836e",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "112795e4-a3dc-408b-b676-a1e0fd5ea772",
+      "stockNumber": "N591915",
+      "vin": "124379N591915",
+      "legacyInventoryVehicleId": "dd02fdfe-ecbf-4a71-bdd7-454e1c4f35c4",
+      "legacyVehicleId": "112795e4-a3dc-408b-b676-a1e0fd5ea772",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "82578654-4180-414c-b29c-fe697d5bb970",
+      "stockNumber": "N532673",
+      "vin": "000CB750K52532673",
+      "legacyInventoryVehicleId": "66e6c73d-84df-4c70-a8b7-95ebec2d5ef3",
+      "legacyVehicleId": "82578654-4180-414c-b29c-fe697d5bb970",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "b3ebcecf-d629-49b1-a169-9668824aa82e",
+      "stockNumber": "N523287",
+      "vin": "123379L523287",
+      "legacyInventoryVehicleId": "dc513112-54d1-4062-bee8-a9d5bccb8c67",
+      "legacyVehicleId": "b3ebcecf-d629-49b1-a169-9668824aa82e",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "c45f1f66-22c5-4df3-aa52-704c65ec9163",
+      "stockNumber": "N483676",
+      "vin": "5YJSA1E61NF483676",
+      "legacyInventoryVehicleId": "163243a4-da3c-4392-b467-4ab2d6fdcd06",
+      "legacyVehicleId": "c45f1f66-22c5-4df3-aa52-704c65ec9163",
+      "inventoryStatus": "external_repair",
+      "status": "inventory_only"
+    },
+    {
+      "id": "d2a4ba84-276a-415a-81e7-dcbd4df5696a",
+      "stockNumber": "N461894",
+      "vin": "6S69B99461894",
+      "legacyInventoryVehicleId": "178e9cfa-de4e-4321-9564-d561e798afb0",
+      "legacyVehicleId": "d2a4ba84-276a-415a-81e7-dcbd4df5696a",
+      "inventoryStatus": "external_repair",
+      "status": "inventory_only"
+    },
+    {
+      "id": "b2e7a01b-a6f0-4f33-849d-da535a03bc89",
+      "stockNumber": "N333352",
+      "vin": "1GCWGAFG1J1333352",
+      "legacyInventoryVehicleId": "b1c666a7-6f0a-4e67-8d56-3a686b1447f5",
+      "legacyVehicleId": "b2e7a01b-a6f0-4f33-849d-da535a03bc89",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "d67a4bfd-676e-4a1d-be98-bf251663df4c",
+      "stockNumber": "N327967",
+      "vin": "7SAYGDEE5NF327967",
+      "legacyInventoryVehicleId": "9ec6e6b1-69ed-496e-8334-beb1084f1ea6",
+      "legacyVehicleId": "d67a4bfd-676e-4a1d-be98-bf251663df4c",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "1aa7ee28-79e5-40f6-ba11-43f1e33ae394",
+      "stockNumber": "N287121",
+      "vin": "3N1BC1CPXCK287121",
+      "legacyInventoryVehicleId": "c740f698-f43a-4737-8666-6edd2e990519",
+      "legacyVehicleId": "1aa7ee28-79e5-40f6-ba11-43f1e33ae394",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "11392ff9-785d-4304-bdc6-b5e3f2a2bfff",
+      "stockNumber": "N285206",
+      "vin": "AZ285206",
+      "legacyInventoryVehicleId": "5d9229b1-4d73-40d9-8f86-cd4e75a976c4",
+      "legacyVehicleId": "11392ff9-785d-4304-bdc6-b5e3f2a2bfff",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "97e7f71c-3f4b-4736-981a-5c8a3640b41c",
+      "stockNumber": "N249101",
+      "vin": "3D7KR19D46C249101",
+      "legacyInventoryVehicleId": "98cba5d7-da16-4952-8610-6b36ded94fbd",
+      "legacyVehicleId": "97e7f71c-3f4b-4736-981a-5c8a3640b41c",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "91e91c4f-7b5f-4335-8919-92ab871a310d",
+      "stockNumber": "N215698",
+      "vin": "1GKS1GRD1SR215698",
+      "legacyInventoryVehicleId": "7365b670-ac18-4f5e-b3a2-3dfcd0df8f7e",
+      "legacyVehicleId": "91e91c4f-7b5f-4335-8919-92ab871a310d",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "a2ee6c67-165b-4710-9c45-2f8a92633107",
+      "stockNumber": "N206568",
+      "vin": "JM1FE173560206568",
+      "legacyInventoryVehicleId": "78dc7d53-2d38-4233-99ee-0e8cd359ac54",
+      "legacyVehicleId": "a2ee6c67-165b-4710-9c45-2f8a92633107",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "fbd39c67-c43d-4935-991a-4a5096a46f74",
+      "stockNumber": "N186625",
+      "vin": "RM21M8G186625",
+      "legacyInventoryVehicleId": "29c91b7a-685d-4050-90c2-85f81d0aa334",
+      "legacyVehicleId": "fbd39c67-c43d-4935-991a-4a5096a46f74",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "5c246ea0-138b-442a-8a87-5fd370b1176e",
+      "stockNumber": "N148631",
+      "vin": "00001Q87L2N148631",
+      "legacyInventoryVehicleId": "4d693f97-232b-40d8-b469-5539448df217",
+      "legacyVehicleId": "5c246ea0-138b-442a-8a87-5fd370b1176e",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "7f3be3aa-931b-4db6-ba36-192c939cfb56",
+      "stockNumber": "N140542",
+      "vin": "D7FH140542",
+      "legacyInventoryVehicleId": "3759b7f7-858f-4279-9291-85ecb6c2ff07",
+      "legacyVehicleId": "7f3be3aa-931b-4db6-ba36-192c939cfb56",
+      "inventoryStatus": "external_repair",
+      "status": "detailing"
+    },
+    {
+      "id": "d3effa49-c196-48ae-a46f-af0505c0baa0",
+      "stockNumber": "N123456",
+      "vin": "COLLECTIBLE123456",
+      "legacyInventoryVehicleId": "af7a4a90-9e48-49a6-a9c2-e45fdd1c4371",
+      "legacyVehicleId": "d3effa49-c196-48ae-a46f-af0505c0baa0",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "51ce8a8a-ddeb-4e09-821c-210c2e60b0b8",
+      "stockNumber": "N117540",
+      "vin": "1G1YY2180J5117540",
+      "legacyInventoryVehicleId": "23b51ef8-4578-4846-adec-2df5df6bc4a5",
+      "legacyVehicleId": "51ce8a8a-ddeb-4e09-821c-210c2e60b0b8",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "6d9d0330-d4f9-479f-a5c5-a098ce29ce51",
+      "stockNumber": "N113720",
+      "vin": "1C4HJWDG1GL113720",
+      "legacyInventoryVehicleId": "623810eb-6780-4f96-8b66-a3a54d35713e",
+      "legacyVehicleId": "6d9d0330-d4f9-479f-a5c5-a098ce29ce51",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "f9503f7d-d170-4faf-8c5e-ae3df54c6584",
+      "stockNumber": "N104280",
+      "vin": "WAUAUGFF1LA104280",
+      "legacyInventoryVehicleId": "400cf5e2-4080-433e-8fa4-f3459b9763e7",
+      "legacyVehicleId": "f9503f7d-d170-4faf-8c5e-ae3df54c6584",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "90cf01b6-7068-4ecd-bc90-0adb18ee986b",
+      "stockNumber": "N101167",
+      "vin": "C1545S101167",
+      "legacyInventoryVehicleId": "fb47391b-1aeb-4549-bb35-e78c1fbcc129",
+      "legacyVehicleId": "90cf01b6-7068-4ecd-bc90-0adb18ee986b",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "7577b46d-01e4-4840-b7de-1425bbbdd1c5",
+      "stockNumber": "N096186",
+      "vin": "4T1DAACK0SU096186",
+      "legacyInventoryVehicleId": "670a2b45-66ff-4dbf-9fae-be698c3f9bc8",
+      "legacyVehicleId": "7577b46d-01e4-4840-b7de-1425bbbdd1c5",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "7f158734-8af6-4932-a0b8-d73cb037b6bd",
+      "stockNumber": "N044451",
+      "vin": "VF1C0635515044451",
+      "legacyInventoryVehicleId": "743bda85-8ca5-40d5-b9b0-44ddd241a335",
+      "legacyVehicleId": "7f158734-8af6-4932-a0b8-d73cb037b6bd",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "fe2ceb13-dbcd-4acf-9adf-937c591a4df2",
+      "stockNumber": "N034772",
+      "vin": "1HD1JD5129Y034772",
+      "legacyInventoryVehicleId": "365609a8-2498-41b3-a54a-4387d492d792",
+      "legacyVehicleId": "fe2ceb13-dbcd-4acf-9adf-937c591a4df2",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "4755f95e-c5a3-4a46-ab4f-c8e65bd8d1d9",
+      "stockNumber": "N032448",
+      "vin": "3VW9T7BU6RM032448",
+      "legacyInventoryVehicleId": "fce7cbea-64c4-4a06-b8e0-f7741b187d17",
+      "legacyVehicleId": "4755f95e-c5a3-4a46-ab4f-c8e65bd8d1d9",
+      "inventoryStatus": "sold",
+      "status": "inventory_only"
+    },
+    {
+      "id": "aae315ee-bf2b-4505-8cfc-bae68279761e",
+      "stockNumber": "N026779",
+      "vin": "10702412026779",
+      "legacyInventoryVehicleId": "af26fe9c-9a0b-4c5a-8122-56499b8adf10",
+      "legacyVehicleId": "aae315ee-bf2b-4505-8cfc-bae68279761e",
+      "inventoryStatus": "external_repair",
+      "status": "external"
+    },
+    {
+      "id": "f7fdca56-60eb-45c5-8516-1b11a9f13825",
+      "stockNumber": "N012843",
+      "vin": "1HD1BW51XAB012843",
+      "legacyInventoryVehicleId": "32a8f6fe-1653-44d3-954e-8dc238d1fff2",
+      "legacyVehicleId": "f7fdca56-60eb-45c5-8516-1b11a9f13825",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "101fb968-0632-40a5-85c0-5bfe959b906c",
+      "stockNumber": "N007214",
+      "vin": "WDDRJ7HAXCA007214",
+      "legacyInventoryVehicleId": "9539874f-e24d-4acf-9fb6-ee20318f9e5a",
+      "legacyVehicleId": "101fb968-0632-40a5-85c0-5bfe959b906c",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "1c5f2539-d98d-41aa-8826-b0954580b65a",
+      "stockNumber": "N004334",
+      "vin": "3JBUUAX40PK004334",
+      "legacyInventoryVehicleId": "e8f5e097-0ccc-4a74-8611-a6bd026701e4",
+      "legacyVehicleId": "1c5f2539-d98d-41aa-8826-b0954580b65a",
+      "inventoryStatus": "in_stock",
+      "status": "inventory_only"
+    },
+    {
+      "id": "84592a03-8fc9-460f-8e54-b4c9c929e343",
+      "stockNumber": "N120891",
+      "vin": "1G1GZ11GXHP120891",
+      "legacyInventoryVehicleId": "4c20dc74-0977-4099-9e84-484eb16e044c",
+      "legacyVehicleId": "84592a03-8fc9-460f-8e54-b4c9c929e343",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "fce3c1bc-adf0-410d-9468-ad8ec4b5f2cb",
+      "stockNumber": "NR43314",
+      "vin": null,
+      "legacyInventoryVehicleId": "390d1904-1f29-46f8-93b1-9a3b93646941",
+      "legacyVehicleId": "fce3c1bc-adf0-410d-9468-ad8ec4b5f2cb",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "992dfe3e-1364-49f8-9e8e-090dd4ab2018",
+      "stockNumber": "N115373",
+      "vin": "C55S115373",
+      "legacyInventoryVehicleId": "b618c37a-33e6-412f-89fb-30ecd507ccea",
+      "legacyVehicleId": "992dfe3e-1364-49f8-9e8e-090dd4ab2018",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "ff9c8e40-1a12-4d65-949f-c76ef95ce5f2",
+      "stockNumber": "N500828",
+      "vin": "1GKEV18KXHF500828",
+      "legacyInventoryVehicleId": "347c2b18-364d-459b-b7bf-719ddee050e0",
+      "legacyVehicleId": "ff9c8e40-1a12-4d65-949f-c76ef95ce5f2",
+      "inventoryStatus": "in_recon",
+      "status": "publish"
+    },
+    {
+      "id": "75a91ba6-540c-43f5-a9e3-c620f1c8c989",
+      "stockNumber": "N047507",
+      "vin": "WDBSK75F23F047507",
+      "legacyInventoryVehicleId": "35d4b853-681c-4446-92eb-26c8a802c03a",
+      "legacyVehicleId": "75a91ba6-540c-43f5-a9e3-c620f1c8c989",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "72c0ddad-0d75-48e6-8b2b-35828cf4ef4f",
+      "stockNumber": "N204220",
+      "vin": "3GCUKREC3FG204220",
+      "legacyInventoryVehicleId": "cfeb9bcc-a2a6-462b-a37a-d24cd0d8aa27",
+      "legacyVehicleId": "72c0ddad-0d75-48e6-8b2b-35828cf4ef4f",
+      "inventoryStatus": "in_recon",
+      "status": "content"
+    },
+    {
+      "id": "b37c605b-4f8c-405e-82e2-ef1cbb0316b5",
+      "stockNumber": "N114274",
+      "vin": "C1445A114274",
+      "legacyInventoryVehicleId": "7fe58624-ffbf-49dd-b411-c5821710b87f",
+      "legacyVehicleId": "b37c605b-4f8c-405e-82e2-ef1cbb0316b5",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "72716391-e3a3-4b8e-b45b-63a17d6f8b74",
+      "stockNumber": "N352017",
+      "vin": "1GKS1BKD0MR352017",
+      "legacyInventoryVehicleId": "68951a6a-6045-48e9-be8f-708f686c7630",
+      "legacyVehicleId": "72716391-e3a3-4b8e-b45b-63a17d6f8b74",
+      "inventoryStatus": "in_recon",
+      "status": "completed"
+    },
+    {
+      "id": "b11d839f-51bf-4347-b82c-d7a7f13e73b1",
+      "stockNumber": "N082591",
+      "vin": "WDB46140117082591",
+      "legacyInventoryVehicleId": "b3065725-d5b5-4693-a622-08fc71c3b98a",
+      "legacyVehicleId": "b11d839f-51bf-4347-b82c-d7a7f13e73b1",
+      "inventoryStatus": "external_repair",
+      "status": "completed"
+    },
+    {
+      "id": "55859ea4-1477-4fef-b3a0-2d1b309fd30f",
+      "stockNumber": "N733479",
+      "vin": "2C3CDZBT6FH733479",
+      "legacyInventoryVehicleId": "4852bb5f-0389-41f0-95f5-b9a9f52806f6",
+      "legacyVehicleId": "55859ea4-1477-4fef-b3a0-2d1b309fd30f",
+      "inventoryStatus": "in_recon",
+      "status": "completed"
+    },
+    {
+      "id": "df451cfb-8f5d-4ee7-86fa-5b92ed880b49",
+      "stockNumber": "N167053",
+      "vin": "WP0AD2A97HS167053",
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "df451cfb-8f5d-4ee7-86fa-5b92ed880b49",
+      "inventoryStatus": null,
+      "status": "completed"
+    },
+    {
+      "id": "b2c54753-e60e-4238-b54a-7492f6390581",
+      "stockNumber": "N750143",
+      "vin": "JN1AR5EF7KM750143",
+      "legacyInventoryVehicleId": "ea25144b-b75c-43c3-afa1-25f40389f6a9",
+      "legacyVehicleId": "b2c54753-e60e-4238-b54a-7492f6390581",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "1a30e8cc-8731-4214-af0b-7286c399075e",
+      "stockNumber": "N663133",
+      "vin": "1HD1ACL19NB663133",
+      "legacyInventoryVehicleId": "5e30bc05-2405-4063-a4ff-ae90c8c9b88c",
+      "legacyVehicleId": "1a30e8cc-8731-4214-af0b-7286c399075e",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "c7927475-7678-43f1-b957-29d95423f19a",
+      "stockNumber": "N000952",
+      "vin": "3JBUUAX46PK000952",
+      "legacyInventoryVehicleId": "c4169d8d-662c-4daf-9a8e-ba0e8e0d710e",
+      "legacyVehicleId": "c7927475-7678-43f1-b957-29d95423f19a",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "c64eb5ee-edae-48db-8af9-495e4c378740",
+      "stockNumber": "N158268",
+      "vin": "D7FH158268",
+      "legacyInventoryVehicleId": "d7532dd9-242d-49d4-88ab-b242f9558a85",
+      "legacyVehicleId": "c64eb5ee-edae-48db-8af9-495e4c378740",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "8d12897c-0e2b-4e55-b062-e46e8f7dc946",
+      "stockNumber": "N820628",
+      "vin": "1GDCS14W4N0820628",
+      "legacyInventoryVehicleId": "d8803de5-65c0-4b1c-b49a-f9762c950067",
+      "legacyVehicleId": "8d12897c-0e2b-4e55-b062-e46e8f7dc946",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "a7dce8e5-20ad-4f97-b3f5-594655f876f6",
+      "stockNumber": "N176438",
+      "vin": "1G8EK18HXEF176438",
+      "legacyInventoryVehicleId": "b4b55279-ac41-420a-a8f4-e89fa88b772d",
+      "legacyVehicleId": "a7dce8e5-20ad-4f97-b3f5-594655f876f6",
+      "inventoryStatus": "external_repair",
+      "status": "mechanic"
+    },
+    {
+      "id": "fa0539e0-53cc-4af4-a4e0-2c5ecf0b1943",
+      "stockNumber": "NB12337",
+      "vin": "1FMSK7DH6MGB12337",
+      "legacyInventoryVehicleId": "bb049cbf-9f3f-45a2-b5d1-3aad3693d7f6",
+      "legacyVehicleId": "fa0539e0-53cc-4af4-a4e0-2c5ecf0b1943",
+      "inventoryStatus": "sold",
+      "status": "archived"
+    },
+    {
+      "id": "03a04926-e74d-46aa-b2ef-090e30e458de",
+      "stockNumber": "NX49783",
+      "vin": "SCA664S54BUX49783",
+      "legacyInventoryVehicleId": "92fd66e3-3c54-4097-a535-2d18ddd002f2",
+      "legacyVehicleId": "03a04926-e74d-46aa-b2ef-090e30e458de",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "0dd7f83e-443e-4798-96f1-8d0f9435d30e",
+      "stockNumber": "N91551A",
+      "vin": "P291551A",
+      "legacyInventoryVehicleId": "36f8b55a-4e6e-4d25-a54f-81608ecb6fc5",
+      "legacyVehicleId": "0dd7f83e-443e-4798-96f1-8d0f9435d30e",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "7d2c2a14-a2f7-4fb0-bfbb-3335a246dc16",
+      "stockNumber": "N110288",
+      "vin": "1G1YA2D75F5110288",
+      "legacyInventoryVehicleId": "1309232f-f326-4254-b7ec-e1e2283f231a",
+      "legacyVehicleId": "7d2c2a14-a2f7-4fb0-bfbb-3335a246dc16",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "f5ffbf09-75e2-42cb-af03-73c1eb294f53",
+      "stockNumber": "NB76879",
+      "vin": "1FTEW1CP1KFB76879",
+      "legacyInventoryVehicleId": "cc4a9f06-b986-4c9f-85cb-1f1f016b80e2",
+      "legacyVehicleId": "f5ffbf09-75e2-42cb-af03-73c1eb294f53",
+      "inventoryStatus": "in_recon",
+      "status": "completed"
+    },
+    {
+      "id": "f7666238-5d83-490c-87d9-8bb128b594ba",
+      "stockNumber": "NKY7007",
+      "vin": "MS67FB8LKY7007",
+      "legacyInventoryVehicleId": "6dc898f6-dbb5-4b03-828f-7606e2cba888",
+      "legacyVehicleId": "f7666238-5d83-490c-87d9-8bb128b594ba",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "0dbff768-222e-4cdf-8987-38f4f2c43d68",
+      "stockNumber": "N037522",
+      "vin": "H53K037522",
+      "legacyInventoryVehicleId": "e5fbb8f1-b85b-41f1-99e2-3115cc4f912c",
+      "legacyVehicleId": "0dbff768-222e-4cdf-8987-38f4f2c43d68",
+      "inventoryStatus": "in_recon",
+      "status": "completed"
+    },
+    {
+      "id": "e7149983-1c88-4c6a-996a-8b56549dcf24",
+      "stockNumber": "N710831",
+      "vin": "124379N710831",
+      "legacyInventoryVehicleId": "1f94a2b2-248d-4bac-8bb7-c4596fc5cad3",
+      "legacyVehicleId": "e7149983-1c88-4c6a-996a-8b56549dcf24",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "2647c758-6eee-4489-97d8-e31ee0841377",
+      "stockNumber": "082803 - Storage Vehicle",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "2647c758-6eee-4489-97d8-e31ee0841377",
+      "inventoryStatus": null,
+      "status": "external"
+    },
+    {
+      "id": "70788b97-1267-4b4f-a483-83b514545c3a",
+      "stockNumber": "N025509",
+      "vin": "025509",
+      "legacyInventoryVehicleId": "f182f05c-ae40-45a7-8527-f0a2b70f9396",
+      "legacyVehicleId": "70788b97-1267-4b4f-a483-83b514545c3a",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "9c26792d-ae6a-4bdb-beab-993fadfb8c19",
+      "stockNumber": "NA52549",
+      "vin": "2FTZF07301CA52549",
+      "legacyInventoryVehicleId": "31d8021f-bd9f-4840-b5cf-dee2accd1e80",
+      "legacyVehicleId": "9c26792d-ae6a-4bdb-beab-993fadfb8c19",
+      "inventoryStatus": "in_recon",
+      "status": "completed"
+    },
+    {
+      "id": "50e098bc-d3a2-4505-8357-c39dbb5d646a",
+      "stockNumber": "N216224",
+      "vin": null,
+      "legacyInventoryVehicleId": "86e6b9ac-af00-46c4-96c0-ecc0b6918c9f",
+      "legacyVehicleId": "50e098bc-d3a2-4505-8357-c39dbb5d646a",
+      "inventoryStatus": "in_recon",
+      "status": "completed"
+    },
+    {
+      "id": "6fbb0df9-37cd-4d7b-a6f2-26da50d8142f",
+      "stockNumber": "N146413",
+      "vin": "1Y732Z146413",
+      "legacyInventoryVehicleId": "6594455f-f068-47b3-85a0-e9d9805647f8",
+      "legacyVehicleId": "6fbb0df9-37cd-4d7b-a6f2-26da50d8142f",
+      "inventoryStatus": "external_repair",
+      "status": "archived"
+    },
+    {
+      "id": "8fe52aad-0a64-45e5-965e-ba9548f560aa",
+      "stockNumber": "N201310",
+      "vin": "1N67H5Y201310",
+      "legacyInventoryVehicleId": "77ca3eb6-f6b8-4e88-b41c-f7f26be5cbd2",
+      "legacyVehicleId": "8fe52aad-0a64-45e5-965e-ba9548f560aa",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "d637df0f-3333-4345-8218-d86e66ddd5cc",
+      "stockNumber": "N166641",
+      "vin": null,
+      "legacyInventoryVehicleId": "700300c9-450e-4ecd-8be9-34d9cdae7726",
+      "legacyVehicleId": "d637df0f-3333-4345-8218-d86e66ddd5cc",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "d84d1200-ffe0-45fe-8444-bfed881d6c2c",
+      "stockNumber": "N110256",
+      "vin": null,
+      "legacyInventoryVehicleId": "1fd3eba7-ade3-4657-a002-fdbd5ac56ee3",
+      "legacyVehicleId": "d84d1200-ffe0-45fe-8444-bfed881d6c2c",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "4b407ecb-6018-4b5a-aa85-162405f3f6fe",
+      "stockNumber": "N749385",
+      "vin": null,
+      "legacyInventoryVehicleId": "b388353b-6b13-444d-bf08-ca214e606029",
+      "legacyVehicleId": "4b407ecb-6018-4b5a-aa85-162405f3f6fe",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "e217e803-85c3-4815-b47b-abf611845253",
+      "stockNumber": "N171505",
+      "vin": null,
+      "legacyInventoryVehicleId": "1b3bf326-401b-4c61-802f-842c63f2fa38",
+      "legacyVehicleId": "e217e803-85c3-4815-b47b-abf611845253",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "10aeb3a4-1186-41b5-9917-2390fce8eba6",
+      "stockNumber": "N121328",
+      "vin": "138177K121328",
+      "legacyInventoryVehicleId": "4218bb3d-04da-406e-9744-07cc97f75290",
+      "legacyVehicleId": "10aeb3a4-1186-41b5-9917-2390fce8eba6",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "c0c1dcad-1726-43a8-b5ee-140f935cd162",
+      "stockNumber": "N744820",
+      "vin": "HDR43744820",
+      "legacyInventoryVehicleId": "3333a345-0bff-428d-a5b0-da53f332aa1c",
+      "legacyVehicleId": "c0c1dcad-1726-43a8-b5ee-140f935cd162",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "b12b4edf-8830-4b1b-8d8f-a0a2ae5aa4ec",
+      "stockNumber": "N113675",
+      "vin": "4G67K2H113675",
+      "legacyInventoryVehicleId": "0eab8b97-3aa9-4ae6-9d0b-7c5d2935404c",
+      "legacyVehicleId": "b12b4edf-8830-4b1b-8d8f-a0a2ae5aa4ec",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "00063ab7-22c6-46c0-886d-cdf979910595",
+      "stockNumber": "N206199",
+      "vin": null,
+      "legacyInventoryVehicleId": "1c41f195-ddd9-46c4-8f05-9c3774d5122c",
+      "legacyVehicleId": "00063ab7-22c6-46c0-886d-cdf979910595",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "fc55b2a6-f780-4042-a71d-065f8304db4b",
+      "stockNumber": "502745",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "fc55b2a6-f780-4042-a71d-065f8304db4b",
+      "inventoryStatus": null,
+      "status": "mechanic"
+    },
+    {
+      "id": "7372914f-18c9-4aba-950e-3b73ef56bc31",
+      "stockNumber": "N177569",
+      "vin": "WDAPF1CD9GP177569",
+      "legacyInventoryVehicleId": "e4cd4c00-a2bd-444e-8688-85f94e4e4373",
+      "legacyVehicleId": "7372914f-18c9-4aba-950e-3b73ef56bc31",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "c828c25f-4c4e-45d9-85e6-4e8c3a758b7b",
+      "stockNumber": "N719825",
+      "vin": "1G6DW5474LR719825",
+      "legacyInventoryVehicleId": "7d19c6c7-7a7c-4c7d-bcc3-c40dc7f7d740",
+      "legacyVehicleId": "c828c25f-4c4e-45d9-85e6-4e8c3a758b7b",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "2306659a-b0ae-4273-aef3-353a903d99a4",
+      "stockNumber": "N9B953N",
+      "vin": "TF179B953N",
+      "legacyInventoryVehicleId": "b7a5a2d7-671f-46a3-a243-bb067eba36dd",
+      "legacyVehicleId": "2306659a-b0ae-4273-aef3-353a903d99a4",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "6ce7362a-f985-4e80-ac0a-8e63b4d2d886",
+      "stockNumber": "N120754",
+      "vin": "1FACP40E7MF120754",
+      "legacyInventoryVehicleId": "45fc421f-772b-4fac-90d6-c2e093dd4d2c",
+      "legacyVehicleId": "6ce7362a-f985-4e80-ac0a-8e63b4d2d886",
+      "inventoryStatus": "in_recon",
+      "status": "completed"
+    },
+    {
+      "id": "dbca1684-1d13-49c2-b807-b8a108e23619",
+      "stockNumber": "107736",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "dbca1684-1d13-49c2-b807-b8a108e23619",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "ca0688c6-5cad-4d4d-94a0-b84edb4abdf7",
+      "stockNumber": "N267768",
+      "vin": null,
+      "legacyInventoryVehicleId": "17f21f86-c627-451c-ad01-2993f35b7eb8",
+      "legacyVehicleId": "ca0688c6-5cad-4d4d-94a0-b84edb4abdf7",
+      "inventoryStatus": "in_stock",
+      "status": "mechanic"
+    },
+    {
+      "id": "51a8d442-473e-47bd-997f-0f530538ed33",
+      "stockNumber": "N179960",
+      "vin": null,
+      "legacyInventoryVehicleId": "d7b3f3bf-8048-4f3f-afda-24d0e5402f3e",
+      "legacyVehicleId": "51a8d442-473e-47bd-997f-0f530538ed33",
+      "inventoryStatus": "in_recon",
+      "status": "detailing"
+    },
+    {
+      "id": "b64bcd38-2755-433f-9c94-61f451664bd8",
+      "stockNumber": "R71181",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "b64bcd38-2755-433f-9c94-61f451664bd8",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "da709789-35e2-4d39-9edc-1a7192ddbcd4",
+      "stockNumber": "N209370",
+      "vin": "1GCCS1443WK209370",
+      "legacyInventoryVehicleId": "cde9ae38-ea78-4c80-bd6b-dddd224b3370",
+      "legacyVehicleId": "da709789-35e2-4d39-9edc-1a7192ddbcd4",
+      "inventoryStatus": "external_repair",
+      "status": "publish"
+    },
+    {
+      "id": "4eeb48f6-2fac-432b-bb92-cc56b9602b5f",
+      "stockNumber": "N082793",
+      "vin": null,
+      "legacyInventoryVehicleId": "83bf738e-1d0c-48e9-8433-9b159dc46401",
+      "legacyVehicleId": "4eeb48f6-2fac-432b-bb92-cc56b9602b5f",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "6f3cf1f2-e3be-420e-ab40-686233120917",
+      "stockNumber": "N522992",
+      "vin": null,
+      "legacyInventoryVehicleId": "58dcd428-3e19-4bef-954c-f42a7079f049",
+      "legacyVehicleId": "6f3cf1f2-e3be-420e-ab40-686233120917",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "c4b6a719-0c2d-4025-b878-a6ca3f861a30",
+      "stockNumber": "N422429",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "c4b6a719-0c2d-4025-b878-a6ca3f861a30",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "a339687a-c13a-47b7-af72-bba5214b76ab",
+      "stockNumber": "N442499",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "a339687a-c13a-47b7-af72-bba5214b76ab",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "b6413e93-c06d-4f5b-ada6-2ad4bb1eb1c3",
+      "stockNumber": "N117029",
+      "vin": null,
+      "legacyInventoryVehicleId": "8bbcd6d3-2ae8-42d4-bdb8-c3266e0d3230",
+      "legacyVehicleId": "b6413e93-c06d-4f5b-ada6-2ad4bb1eb1c3",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "68260386-0ad6-45c0-a273-2458d70abc3a",
+      "stockNumber": "N149956",
+      "vin": null,
+      "legacyInventoryVehicleId": "1209dc8a-bac7-45f2-a575-b4f8ed4238c3",
+      "legacyVehicleId": "68260386-0ad6-45c0-a273-2458d70abc3a",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "21de778a-4cb6-451c-8abe-1e9682140e63",
+      "stockNumber": "N153385",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "21de778a-4cb6-451c-8abe-1e9682140e63",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "c7749850-3d12-4d92-9fd1-37ff50427ad9",
+      "stockNumber": "N74354M",
+      "vin": null,
+      "legacyInventoryVehicleId": "47541b34-452f-4bdf-b52b-52d4fa6cba55",
+      "legacyVehicleId": "c7749850-3d12-4d92-9fd1-37ff50427ad9",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "8f3e59ea-4f40-45e7-bd6d-e41f32ba7d51",
+      "stockNumber": "N218948",
+      "vin": null,
+      "legacyInventoryVehicleId": "150d90b7-dc29-4e0d-8483-8cce9e667aa2",
+      "legacyVehicleId": "8f3e59ea-4f40-45e7-bd6d-e41f32ba7d51",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "b94fe1ff-c31a-4fad-95a6-343487818dd8",
+      "stockNumber": "NI41867",
+      "vin": "2W87K9NI41867",
+      "legacyInventoryVehicleId": "f7cc8f39-81a2-4251-9591-2765c32f89f8",
+      "legacyVehicleId": "b94fe1ff-c31a-4fad-95a6-343487818dd8",
+      "inventoryStatus": "in_stock",
+      "status": "mechanic"
+    },
+    {
+      "id": "fedb7511-3b48-4d19-a5d8-461a0acda110",
+      "stockNumber": "N151700",
+      "vin": null,
+      "legacyInventoryVehicleId": "6c21a95f-a739-427c-86da-109c5eb25e80",
+      "legacyVehicleId": "fedb7511-3b48-4d19-a5d8-461a0acda110",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "1b6349d9-dd33-496d-8023-456a0a3923bf",
+      "stockNumber": "N208815",
+      "vin": null,
+      "legacyInventoryVehicleId": "67295cc6-a8b4-496e-93f4-342098bd2f94",
+      "legacyVehicleId": "1b6349d9-dd33-496d-8023-456a0a3923bf",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "02f7db0a-4520-4437-b6aa-17094c42e1b0",
+      "stockNumber": "N172864",
+      "vin": null,
+      "legacyInventoryVehicleId": "6050bb94-7ba3-4188-b177-5dca31e78021",
+      "legacyVehicleId": "02f7db0a-4520-4437-b6aa-17094c42e1b0",
+      "inventoryStatus": "external_repair",
+      "status": "mechanic"
+    },
+    {
+      "id": "ba83f240-b543-4896-9ffc-c142f3483add",
+      "stockNumber": "N208859",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "ba83f240-b543-4896-9ffc-c142f3483add",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "33d6960d-a3f6-4c87-af70-07086a0f281a",
+      "stockNumber": "NF16167",
+      "vin": null,
+      "legacyInventoryVehicleId": "0cd4675d-8a79-420d-8648-b9423c49d21d",
+      "legacyVehicleId": "33d6960d-a3f6-4c87-af70-07086a0f281a",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "eac60b2e-f1bf-4457-a554-7706f9206acb",
+      "stockNumber": "N145815",
+      "vin": null,
+      "legacyInventoryVehicleId": "be829fc0-8b83-4a12-8cc2-d81968f5fab8",
+      "legacyVehicleId": "eac60b2e-f1bf-4457-a554-7706f9206acb",
+      "inventoryStatus": "in_stock",
+      "status": "mechanic"
+    },
+    {
+      "id": "342dda0f-a754-4b06-830f-457039bda1b3",
+      "stockNumber": "N110250",
+      "vin": null,
+      "legacyInventoryVehicleId": "cb0ed31a-faeb-462c-b26f-03eaf5e7d5d1",
+      "legacyVehicleId": "342dda0f-a754-4b06-830f-457039bda1b3",
+      "inventoryStatus": "sold",
+      "status": "external"
+    },
+    {
+      "id": "b7507549-ba45-4219-bd9d-a420c5fa461a",
+      "stockNumber": "N210520",
+      "vin": null,
+      "legacyInventoryVehicleId": "83f309b7-30e4-40c5-b669-fcb01d6b8112",
+      "legacyVehicleId": "b7507549-ba45-4219-bd9d-a420c5fa461a",
+      "inventoryStatus": "in_recon",
+      "status": "completed"
+    },
+    {
+      "id": "38180ee7-98e6-46f1-9ca8-708f10f28d8d",
+      "stockNumber": "NN64962",
+      "vin": null,
+      "legacyInventoryVehicleId": "ba1da975-572a-4346-baf1-167321ee1a55",
+      "legacyVehicleId": "38180ee7-98e6-46f1-9ca8-708f10f28d8d",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "0db65089-ea2e-4a21-9b43-02beca65c422",
+      "stockNumber": "N403450",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "0db65089-ea2e-4a21-9b43-02beca65c422",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "2926dd9b-4e5f-475a-a366-696297620a50",
+      "stockNumber": "N657438",
+      "vin": "1B7FD14T6FS657438",
+      "legacyInventoryVehicleId": "6163e85b-28e7-4e1b-8863-cb45544e31be",
+      "legacyVehicleId": "2926dd9b-4e5f-475a-a366-696297620a50",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "45fa9aa4-9857-41f5-a3fc-2c2c4eb3f186",
+      "stockNumber": "N718044",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "45fa9aa4-9857-41f5-a3fc-2c2c4eb3f186",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "cac0f53b-16fc-4249-ab5f-9fe89d92a39f",
+      "stockNumber": "N063075",
+      "vin": null,
+      "legacyInventoryVehicleId": "28d374af-f554-4cba-a325-008968702d41",
+      "legacyVehicleId": "cac0f53b-16fc-4249-ab5f-9fe89d92a39f",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "4f31cfc9-f6ce-4ec9-8e42-e1dcfb22df6d",
+      "stockNumber": "N170942",
+      "vin": null,
+      "legacyInventoryVehicleId": "b5ea75e5-ffd0-41c5-b317-f94e82872e89",
+      "legacyVehicleId": "4f31cfc9-f6ce-4ec9-8e42-e1dcfb22df6d",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "d6f55054-9392-44de-be70-067de9b10c94",
+      "stockNumber": "NE25368",
+      "vin": null,
+      "legacyInventoryVehicleId": "fe9e65ac-2695-4b90-a656-c6fbd63e7a46",
+      "legacyVehicleId": "d6f55054-9392-44de-be70-067de9b10c94",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "00339c3e-fcee-4478-832a-6c222795725c",
+      "stockNumber": "N416711",
+      "vin": "CCU148F416711",
+      "legacyInventoryVehicleId": "7588028f-991d-4204-9c3d-b11798e8653e",
+      "legacyVehicleId": "00339c3e-fcee-4478-832a-6c222795725c",
+      "inventoryStatus": "in_recon",
+      "status": "awaiting_routing"
+    },
+    {
+      "id": "ea67c25b-c124-4824-8f7b-434694382434",
+      "stockNumber": "NL02851",
+      "vin": null,
+      "legacyInventoryVehicleId": "43540f84-3a6b-49c9-9467-9b27b5e28a64",
+      "legacyVehicleId": "ea67c25b-c124-4824-8f7b-434694382434",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "820fa4bb-9970-4193-a210-d8d5955955d2",
+      "stockNumber": "N119315",
+      "vin": null,
+      "legacyInventoryVehicleId": "537ff91f-0e6c-4ffc-9e84-cd11af01fdb4",
+      "legacyVehicleId": "820fa4bb-9970-4193-a210-d8d5955955d2",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "a5d07c95-ca6e-47c7-93b7-42f7e67e91ba",
+      "stockNumber": "N260758",
+      "vin": null,
+      "legacyInventoryVehicleId": "257de63c-ce45-46cc-a158-c9db5a851bdd",
+      "legacyVehicleId": "a5d07c95-ca6e-47c7-93b7-42f7e67e91ba",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "b209fd72-86a7-4d63-977c-f35129d260f0",
+      "stockNumber": "N100617",
+      "vin": null,
+      "legacyInventoryVehicleId": "e1e3954d-d5ee-4290-8fe0-38ca749caf95",
+      "legacyVehicleId": "b209fd72-86a7-4d63-977c-f35129d260f0",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "4d9a483a-c1a2-4c85-ab75-8588307a960a",
+      "stockNumber": "N194056",
+      "vin": null,
+      "legacyInventoryVehicleId": "ba3b8fe9-c1cc-4f58-ad37-30be0505cf3c",
+      "legacyVehicleId": "4d9a483a-c1a2-4c85-ab75-8588307a960a",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "af7c7dac-053f-476a-b7ff-79caf7102a6f",
+      "stockNumber": "N125877",
+      "vin": null,
+      "legacyInventoryVehicleId": "b747e486-81d6-49f3-a8ce-af106b615ebe",
+      "legacyVehicleId": "af7c7dac-053f-476a-b7ff-79caf7102a6f",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "e0a805de-7785-4bdf-8966-51a4c1b2dadc",
+      "stockNumber": "N208282",
+      "vin": null,
+      "legacyInventoryVehicleId": null,
+      "legacyVehicleId": "e0a805de-7785-4bdf-8966-51a4c1b2dadc",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "9a40f511-817e-4b6b-8eb1-4703ca40568e",
+      "stockNumber": "NH14106",
+      "vin": null,
+      "legacyInventoryVehicleId": "15ef137e-62f3-4177-abdb-6e4944749a51",
+      "legacyVehicleId": "9a40f511-817e-4b6b-8eb1-4703ca40568e",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "5d42e1ba-41c1-4cf5-b9da-eb8c77c58ecb",
+      "stockNumber": "N368231",
+      "vin": null,
+      "legacyInventoryVehicleId": "71455bb4-cd20-4645-9534-82c31f658bf3",
+      "legacyVehicleId": "5d42e1ba-41c1-4cf5-b9da-eb8c77c58ecb",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "77a4bf28-8367-4695-9ee0-e834d044579f",
+      "stockNumber": "N162932",
+      "vin": null,
+      "legacyInventoryVehicleId": "5023b581-3386-4f8c-b5ba-ee7f7bb96bb9",
+      "legacyVehicleId": "77a4bf28-8367-4695-9ee0-e834d044579f",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "9779070d-e065-406e-9928-19cc4332f675",
+      "stockNumber": "N530966",
+      "vin": null,
+      "legacyInventoryVehicleId": "242ab297-64ac-4f38-b0dd-a6d877a47c35",
+      "legacyVehicleId": "9779070d-e065-406e-9928-19cc4332f675",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "30445db6-9008-4ad9-8cbd-548b0889d5ba",
+      "stockNumber": "N524535",
+      "vin": null,
+      "legacyInventoryVehicleId": "7580cd26-6078-4762-8495-a0ac81bbca1d",
+      "legacyVehicleId": "30445db6-9008-4ad9-8cbd-548b0889d5ba",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "ce1d9a86-2adc-4973-83b9-702250c70d35",
+      "stockNumber": "N134404",
+      "vin": null,
+      "legacyInventoryVehicleId": "7c6d37a5-5669-4a04-a91a-d6fc360cef3b",
+      "legacyVehicleId": "ce1d9a86-2adc-4973-83b9-702250c70d35",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "fe33bea4-f0e7-44c4-801f-49691880a8d1",
+      "stockNumber": "N409679",
+      "vin": null,
+      "legacyInventoryVehicleId": "36da513e-ce9f-4961-84a3-0aa8289aa957",
+      "legacyVehicleId": "fe33bea4-f0e7-44c4-801f-49691880a8d1",
+      "inventoryStatus": "in_recon",
+      "status": "mechanic"
+    },
+    {
+      "id": "b00fe6a1-9949-4a3d-aa3e-8234a235152c",
+      "stockNumber": "N345806",
+      "vin": null,
+      "legacyInventoryVehicleId": "dd25ca71-1f19-4c33-8409-9e4d3c3208d7",
+      "legacyVehicleId": "b00fe6a1-9949-4a3d-aa3e-8234a235152c",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "d316a7dc-75c5-480e-b3a0-bec4d8732866",
+      "stockNumber": "N137609",
+      "vin": null,
+      "legacyInventoryVehicleId": "67c97b37-f443-4748-9c06-b72cc89c635a",
+      "legacyVehicleId": "d316a7dc-75c5-480e-b3a0-bec4d8732866",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "d68ec8f3-e40d-4077-b1b5-6f87df68dc8b",
+      "stockNumber": "N297480",
+      "vin": null,
+      "legacyInventoryVehicleId": "78a94a0b-2d01-446f-ab20-f20085cc0f17",
+      "legacyVehicleId": "d68ec8f3-e40d-4077-b1b5-6f87df68dc8b",
+      "inventoryStatus": "external_repair",
+      "status": "external"
+    },
+    {
+      "id": "e5dfc873-ab98-4e36-bbce-579e83101e2c",
+      "stockNumber": "N219805",
+      "vin": null,
+      "legacyInventoryVehicleId": "21cfd40f-a7aa-49c7-b18a-d580a802f408",
+      "legacyVehicleId": "e5dfc873-ab98-4e36-bbce-579e83101e2c",
+      "inventoryStatus": "external_repair",
+      "status": "external"
+    },
+    {
+      "id": "c6bb8739-441f-435c-acb1-cc99c68c9442",
+      "stockNumber": "N001559",
+      "vin": "H55A001559",
+      "legacyInventoryVehicleId": "1f4b50b1-2829-4578-a5d7-f4099c261194",
+      "legacyVehicleId": "c6bb8739-441f-435c-acb1-cc99c68c9442",
+      "inventoryStatus": "in_recon",
+      "status": "completed"
+    },
+    {
+      "id": "b0850d1b-2fbe-42b0-892d-4e6a52c271a1",
+      "stockNumber": "N275535",
+      "vin": null,
+      "legacyInventoryVehicleId": "4ff3d3dd-ccf7-4cd9-a893-72f3b3f1a5cf",
+      "legacyVehicleId": "b0850d1b-2fbe-42b0-892d-4e6a52c271a1",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "ad1f4cba-26a8-4d29-a7f9-420b4ede982f",
+      "stockNumber": "N517539",
+      "vin": null,
+      "legacyInventoryVehicleId": "503b807a-5c4e-455a-97f8-ccbdd0c21506",
+      "legacyVehicleId": "ad1f4cba-26a8-4d29-a7f9-420b4ede982f",
+      "inventoryStatus": "sold",
+      "status": "completed"
+    },
+    {
+      "id": "2fe59f73-98a2-4d39-963d-6e2e467f66ce",
+      "stockNumber": "NA75430",
+      "vin": null,
+      "legacyInventoryVehicleId": "ef095cee-c114-44d9-9850-a33cc8793392",
+      "legacyVehicleId": "2fe59f73-98a2-4d39-963d-6e2e467f66ce",
+      "inventoryStatus": "in_stock",
+      "status": "completed"
+    },
+    {
+      "id": "e62e2e0d-6bfb-4cbf-8112-dcd01577ed4f",
+      "stockNumber": "N120651",
+      "vin": null,
+      "legacyInventoryVehicleId": "e695ff2f-c78d-433e-815a-37db541de377",
+      "legacyVehicleId": "e62e2e0d-6bfb-4cbf-8112-dcd01577ed4f",
+      "inventoryStatus": "in_recon",
+      "status": "awaiting_routing"
+    },
+    {
+      "id": "a4b9bff0-e9e4-45b0-96cd-416c2b7186e9",
+      "stockNumber": "N103784",
+      "vin": null,
+      "legacyInventoryVehicleId": "75200cba-9782-48ff-ab1b-95a9806bf0e8",
+      "legacyVehicleId": "a4b9bff0-e9e4-45b0-96cd-416c2b7186e9",
+      "inventoryStatus": "in_recon",
+      "status": "external"
+    },
+    {
+      "id": "b6a75168-01ba-49ce-ae53-c2499c021028",
+      "stockNumber": "N018750",
+      "vin": null,
+      "legacyInventoryVehicleId": "eb3a5c1a-0b04-46cb-ba56-43e31ca262b6",
+      "legacyVehicleId": "b6a75168-01ba-49ce-ae53-c2499c021028",
+      "inventoryStatus": "external_repair",
+      "status": "mechanic"
+    }
+  ]
+}
