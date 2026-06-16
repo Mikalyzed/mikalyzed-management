@@ -99,6 +99,18 @@ function reshapeVehicleAsInventory<T extends Record<string, any>>(row: T | null)
  * Inventory list query — used by /api/inventory GET, /api/vehicles list, etc.
  * Returns rows shaped like InventoryVehicle so caller code doesn't change.
  */
+/**
+ * Combines the caller's remapped where with the "must be inventoried" filter.
+ * Uses an AND clause instead of object-spread so existing `inventoryStatus`
+ * conditions (e.g. `{ notIn: ['sold', 'removed'] }`) survive — the previous
+ * spread-then-overwrite approach silently dropped them.
+ */
+function withInventoriedFilter(remapped: any): any {
+  return {
+    AND: [remapped ?? {}, { inventoryStatus: { not: null } }],
+  }
+}
+
 export async function getInventoryList(args: {
   where?: any
   orderBy?: any
@@ -108,7 +120,7 @@ export async function getInventoryList(args: {
 }) {
   if (isCanonicalReadMode()) {
     const rows = await prisma.vehicle.findMany({
-      where: { ...remapWhereToCanonical(args.where ?? {}), inventoryStatus: { not: null } },
+      where: withInventoriedFilter(remapWhereToCanonical(args.where ?? {})),
       orderBy: remapOrderByToCanonical(args.orderBy),
       take: args.take,
       skip: args.skip,
@@ -128,7 +140,7 @@ export async function getInventoryList(args: {
 export async function getInventoryCount(where?: any) {
   if (isCanonicalReadMode()) {
     return prisma.vehicle.count({
-      where: { ...remapWhereToCanonical(where ?? {}), inventoryStatus: { not: null } },
+      where: withInventoriedFilter(remapWhereToCanonical(where ?? {})),
     })
   }
   return prisma.inventoryVehicle.count({ where })
@@ -143,7 +155,7 @@ export async function getInventoryGroupByStatus(where?: any): Promise<{ status: 
   if (isCanonicalReadMode()) {
     const rows = await prisma.vehicle.groupBy({
       by: ['inventoryStatus'],
-      where: { ...remapWhereToCanonical(where ?? {}), inventoryStatus: { not: null } },
+      where: withInventoriedFilter(remapWhereToCanonical(where ?? {})),
       _count: true,
     })
     return rows
