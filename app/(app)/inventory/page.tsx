@@ -528,14 +528,14 @@ function VehicleLedgerRow({
 
       {/* ─── Title block: Year Make Model / VIN / Type ─── */}
       <div style={{ minWidth: 0 }}>
-        <p style={{
+        <p title={titleText} style={{
           fontSize: 16, fontWeight: 700, letterSpacing: '-0.015em',
           color: '#0a0a0a', lineHeight: 1.2,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {titleText}
         </p>
-        <p style={{
+        <p title={vinDisplay} style={{
           fontSize: 11, color: 'rgba(0,0,0,0.5)', fontWeight: 500, marginTop: 4,
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
