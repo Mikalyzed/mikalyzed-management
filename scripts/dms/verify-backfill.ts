@@ -22,15 +22,27 @@ interface Issue {
 async function main() {
   const issues: Issue[] = []
 
-  // CHECK 1: every InventoryVehicle has a VehicleMigrationMap row
+  // CHECK 1: every InventoryVehicle has at least one VehicleMigrationMap row.
+  //
+  // We count DISTINCT oldInventoryVehicleId rather than total map rows because a
+  // single InventoryVehicle is legitimately allowed to appear in more than one
+  // map row when a later `manual_review` re-mapping supersedes an earlier
+  // `orphan_iv_created` (or similar) audit row. The 2026-06-03 cleanup added one
+  // such re-mapping (IV f7cc8f39, stock NI41867) where a stockNumber rename
+  // forced an audit-preserving re-link rather than an in-place mutation.
+  //
+  // Invariant: every InventoryVehicle is mapped AT LEAST ONCE — not exactly once.
   const ivCount = await prisma.inventoryVehicle.count()
-  const ivMappedCount = await prisma.vehicleMigrationMap.count({
-    where: { oldInventoryVehicleId: { not: null } },
-  })
+  const distinctIvMapped = await prisma.$queryRaw<{ count: bigint }[]>`
+    SELECT COUNT(DISTINCT old_inventory_vehicle_id)::bigint AS count
+    FROM vehicle_migration_map
+    WHERE old_inventory_vehicle_id IS NOT NULL
+  `
+  const ivMappedCount = Number(distinctIvMapped?.[0]?.count ?? 0)
   if (ivCount !== ivMappedCount) {
     issues.push({
       check: 'iv_mapping_completeness',
-      detail: `InventoryVehicle.count=${ivCount} but VehicleMigrationMap rows with oldInventoryVehicleId=${ivMappedCount}`,
+      detail: `InventoryVehicle.count=${ivCount} but DISTINCT VehicleMigrationMap.oldInventoryVehicleId=${ivMappedCount}`,
     })
   }
 
