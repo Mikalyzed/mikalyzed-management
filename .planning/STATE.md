@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-06-02)
 ## Current Position
 
 Phase: 0 of 10 (Vehicle Identity Unification)
-Plan: 1 of 5 in current phase (00-01 schema additions code-complete; checkpoint awaiting user to apply migration on Supabase preview branch)
-Status: Awaiting checkpoint approval (00-01 Task 3 = human-verify preview-branch migration apply + smoke)
-Last activity: 2026-06-02 — 00-01-PLAN.md executed: Vehicle absorbed 12 InventoryVehicle scalars, VehicleMigrationMap created, photos[] dropped, feature-flag + canonical-reader helpers added, migration SQL hand-written (NOT applied to production)
+Plan: 2 of 5 in current phase (00-02 backfill complete on production; ready for 00-03 dual-write)
+Status: 00-02 complete — production VehicleMigrationMap fully populated, idempotency proven, verify-backfill green
+Last activity: 2026-06-16 — 00-02-PLAN.md executed against production: 4-pass idempotent backfill ran successfully (15 matched + 2 orphan IV + 2 orphan V + 19 net-new rows on top of 159 pre-existing from undocumented 2026-06-03 catch-up); verify-backfill patched to use DISTINCT IV count for legitimate manual_review re-mappings, now exits 0; Strategy A invariant verified (0 orphan Opportunities)
 
-Progress: [██░░░░░░░░] 20% (1 of 5 Phase 0 plans code-complete; production apply pending checkpoint)
+Progress: [████░░░░░░] 40% (2 of 5 Phase 0 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1 (code-complete; migration not yet applied)
-- Average duration: 9 min
-- Total execution time: 9 min
+- Total plans completed: 2
+- Average duration: ~1h 35m
+- Total execution time: ~3h 9m
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| Phase 0 | 1 of 5 | 9 min | 9 min |
+| Phase 0 | 2 of 5 | ~3h 9m | ~1h 35m |
 
 **Recent Trend:**
-- Last 5 plans: 00-01 (9 min, 2 tasks + 1 pending checkpoint)
-- Trend: First plan — baseline established
+- Last 5 plans: 00-01 (9 min, 2 tasks + 1 pending checkpoint), 00-02 (~3h, 3 tasks, 5 files)
+- Trend: 00-02 took significantly longer due to production-direct execution + pre-existing-mapping discovery + verify-script false-positive patch
 
 *Updated after each plan completion*
 
@@ -54,6 +54,13 @@ Decisions made during Phase 0 plan 1 (00-01):
 - **00-01: `ON DELETE SET NULL` on `vehicles.prior_vehicle_id` FK** — deleting an archived prior vehicle should never cascade-delete its successor; just break the history link.
 - **00-01: Added `legacy_vehicle_id` audit column** even though Strategy A makes it equal to `id` for backfilled rows — gives audit queries symmetry with `legacy_inventory_vehicle_id`. Cost: one nullable TEXT column.
 
+Decisions made during Phase 0 plan 2 (00-02):
+
+- **00-02: Production-direct execution (no preview-branch dress rehearsal)** — User opted to skip the planned Supabase preview-branch refresh because (a) backfill is idempotent by design — partial-failure rerun is safe; (b) backfill never overwrites canonical fields (`??` fallback); (c) Strategy A preserves Vehicle.id so Opportunity.vehicleId cannot orphan; (d) Supabase snapshot in hand provides rollback. Cost-benefit favored direct execution.
+- **00-02: Flooring fields left blank during backfill** — Phase 2 introduces `flooringStatus` and flooring accrual; Phase 0 has no floorplan model to populate. CostAdd backfill in Phase 2 will populate.
+- **00-02: Pre-existing 159 mappings discovery absorbed via idempotency** — `VehicleMigrationMap` was NOT empty pre-backfill; 159 rows existed from undocumented 2026-06-03 catch-up scripts (since deleted in commit `b785af5`). Backfill's `findFirst` guard correctly skipped them and only wrote 19 net-new mappings for vehicles introduced after 2026-06-03. Idempotency design absorbed the divergence without intervention.
+- **00-02: verify-backfill Check 1 patched to use COUNT(DISTINCT old_inventory_vehicle_id)** — original `COUNT(*)` invariant was wrong because legitimate `manual_review` audit rows (e.g., IV f7cc8f39 / stock NI41867 stockNumber rename on 2026-06-03) produce >1 map row per IV. New invariant: every InventoryVehicle is mapped AT LEAST ONCE.
+
 ### Pending Todos
 
 [From .planning/todos/pending/ — ideas captured during sessions]
@@ -64,13 +71,13 @@ None yet.
 
 [Issues that affect future work]
 
-- **CHECKPOINT (Phase 0 plan 1, Task 3):** Migration `20260602172548_00a_canonical_vehicle_additions` is code-complete and committed but NOT YET APPLIED to production. User must (a) clone production to a Supabase preview branch, (b) run `npx prisma migrate dev` against the preview branch, (c) smoke-test recon + inventory flows against preview, then (d) `npx prisma migrate deploy` against production. Plan 00-02 (backfill) cannot start until prod migration is applied.
-- **Phase 0 strategy confirmation needed**: ROADMAP encodes Strategy A (Vehicle.id canonical); PROJECT.md Key Decisions table currently says InventoryVehicle should be canonical. Resolve before Phase 0 planning.
+- **Phase 0 strategy confirmation needed**: ROADMAP encodes Strategy A (Vehicle.id canonical); PROJECT.md Key Decisions table currently says InventoryVehicle should be canonical. Resolve before further Phase 0 planning iterations.
+- **3 inventory_only Vehicles with NULL `legacyInventoryVehicleId`**: created during 2026-06-03 catch-up before the audit bridge column was added. They have `VehicleMigrationMap` rows but lack the canonical-side back-reference. 0.C can ignore (no functional impact) or backfill the column from `VehicleMigrationMap.canonicalVehicleId`.
 - **FL statutory verification pending**: accountant call (surtax cap, doc-fee taxable, sourcing rule, trade-in credit) needed before Phase 4 code; attorney call (ESIGN, FCRA, GLBA, HSMV) needed before Phase 5/6 code; chart-of-accounts mapping needed before Phase 7 code.
 - **Provider onboarding lead time**: 700Credit/eLEND and BoldSign/Anvil onboarding takes days, not minutes — apply during Phase 0/1 to avoid blocking Phase 5/6.
 
 ## Session Continuity
 
-Last session: 2026-06-02
-Stopped at: 00-01-PLAN.md complete (2 tasks committed: c5ffe3c, 01da9b9). Task 3 is a `checkpoint:human-verify` — user must apply migration to Supabase preview branch and smoke-test before production deploy. SUMMARY.md written.
-Resume file: .planning/phases/00-vehicle-identity-unification/00-01-SUMMARY.md (see "User Setup Required" section for migration apply steps)
+Last session: 2026-06-16
+Stopped at: 00-02-PLAN.md complete (5 commits: 217c2c7, 2151ffb, 4ca5bd4, bd8afb6, eabcfff + SUMMARY commit e13725d). Production backfill is committed and verify-backfill is green. Ready for 00-03 dual-write window.
+Resume file: .planning/phases/00-vehicle-identity-unification/00-02-SUMMARY.md (see "Next Phase Readiness" section)

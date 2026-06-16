@@ -179,7 +179,7 @@ Phase 1a and 1b are cognitively parallel (different domains) but ship sequential
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Vehicle Identity Unification | 1/5 | In progress (00-01 code-complete; awaiting preview-branch migration apply checkpoint) | - |
+| 0. Vehicle Identity Unification | 2/5 | In progress (00-02 backfill complete on production; ready for 00-03 dual-write) | - |
 | 1a. RBAC Upgrade | 0/TBD | Not started | - |
 | 1b. Background Jobs Scaffold + Storage Consolidation | 0/TBD | Not started | - |
 | 2. Inventory Core | 0/TBD | Not started | - |

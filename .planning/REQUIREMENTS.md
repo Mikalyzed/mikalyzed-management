@@ -9,14 +9,14 @@ Requirements for the DMS milestone. Each maps to a roadmap phase. Validated exis
 
 ### Vehicle Identity (Phase 0)
 
-- [ ] **VEH-01**: One canonical vehicle record exists for every physical car (Vehicle table absorbs InventoryVehicle fields; Vehicle.id remains canonical PK)
-- [ ] **VEH-02**: VehicleMigrationMap captures every old `Vehicle.id` ↔ `InventoryVehicle.id` ↔ canonical mapping with match method and confidence, preserved permanently as audit trail
-- [ ] **VEH-03**: Inventory backfill is idempotent and verifiable on a Supabase preview-branch clone before live cutover
+- [x] **VEH-01**: One canonical vehicle record exists for every physical car (Vehicle table absorbs InventoryVehicle fields; Vehicle.id remains canonical PK)
+- [x] **VEH-02**: VehicleMigrationMap captures every old `Vehicle.id` ↔ `InventoryVehicle.id` ↔ canonical mapping with match method and confidence, preserved permanently as audit trail
+- [x] **VEH-03**: Inventory backfill is idempotent and verifiable on a Supabase preview-branch clone before live cutover
 - [ ] **VEH-04**: Dual-write window (DealerCenter mirror writes to both `InventoryVehicle` AND canonical `Vehicle`) runs for ≤2 weeks before reader cutover
 - [ ] **VEH-05**: After reader cutover, every DMS-facing read resolves to the canonical Vehicle; `Opportunity.vehicleId` continues to resolve correctly with no FK flip required
 - [x] **VEH-06**: `Vehicle.photos[]` is dropped in Phase 0 (column is vestigial — no code reads or writes it; verified via grep). No MediaAsset migration needed; MediaAsset is Phase 3 scope. The same applies to the unused `photos[]` on VehicleStage
 - [ ] **VEH-07**: Recon workflow (stage transitions, parts, checklists, mechanic board, TV board, notifications) continues to function unchanged through Phase 0
-- [ ] **VEH-08**: A rollback plan exists with database snapshot + feature flag for read-from-old-vs-new and is rehearsed on a production data copy before cutover
+- [x] **VEH-08**: A rollback plan exists with database snapshot + feature flag for read-from-old-vs-new and is rehearsed on a production data copy before cutover
 - [ ] **VEH-09**: Legacy ID redirect endpoint (`/api/vehicles/legacy/:oldId`) returns 301 to canonical for 90 days post-cutover; iOS Capacitor build is pushed pre-cutover
 
 ### RBAC & Permissions (Phase 1a)
@@ -211,12 +211,12 @@ Every v1 requirement is mapped to exactly one phase. Updated by roadmapper on 20
 |-------------|-------|--------|
 | VEH-01 | Phase 0 | In Progress (0.A schema ready in 00-01; backfill in 00-02) |
 | VEH-02 | Phase 0 | In Progress (VehicleMigrationMap model created in 00-01; populated by 00-02 backfill) |
-| VEH-03 | Phase 0 | Pending |
+| VEH-03 | Phase 0 | Complete |
 | VEH-04 | Phase 0 | Pending |
 | VEH-05 | Phase 0 | Pending |
 | VEH-06 | Phase 0 | Complete (00-01: photos[] dropped on Vehicle + VehicleStage; MediaAsset deferred to Phase 3) |
 | VEH-07 | Phase 0 | Pending |
-| VEH-08 | Phase 0 | Pending |
+| VEH-08 | Phase 0 | Complete |
 | VEH-09 | Phase 0 | Pending |
 | RBAC-01 | Phase 1a | Pending |
 | RBAC-02 | Phase 1a | Pending |
