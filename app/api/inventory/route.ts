@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 import { presignGet } from '@/lib/r2'
+import { getInventoryList, getInventoryCount, getInventoryGroupByStatus, findInventoryByStockNumber } from '@/lib/dms/vehicle/canonical-reader'
+import { upsertInventoryRecord, markStaleInventoryAsSold } from '@/lib/dms/vehicle/canonical-writer'
 
 export async function GET(req: NextRequest) {
   const user = await getSessionUser()
@@ -45,33 +47,29 @@ export async function GET(req: NextRequest) {
   const [vehicles, total, counts] = await Promise.all([
     sortSoldLast
       ? Promise.all([
-          prisma.inventoryVehicle.findMany({
+          getInventoryList({
             where: { ...where, status: { notIn: ['sold', 'removed'] } },
             orderBy: { dateInStock: 'desc' },
             take: limit,
             skip: offset,
           }),
-          prisma.inventoryVehicle.findMany({
+          getInventoryList({
             where: { ...where, status: { in: ['sold', 'removed'] } },
             orderBy: { dateInStock: 'desc' },
             take: limit,
             skip: offset,
           }),
         ]).then(([active, soldOrRemoved]) => [...active, ...soldOrRemoved].slice(0, limit))
-      : prisma.inventoryVehicle.findMany({
+      : getInventoryList({
           where,
           orderBy: { dateInStock: 'desc' },
           take: limit,
           skip: offset,
         }),
-    prisma.inventoryVehicle.count({ where }),
-    prisma.inventoryVehicle.groupBy({
-      by: ['status'],
-      where: search
-        ? { isActive: true, OR: where.OR }
-        : { isActive: true },
-      _count: true,
-    }),
+    getInventoryCount(where),
+    getInventoryGroupByStatus(
+      search ? { isActive: true, OR: where.OR } : { isActive: true },
+    ),
   ])
 
   const countsByStatus: Record<string, number> = {}
@@ -217,10 +215,9 @@ export async function POST(req: NextRequest) {
           model = parts.slice(1).join(' ') || ''
         }
 
-        const existing = await prisma.inventoryVehicle.findUnique({
-          where: { stockNumber: stock },
+        const existing = await findInventoryByStockNumber(stock, {
           select: { status: true },
-        })
+        }) as { status: string } | null
 
         // On re-import: if vehicle was manually marked sold/removed, DON'T touch status.
         // If it was removed and is now back in the feed, revive it with initialStatus.
@@ -230,43 +227,27 @@ export async function POST(req: NextRequest) {
           : existing.status === 'removed' ? initialStatus
           : initialStatus
 
-        await prisma.inventoryVehicle.upsert({
-          where: { stockNumber: stock },
-          update: {
-            vin: row.vin?.trim() || null,
-            vehicleInfo: info,
-            year,
-            make,
-            model,
-            color: row.color?.trim() || null,
-            mileage: row.mileage ? parseInt(row.mileage) || null : null,
-            location: row.location?.trim() || null,
-            askingPrice: row.askingPrice ? parseFloat(row.askingPrice) || null : null,
-            vehicleCost: row.vehicleCost ? parseFloat(row.vehicleCost) || null : null,
-            purchaseType: row.purchaseType?.trim() || null,
-            purchasedFrom: row.purchasedFrom?.trim() || null,
-            titleStatus: row.titleStatus?.trim() || null,
-            dateInStock: row.dateInStock ? new Date(row.dateInStock) : null,
-            status: nextStatus,
-          },
-          create: {
-            stockNumber: stock,
-            vin: row.vin?.trim() || null,
-            vehicleInfo: info,
-            year,
-            make,
-            model,
-            color: row.color?.trim() || null,
-            mileage: row.mileage ? parseInt(row.mileage) || null : null,
-            location: row.location?.trim() || null,
-            askingPrice: row.askingPrice ? parseFloat(row.askingPrice) || null : null,
-            vehicleCost: row.vehicleCost ? parseFloat(row.vehicleCost) || null : null,
-            purchaseType: row.purchaseType?.trim() || null,
-            purchasedFrom: row.purchasedFrom?.trim() || null,
-            titleStatus: row.titleStatus?.trim() || null,
-            dateInStock: row.dateInStock ? new Date(row.dateInStock) : null,
-            status: nextStatus,
-          },
+        const sharedPayload = {
+          vin: row.vin?.trim() || null,
+          vehicleInfo: info,
+          year,
+          make,
+          model,
+          color: row.color?.trim() || null,
+          mileage: row.mileage ? parseInt(row.mileage) || null : null,
+          location: row.location?.trim() || null,
+          askingPrice: row.askingPrice ? parseFloat(row.askingPrice) || null : null,
+          vehicleCost: row.vehicleCost ? parseFloat(row.vehicleCost) || null : null,
+          purchaseType: row.purchaseType?.trim() || null,
+          purchasedFrom: row.purchasedFrom?.trim() || null,
+          titleStatus: row.titleStatus?.trim() || null,
+          dateInStock: row.dateInStock ? new Date(row.dateInStock) : null,
+          status: nextStatus,
+        }
+        await upsertInventoryRecord({
+          stockNumber: stock,
+          update: sharedPayload,
+          create: sharedPayload,
         })
         imported++
       } catch (e: any) {
@@ -278,13 +259,9 @@ export async function POST(req: NextRequest) {
     // Reconcile: any active inventory vehicle NOT in the current CSV → mark as sold
     // (DealerCenter removes a vehicle from its export when it's sold)
     if (csvStocks.size > 0) {
-      const stale = await prisma.inventoryVehicle.updateMany({
-        where: {
-          isActive: true,
-          status: { in: ['in_stock', 'in_recon', 'external_repair'] },
-          stockNumber: { notIn: Array.from(csvStocks) },
-        },
-        data: { status: 'sold' },
+      const stale = await markStaleInventoryAsSold({
+        activeStockNumbers: Array.from(csvStocks),
+        alsoInStatuses: ['in_stock', 'in_recon', 'external_repair'],
       })
       markedRemoved = stale.count
     }

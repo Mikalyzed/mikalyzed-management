@@ -1,18 +1,22 @@
 import { prisma } from './db'
+import { findInventoryByStockNumber } from './dms/vehicle/canonical-reader'
+import { setInventoryStatusByStockNumber } from './dms/vehicle/canonical-writer'
 
 /**
- * Recomputes InventoryVehicle.status for a given stock# based on current
+ * Recomputes inventory-side status for a given stock# based on current
  * Vehicle (recon) and ExternalRepair state. Priority:
  *   external_repair > in_recon > in_stock
  * Does not overwrite `sold` or `removed` — those are terminal/manual states.
+ *
+ * Reads/writes are flag-gated via canonical-reader/writer — flips to canonical
+ * Vehicle.inventoryStatus when DMS_READ_CANONICAL_VEHICLE=true.
  */
 export async function recomputeInventoryStatus(stockNumber: string) {
   if (!stockNumber) return
 
-  const inv = await prisma.inventoryVehicle.findUnique({
-    where: { stockNumber },
+  const inv = await findInventoryByStockNumber(stockNumber, {
     select: { id: true, status: true },
-  })
+  }) as { id: string; status: string } | null
   if (!inv) return
   if (inv.status === 'sold' || inv.status === 'removed') return
 
@@ -49,9 +53,6 @@ export async function recomputeInventoryStatus(stockNumber: string) {
       : 'in_stock'
 
   if (nextStatus !== inv.status) {
-    await prisma.inventoryVehicle.update({
-      where: { id: inv.id },
-      data: { status: nextStatus },
-    })
+    await setInventoryStatusByStockNumber(stockNumber, nextStatus)
   }
 }

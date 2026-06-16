@@ -5,6 +5,7 @@ import { DEFAULT_CHECKLISTS, STAGE_LABELS } from '@/lib/constants'
 import { sendNotificationEmail } from '@/lib/email'
 import { newVehicleEmail } from '@/lib/email-templates'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
+import { getInventoryList } from '@/lib/dms/vehicle/canonical-reader'
 
 export async function GET(request: Request) {
   const user = await getSessionUser()
@@ -47,10 +48,10 @@ export async function GET(request: Request) {
   // Pull inventory status (sold/in_stock/etc) for SOLD badges
   const stockNumbers = vehicles.map(v => v.stockNumber).filter(Boolean) as string[]
   const inventoryRows = stockNumbers.length > 0
-    ? await prisma.inventoryVehicle.findMany({
+    ? await getInventoryList({
         where: { stockNumber: { in: stockNumbers } },
         select: { stockNumber: true, status: true },
-      })
+      }) as { stockNumber: string; status: string }[]
     : []
   const invByStock = Object.fromEntries(inventoryRows.map(i => [i.stockNumber, i.status]))
 

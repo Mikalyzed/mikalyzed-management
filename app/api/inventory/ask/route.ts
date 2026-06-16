@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
+import { getInventoryList } from '@/lib/dms/vehicle/canonical-reader'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -358,14 +359,14 @@ export async function POST(req: NextRequest) {
   }
   if (!question?.trim()) return NextResponse.json({ error: 'Question required' }, { status: 400 })
 
-  const vehicles: VehicleRow[] = await prisma.inventoryVehicle.findMany({
+  const vehicles: VehicleRow[] = await getInventoryList({
     where: { isActive: true },
     select: {
       stockNumber: true, vehicleInfo: true, year: true, make: true, model: true,
       color: true, mileage: true, location: true, askingPrice: true, vehicleCost: true,
       purchaseType: true, purchasedFrom: true, titleStatus: true, dateInStock: true, status: true,
     },
-  })
+  }) as VehicleRow[]
 
   const todayIso = new Date().toISOString().split('T')[0]
   const system = `You are an analyst for a used car dealership. You answer questions about inventory AND recon stage history (who worked on what, how long, how many completed).

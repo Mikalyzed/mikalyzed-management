@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
+import { findInventoryByStockNumber } from '@/lib/dms/vehicle/canonical-reader'
 
 /**
  * Given a stockNumber, return a Vehicle.id suitable for navigating to /vehicles/[id].
@@ -26,10 +27,9 @@ export async function POST(req: NextRequest) {
 
   // No Vehicle record — try InventoryVehicle first, fall back to ExternalRepair
   // (a vehicle may exist only in external repairs without ever being added to inventory)
-  const inv = await prisma.inventoryVehicle.findUnique({
-    where: { stockNumber: stock },
+  const inv = await findInventoryByStockNumber(stock, {
     select: { year: true, make: true, model: true, color: true, vin: true },
-  })
+  }) as { year: number | null; make: string | null; model: string | null; color: string | null; vin: string | null } | null
 
   let year: number | null = null
   let make = ''
