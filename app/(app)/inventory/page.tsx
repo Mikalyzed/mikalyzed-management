@@ -493,8 +493,8 @@ function VehicleLedgerRow({
         //        | cost | asking (money roles only)
         //        | status pill (right-aligned)
         gridTemplateColumns: canSeeMoney
-          ? '156px minmax(0, 1.6fr) 104px 96px 108px 96px 108px 124px 136px'
-          : '156px minmax(0, 2fr) 110px 104px 112px 100px 136px',
+          ? '156px minmax(220px, 2.4fr) 84px 76px 88px 76px 88px 104px 116px'
+          : '156px minmax(220px, 3fr) 90px 80px 92px 80px 116px',
         gap: 22,
         alignItems: 'center',
         padding: '14px 18px',
