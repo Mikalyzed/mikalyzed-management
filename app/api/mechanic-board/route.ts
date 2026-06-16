@@ -83,10 +83,13 @@ export async function GET() {
   }
 
   const active = stages.filter(s => s.status === 'in_progress' && !s.awaitingParts && s.timerStartedAt)
+  // Completed/skipped stages are excluded from `paused` even if an orphaned
+  // `awaitingParts` flag is lingering on the row — a completed job is not
+  // pending, paused, or waiting on anything.
   const paused = stages.filter(s =>
     (s.status === 'in_progress' && !s.timerStartedAt && !s.awaitingParts) ||
     (s.status === 'blocked' && !s.awaitingParts) ||
-    (s.awaitingParts && s.status !== 'pending')
+    (s.awaitingParts && s.status !== 'pending' && s.status !== 'done' && s.status !== 'skipped')
   )
   const queued = stages.filter(s => s.status === 'pending')
   const completedToday = stages.filter(s => s.status === 'done' && s.completedAt && s.completedAt >= todayStart)
@@ -362,6 +365,13 @@ export async function POST(req: NextRequest) {
           activeSeconds: stage.activeSeconds + Math.max(0, addSeconds),
           autoPaused: false,
           pauseReason: null,
+          pauseDetail: null,
+          pausedAt: null,
+          awaitingParts: false,
+          awaitingPartsName: null,
+          awaitingPartsDate: null,
+          awaitingPartsTracking: null,
+          awaitingPartsSince: null,
         },
       })
       // All stage completions park in awaiting_routing for admin review — never auto-advance.

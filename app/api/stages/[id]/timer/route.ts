@@ -90,6 +90,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         activeSeconds: addPendingTime(stage.activeSeconds, stage.timerStartedAt),
         autoPaused: false,
         pauseReason: null,
+        pauseDetail: null,
+        pausedAt: null,
+        awaitingParts: false,
+        awaitingPartsName: null,
+        awaitingPartsDate: null,
+        awaitingPartsTracking: null,
+        awaitingPartsSince: null,
       },
     })
     // Park the vehicle in awaiting_routing for the admin to decide what's next.

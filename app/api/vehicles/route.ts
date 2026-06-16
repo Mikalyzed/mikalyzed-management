@@ -157,7 +157,10 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist, startingStage: rawStartingStage, estimatedHours, soldDelivery: rawSoldDelivery, newInventory: rawNewInventory, reason: rawReason } = body
+  const { stockNumber, vin, year, make, model, color, trim, notes, assigneeId, mechanicChecklist, mechanicScopeName: rawMechanicScopeName, startingStage: rawStartingStage, estimatedHours, soldDelivery: rawSoldDelivery, newInventory: rawNewInventory, reason: rawReason } = body
+  const mechanicScopeName = typeof rawMechanicScopeName === 'string' && rawMechanicScopeName.trim()
+    ? rawMechanicScopeName.trim()
+    : null
   // Optional reason — used when the admin is re-routing a sold or otherwise
   // unusual vehicle back into recon.  Surfaces on the new stage's notes so
   // the explanation lives with the work that's about to happen.
@@ -251,7 +254,20 @@ export async function POST(request: Request) {
             vehicleId: existing.id,
             status: { notIn: ['done', 'skipped'] },
           },
-          data: { status: 'skipped', completedAt: new Date() },
+          data: {
+            status: 'skipped',
+            completedAt: new Date(),
+            timerStartedAt: null,
+            autoPaused: false,
+            pauseReason: null,
+            pauseDetail: null,
+            pausedAt: null,
+            awaitingParts: false,
+            awaitingPartsName: null,
+            awaitingPartsDate: null,
+            awaitingPartsTracking: null,
+            awaitingPartsSince: null,
+          },
         })
 
         const stage = await tx.vehicleStage.create({
@@ -263,7 +279,7 @@ export async function POST(request: Request) {
             checklist,
             priority: nextPriority,
             estimatedHours: estimatedHours ? parseFloat(estimatedHours) : null,
-            scopeName: soldDelivery ? 'Sold Delivery' : newInventory ? 'New Inventory' : null,
+            scopeName: soldDelivery ? 'Sold Delivery' : newInventory ? 'New Inventory' : mechanicScopeName,
             notes: reason,
           },
         })

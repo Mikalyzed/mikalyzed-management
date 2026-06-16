@@ -96,6 +96,12 @@ export default function AddVehiclePage() {
     } else {
       mechanicChecklist = ['Inspect & clear']
     }
+    // Pass the selected template's name through to the API so the stage is
+    // scoped (e.g. "New Vehicle Inspection") and identifiable across the UI —
+    // not just a generic mechanic stage that happens to have the right items.
+    const mechanicScopeName = selectedTemplates.length > 0
+      ? selectedTemplates.map(t => t.name).join(' + ')
+      : null
 
     // Sold-car gate: if the admin is sending a car that's already marked Sold
     // back into recon, ask why first so the answer is captured on the new
@@ -124,6 +130,7 @@ export default function AddVehiclePage() {
       notes: form.get('notes'),
       startingStage,
       mechanicChecklist,
+      mechanicScopeName,
       estimatedHours: form.get('estimatedHours') ? parseFloat(form.get('estimatedHours') as string) : null,
       soldDelivery: startingStage === 'detailing' ? soldDelivery : false,
       ...(soldReason ? { reason: soldReason } : {}),
@@ -148,6 +155,7 @@ export default function AddVehiclePage() {
               body: JSON.stringify({
                 reason,
                 mechanicChecklist,
+                mechanicScopeName,
               }),
             })
             if (restartRes.ok) {

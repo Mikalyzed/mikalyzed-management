@@ -50,6 +50,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     data.status = body.status
 
+    // Terminal transitions wipe the pause/awaiting-parts state so it can't
+    // leak into board filters (mechanic-board's "Waiting for Parts" used to
+    // catch done stages with orphaned awaitingParts=true flags).
+    if (body.status === 'done' || body.status === 'skipped') {
+      data.timerStartedAt = null
+      data.autoPaused = false
+      data.pauseReason = null
+      data.pauseDetail = null
+      data.pausedAt = null
+      data.awaitingParts = false
+      data.awaitingPartsName = null
+      data.awaitingPartsDate = null
+      data.awaitingPartsTracking = null
+      data.awaitingPartsSince = null
+    }
+
     // Handle blocked time tracking
     if (body.status === 'blocked') {
       data.blockedAt = new Date()

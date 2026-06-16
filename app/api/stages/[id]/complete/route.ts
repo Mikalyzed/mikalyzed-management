@@ -32,6 +32,15 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         status: 'done',
         completedAt: new Date(),
         timerStartedAt: null,
+        autoPaused: false,
+        pauseReason: null,
+        pauseDetail: null,
+        pausedAt: null,
+        awaitingParts: false,
+        awaitingPartsName: null,
+        awaitingPartsDate: null,
+        awaitingPartsTracking: null,
+        awaitingPartsSince: null,
       },
     })
     await tx.activityLog.create({

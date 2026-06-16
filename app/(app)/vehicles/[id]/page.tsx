@@ -708,6 +708,14 @@ export default function VehicleDetailV2() {
                     <p style={{ fontSize: 15, color: 'rgba(0,0,0,0.72)', lineHeight: 1.7, fontStyle: 'italic' }}>{vehicle.notes}</p>
                   </GlassCard>
                 )}
+
+                <VehicleInspectionCard
+                  stages={vehicle.stages || []}
+                  onOpenInRecon={(stageId) => {
+                    setActiveTab('recon')
+                    setExpandedStageId(stageId)
+                  }}
+                />
               </div>
 
               {/* RIGHT COLUMN — Status & Logistics */}
@@ -2343,40 +2351,17 @@ function LogisticsHubCard({
 
       {canSeeMoney && (
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 10, fontWeight: 700, color: 'rgba(0,0,0,0.5)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Floorplan</span>
-            {isAdmin && (
-              <button onClick={onEditFlooring} style={{ background: 'none', border: 'none', color: '#0071e3', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0, minHeight: 'auto' }}>
-                {flooring ? 'Edit' : '+ Set'}
-              </button>
-            )}
-          </div>
-          {flooring ? (
-            <div style={{ borderRadius: 12, overflow: 'hidden' }}>
-              {[
-                { label: 'Lender', value: flooring.lender },
-                { label: 'Principal', value: money(flooring.principal) },
-                { label: 'Rate', value: `${flooring.dailyRate}% / day` },
-                { label: 'Cost / Day', value: money(flooring.costPerDay), accent: '#dc2626' },
-                { label: 'Accrued', value: `${money(flooring.accruedInterest)} · ${flooring.daysHeld}d` },
-                { label: 'Payoff', value: money(flooring.payoff), accent: '#dc2626' },
-              ].map((r, i) => (
-                <div key={r.label} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                  padding: '10px 12px',
-                  background: i % 2 === 0 ? 'rgba(0,0,0,0.025)' : 'transparent',
-                  gap: 12,
-                }}>
-                  <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.55)', fontWeight: 500 }}>{r.label}</span>
-                  <span style={{ fontSize: 13, color: r.accent || '#1d1d1f', fontWeight: 600, textAlign: 'right' }}>{r.value}</span>
-                </div>
-              ))}
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+              <FloorplanActivatedPill active={!!flooring} />
+              {isAdmin && (
+                <button onClick={onEditFlooring} style={{ background: 'none', border: 'none', color: '#0071e3', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0, minHeight: 'auto' }}>
+                  {flooring ? 'Edit' : '+ Set'}
+                </button>
+              )}
             </div>
-          ) : (
-            <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.5)', fontStyle: 'italic' }}>
-              {vehicle.purchaseType === 'CONSIGNMENT' ? 'Consignment — not floored.' : 'Not on a floorplan.'}
-            </p>
-          )}
+          </div>
         </div>
       )}
     </GlassCard>
@@ -2446,6 +2431,105 @@ function PrintHubCard() {
       <GlassEyebrow label="Print Hub" subtitle="Generate dealer documents" />
       <PrintRow label="Window Sticker" subtitle="Compliance + pricing layout" />
       <PrintRow label="Buyer's Guide" subtitle="FTC As-Is / Warranty" />
+    </GlassCard>
+  )
+}
+
+// Read-only reference card for the vehicle's most recent mechanic-stage
+// inspection (e.g. "New Vehicle Inspection").  Lives on the General Info
+// sub-tab so the technician's findings are visible without having to dig
+// through the Recon timeline.
+function VehicleInspectionCard({
+  stages, onOpenInRecon,
+}: {
+  stages: ReconStage[]
+  onOpenInRecon: (stageId: string) => void
+}) {
+  const inspection = (() => {
+    const mechanics = (stages || []).filter(s => s.stage === 'mechanic')
+    if (mechanics.length === 0) return null
+    return mechanics.slice().sort((a, b) => {
+      const at = a.startedAt ? new Date(a.startedAt).getTime() : 0
+      const bt = b.startedAt ? new Date(b.startedAt).getTime() : 0
+      return bt - at
+    })[0]
+  })()
+
+  if (!inspection) return null
+
+  const checklist = inspection.checklist || []
+  const doneCount = checklist.filter(c => c.done).length
+  const totalCount = checklist.length
+  const isActive = inspection.status !== 'done' && inspection.status !== 'skipped' && !inspection.completedAt
+
+  return (
+    <GlassCard>
+      <GlassEyebrow
+        label="Vehicle Inspection"
+        subtitle={inspection.scopeName || 'Mechanical work'}
+        action={
+          <button
+            onClick={() => onOpenInRecon(inspection.id)}
+            style={{
+              background: 'none', border: 'none', color: '#0071e3',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              padding: 0, minHeight: 'auto',
+            }}
+          >
+            Open in Recon ↗
+          </button>
+        }
+      />
+
+      <div style={{ display: 'flex', gap: 14, alignItems: 'center', fontSize: 12, color: 'rgba(0,0,0,0.55)', flexWrap: 'wrap', marginBottom: 14, fontWeight: 500 }}>
+        <V2StageStatus value={inspection.status} active={isActive} />
+        {inspection.assignee && <span>{inspection.assignee.name}</span>}
+        <span>{fmtDate(inspection.startedAt)}{inspection.completedAt ? ` → ${fmtDate(inspection.completedAt)}` : ''}</span>
+        {totalCount > 0 && <span>{doneCount}/{totalCount} tasks</span>}
+      </div>
+
+      {checklist.length > 0 ? (
+        <div>
+          {checklist.map((item, i) => (
+            <div key={i} style={{
+              display: 'flex', gap: 10, alignItems: 'flex-start',
+              padding: '8px 10px',
+              background: item.done ? '#f0fdf4' : 'transparent',
+              border: item.done ? '1px solid #bbf7d0' : '1px solid rgba(0,0,0,0.06)',
+              borderRadius: 8, marginBottom: 4,
+            }}>
+              <span style={{
+                display: 'inline-flex', width: 18, height: 18, borderRadius: 4,
+                background: item.done ? '#22c55e' : 'transparent',
+                border: `2px solid ${item.done ? '#22c55e' : 'rgba(0,0,0,0.2)'}`,
+                alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1,
+              }}>
+                {item.done && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: 13, color: item.done ? 'rgba(0,0,0,0.55)' : '#1d1d1f', textDecoration: item.done ? 'line-through' : 'none' }}>
+                  {item.item}
+                </span>
+                {item.note && (
+                  <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.55)', marginTop: 2, fontStyle: 'italic' }}>↳ {item.note}</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p style={{ fontSize: 13, color: 'rgba(0,0,0,0.5)', fontStyle: 'italic', margin: 0 }}>No checklist on this stage yet.</p>
+      )}
+
+      {inspection.notes && (
+        <div style={{
+          marginTop: 12, padding: '10px 12px',
+          background: 'rgba(0,0,0,0.025)', borderRadius: 10,
+          fontSize: 12, color: 'rgba(0,0,0,0.65)', fontStyle: 'italic', lineHeight: 1.5,
+        }}>
+          ↳ {inspection.notes}
+        </div>
+      )}
     </GlassCard>
   )
 }
@@ -3754,9 +3838,9 @@ function TitleBuildStudio({
 
 // ─── Purchase Info Studio (Vehicle Info → Purchase Info sub-tab) ────────
 // 60/40 asymmetric two-column layout:
-//   LEFT (60%): operational financials — Purchase Info + How Did You Pay
-//   RIGHT (40%): external legal entities — Lienholder + Previous Owner
-// All four parent containers use GlassCard so they share the same translucent
+//   LEFT (60%): Purchase Info (acquisition + buyer/source)
+//   RIGHT (40%): Lienholder + How Did You Pay
+// All three parent containers use GlassCard so they share the same translucent
 // frosted surface; sub-content uses SubPanel + custom mini-helpers below.
 
 const ACQUIRED_MILEAGE_STATUS_OPTIONS = [
@@ -3772,16 +3856,6 @@ const PAYMENT_METHOD_OPTIONS = [
   { value: 'ach',     label: 'ACH' },
   { value: 'card',    label: 'Card' },
   { value: 'other',   label: 'Other' },
-]
-
-const PRINCIPAL_USE_OPTIONS = [
-  { value: 'personal',   label: 'Personal' },
-  { value: 'commercial', label: 'Commercial' },
-  { value: 'rental',     label: 'Rental' },
-  { value: 'lease',      label: 'Lease' },
-  { value: 'demo',       label: 'Demo' },
-  { value: 'police',     label: 'Police' },
-  { value: 'taxi',       label: 'Taxi' },
 ]
 
 function PurchaseInfoStudio({
@@ -3806,7 +3880,68 @@ function PurchaseInfoStudio({
   const [purchaseDetail, setPurchaseDetail] = useState('')
 
   // Card 2 — How Did You Pay
+  // One payment type per vehicle — either Consignment or Flooring.  Each
+  // carries its own field set; a single shared Memo captures cross-cutting
+  // notes (splits, reference IDs, paydown history).
+  type PaymentTypeKind = 'consignment' | 'flooring'
+  type PaymentTypeEntry = {
+    id: string
+    kind: PaymentTypeKind
+    // Consignment fields
+    amount: number
+    paidDate: string
+    // Flooring fields — kept on the same row so a single payment record
+    // covers both shapes.  Unused fields stay at their defaults.
+    flooringCompany: string
+    amountFloored: number
+    dateFloored: string
+    interestRate: number   // annual %, e.g. 10 means 10.0%
+    dayBasis: '365' | '360' | 'actual'
+  }
+  const [paymentTypes, setPaymentTypes] = useState<PaymentTypeEntry[]>([])
+  const [paymentPickerOpen, setPaymentPickerOpen] = useState(false)
+  const paymentPickerRef = useRef<HTMLDivElement | null>(null)
   const [howPaidMemo, setHowPaidMemo] = useState('')
+
+  useEffect(() => {
+    if (!paymentPickerOpen) return
+    function onClick(e: MouseEvent) {
+      if (!paymentPickerRef.current?.contains(e.target as Node)) setPaymentPickerOpen(false)
+    }
+    function onEsc(e: KeyboardEvent) { if (e.key === 'Escape') setPaymentPickerOpen(false) }
+    document.addEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onEsc)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }, [paymentPickerOpen])
+
+  const paymentTypeMax = 1
+  const paymentMaxReached = paymentTypes.length >= paymentTypeMax
+  const hasPaymentType = (k: PaymentTypeKind) => paymentTypes.some(p => p.kind === k)
+
+  function addPaymentType(kind: PaymentTypeKind) {
+    if (paymentMaxReached || hasPaymentType(kind)) return
+    setPaymentTypes(prev => [...prev, {
+      id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+      kind,
+      amount: 0,
+      paidDate: '',
+      flooringCompany: '',
+      amountFloored: 0,
+      dateFloored: '',
+      interestRate: 0,
+      dayBasis: '365',
+    }])
+    setPaymentPickerOpen(false)
+  }
+  function updatePaymentType(id: string, patch: Partial<PaymentTypeEntry>) {
+    setPaymentTypes(prev => prev.map(p => p.id === id ? { ...p, ...patch } : p))
+  }
+  function removePaymentType(id: string) {
+    setPaymentTypes(prev => prev.filter(p => p.id !== id))
+  }
 
   // Card 3 — Lienholder
   const [lienholderSearch, setLienholderSearch] = useState('')
@@ -3816,15 +3951,7 @@ function PurchaseInfoStudio({
   const [lienPaymentMethod, setLienPaymentMethod] = useState('')
   const [lienPerDiem, setLienPerDiem] = useState(0)
   const [lienDatePaidOff, setLienDatePaidOff] = useState('')
-  const [paidViaFlooring, setPaidViaFlooring] = useState(false)
   const [lienMemo, setLienMemo] = useState('')
-
-  // Card 4 — Previous Owner
-  const [prevOwnerName, setPrevOwnerName] = useState('')
-  const [prevOwnerPhone, setPrevOwnerPhone] = useState('')
-  const [prevOwnerAddress, setPrevOwnerAddress] = useState('')
-  const [prevOwnerDealerLicense, setPrevOwnerDealerLicense] = useState('')
-  const [prevOwnerPrincipalUse, setPrevOwnerPrincipalUse] = useState('')
 
   // Days in Inventory — computed from dateInStock so the admin doesn't
   // have to maintain it.  Defaults to '—' when no purchase date is set.
@@ -3834,31 +3961,30 @@ function PurchaseInfoStudio({
 
   return (
     <div style={{
-      display: 'grid',
-      gridTemplateColumns: '3fr 2fr',
+      display: 'flex',
+      flexDirection: 'column',
       gap: 18,
-      alignItems: 'start',
       minWidth: 0,
     }}>
-      {/* ─── LEFT COLUMN (60%) ───────────────────────────────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
+      {/* ─── TOP ROW: Purchase Info (full width) ───────────────────── */}
+      <div style={{ minWidth: 0 }}>
         {/* CARD 1 — Purchase Info */}
         <GlassCard padding={22}>
           <GlassEyebrow label="Purchase Info" />
 
-          {/* Stack the two mini-grids vertically so each field gets the full
-              card width — the prior side-by-side layout squeezed the values
-              into the right rail of each SubPanel, making them feel cramped. */}
+          {/* Two-column layout inside the full-width card — Acquisition on
+              the left, Buyer & Source on the right.  Each side holds its
+              own chip stack so individual rows stay readable instead of
+              spanning the entire card width. */}
           <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 14,
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 24,
             minWidth: 0,
           }}>
-            {/* TOP — acquisition financials.  All AnchorRow* variants so the
-                row chips match Previous Owner's visual weight. */}
+            {/* LEFT — acquisition financials.  All AnchorRow* variants for
+                visual consistency with the rest of the studio. */}
             <div>
-              <SectionLabel>Acquisition</SectionLabel>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <AnchorRowDate
                   label="Purchase Date"
@@ -3899,8 +4025,8 @@ function PurchaseInfoStudio({
               </div>
             </div>
 
-            {/* BOTTOM — Buyer & Source.  Contact details ride the same chip
-                pattern so they match Previous Owner in size and density. */}
+            {/* RIGHT — Buyer & Source.  Contact details ride the same chip
+                pattern as the rest of the studio for visual consistency. */}
             <div>
               <SectionLabel>Buyer &amp; Source</SectionLabel>
               <ContactBadge name="Yoan Perez Gutierrez" />
@@ -3964,60 +4090,17 @@ function PurchaseInfoStudio({
           </div>
         </GlassCard>
 
-        {/* CARD 2 — How Did You Pay */}
-        <GlassCard padding={22}>
-          <GlassEyebrow
-            label="How Did You Pay"
-            action={
-              <button
-                type="button"
-                style={{
-                  padding: '6px 12px', borderRadius: 999,
-                  border: '1px solid rgba(0, 113, 227, 0.2)',
-                  background: 'rgba(255, 255, 255, 0.55)',
-                  backdropFilter: 'blur(10px) saturate(180%)',
-                  WebkitBackdropFilter: 'blur(10px) saturate(180%)',
-                  color: '#0071e3', fontSize: 11, fontWeight: 700,
-                  letterSpacing: '-0.005em', cursor: 'pointer',
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  minHeight: 'auto',
-                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
-                }}
-              >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-                Add Payment Type
-              </button>
-            }
-          />
-
-          {/* Floating satin floorplan tile */}
-          <FloorplanTile
-            lenderName={vehicle.floorLender || 'Mikalyzed (in-house)'}
-            payOffAmount={vehicle.floorPrincipal ?? 0}
-            amountFloored={vehicle.floorPrincipal ?? 0}
-            dailyRate={vehicle.floorDailyRate ?? 0}
-            status={vehicle.floorStatus || 'pending'}
-          />
-
-          {/* Base — Memo textarea */}
-          <div style={{ marginTop: 14 }}>
-            <p style={{
-              fontSize: 11, fontWeight: 600, letterSpacing: '-0.005em',
-              color: 'rgba(0, 0, 0, 0.5)', marginBottom: 6,
-            }}>Memo</p>
-            <GlassTextArea
-              value={howPaidMemo}
-              onChange={setHowPaidMemo}
-              placeholder="Payment splits, transaction IDs, deposit confirmations…"
-              minRows={3}
-            />
-          </div>
-        </GlassCard>
       </div>
 
-      {/* ─── RIGHT COLUMN (40%) ──────────────────────────────────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
-        {/* CARD 3 — Lienholder */}
+      {/* ─── BOTTOM ROW: Lienholder + How Did You Pay (50/50) ────── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: 18,
+        alignItems: 'start',
+        minWidth: 0,
+      }}>
+        {/* CARD 2 — Lienholder */}
         <GlassCard padding={22}>
           <GlassEyebrow label="Lienholder" />
 
@@ -4041,8 +4124,7 @@ function PurchaseInfoStudio({
             />
           </div>
 
-          {/* AnchorRow chip stack so the lien tracking fields read the same as
-              Previous Owner — full-width chips with translucent backgrounds,
+          {/* AnchorRow chip stack — full-width translucent chips,
               label-left / value-right. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <AnchorRow label="Lien Account No." value={lienAccountNo} onChange={setLienAccountNo} placeholder="—" />
@@ -4057,15 +4139,6 @@ function PurchaseInfoStudio({
             />
             <AnchorRowMoney label="Per Diem" value={lienPerDiem} onChange={setLienPerDiem} />
             <AnchorRowDate label="Date Paid Off" value={lienDatePaidOff} onChange={setLienDatePaidOff} />
-          </div>
-
-          {/* Custom Paid Via Flooring toggle pill */}
-          <div style={{ marginTop: 12 }}>
-            <FlooringTogglePill
-              checked={paidViaFlooring}
-              onChange={setPaidViaFlooring}
-              label="Paid Via Flooring"
-            />
           </div>
 
           {/* Base — Memo textarea */}
@@ -4083,23 +4156,124 @@ function PurchaseInfoStudio({
           </div>
         </GlassCard>
 
-        {/* CARD 4 — Previous Owner */}
+        {/* CARD 3 — How Did You Pay */}
         <GlassCard padding={22}>
-          <GlassEyebrow label="Previous Owner" />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <AnchorRow label="Owner Name" value={prevOwnerName} onChange={setPrevOwnerName} placeholder="—" />
-            <AnchorRow label="Phone No." value={prevOwnerPhone} onChange={setPrevOwnerPhone} placeholder="—" />
-            <AnchorRow label="Address" value={prevOwnerAddress} onChange={setPrevOwnerAddress} placeholder="—" />
-            <AnchorRow label="Dealer License No." value={prevOwnerDealerLicense} onChange={setPrevOwnerDealerLicense} placeholder="—" />
-            <AnchorRowSelect
-              label="Principal Use of Vehicle"
-              value={prevOwnerPrincipalUse}
-              onChange={setPrevOwnerPrincipalUse}
-              options={PRINCIPAL_USE_OPTIONS}
-              placeholder="—"
+          <GlassEyebrow
+            label="How Did You Pay"
+            action={
+              <div ref={paymentPickerRef} style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => { if (!paymentMaxReached) setPaymentPickerOpen(o => !o) }}
+                  disabled={paymentMaxReached}
+                  style={{
+                    padding: '6px 12px', borderRadius: 999,
+                    border: '1px solid rgba(0, 113, 227, 0.2)',
+                    background: 'rgba(255, 255, 255, 0.55)',
+                    backdropFilter: 'blur(10px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(10px) saturate(180%)',
+                    color: '#0071e3', fontSize: 11, fontWeight: 700,
+                    letterSpacing: '-0.005em',
+                    cursor: paymentMaxReached ? 'not-allowed' : 'pointer',
+                    opacity: paymentMaxReached ? 0.5 : 1,
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    minHeight: 'auto',
+                    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+                  }}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                  Add Payment Type
+                </button>
+                {paymentPickerOpen && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: 6,
+                    minWidth: 180,
+                    borderRadius: 12,
+                    background: 'rgba(255, 255, 255, 0.82)',
+                    backdropFilter: 'blur(28px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+                    border: '1px solid rgba(255, 255, 255, 0.55)',
+                    boxShadow: '0 20px 50px -12px rgba(31, 38, 135, 0.28), 0 4px 12px -4px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.85)',
+                    overflow: 'hidden',
+                    padding: 4,
+                    zIndex: 100,
+                  }}>
+                    {(['consignment', 'flooring'] as const).map(kind => {
+                      const taken = hasPaymentType(kind)
+                      return (
+                        <button
+                          key={kind}
+                          type="button"
+                          disabled={taken}
+                          onClick={() => addPaymentType(kind)}
+                          style={{
+                            width: '100%', textAlign: 'left',
+                            padding: '8px 12px', borderRadius: 8,
+                            background: 'transparent', border: 'none',
+                            fontSize: 13, fontWeight: 600,
+                            color: taken ? 'rgba(0,0,0,0.3)' : '#0a0a0a',
+                            cursor: taken ? 'not-allowed' : 'pointer',
+                            minHeight: 'auto',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            transition: 'background 120ms ease',
+                            textTransform: 'capitalize',
+                          }}
+                          onMouseEnter={e => { if (!taken) e.currentTarget.style.background = 'rgba(0,0,0,0.045)' }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                        >
+                          {kind}
+                          {taken && <span style={{ fontSize: 10, color: 'rgba(0,0,0,0.4)', fontWeight: 700, letterSpacing: '0.04em' }}>ADDED</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            }
+          />
+
+          {/* Selected payment types — stacked sub-cards */}
+          {paymentTypes.length === 0 ? (
+            <div style={{
+              padding: '20px 16px',
+              borderRadius: 12,
+              background: 'rgba(255, 255, 255, 0.32)',
+              border: '1px dashed rgba(0, 0, 0, 0.12)',
+              fontSize: 12, fontWeight: 600,
+              color: 'rgba(0, 0, 0, 0.45)',
+              textAlign: 'center',
+              letterSpacing: '-0.005em',
+            }}>
+              No payment type added yet
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {paymentTypes.map(p => (
+                <PaymentTypeCard
+                  key={p.id}
+                  entry={p}
+                  onChange={(patch) => updatePaymentType(p.id, patch)}
+                  onRemove={() => removePaymentType(p.id)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Base — Memo textarea */}
+          <div style={{ marginTop: 14 }}>
+            <p style={{
+              fontSize: 11, fontWeight: 600, letterSpacing: '-0.005em',
+              color: 'rgba(0, 0, 0, 0.5)', marginBottom: 6,
+            }}>Memo</p>
+            <GlassTextArea
+              value={howPaidMemo}
+              onChange={setHowPaidMemo}
+              placeholder="Payment splits, transaction IDs, deposit confirmations…"
+              minRows={3}
             />
           </div>
         </GlassCard>
+
       </div>
     </div>
   )
@@ -4107,29 +4281,361 @@ function PurchaseInfoStudio({
 
 // ─── Purchase Info mini-helpers ────────────────────────────────────────
 
-// Translucent textarea — borderless, glass-tinted, no harsh rectangle.
+// Per-payment-type sub-card.  Renders the kind name + remove button up top,
+// then a kind-specific field set underneath as AnchorRow* chips so the
+// styling matches the rest of the studio.
+//
+// Consignment → Amount + Paid Date
+// Flooring    → Company, Amount Floored, Date Floored, Interest, Day Basis
+//               plus a live "Accrued So Far" tile computed from the inputs.
+type PaymentEntry = {
+  id: string
+  kind: 'consignment' | 'flooring'
+  amount: number
+  paidDate: string
+  flooringCompany: string
+  amountFloored: number
+  dateFloored: string
+  interestRate: number
+  dayBasis: '365' | '360' | 'actual'
+}
+function PaymentTypeCard({
+  entry, onChange, onRemove,
+}: {
+  entry: PaymentEntry
+  onChange: (patch: Partial<PaymentEntry>) => void
+  onRemove: () => void
+}) {
+  const { kind } = entry
+
+  return (
+    <div style={{
+      padding: 14,
+      borderRadius: 14,
+      background: 'rgba(255, 255, 255, 0.42)',
+      backdropFilter: 'blur(15px) saturate(180%)',
+      WebkitBackdropFilter: 'blur(15px) saturate(180%)',
+      border: '1px solid rgba(255, 255, 255, 0.55)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85), 0 1px 2px rgba(31, 38, 135, 0.04)',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        marginBottom: 10,
+      }}>
+        <p style={{
+          fontSize: 13, fontWeight: 700, color: '#0a0a0a',
+          letterSpacing: '-0.005em', margin: 0,
+          textTransform: 'capitalize',
+        }}>{kind}</p>
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${kind} payment`}
+          style={{
+            width: 22, height: 22, borderRadius: 999,
+            border: 'none',
+            background: 'rgba(0, 0, 0, 0.04)',
+            color: 'rgba(0, 0, 0, 0.55)',
+            cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            minHeight: 'auto', padding: 0,
+            transition: 'background 160ms ease, color 160ms ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255, 59, 48, 0.12)'; e.currentTarget.style.color = '#b42318' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(0, 0, 0, 0.04)'; e.currentTarget.style.color = 'rgba(0, 0, 0, 0.55)' }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      {kind === 'consignment' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <AnchorRowMoney
+            label="Amount"
+            value={entry.amount}
+            onChange={(v) => onChange({ amount: v })}
+            placeholderEmpty={!entry.amount}
+          />
+          <AnchorRowDate
+            label="Paid Date"
+            value={entry.paidDate}
+            onChange={(v) => onChange({ paidDate: v })}
+          />
+        </div>
+      )}
+
+      {kind === 'flooring' && (
+        <FlooringPanel entry={entry} onChange={onChange} />
+      )}
+    </div>
+  )
+}
+
+// Pulled out so all the flooring-specific state + math lives in one place,
+// keeping PaymentTypeCard skinny.
+function FlooringPanel({
+  entry, onChange,
+}: {
+  entry: PaymentEntry
+  onChange: (patch: Partial<PaymentEntry>) => void
+}) {
+  const accrual = computeFlooringAccrual(entry)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <FlooringCompanyRow
+        value={entry.flooringCompany}
+        onChange={(v) => onChange({ flooringCompany: v })}
+      />
+      <AnchorRowMoney
+        label="Amount Floored"
+        value={entry.amountFloored}
+        onChange={(v) => onChange({ amountFloored: v })}
+        placeholderEmpty={!entry.amountFloored}
+      />
+      <AnchorRowDate
+        label="Date Floored"
+        value={entry.dateFloored}
+        onChange={(v) => onChange({ dateFloored: v })}
+      />
+      <AnchorRowPercent
+        label="Interest"
+        value={entry.interestRate}
+        onChange={(v) => onChange({ interestRate: v })}
+      />
+      <AnchorRowSelect
+        label="Day Basis"
+        value={entry.dayBasis}
+        onChange={(v) => onChange({ dayBasis: v as PaymentEntry['dayBasis'] })}
+        options={[
+          { value: '365', label: '365' },
+          { value: '360', label: '360' },
+          { value: 'actual', label: 'Actual' },
+        ]}
+      />
+
+      {/* Live accrual readout — only meaningful once amount + date are filled */}
+      <AccruedTile accrual={accrual} active={entry.amountFloored > 0 && !!entry.dateFloored} />
+    </div>
+  )
+}
+
+// Compact text-search chip for the Flooring Company picker.  Real contact
+// search is wired in Pass 2; for now it's a text input with a search icon
+// so the layout matches the upload reference.
+function FlooringCompanyRow({
+  value, onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  const [hover, setHover] = useState(false)
+  const [focused, setFocused] = useState(false)
+  return (
+    <label
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        ...chipBoxStyle(focused, hover, true),
+        cursor: 'text',
+      }}
+    >
+      <span style={labelStyle}>Flooring Company</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, justifyContent: 'flex-end' }}>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder="Search company…"
+          style={{
+            flex: 1, minWidth: 0, textAlign: 'right',
+            background: 'transparent', border: 'none', outline: 'none',
+            fontSize: 14, fontWeight: 700, color: '#0a0a0a',
+            letterSpacing: '-0.005em', fontFamily: 'inherit',
+          }}
+        />
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(0,0,0,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+      </span>
+    </label>
+  )
+}
+
+// Percent variant of AnchorRow* — click chip to edit, shows "X%" when idle.
+function AnchorRowPercent({ label, value, onChange }: {
+  label: string; value: number; onChange: (v: number) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [hover, setHover] = useState(false)
+  function startEdit() {
+    setDraft(value && value > 0 ? String(value) : '')
+    setEditing(true)
+  }
+  function commit() {
+    setEditing(false)
+    const n = draft === '' ? 0 : parseFloat(draft)
+    if (!Number.isFinite(n)) return
+    onChange(n)
+  }
+  return (
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        ...chipBoxStyle(editing, hover, true),
+        cursor: 'text',
+      }}
+      onClick={() => { if (!editing) startEdit() }}
+    >
+      <span style={labelStyle}>{label}</span>
+      {editing ? (
+        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 2 }}>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={draft}
+            autoFocus
+            size={Math.max(2, draft.length || 1)}
+            onChange={(e) => setDraft(e.target.value.replace(/[^0-9.]/g, ''))}
+            onBlur={commit}
+            onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
+            style={{
+              border: 'none', outline: 'none', background: 'transparent',
+              fontSize: 14, fontWeight: 700, color: '#0a0a0a',
+              textAlign: 'right', letterSpacing: '-0.005em',
+              fontVariantNumeric: 'tabular-nums',
+              padding: 0, width: 'auto', boxSizing: 'content-box',
+            }}
+          />
+          <span style={{ fontSize: 14, fontWeight: 700, color: '#0a0a0a' }}>%</span>
+        </span>
+      ) : (
+        <span style={{
+          fontSize: 14, fontWeight: 700,
+          color: value > 0 ? '#0a0a0a' : 'rgba(0,0,0,0.3)',
+          letterSpacing: '-0.005em',
+          fontVariantNumeric: 'tabular-nums',
+        }}>{value > 0 ? `${value}%` : '—'}</span>
+      )}
+    </div>
+  )
+}
+
+// Live-computed flooring accrual.  Pure function so it can be reused in
+// other surfaces (Cost Info tile, top-of-page summary) without re-rendering
+// the whole FlooringPanel.
+type FlooringAccrual = {
+  daysElapsed: number
+  dailyInterest: number
+  accruedTotal: number
+}
+function computeFlooringAccrual(entry: Pick<PaymentEntry, 'amountFloored' | 'dateFloored' | 'interestRate' | 'dayBasis'>): FlooringAccrual {
+  const empty: FlooringAccrual = { daysElapsed: 0, dailyInterest: 0, accruedTotal: 0 }
+  if (!entry.amountFloored || !entry.dateFloored || !entry.interestRate) return empty
+  const advance = new Date(entry.dateFloored + 'T00:00:00')
+  if (Number.isNaN(advance.getTime())) return empty
+  const daysElapsed = Math.max(0, Math.floor((Date.now() - advance.getTime()) / 86400000))
+  // 'actual' treats the year as 365 — the practical effect of the 'actual/365'
+  // basis convention.  Switching to 366 in leap years would be more correct
+  // but the per-day delta is negligible for floor-plan tracking.
+  const basisDays = entry.dayBasis === '360' ? 360 : 365
+  const dailyInterest = (entry.amountFloored * (entry.interestRate / 100)) / basisDays
+  return {
+    daysElapsed,
+    dailyInterest,
+    accruedTotal: dailyInterest * daysElapsed,
+  }
+}
+
+// "Accrued So Far" readout — shows total + per-day burn rate.  Idle state
+// (no inputs yet) renders a soft empty placeholder so the card doesn't jump
+// when the admin starts typing.
+function AccruedTile({ accrual, active }: { accrual: FlooringAccrual; active: boolean }) {
+  return (
+    <div style={{
+      marginTop: 6,
+      padding: '10px 14px',
+      borderRadius: 12,
+      background: active ? 'linear-gradient(135deg, rgba(10, 132, 255, 0.10) 0%, rgba(10, 132, 255, 0.04) 100%)' : 'rgba(0,0,0,0.025)',
+      border: active ? '1px solid rgba(10, 132, 255, 0.18)' : '1px dashed rgba(0,0,0,0.10)',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
+        <span style={{
+          fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase',
+          color: active ? 'rgba(10, 132, 255, 0.85)' : 'rgba(0, 0, 0, 0.4)',
+        }}>Accrued So Far</span>
+        <span style={{
+          fontSize: 18, fontWeight: 800,
+          color: active ? '#0a0a0a' : 'rgba(0,0,0,0.3)',
+          letterSpacing: '-0.01em',
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          ${accrual.accruedTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, gap: 12 }}>
+        <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)', fontWeight: 600 }}>
+          {accrual.daysElapsed} day{accrual.daysElapsed === 1 ? '' : 's'} elapsed
+        </span>
+        <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.55)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+          ${accrual.dailyInterest.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/day
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// Translucent textarea — borderless, glass-tinted, with hover + focus states
+// that match chipBoxStyle so it sits in the same visual language as every other
+// field on the page.
 function GlassTextArea({
   value, onChange, placeholder, minRows = 3,
 }: { value: string; onChange: (v: string) => void; placeholder?: string; minRows?: number }) {
+  const [hover, setHover] = useState(false)
+  const [focused, setFocused] = useState(false)
+
+  const bg = focused
+    ? 'rgba(255, 255, 255, 0.55)'
+    : hover
+      ? 'rgba(255, 255, 255, 0.45)'
+      : 'rgba(255, 255, 255, 0.35)'
+
+  const focusGlow = focused
+    ? ', 0 0 0 3px rgba(10, 132, 255, 0.18), 0 6px 18px -8px rgba(10, 132, 255, 0.35)'
+    : ''
+
   return (
     <textarea
       value={value}
       onChange={(e) => onChange(e.target.value)}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       placeholder={placeholder}
       rows={minRows}
       style={{
         width: '100%',
         padding: '11px 14px',
         borderRadius: 12,
-        border: 'none',
-        background: 'rgba(255, 255, 255, 0.35)',
+        border: focused ? '1px solid rgba(10, 132, 255, 0.55)' : '1px solid transparent',
+        background: bg,
         backdropFilter: 'blur(15px) saturate(180%)',
         WebkitBackdropFilter: 'blur(15px) saturate(180%)',
         fontSize: 13, fontWeight: 500, color: '#0a0a0a',
         lineHeight: 1.55, fontFamily: 'inherit',
         outline: 'none', resize: 'vertical',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7), inset 0 0 0 0.5px rgba(255,255,255,0.4)',
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.7), inset 0 0 0 0.5px rgba(255,255,255,0.4)${focusGlow}`,
         boxSizing: 'border-box',
+        transition: 'background 180ms ease, box-shadow 180ms ease, border-color 180ms ease',
       }}
     />
   )
@@ -4182,6 +4688,32 @@ function ContactLine({ label, value }: { label: string; value: string }) {
       }}>{label}</span>
       <span style={{ fontWeight: 600, color: 'rgba(0, 0, 0, 0.78)' }}>{value}</span>
     </div>
+  )
+}
+
+// Simple pill that says "Activated" (with a green dot) when the vehicle has
+// floorplan data, and "Not active" (dimmed) otherwise.  Used inside the
+// Logistics Hub card — admins prefer a quick at-a-glance status there;
+// the detailed floorplan numbers live in Purchase Info → How Did You Pay.
+function FloorplanActivatedPill({ active }: { active: boolean }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      padding: '4px 10px',
+      borderRadius: 999,
+      background: active ? 'rgba(52, 199, 89, 0.12)' : 'rgba(0, 0, 0, 0.04)',
+      border: active ? '1px solid rgba(52, 199, 89, 0.25)' : '1px solid rgba(0, 0, 0, 0.08)',
+      fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
+      color: active ? '#1f7a3a' : 'rgba(0,0,0,0.45)',
+      minHeight: 'auto',
+    }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%',
+        background: active ? '#34c759' : 'rgba(0,0,0,0.25)',
+        boxShadow: active ? '0 0 0 3px rgba(52, 199, 89, 0.18)' : 'none',
+      }} />
+      {active ? 'Activated' : 'Not active'}
+    </span>
   )
 }
 
@@ -4259,52 +4791,8 @@ function FloorplanTile({ lenderName, payOffAmount, amountFloored, dailyRate, sta
   )
 }
 
-// Custom Paid Via Flooring toggle pill — satin pill switch.
-function FlooringTogglePill({ checked, onChange, label }: {
-  checked: boolean; onChange: (v: boolean) => void; label: string
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 10,
-        padding: '7px 14px 7px 8px',
-        borderRadius: 999,
-        background: checked ? 'linear-gradient(135deg, #1d1d1f 0%, #0a0a0a 100%)' : 'rgba(255, 255, 255, 0.5)',
-        backdropFilter: 'blur(10px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(10px) saturate(180%)',
-        border: `1px solid ${checked ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.55)'}`,
-        boxShadow: checked
-          ? '0 4px 14px -4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.12)'
-          : 'inset 0 1px 0 rgba(255,255,255,0.75)',
-        cursor: 'pointer', minHeight: 'auto',
-        transition: 'background 220ms ease',
-      }}
-    >
-      <span style={{
-        width: 18, height: 18, borderRadius: '50%',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        background: checked ? '#dffd6e' : 'rgba(0,0,0,0.06)',
-        color: checked ? '#0a0a0a' : 'transparent',
-        transition: 'background 220ms ease, color 220ms ease',
-        flexShrink: 0,
-      }}>
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      </span>
-      <span style={{
-        fontSize: 11, fontWeight: 700, letterSpacing: '0.02em',
-        color: checked ? '#fff' : 'rgba(0, 0, 0, 0.65)',
-        transition: 'color 220ms ease',
-      }}>{label}</span>
-    </button>
-  )
-}
-
 // Anchor row — borderless inline input with a translucent rounded background.
-// Used in the Previous Owner card so each field reads as its own soft floating chip.
+// Each field reads as its own soft floating chip with hover + focus states.
 function AnchorRow({ label, value, onChange, placeholder }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string
 }) {
@@ -5226,32 +5714,50 @@ function rowLineColor(editing: boolean, hover: boolean, isEditable: boolean): st
 // InlineDateField so the General Info + Build / Title surfaces render with
 // the same AnchorRow visual language used in Purchase Info.
 //
-// Definition bumped per user feedback — chips now hold up against the
-// SubPanel substrate they often sit on (e.g., inside Price & Cost,
-// Mechanical Blueprint).  Higher idle opacity + stronger perimeter so the
-// rounded rectangle reads as its own surface, not as faint tinted air.
+// Three visual states (so the user always knows which field they're in):
+//   • idle       — soft translucent fill
+//   • hover      — brighter fill + thin tint ring
+//   • focused    — bright fill + soft blue focus glow ring
 function chipBoxStyle(editing: boolean, hover: boolean, isEditable: boolean): React.CSSProperties {
   const bg = editing
-    ? 'rgba(255, 255, 255, 0.72)'
+    ? 'rgba(255, 255, 255, 0.86)'
     : hover && isEditable
-      ? 'rgba(255, 255, 255, 0.6)'
+      ? 'rgba(255, 255, 255, 0.72)'
       : isEditable
         ? 'rgba(255, 255, 255, 0.46)'
         : 'rgba(255, 255, 255, 0.32)'
+
+  const border = editing
+    ? '1px solid rgba(10, 132, 255, 0.55)'
+    : hover && isEditable
+      ? '1px solid rgba(0, 0, 0, 0.10)'
+      : '1px solid rgba(255, 255, 255, 0.65)'
+
+  const baseShadow = [
+    '0 1px 2px rgba(31, 38, 135, 0.04)',
+    'inset 0 1px 0 rgba(255,255,255,0.85)',
+    'inset 0 0 0 0.5px rgba(255, 255, 255, 0.45)',
+  ]
+  const focusGlow = editing
+    ? [
+        '0 0 0 3px rgba(10, 132, 255, 0.18)',
+        '0 6px 18px -8px rgba(10, 132, 255, 0.35)',
+      ]
+    : hover && isEditable
+      ? ['0 4px 12px -6px rgba(0, 0, 0, 0.10)']
+      : []
+
   return {
     display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
     gap: 12,
     padding: '10px 14px',
     borderRadius: 12,
     background: bg,
-    border: '1px solid rgba(255, 255, 255, 0.65)',
-    boxShadow: [
-      '0 1px 2px rgba(31, 38, 135, 0.04)',
-      'inset 0 1px 0 rgba(255,255,255,0.85)',
-      'inset 0 0 0 0.5px rgba(255, 255, 255, 0.45)',
-    ].join(', '),
+    border,
+    boxShadow: [...baseShadow, ...focusGlow].join(', '),
     cursor: isEditable ? 'pointer' : 'default',
-    transition: 'background 180ms ease',
+    transform: hover && isEditable && !editing ? 'translateY(-0.5px)' : 'none',
+    transition: 'background 180ms ease, box-shadow 180ms ease, border-color 180ms ease, transform 180ms ease',
   }
 }
 

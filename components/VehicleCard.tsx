@@ -56,7 +56,10 @@ export default function VehicleCard({
     ? returnQueue.find(r => r.stage !== status) ?? null
     : null
   const isSold = stageScope === 'Sold Delivery'
-  const isNewInventory = stageScope === 'New Inventory'
+  // "New Inventory" is the legacy toggle scope; "New Vehicle Inspection" is
+  // the current template name. Both mark a fresh-intake mechanic stage and
+  // should fly the same blue "New Inspection" badge.
+  const isNewInventory = stageScope === 'New Inventory' || stageScope === 'New Vehicle Inspection'
 
   const accentColor = isSold ? '#f59e0b'
     : nextReturn ? '#f59e0b'

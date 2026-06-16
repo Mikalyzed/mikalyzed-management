@@ -23,8 +23,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Vehicle is not completed' }, { status: 400 })
   }
 
-  let body: { reason?: string; mechanicChecklist?: (string | { item: string; type?: string })[] } = {}
+  let body: { reason?: string; mechanicChecklist?: (string | { item: string; type?: string })[]; mechanicScopeName?: string | null } = {}
   try { body = await request.json() } catch { /* ok */ }
+  const mechanicScopeName = typeof body.mechanicScopeName === 'string' && body.mechanicScopeName.trim()
+    ? body.mechanicScopeName.trim()
+    : null
 
   const firstStage: Stage = 'mechanic'
   const config = await prisma.stageConfig.findUnique({ where: { stage: firstStage } })
@@ -51,6 +54,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: 'pending',
         assigneeId: config?.defaultAssigneeId || null,
         checklist,
+        scopeName: mechanicScopeName,
       },
     })
 

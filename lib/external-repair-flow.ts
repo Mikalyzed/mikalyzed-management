@@ -22,7 +22,20 @@ export async function markVehicleAsAtExternal(args: {
 
   await prisma.vehicleStage.updateMany({
     where: { vehicleId: v.id, status: { in: ['pending', 'in_progress'] } },
-    data: { status: 'skipped', completedAt: new Date(), timerStartedAt: null },
+    data: {
+      status: 'skipped',
+      completedAt: new Date(),
+      timerStartedAt: null,
+      autoPaused: false,
+      pauseReason: null,
+      pauseDetail: null,
+      pausedAt: null,
+      awaitingParts: false,
+      awaitingPartsName: null,
+      awaitingPartsDate: null,
+      awaitingPartsTracking: null,
+      awaitingPartsSince: null,
+    },
   })
   await prisma.vehicle.update({
     where: { id: v.id },
@@ -62,7 +75,20 @@ export async function markVehicleReturnedFromExternal(args: {
 
   await prisma.vehicleStage.updateMany({
     where: { vehicleId: v.id, status: { in: ['pending', 'in_progress'] } },
-    data: { status: 'skipped', completedAt: new Date(), timerStartedAt: null },
+    data: {
+      status: 'skipped',
+      completedAt: new Date(),
+      timerStartedAt: null,
+      autoPaused: false,
+      pauseReason: null,
+      pauseDetail: null,
+      pausedAt: null,
+      awaitingParts: false,
+      awaitingPartsName: null,
+      awaitingPartsDate: null,
+      awaitingPartsTracking: null,
+      awaitingPartsSince: null,
+    },
   })
   await prisma.vehicle.update({
     where: { id: v.id },

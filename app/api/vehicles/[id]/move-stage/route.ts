@@ -50,6 +50,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           status: skipCurrent ? 'skipped' : 'done',
           completedAt: new Date(),
           timerStartedAt: null,
+          autoPaused: false,
+          pauseReason: null,
+          pauseDetail: null,
+          pausedAt: null,
+          awaitingParts: false,
+          awaitingPartsName: null,
+          awaitingPartsDate: null,
+          awaitingPartsTracking: null,
+          awaitingPartsSince: null,
         },
       })
     }

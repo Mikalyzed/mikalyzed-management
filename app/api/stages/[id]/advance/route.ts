@@ -35,7 +35,20 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const returned = await prisma.$transaction(async (tx) => {
     await tx.vehicleStage.update({
       where: { id },
-      data: { status: 'done', completedAt: new Date(), timerStartedAt: null },
+      data: {
+        status: 'done',
+        completedAt: new Date(),
+        timerStartedAt: null,
+        autoPaused: false,
+        pauseReason: null,
+        pauseDetail: null,
+        pausedAt: null,
+        awaitingParts: false,
+        awaitingPartsName: null,
+        awaitingPartsDate: null,
+        awaitingPartsTracking: null,
+        awaitingPartsSince: null,
+      },
     })
     await tx.activityLog.create({
       data: {
