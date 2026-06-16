@@ -98,6 +98,41 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       vehicleDesc: `${part.vehicle.year ?? ''} ${part.vehicle.make} ${part.vehicle.model}`.trim(),
       triggeredByUserId: user.id,
     })
+
+    // If the vehicle is actively in mechanic right now, append an Install task
+    // to the current stage's checklist so the mechanic sees it without having
+    // to wait for the next routing cycle. Stamps installTaskCreatedAt to keep
+    // the routing modal's pending-install logic in sync.
+    const vehicleNow = await prisma.vehicle.findUnique({
+      where: { id: part.vehicleId },
+      select: { currentStageId: true },
+    })
+    if (vehicleNow?.currentStageId) {
+      const currentStage = await prisma.vehicleStage.findUnique({
+        where: { id: vehicleNow.currentStageId },
+        select: { id: true, stage: true, status: true, checklist: true },
+      })
+      if (
+        currentStage &&
+        currentStage.stage === 'mechanic' &&
+        currentStage.status !== 'done' &&
+        currentStage.status !== 'skipped'
+      ) {
+        const existing = Array.isArray(currentStage.checklist) ? currentStage.checklist as any[] : []
+        const taskName = `Install: ${part.name}`
+        const alreadyOnList = existing.some(c => typeof c?.item === 'string' && c.item.trim().toLowerCase() === taskName.trim().toLowerCase())
+        if (!alreadyOnList) {
+          await prisma.vehicleStage.update({
+            where: { id: currentStage.id },
+            data: { checklist: [...existing, { item: taskName, done: false, note: '' }] },
+          })
+          await prisma.part.update({
+            where: { id },
+            data: { installTaskCreatedAt: new Date() },
+          })
+        }
+      }
+    }
   }
 
   if (!statusChangeLogged) {

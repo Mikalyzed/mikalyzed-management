@@ -1168,7 +1168,23 @@ export default function VehiclesPage() {
                 return (
                   <button
                     key={opt.v}
-                    onClick={() => setRoutingNext(opt.v)}
+                    onClick={() => {
+                      // Fix/Install tasks are mechanic-only work — strip them when
+                      // routing anywhere else so they don't leak into a detailing /
+                      // content / publish stage as bogus checklist items. Re-add
+                      // them if the user switches back to mechanic.
+                      const fixes = routingVehicle
+                        ? extractIssueFixTasks((routingVehicle.lastCompleted?.checklist || []) as any).map(f => f.item)
+                        : []
+                      const installs = Object.keys(routingInstallMap)
+                      const autoSet = new Set<string>([...fixes, ...installs])
+                      const userTasks = routingTasks.filter(t => !autoSet.has(t))
+                      const next = opt.v === 'mechanic'
+                        ? [...fixes, ...installs, ...userTasks]
+                        : userTasks
+                      setRoutingTasks(next)
+                      setRoutingNext(opt.v)
+                    }}
                     style={{
                       padding: '10px 14px', borderRadius: 10,
                       border: active ? '2px solid #1a1a1a' : '1px solid var(--border)',
