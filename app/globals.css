@@ -1,5 +1,29 @@
 @import 'tailwindcss';
 
+/* ─── Scroll-paused glass-blur ────────────────────────────────────────
+   backdrop-filter is GPU-expensive: it recomposites the content behind
+   every blurred element on every scroll frame. With many glass cards on
+   a page that adds up.
+   While the user is actively scrolling we drop the blur and the saturate
+   filter, then restore them ~140ms after scroll stops. The transition is
+   instant in both directions so the effect is imperceptible — but
+   scrolling stays buttery.
+
+   How it's wired: a small script on the vehicle detail page (and any
+   other heavy page) adds `data-scrolling="1"` to the <html> element on
+   scroll, and clears it on idle. CSS variables `--glass-blur` /
+   `--glass-saturate` change accordingly. Glass components read them via
+   `backdropFilter: 'blur(var(--glass-blur, 20px)) saturate(var(--glass-saturate, 180%))'`.
+*/
+:root {
+  --glass-blur: 20px;
+  --glass-saturate: 180%;
+}
+html[data-scrolling="1"] {
+  --glass-blur: 0px;
+  --glass-saturate: 100%;
+}
+
 /* Nav responsive — desktop sidebar hidden on mobile, mobile elements hidden on desktop */
 .desktop-sidebar { display: none !important; }
 .mobile-topbar { display: flex !important; }

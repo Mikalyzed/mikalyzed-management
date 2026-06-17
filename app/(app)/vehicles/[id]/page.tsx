@@ -391,6 +391,33 @@ export default function VehicleDetailV2() {
       .then((d) => setMedia(d?.media || []))
       .catch(() => {})
 
+  // Scroll-paused backdrop-filter — toggles `data-scrolling="1"` on <html>
+  // while the user scrolls. The CSS in globals.css swaps --glass-blur to 0px
+  // during that time so GlassCard / SubPanel skip the expensive blur pass
+  // on every scroll frame. Restored ~140ms after scroll idle.
+  useEffect(() => {
+    let raf: number | null = null
+    let idleTimer: ReturnType<typeof setTimeout> | null = null
+    function onScroll() {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        document.documentElement.dataset.scrolling = '1'
+        raf = null
+      })
+      if (idleTimer) clearTimeout(idleTimer)
+      idleTimer = setTimeout(() => {
+        delete document.documentElement.dataset.scrolling
+      }, 140)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll, { capture: true })
+      if (raf) cancelAnimationFrame(raf)
+      if (idleTimer) clearTimeout(idleTimer)
+      delete document.documentElement.dataset.scrolling
+    }
+  }, [])
+
   useEffect(() => {
     Promise.all([refreshVehicle(), refreshParts(), refreshActivity(), refreshCostAdds(), refreshMedia()]).finally(() => setLoading(false))
 
@@ -540,7 +567,7 @@ export default function VehicleDetailV2() {
           gridTemplateColumns: '340px 1fr',
           gap: 24,
           padding: 28,
-          background: 'rgba(255, 255, 255, 0.45)',
+          background: 'rgba(255, 255, 255, 0.66)',
           backdropFilter: 'blur(24px) saturate(180%)',
           WebkitBackdropFilter: 'blur(24px) saturate(180%)',
           borderRadius: 28,
@@ -3435,17 +3462,19 @@ function GlassMetric({ label, value, sub, accent }: { label: string; value: stri
 // ─── Glass section primitives ───────────────────────────────────────
 
 function GlassCard({ children, padding = 22 }: { children: React.ReactNode; padding?: number }) {
-  // Perf: backdrop-filter blur was the hottest GPU cost on this page (each
-  // card recomposites the background underneath every scroll/hover frame).
-  // Switched to a near-opaque translucent fill + the same inset highlights;
-  // the glass-ish look comes from the inset shadows + border, not the blur.
-  // `contain: layout style paint` lets the browser skip work for off-screen
-  // cards entirely.
+  // Original glass look restored. Backdrop-filter blur IS expensive (no
+  // way around that — it's how frosted glass works). But we push each card
+  // to its own GPU layer via translateZ(0) + will-change, so the blur is
+  // computed once per card and CACHED as a texture instead of recomputed on
+  // every scroll frame. `contain: paint` isolates the work so off-screen
+  // cards don't paint at all.
   return (
     <div style={{
-      background: 'rgba(255, 255, 255, 0.92)',
+      background: 'rgba(255, 255, 255, 0.55)',
+      backdropFilter: 'blur(var(--glass-blur, 20px)) saturate(var(--glass-saturate, 180%))',
+      WebkitBackdropFilter: 'blur(var(--glass-blur, 20px)) saturate(var(--glass-saturate, 180%))',
       borderRadius: 20,
-      border: '1px solid rgba(255, 255, 255, 0.65)',
+      border: '1px solid rgba(255, 255, 255, 0.5)',
       padding,
       boxShadow: [
         '0 8px 28px -10px rgba(31, 38, 135, 0.12)',
@@ -3453,6 +3482,8 @@ function GlassCard({ children, padding = 22 }: { children: React.ReactNode; padd
         'inset 0 1px 0 rgba(255, 255, 255, 0.75)',
         'inset 0 0 0 0.5px rgba(255, 255, 255, 0.35)',
       ].join(', '),
+      transform: 'translateZ(0)',
+      willChange: 'transform',
       contain: 'layout style paint',
     }}>
       {children}
@@ -3692,20 +3723,22 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 // Subtly tinted glass sub-panel — softer than the parent card so sections cluster
 // visually without needing horizontal rules.
 function SubPanel({ children }: { children: React.ReactNode }) {
-  // Perf: dropped backdrop-filter blur. SubPanel is used many times per page
-  // (Price Info, Cost Info, Mechanical Blueprint, Title Registration, etc.)
-  // so blur cost compounded. Solid translucent fill + contain keeps the look.
+  // Original glass restored with GPU-layer hints. See GlassCard comment.
   return (
     <div style={{
       padding: '16px 18px',
-      background: 'rgba(255, 255, 255, 0.88)',
+      background: 'rgba(255, 255, 255, 0.45)',
+      backdropFilter: 'blur(var(--glass-blur, 20px)) saturate(var(--glass-saturate, 180%))',
+      WebkitBackdropFilter: 'blur(var(--glass-blur, 20px)) saturate(var(--glass-saturate, 180%))',
       borderRadius: 12,
-      border: '1px solid rgba(255, 255, 255, 0.65)',
+      border: '1px solid rgba(255, 255, 255, 0.55)',
       boxShadow: [
         '0 2px 8px -4px rgba(31, 38, 135, 0.06)',
         'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
         'inset 0 0 0 0.5px rgba(255, 255, 255, 0.4)',
       ].join(', '),
+      transform: 'translateZ(0)',
+      willChange: 'transform',
       contain: 'layout style paint',
     }}>
       {children}
@@ -4029,7 +4062,7 @@ function CarfaxCard({ vin }: { vin: string }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         textDecoration: 'none', gap: 16,
         padding: '18px 22px',
-        background: 'rgba(255, 255, 255, 0.55)',
+        background: 'rgba(255, 255, 255, 0.66)',
         borderRadius: 20,
         border: '1px solid rgba(255, 255, 255, 0.5)',
         boxShadow: hovered
@@ -4579,7 +4612,7 @@ function AssetTile({
           zIndex: 3,
           display: 'inline-flex', alignItems: 'center', gap: 4,
           padding: '6px 12px',
-          background: 'rgba(255, 255, 255, 0.88)',
+          background: 'rgba(255, 255, 255, 0.66)',
           border: '1px solid rgba(255, 255, 255, 0.6)',
           color: '#1d1d1f',
           fontSize: 11, fontWeight: 600, letterSpacing: '-0.005em',
@@ -4843,7 +4876,7 @@ function TabNav({ tabs, activeId, onChange }: {
       display: 'flex',
       padding: 4,
       marginBottom: 24,
-      background: 'rgba(255, 255, 255, 0.5)',
+      background: 'rgba(255, 255, 255, 0.66)',
       borderRadius: 999,
       border: '1px solid rgba(255, 255, 255, 0.55)',
       boxShadow: [
@@ -4934,7 +4967,7 @@ function SubTabNav({
       display: 'inline-flex',
       padding: 3,
       marginBottom: 18,
-      background: 'rgba(255, 255, 255, 0.45)',
+      background: 'rgba(255, 255, 255, 0.66)',
       borderRadius: 999,
       border: '1px solid rgba(255, 255, 255, 0.5)',
       boxShadow: [
@@ -5842,7 +5875,7 @@ function PurchaseInfoStudio({
               style={{
                 width: '100%', padding: '10px 14px',
                 borderRadius: 12, border: 'none',
-                background: 'rgba(255, 255, 255, 0.45)',
+                background: 'rgba(255, 255, 255, 0.66)',
                 fontSize: 13, fontWeight: 500, color: '#0a0a0a',
                 outline: 'none', boxSizing: 'border-box',
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7), inset 0 0 0 1px rgba(255,255,255,0.4)',
@@ -5895,7 +5928,7 @@ function PurchaseInfoStudio({
                   style={{
                     padding: '6px 12px', borderRadius: 999,
                     border: '1px solid rgba(0, 113, 227, 0.2)',
-                    background: 'rgba(255, 255, 255, 0.55)',
+                    background: 'rgba(255, 255, 255, 0.66)',
                     color: '#0071e3', fontSize: 11, fontWeight: 700,
                     letterSpacing: '-0.005em',
                     cursor: paymentMaxReached ? 'not-allowed' : 'pointer',
@@ -6034,7 +6067,7 @@ function PaymentTypeCard({
     <div style={{
       padding: 14,
       borderRadius: 14,
-      background: 'rgba(255, 255, 255, 0.42)',
+      background: 'rgba(255, 255, 255, 0.66)',
       border: '1px solid rgba(255, 255, 255, 0.55)',
       boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85), 0 1px 2px rgba(31, 38, 135, 0.04)',
     }}>
@@ -6368,7 +6401,7 @@ function ContactBadge({ name, cell, email, address }: {
       <div style={{
         display: 'inline-flex', alignItems: 'center', gap: 8,
         padding: '6px 12px',
-        background: 'rgba(255, 255, 255, 0.55)',
+        background: 'rgba(255, 255, 255, 0.66)',
         border: '1px solid rgba(255, 255, 255, 0.6)',
         borderRadius: 999,
         boxShadow: [
