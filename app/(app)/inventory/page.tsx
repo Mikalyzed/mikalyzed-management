@@ -498,11 +498,13 @@ function VehicleLedgerRow({
         gap: 22,
         alignItems: 'center',
         padding: '14px 18px',
-        background: hovered ? 'rgba(255, 255, 255, 0.62)' : 'rgba(255, 255, 255, 0.4)',
-        backdropFilter: 'blur(15px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(15px) saturate(180%)',
+        // Perf: dropped backdrop-filter blur — with ~90+ cards on screen the
+        // recomposite cost was the dominant scroll-jank source. Solid
+        // translucent background + the existing inset highlights still read as
+        // glassy. `contain` lets the browser skip off-screen rows entirely.
+        background: hovered ? 'rgba(255, 255, 255, 0.96)' : 'rgba(255, 255, 255, 0.88)',
         borderRadius: 16,
-        border: '1px solid rgba(255, 255, 255, 0.55)',
+        border: '1px solid rgba(255, 255, 255, 0.7)',
         boxShadow: hovered
           ? [
               '0 14px 36px -10px rgba(31, 38, 135, 0.22)',
@@ -521,6 +523,9 @@ function VehicleLedgerRow({
         opacity: resolving ? 0.7 : 1,
         WebkitTapHighlightColor: 'transparent',
         outline: 'none',
+        // Isolate paint + layout so off-screen rows don't trigger work when
+        // the visible area scrolls. Cheap; massive scroll-perf win.
+        contain: 'layout style paint',
       }}
     >
       {/* ─── Hero 16:9 thumbnail ─── */}

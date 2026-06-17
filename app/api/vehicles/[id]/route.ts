@@ -60,6 +60,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     'vehicleInfo',
     // Title & Build Studio (Vehicle Info → Build / Title sub-tab)
     'titleStatus',
+    // Purchase Info sub-tab — acquisition source + structure
+    'mileage', 'purchaseType', 'purchaseSource', 'purchasedFrom', 'purchasedFromVendorId', 'purchasedFromContactId',
     // Phase 2 — flooring
     'floorLender', 'floorPrincipal', 'floorDailyRate', 'floorAdvanceDate', 'floorStatus',
   ]

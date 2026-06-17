@@ -9,6 +9,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const search = searchParams.get('search')
   const source = searchParams.get('source')
+  const contactType = searchParams.get('contactType')
   const limit = parseInt(searchParams.get('limit') || '50')
   const offset = parseInt(searchParams.get('offset') || '0')
 
@@ -22,6 +23,7 @@ export async function GET(request: Request) {
     ]
   }
   if (source) where.source = source
+  if (contactType) where.contactType = contactType
 
   // Sales reps see only contacts with at least one opportunity assigned to them
   if (!canSeeAllLeads(user.role)) {
@@ -49,7 +51,19 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { firstName, lastName, email, phone, secondaryPhone, address, city, state, zip, source, tags, notes } = body
+  const {
+    firstName, lastName, email, phone, secondaryPhone, address, city, state, zip,
+    source, tags, notes, contactType, dateOfBirth,
+    // Identity (DealerCenter Buyer Info)
+    gender, ssn, idType, idState, idNo, idIssuedDate, idExpirationDate,
+    homePhone, workPhone,
+    // Lead pipeline
+    leadType, leadSource, customerStatus, cashDown, salesRepId, isInShowroom,
+    // Employment
+    employerName, employerPhone, employerAddress, employerYears, employerMonthlyIncome,
+    // Referrer
+    referrerName, referrerContactId,
+  } = body
 
   if (!firstName || !lastName) {
     return NextResponse.json({ error: 'First and last name required' }, { status: 400 })
@@ -70,13 +84,68 @@ export async function POST(request: Request) {
     }
   }
 
+  const parseDate = (v: unknown): Date | null => {
+    if (!v || typeof v !== 'string') return null
+    const d = new Date(v)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  const trimStr = (v: unknown): string | null => {
+    if (typeof v !== 'string') return null
+    const t = v.trim()
+    return t.length > 0 ? t : null
+  }
+  const num = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === '') return null
+    const n = typeof v === 'number' ? v : parseFloat(String(v))
+    return Number.isFinite(n) ? n : null
+  }
+  const int = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === '') return null
+    const n = typeof v === 'number' ? v : parseInt(String(v), 10)
+    return Number.isFinite(n) ? Math.trunc(n) : null
+  }
+
   const contact = await prisma.contact.create({
     data: {
-      firstName, lastName, email, phone, secondaryPhone,
-      address, city, state, zip,
+      firstName, lastName,
+      email: trimStr(email) ?? undefined,
+      phone: trimStr(phone) ?? undefined,
+      secondaryPhone: trimStr(secondaryPhone) ?? undefined,
+      address: trimStr(address) ?? undefined,
+      city: trimStr(city) ?? undefined,
+      state: trimStr(state) ?? undefined,
+      zip: trimStr(zip) ?? undefined,
       source: source || 'other',
       tags: tags || [],
-      notes,
+      notes: trimStr(notes) ?? undefined,
+      contactType: typeof contactType === 'string' && contactType ? contactType : undefined,
+      dateOfBirth: parseDate(dateOfBirth) ?? undefined,
+      // Identity
+      gender: trimStr(gender) ?? undefined,
+      ssn: trimStr(ssn) ?? undefined,
+      idType: trimStr(idType) ?? undefined,
+      idState: trimStr(idState) ?? undefined,
+      idNo: trimStr(idNo) ?? undefined,
+      idIssuedDate: parseDate(idIssuedDate) ?? undefined,
+      idExpirationDate: parseDate(idExpirationDate) ?? undefined,
+      homePhone: trimStr(homePhone) ?? undefined,
+      workPhone: trimStr(workPhone) ?? undefined,
+      // Lead pipeline
+      leadType: trimStr(leadType) ?? undefined,
+      leadSource: trimStr(leadSource) ?? undefined,
+      customerStatus: trimStr(customerStatus) ?? undefined,
+      cashDown: num(cashDown) ?? undefined,
+      salesRepId: trimStr(salesRepId) ?? undefined,
+      isInShowroom: typeof isInShowroom === 'boolean' ? isInShowroom : undefined,
+      // Employment
+      employerName: trimStr(employerName) ?? undefined,
+      employerPhone: trimStr(employerPhone) ?? undefined,
+      employerAddress: trimStr(employerAddress) ?? undefined,
+      employerYears: int(employerYears) ?? undefined,
+      employerMonthlyIncome: num(employerMonthlyIncome) ?? undefined,
+      // Referrer
+      referrerName: trimStr(referrerName) ?? undefined,
+      referrerContactId: trimStr(referrerContactId) ?? undefined,
       createdById: user.id,
     },
   })

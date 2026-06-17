@@ -56,6 +56,7 @@ type Vehicle = {
   askingPrice: number | null
   vehicleCost: number | null
   purchaseType: string | null
+  purchaseSource: string | null
   purchasedFrom: string | null
   titleStatus: string | null
   dateInStock: string | null
@@ -2479,6 +2480,569 @@ function PartnerField({
   )
 }
 
+// ─── Customer dropdown option lists ─────────────────────────────────
+// Fixed lists v1; could become admin-managed tables later (same pattern as
+// cost_add_descriptions / cost_add_categories) if the dealership wants to
+// extend them per market segment.
+const GENDER_OPTIONS = [
+  { value: 'male',          label: 'Male' },
+  { value: 'female',        label: 'Female' },
+  { value: 'other',         label: 'Other' },
+  { value: 'prefer_not',    label: 'Prefer not to say' },
+]
+
+const ID_TYPE_OPTIONS = [
+  { value: 'drivers_license', label: 'Driver License' },
+  { value: 'state_id',        label: 'State ID' },
+  { value: 'passport',        label: 'Passport' },
+  { value: 'military_id',     label: 'Military ID' },
+  { value: 'permanent_resident_card', label: 'Permanent Resident Card' },
+  { value: 'other',           label: 'Other' },
+]
+
+const LEAD_TYPE_OPTIONS = [
+  { value: 'walk_in',   label: 'Walk-in' },
+  { value: 'internet',  label: 'Internet' },
+  { value: 'phone',     label: 'Phone' },
+  { value: 'referral',  label: 'Referral' },
+  { value: 'trade_in',  label: 'Trade-In' },
+  { value: 'repeat',    label: 'Repeat' },
+  { value: 'other',     label: 'Other' },
+]
+
+const LEAD_SOURCE_OPTIONS = [
+  { value: 'website',       label: 'Website' },
+  { value: 'facebook',      label: 'Facebook' },
+  { value: 'instagram',     label: 'Instagram' },
+  { value: 'google',        label: 'Google' },
+  { value: 'craigslist',    label: 'Craigslist' },
+  { value: 'newspaper',     label: 'Newspaper' },
+  { value: 'radio',         label: 'Radio' },
+  { value: 'tv',            label: 'TV' },
+  { value: 'word_of_mouth', label: 'Word of Mouth' },
+  { value: 'repeat',        label: 'Repeat Customer' },
+  { value: 'trade_in',      label: 'Trade-In' },
+  { value: 'other',         label: 'Other' },
+]
+
+const CUSTOMER_STATUS_OPTIONS = [
+  { value: 'new',         label: 'New' },
+  { value: 'contacted',   label: 'Contacted' },
+  { value: 'hot',         label: 'Hot' },
+  { value: 'warm',        label: 'Warm' },
+  { value: 'cold',        label: 'Cold' },
+  { value: 'negotiating', label: 'Negotiating' },
+  { value: 'sold',        label: 'Sold' },
+  { value: 'lost',        label: 'Lost' },
+  { value: 'inactive',    label: 'Inactive' },
+]
+
+// Subset of Contact returned from /api/contacts for the picker dropdown.
+type ContactSummary = {
+  id: string
+  firstName: string
+  lastName: string
+  email: string | null
+  phone: string | null
+}
+
+// ─── Customer Picker ────────────────────────────────────────────────
+// Mirror of VendorPicker but searches the Contact table filtered to
+// contactType='customer'. "+ Add new customer" opens AddCustomerModal which
+// captures the full DealerCenter-equivalent Buyer Info on save.
+function CustomerPicker({
+  value, onChange, onPickContact, onRequestAddNew,
+}: {
+  value: string
+  onChange: (text: string) => void
+  onPickContact: (contact: { id: string; firstName: string; lastName: string }) => void
+  onRequestAddNew: (typedName: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [results, setResults] = useState<ContactSummary[]>([])
+  const [loading, setLoading] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const lastQueryRef = useRef('')
+
+  useEffect(() => {
+    if (!open) return
+    function handleDown(e: MouseEvent) {
+      if (!wrapperRef.current) return
+      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleDown)
+    return () => document.removeEventListener('mousedown', handleDown)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    lastQueryRef.current = value
+    const t = setTimeout(async () => {
+      if (lastQueryRef.current !== value) return
+      setLoading(true)
+      try {
+        const params = new URLSearchParams({ contactType: 'customer', limit: '25' })
+        if (value.trim()) params.set('search', value.trim())
+        const r = await fetch(`/api/contacts?${params}`)
+        const d = await r.json()
+        setResults(Array.isArray(d?.contacts) ? d.contacts : [])
+      } catch {
+        setResults([])
+      } finally {
+        setLoading(false)
+      }
+    }, 200)
+    return () => clearTimeout(t)
+  }, [value, open])
+
+  const trimmed = value.trim()
+  const exactMatch = results.some(c => `${c.firstName} ${c.lastName}`.toLowerCase() === trimmed.toLowerCase())
+  const canAddNew = trimmed.length > 0 && !exactMatch
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setOpen(true)}
+          placeholder="Customer"
+          style={{ ...cellInputStyle, paddingRight: 26 }}
+        />
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          aria-label="Open customer list"
+          style={{
+            position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '4px 6px', minHeight: 'auto',
+            color: 'rgba(0,0,0,0.45)', fontSize: 10, lineHeight: 1,
+          }}
+        >▾</button>
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+          background: '#fff', borderRadius: 8,
+          border: '1px solid rgba(0,0,0,0.1)',
+          boxShadow: '0 12px 28px rgba(0,0,0,0.12)',
+          zIndex: 50,
+          maxHeight: 280, overflowY: 'auto',
+          fontSize: 13, minWidth: 240,
+        }}>
+          {loading && results.length === 0 && (
+            <div style={{ padding: '10px 12px', color: 'rgba(0,0,0,0.45)' }}>Searching…</div>
+          )}
+          {!loading && results.length === 0 && !canAddNew && (
+            <div style={{ padding: '10px 12px', color: 'rgba(0,0,0,0.45)' }}>
+              {trimmed ? `No customer matching "${trimmed}"` : 'No customers yet'}
+            </div>
+          )}
+          {results.map(c => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => { onPickContact({ id: c.id, firstName: c.firstName, lastName: c.lastName }); setOpen(false) }}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                gap: 2, width: '100%', textAlign: 'left',
+                padding: '8px 12px', background: 'none', border: 'none',
+                cursor: 'pointer', color: '#1d1d1f', minHeight: 'auto',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,113,227,0.06)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <span style={{ fontWeight: 600 }}>{c.firstName} {c.lastName}</span>
+              {(c.phone || c.email) && (
+                <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)' }}>
+                  {[c.phone, c.email].filter(Boolean).join(' · ')}
+                </span>
+              )}
+            </button>
+          ))}
+          {canAddNew && (
+            <button
+              type="button"
+              onClick={() => { onRequestAddNew(trimmed); setOpen(false) }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                width: '100%', textAlign: 'left',
+                padding: '10px 12px', background: 'rgba(0,113,227,0.06)',
+                border: 'none', borderTop: results.length > 0 ? '1px solid rgba(0,0,0,0.06)' : 'none',
+                cursor: 'pointer', color: '#0071e3', fontWeight: 600, fontSize: 12,
+                minHeight: 'auto',
+              }}
+            >+ Add new customer "{trimmed}"</button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Add Customer Modal ─────────────────────────────────────────────
+// Mirrors the DealerCenter "Add New Customer" surface: Buyer Info as the
+// primary section, with collapsible Employment + Referrer sub-sections, and
+// stub buttons for Interested Vehicle / Customer Wishlist / Campaign which
+// tie into the future sales-pipeline + campaigns work.
+function AddCustomerModal({
+  initialFirstName, initialLastName, onClose, onSaved,
+}: {
+  initialFirstName: string
+  initialLastName: string
+  onClose: () => void
+  onSaved: (contact: { id: string; firstName: string; lastName: string }) => void
+}) {
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  // Buyer Info
+  const [firstName, setFirstName] = useState(initialFirstName)
+  const [lastName, setLastName] = useState(initialLastName)
+  const [gender, setGender] = useState('')
+  const [ssn, setSsn] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
+  const [idType, setIdType] = useState('')
+  const [idState, setIdState] = useState('')
+  const [idNo, setIdNo] = useState('')
+  const [idIssuedDate, setIdIssuedDate] = useState('')
+  const [idExpirationDate, setIdExpirationDate] = useState('')
+  const [phone, setPhone] = useState('')
+  const [homePhone, setHomePhone] = useState('')
+  const [workPhone, setWorkPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [leadType, setLeadType] = useState('')
+  const [customerStatus, setCustomerStatus] = useState('')
+  const [leadSource, setLeadSource] = useState('')
+  const [address, setAddress] = useState('')
+  const [cashDown, setCashDown] = useState('')
+  const [salesRepId, setSalesRepId] = useState('')
+  const [isInShowroom, setIsInShowroom] = useState(false)
+
+  // Collapsible sections
+  const [showEmployment, setShowEmployment] = useState(false)
+  const [showReferrer, setShowReferrer] = useState(false)
+  // Employment
+  const [employerName, setEmployerName] = useState('')
+  const [employerPhone, setEmployerPhone] = useState('')
+  const [employerAddress, setEmployerAddress] = useState('')
+  const [employerYears, setEmployerYears] = useState('')
+  const [employerMonthlyIncome, setEmployerMonthlyIncome] = useState('')
+  // Referrer
+  const [referrerName, setReferrerName] = useState('')
+
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  async function save() {
+    setErr(null)
+    if (!firstName.trim() || !lastName.trim()) {
+      setErr('First and Last Name are required')
+      return
+    }
+    setSaving(true)
+    try {
+      const r = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          contactType: 'customer',
+          gender, ssn, dateOfBirth: dateOfBirth || null,
+          idType, idState, idNo,
+          idIssuedDate: idIssuedDate || null,
+          idExpirationDate: idExpirationDate || null,
+          phone, homePhone, workPhone, email,
+          leadType, leadSource, customerStatus,
+          address, cashDown,
+          salesRepId, isInShowroom,
+          employerName, employerPhone, employerAddress,
+          employerYears, employerMonthlyIncome,
+          referrerName,
+        }),
+      })
+      if (!r.ok) {
+        const txt = await r.text()
+        setErr(`Save failed (${r.status}): ${txt.slice(0, 160)}`)
+        setSaving(false)
+        return
+      }
+      const data = await r.json()
+      if (!data?.id) {
+        setErr('Save returned no contact id')
+        setSaving(false)
+        return
+      }
+      onSaved({ id: data.id, firstName: data.firstName, lastName: data.lastName })
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 110,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 14, width: 'min(92vw, 1280px)',
+          maxHeight: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column',
+          boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
+          transform: 'translateZ(0)', contain: 'layout style',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '16px 24px', borderBottom: '1px solid rgba(0,0,0,0.06)',
+        }}>
+          <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>Add New Customer</h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: 'none', fontSize: 24, cursor: 'pointer',
+              color: 'rgba(0,0,0,0.4)', minHeight: 'auto', padding: 0, lineHeight: 1,
+            }}
+          >×</button>
+        </div>
+
+        {/* Save-and-close banner (matches DealerCenter — a quick-action area
+            anchored to the top of the form for power users who fill out only
+            the required fields and dismiss). */}
+        <div style={{
+          display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
+          padding: '10px 24px',
+          background: 'rgba(0, 113, 227, 0.04)',
+          borderBottom: '1px solid rgba(0, 113, 227, 0.08)',
+        }}>
+          <button
+            onClick={save}
+            disabled={saving || !firstName.trim() || !lastName.trim()}
+            style={{
+              padding: '7px 14px', borderRadius: 8,
+              border: '1px solid rgba(0, 113, 227, 0.4)', background: 'transparent',
+              color: '#0071e3', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              minHeight: 'auto',
+              opacity: (saving || !firstName.trim() || !lastName.trim()) ? 0.5 : 1,
+            }}
+          >Save and Close</button>
+        </div>
+
+        {/* Body */}
+        <div style={{
+          flex: 1, overflowY: 'auto', padding: '20px 24px',
+          overscrollBehavior: 'contain',
+        }}>
+          {/* ── Buyer Info ── */}
+          <PartnerSectionLabel>Buyer Info</PartnerSectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <PartnerField label="First Name" value={firstName} onChange={setFirstName} required />
+            <PartnerField label="Last Name" value={lastName} onChange={setLastName} required />
+            <PartnerFieldSelect label="Gender" value={gender} onChange={setGender} options={GENDER_OPTIONS} />
+            <PartnerField label="SSN" value={ssn} onChange={setSsn} placeholder="___-__-____" />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <PartnerFieldDate label="Date of Birth" value={dateOfBirth} onChange={setDateOfBirth} />
+            <PartnerFieldSelect label="ID Type" value={idType} onChange={setIdType} options={ID_TYPE_OPTIONS} />
+            <PartnerField label="ID State" value={idState} onChange={setIdState} placeholder="FL" />
+            <PartnerField label="ID No." value={idNo} onChange={setIdNo} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <PartnerFieldDate label="Issued Date" value={idIssuedDate} onChange={setIdIssuedDate} />
+            <PartnerFieldDate label="Expiration Date" value={idExpirationDate} onChange={setIdExpirationDate} />
+            <PartnerField label="Cell Phone" value={phone} onChange={setPhone} placeholder="(___) ___-____" />
+            <PartnerField label="Home Phone" value={homePhone} onChange={setHomePhone} placeholder="(___) ___-____" />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <PartnerField label="Work Phone" value={workPhone} onChange={setWorkPhone} placeholder="(___) ___-____" />
+            <PartnerField label="Email" value={email} onChange={setEmail} placeholder="name@example.com" />
+            <PartnerFieldSelect label="Lead Type" value={leadType} onChange={setLeadType} options={LEAD_TYPE_OPTIONS} />
+            <PartnerFieldSelect label="Customer Status" value={customerStatus} onChange={setCustomerStatus} options={CUSTOMER_STATUS_OPTIONS} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <PartnerField label="Current Address" value={address} onChange={setAddress} placeholder="Street, City, State, ZIP" />
+            <PartnerField label="Cash Down" value={cashDown} onChange={setCashDown} placeholder="$0.00" />
+            <PartnerFieldSelect label="Lead Source" value={leadSource} onChange={setLeadSource} options={LEAD_SOURCE_OPTIONS} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 14 }}>
+            <PartnerField label="Sales Rep" value={salesRepId} onChange={setSalesRepId} placeholder="user id or name (lookup wires when sales rep picker lands)" />
+          </div>
+          <label style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            fontSize: 13, fontWeight: 500, color: '#1d1d1f',
+            marginBottom: 24, cursor: 'pointer',
+          }}>
+            <input
+              type="checkbox"
+              checked={isInShowroom}
+              onChange={(e) => setIsInShowroom(e.target.checked)}
+              style={{ accentColor: '#0071e3' }}
+            />
+            Is in Showroom (Check-In after Prospect is created)
+          </label>
+
+          {/* ── Interested Vehicle ── stub */}
+          <CollapsibleStub label="Interested Vehicle" />
+
+          {/* ── Employment ── */}
+          <CollapsibleSection
+            label="+ Employment"
+            open={showEmployment}
+            onToggle={() => setShowEmployment(s => !s)}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <PartnerField label="Employer Name" value={employerName} onChange={setEmployerName} />
+              <PartnerField label="Employer Phone" value={employerPhone} onChange={setEmployerPhone} placeholder="(___) ___-____" />
+            </div>
+            <PartnerField label="Employer Address" value={employerAddress} onChange={setEmployerAddress} placeholder="Street, City, State, ZIP" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <PartnerField label="Years at Employer" value={employerYears} onChange={setEmployerYears} placeholder="0" />
+              <PartnerField label="Monthly Income" value={employerMonthlyIncome} onChange={setEmployerMonthlyIncome} placeholder="$0.00" />
+            </div>
+          </CollapsibleSection>
+
+          {/* ── Referrer ── */}
+          <CollapsibleSection
+            label="+ Referrer"
+            open={showReferrer}
+            onToggle={() => setShowReferrer(s => !s)}
+          >
+            <PartnerField label="Referrer Name" value={referrerName} onChange={setReferrerName} placeholder="Who referred this customer" />
+          </CollapsibleSection>
+
+          {/* ── Customer Wishlist & Campaign — stubs ── */}
+          <CollapsibleStub label="+ Customer Wishlist" />
+          <CollapsibleStub label="+ Associate with a Campaign" />
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 24px', borderTop: '1px solid rgba(0,0,0,0.06)',
+          background: 'rgba(0,0,0,0.02)', gap: 12,
+        }}>
+          <p style={{ fontSize: 12, color: err ? '#dc2626' : 'rgba(0,0,0,0.5)' }}>
+            {err ?? 'Customer record will be tagged contactType="customer"'}
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} disabled={saving} style={v2Btn('ghost')}>Cancel</button>
+            <button onClick={save} disabled={saving || !firstName.trim() || !lastName.trim()} style={v2Btn('primary')}>
+              {saving ? 'Saving…' : 'Save Customer'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PartnerFieldSelect({
+  label, value, onChange, options,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  options: { value: string; label: string }[]
+}) {
+  return (
+    <label style={{ display: 'block' }}>
+      <span style={{
+        display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(0,0,0,0.6)',
+        marginBottom: 4, letterSpacing: '-0.005em',
+      }}>{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: '100%', padding: '8px 10px',
+          border: '1px solid rgba(0,0,0,0.14)', borderRadius: 8,
+          fontSize: 13, color: '#1d1d1f', background: '#fff',
+          minHeight: 'auto', boxSizing: 'border-box',
+        }}
+      >
+        <option value="">—</option>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </label>
+  )
+}
+
+function PartnerFieldDate({
+  label, value, onChange,
+}: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label style={{ display: 'block' }}>
+      <span style={{
+        display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(0,0,0,0.6)',
+        marginBottom: 4, letterSpacing: '-0.005em',
+      }}>{label}</span>
+      <input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          width: '100%', padding: '8px 10px',
+          border: '1px solid rgba(0,0,0,0.14)', borderRadius: 8,
+          fontSize: 13, color: '#1d1d1f', background: '#fff',
+          minHeight: 'auto', boxSizing: 'border-box',
+        }}
+      />
+    </label>
+  )
+}
+
+function CollapsibleSection({
+  label, open, onToggle, children,
+}: { label: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          background: 'none', border: '1px solid rgba(0,0,0,0.14)',
+          borderRadius: 8, padding: '8px 14px',
+          fontSize: 13, fontWeight: 600, color: '#1d1d1f',
+          cursor: 'pointer', minHeight: 'auto',
+        }}
+      >{label}{open ? ' ▾' : ''}</button>
+      {open && (
+        <div style={{ marginTop: 12, padding: '14px 0' }}>{children}</div>
+      )}
+    </div>
+  )
+}
+
+function CollapsibleStub({ label }: { label: string }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <button
+        type="button"
+        disabled
+        title="Coming with sales pipeline"
+        style={{
+          background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.10)',
+          borderRadius: 8, padding: '8px 14px',
+          fontSize: 13, fontWeight: 600, color: 'rgba(0,0,0,0.4)',
+          cursor: 'not-allowed', minHeight: 'auto',
+        }}
+      >{label} <span style={{ fontSize: 11, opacity: 0.7 }}>· coming with sales pipeline</span></button>
+    </div>
+  )
+}
+
 function AddCostModal({ vehicleId, onClose, onSaved }: { vehicleId: string; onClose: () => void; onSaved: () => void }) {
   const [kind, setKind] = useState<string>('recon')
   const [amount, setAmount] = useState('')
@@ -2782,8 +3346,6 @@ function PillButton({
           boxShadow: hovered
             ? '0 4px 12px -4px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.6), inset 0 0 0 1px rgba(255,255,255,0.4)'
             : '0 1px 3px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,0.6), inset 0 0 0 1px rgba(255,255,255,0.4)',
-          backdropFilter: 'blur(12px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(12px) saturate(180%)',
         }
 
   return (
@@ -2820,8 +3382,6 @@ function SatinCapsule({
       fontFamily: mono ? 'ui-monospace, SFMono-Regular, monospace' : undefined,
       background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.55) 100%)',
       borderRadius: 999,
-      backdropFilter: 'blur(14px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(14px) saturate(180%)',
       border: '1px solid rgba(255, 255, 255, 0.5)',
       boxShadow: [
         '0 2px 6px -2px rgba(0, 0, 0, 0.08)',
@@ -2849,8 +3409,6 @@ function GlassMetric({ label, value, sub, accent }: { label: string; value: stri
     <div style={{
       padding: '14px 16px',
       background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.4) 100%)',
-      backdropFilter: 'blur(20px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
       borderRadius: 16,
       border: '1px solid rgba(255, 255, 255, 0.5)',
       boxShadow: [
@@ -2877,13 +3435,17 @@ function GlassMetric({ label, value, sub, accent }: { label: string; value: stri
 // ─── Glass section primitives ───────────────────────────────────────
 
 function GlassCard({ children, padding = 22 }: { children: React.ReactNode; padding?: number }) {
+  // Perf: backdrop-filter blur was the hottest GPU cost on this page (each
+  // card recomposites the background underneath every scroll/hover frame).
+  // Switched to a near-opaque translucent fill + the same inset highlights;
+  // the glass-ish look comes from the inset shadows + border, not the blur.
+  // `contain: layout style paint` lets the browser skip work for off-screen
+  // cards entirely.
   return (
     <div style={{
-      background: 'rgba(255, 255, 255, 0.55)',
-      backdropFilter: 'blur(20px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      background: 'rgba(255, 255, 255, 0.92)',
       borderRadius: 20,
-      border: '1px solid rgba(255, 255, 255, 0.5)',
+      border: '1px solid rgba(255, 255, 255, 0.65)',
       padding,
       boxShadow: [
         '0 8px 28px -10px rgba(31, 38, 135, 0.12)',
@@ -2891,6 +3453,7 @@ function GlassCard({ children, padding = 22 }: { children: React.ReactNode; padd
         'inset 0 1px 0 rgba(255, 255, 255, 0.75)',
         'inset 0 0 0 0.5px rgba(255, 255, 255, 0.35)',
       ].join(', '),
+      contain: 'layout style paint',
     }}>
       {children}
     </div>
@@ -3129,19 +3692,21 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 // Subtly tinted glass sub-panel — softer than the parent card so sections cluster
 // visually without needing horizontal rules.
 function SubPanel({ children }: { children: React.ReactNode }) {
+  // Perf: dropped backdrop-filter blur. SubPanel is used many times per page
+  // (Price Info, Cost Info, Mechanical Blueprint, Title Registration, etc.)
+  // so blur cost compounded. Solid translucent fill + contain keeps the look.
   return (
     <div style={{
       padding: '16px 18px',
-      background: 'rgba(255, 255, 255, 0.45)',
-      backdropFilter: 'blur(20px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+      background: 'rgba(255, 255, 255, 0.88)',
       borderRadius: 12,
-      border: '1px solid rgba(255, 255, 255, 0.55)',
+      border: '1px solid rgba(255, 255, 255, 0.65)',
       boxShadow: [
         '0 2px 8px -4px rgba(31, 38, 135, 0.06)',
         'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
         'inset 0 0 0 0.5px rgba(255, 255, 255, 0.4)',
       ].join(', '),
+      contain: 'layout style paint',
     }}>
       {children}
     </div>
@@ -3465,8 +4030,6 @@ function CarfaxCard({ vin }: { vin: string }) {
         textDecoration: 'none', gap: 16,
         padding: '18px 22px',
         background: 'rgba(255, 255, 255, 0.55)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
         borderRadius: 20,
         border: '1px solid rgba(255, 255, 255, 0.5)',
         boxShadow: hovered
@@ -3893,8 +4456,6 @@ function AssetTile({
         borderRadius: 12,
         overflow: 'hidden',
         background: hero && category.variant !== 'doc' ? '#1d1d1f' : 'rgba(255, 255, 255, 0.5)',
-        backdropFilter: hero && category.variant !== 'doc' ? undefined : 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: hero && category.variant !== 'doc' ? undefined : 'blur(20px) saturate(180%)',
         border: '1px solid rgba(255, 255, 255, 0.55)',
         boxShadow: hovered
           ? [
@@ -3971,8 +4532,6 @@ function AssetTile({
           zIndex: 2,
           padding: '4px 10px', borderRadius: 999,
           background: 'rgba(0, 0, 0, 0.55)',
-          backdropFilter: 'blur(14px)',
-          WebkitBackdropFilter: 'blur(14px)',
           color: '#fff',
           fontSize: 11, fontWeight: 700, letterSpacing: '-0.005em',
           boxShadow: '0 2px 8px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.15)',
@@ -4001,7 +4560,6 @@ function AssetTile({
             right: items.length > 1 ? 60 : 10,
             zIndex: 4,
             background: 'rgba(0,0,0,0.55)',
-            backdropFilter: 'blur(8px)',
             border: 'none', color: '#fff',
             fontSize: 13, lineHeight: 1,
             width: 26, height: 26, borderRadius: '50%',
@@ -4022,8 +4580,6 @@ function AssetTile({
           display: 'inline-flex', alignItems: 'center', gap: 4,
           padding: '6px 12px',
           background: 'rgba(255, 255, 255, 0.88)',
-          backdropFilter: 'blur(14px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(14px) saturate(180%)',
           border: '1px solid rgba(255, 255, 255, 0.6)',
           color: '#1d1d1f',
           fontSize: 11, fontWeight: 600, letterSpacing: '-0.005em',
@@ -4166,8 +4722,6 @@ function SyndicationRow({
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: 16, padding: '14px 18px',
         background: hovered ? 'rgba(255, 255, 255, 0.68)' : 'rgba(255, 255, 255, 0.45)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
         borderRadius: 14,
         border: '1px solid rgba(255, 255, 255, 0.55)',
         boxShadow: [
@@ -4290,8 +4844,6 @@ function TabNav({ tabs, activeId, onChange }: {
       padding: 4,
       marginBottom: 24,
       background: 'rgba(255, 255, 255, 0.5)',
-      backdropFilter: 'blur(20px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
       borderRadius: 999,
       border: '1px solid rgba(255, 255, 255, 0.55)',
       boxShadow: [
@@ -4307,8 +4859,6 @@ function TabNav({ tabs, activeId, onChange }: {
         width: `calc((100% - 8px) / ${tabs.length})`,
         transform: `translateX(${activeIdx * 100}%)`,
         background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.72) 100%)',
-        backdropFilter: 'blur(14px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(14px) saturate(180%)',
         borderRadius: 999,
         border: '1px solid rgba(255, 255, 255, 0.6)',
         boxShadow: [
@@ -4385,8 +4935,6 @@ function SubTabNav({
       padding: 3,
       marginBottom: 18,
       background: 'rgba(255, 255, 255, 0.45)',
-      backdropFilter: 'blur(16px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(16px) saturate(180%)',
       borderRadius: 999,
       border: '1px solid rgba(255, 255, 255, 0.5)',
       boxShadow: [
@@ -4538,7 +5086,6 @@ function DescriptionEditor({
               style={{
                 padding: '6px 14px', borderRadius: 999,
                 background: 'rgba(255,255,255,0.5)',
-                backdropFilter: 'blur(10px) saturate(180%)',
                 border: '1px solid rgba(255,255,255,0.6)',
                 color: 'rgba(0,0,0,0.7)',
                 fontSize: 11, fontWeight: 600, letterSpacing: '-0.005em',
@@ -4598,8 +5145,6 @@ function DescriptionEditor({
           width: '100%',
           padding: '16px 18px',
           background: 'rgba(255, 255, 255, 0.4)',
-          backdropFilter: 'blur(14px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(14px) saturate(180%)',
           border: '1px solid rgba(255, 255, 255, 0.55)',
           borderRadius: 14,
           fontSize: 15, lineHeight: 1.7,
@@ -4977,6 +5522,14 @@ function PurchaseInfoStudio({
   const [acquiredMileageStatus, setAcquiredMileageStatus] = useState('')
   const [readyToSell, setReadyToSell] = useState('')
   const [purchaseDetail, setPurchaseDetail] = useState('')
+  // Source section — pick whether the vehicle came from a business (Vendor →
+  // Partner table) or an individual (Customer → Contact table, not yet wired).
+  // Default to vendor since the picker on that side is already functional.
+  const [sourceType, setSourceType] = useState<'vendor' | 'customer'>('vendor')
+  const [addSourcePartnerName, setAddSourcePartnerName] = useState<string | null>(null)
+  // Customer-side picker state — when populated, AddCustomerModal opens with
+  // first / last pre-filled from whatever was typed into the CustomerPicker.
+  const [addSourceCustomerName, setAddSourceCustomerName] = useState<{ first: string; last: string } | null>(null)
 
   // Card 2 — How Did You Pay
   // One payment type per vehicle — either Consignment or Flooring.  Each
@@ -5124,53 +5677,129 @@ function PurchaseInfoStudio({
               </div>
             </div>
 
-            {/* RIGHT — Buyer & Source.  Contact details ride the same chip
-                pattern as the rest of the studio for visual consistency. */}
+            {/* RIGHT — Source: who the dealership got the vehicle from.
+                Sub-type toggle picks Vendor (business → Partner table) vs
+                Customer (individual → Contact table, future). Vendor picker
+                is already wired through the Partner system shipped with the
+                Cost Adds Vendor cell; "Add new" layers AddPartnerModal here
+                too, so the same flow works in both surfaces. */}
             <div>
-              <SectionLabel>Buyer &amp; Source</SectionLabel>
-              <ContactBadge name="Yoan Perez Gutierrez" />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
-                <AnchorRow
-                  label="Cell"
-                  value="(305) 555-0142"
-                  onChange={() => { /* placeholder until contact picker is wired */ }}
-                  placeholder="—"
-                />
-                <AnchorRow
-                  label="Email"
-                  value="yoan.perez@example.com"
-                  onChange={() => { /* placeholder until contact picker is wired */ }}
-                  placeholder="—"
-                />
-                <AnchorRow
-                  label="Address"
-                  value="1234 Coral Way, Miami FL 33145"
-                  onChange={() => { /* placeholder until contact picker is wired */ }}
+              {/* Acquisition channel — distinct from purchaseType (the legal/
+                  financial structure). Source captures HOW/WHERE the dealership
+                  got the vehicle so reports can slice by channel. */}
+              <div style={{ marginBottom: 10 }}>
+                <AnchorRowSelect
+                  label="Source"
+                  value={vehicle.purchaseSource ?? ''}
+                  onChange={(v) => onSavePartial({ purchaseSource: v || null })}
+                  options={[
+                    { value: 'auction',       label: 'Auction' },
+                    { value: 'consignment',   label: 'Consignment' },
+                    { value: 'private_party', label: 'Private Party' },
+                    { value: 'referral',      label: 'Referral' },
+                    { value: 'repeat',        label: 'Repeat' },
+                    { value: 'repo',          label: 'Repo' },
+                    { value: 'trade_in',      label: 'Trade-In' },
+                    { value: 'wholesale',     label: 'Wholesale' },
+                    { value: 'other',         label: 'Other' },
+                  ]}
                   placeholder="—"
                 />
               </div>
-              <div style={{ marginTop: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => { /* placeholder for contact selector */ }}
-                  style={{
-                    width: '100%',
-                    padding: '9px 12px',
-                    borderRadius: 12,
-                    border: '1px dashed rgba(0, 0, 0, 0.14)',
-                    background: 'rgba(255, 255, 255, 0.32)',
-                    backdropFilter: 'blur(10px) saturate(180%)',
-                    WebkitBackdropFilter: 'blur(10px) saturate(180%)',
-                    fontSize: 12, fontWeight: 600, color: 'rgba(0, 0, 0, 0.55)',
-                    cursor: 'pointer',
-                    transition: 'background 160ms ease',
+
+              {/* Type pill toggle (Vendor / Customer) */}
+              <div style={{
+                display: 'inline-flex', padding: 3, gap: 2,
+                background: 'rgba(0,0,0,0.05)', borderRadius: 999,
+                marginBottom: 12,
+              }}>
+                {(['vendor', 'customer'] as const).map((t) => {
+                  const active = sourceType === t
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setSourceType(t)}
+                      style={{
+                        padding: '5px 14px', borderRadius: 999, border: 'none',
+                        background: active ? '#fff' : 'transparent',
+                        boxShadow: active ? '0 1px 2px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)' : 'none',
+                        color: active ? '#1d1d1f' : 'rgba(0,0,0,0.5)',
+                        fontSize: 12, fontWeight: 600, letterSpacing: '-0.005em',
+                        cursor: 'pointer', minHeight: 'auto',
+                        textTransform: 'capitalize',
+                        transition: 'background 180ms ease, color 180ms ease',
+                      }}
+                    >{t}</button>
+                  )
+                })}
+              </div>
+
+              {sourceType === 'vendor' && (
+                <VendorPicker
+                  value={vehicle.purchasedFrom ?? ''}
+                  isAdmin={isAdmin}
+                  onChange={() => { /* free-typing here doesn't commit; the user must pick or add */ }}
+                  onPickPartner={(p) => {
+                    void onSavePartial({ purchasedFrom: p.companyName, purchasedFromVendorId: p.id })
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.5)' }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.32)' }}
-                >
-                  Change contact…
-                </button>
-              </div>
+                  onRequestAddNew={(typedName) => setAddSourcePartnerName(typedName)}
+                />
+              )}
+
+              {sourceType === 'customer' && (
+                <CustomerPicker
+                  value={vehicle.purchasedFrom ?? ''}
+                  onChange={() => { /* typing alone doesn't commit; user picks or adds new */ }}
+                  onPickContact={(c) => {
+                    const displayName = `${c.firstName} ${c.lastName}`.trim()
+                    void onSavePartial({
+                      purchasedFrom: displayName,
+                      purchasedFromContactId: c.id,
+                      purchasedFromVendorId: null,
+                    })
+                  }}
+                  onRequestAddNew={(typedName) => {
+                    // Split typed text into first / last on the first space so
+                    // the modal pre-fills both fields when possible.
+                    const parts = typedName.trim().split(/\s+/)
+                    const first = parts[0] ?? ''
+                    const last = parts.slice(1).join(' ')
+                    setAddSourceCustomerName({ first, last })
+                  }}
+                />
+              )}
+
+              {/* AddPartnerModal layered for the Source vendor picker */}
+              {isAdmin && addSourcePartnerName !== null && (
+                <AddPartnerModal
+                  initialCompanyName={addSourcePartnerName}
+                  initialCategories={['vendor']}
+                  onClose={() => setAddSourcePartnerName(null)}
+                  onSaved={(partner) => {
+                    void onSavePartial({ purchasedFrom: partner.companyName, purchasedFromVendorId: partner.id })
+                    setAddSourcePartnerName(null)
+                  }}
+                />
+              )}
+
+              {/* AddCustomerModal layered for the Source customer picker */}
+              {addSourceCustomerName !== null && (
+                <AddCustomerModal
+                  initialFirstName={addSourceCustomerName.first}
+                  initialLastName={addSourceCustomerName.last}
+                  onClose={() => setAddSourceCustomerName(null)}
+                  onSaved={(contact) => {
+                    const displayName = `${contact.firstName} ${contact.lastName}`.trim()
+                    void onSavePartial({
+                      purchasedFrom: displayName,
+                      purchasedFromContactId: contact.id,
+                      purchasedFromVendorId: null,
+                    })
+                    setAddSourceCustomerName(null)
+                  }}
+                />
+              )}
             </div>
           </div>
 
@@ -5214,8 +5843,6 @@ function PurchaseInfoStudio({
                 width: '100%', padding: '10px 14px',
                 borderRadius: 12, border: 'none',
                 background: 'rgba(255, 255, 255, 0.45)',
-                backdropFilter: 'blur(15px) saturate(180%)',
-                WebkitBackdropFilter: 'blur(15px) saturate(180%)',
                 fontSize: 13, fontWeight: 500, color: '#0a0a0a',
                 outline: 'none', boxSizing: 'border-box',
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7), inset 0 0 0 1px rgba(255,255,255,0.4)',
@@ -5269,8 +5896,6 @@ function PurchaseInfoStudio({
                     padding: '6px 12px', borderRadius: 999,
                     border: '1px solid rgba(0, 113, 227, 0.2)',
                     background: 'rgba(255, 255, 255, 0.55)',
-                    backdropFilter: 'blur(10px) saturate(180%)',
-                    WebkitBackdropFilter: 'blur(10px) saturate(180%)',
                     color: '#0071e3', fontSize: 11, fontWeight: 700,
                     letterSpacing: '-0.005em',
                     cursor: paymentMaxReached ? 'not-allowed' : 'pointer',
@@ -5289,8 +5914,6 @@ function PurchaseInfoStudio({
                     minWidth: 180,
                     borderRadius: 12,
                     background: 'rgba(255, 255, 255, 0.82)',
-                    backdropFilter: 'blur(28px) saturate(180%)',
-                    WebkitBackdropFilter: 'blur(28px) saturate(180%)',
                     border: '1px solid rgba(255, 255, 255, 0.55)',
                     boxShadow: '0 20px 50px -12px rgba(31, 38, 135, 0.28), 0 4px 12px -4px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.85)',
                     overflow: 'hidden',
@@ -5412,8 +6035,6 @@ function PaymentTypeCard({
       padding: 14,
       borderRadius: 14,
       background: 'rgba(255, 255, 255, 0.42)',
-      backdropFilter: 'blur(15px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(15px) saturate(180%)',
       border: '1px solid rgba(255, 255, 255, 0.55)',
       boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85), 0 1px 2px rgba(31, 38, 135, 0.04)',
     }}>
@@ -5727,8 +6348,6 @@ function GlassTextArea({
         borderRadius: 12,
         border: focused ? '1px solid rgba(10, 132, 255, 0.55)' : '1px solid transparent',
         background: bg,
-        backdropFilter: 'blur(15px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(15px) saturate(180%)',
         fontSize: 13, fontWeight: 500, color: '#0a0a0a',
         lineHeight: 1.55, fontFamily: 'inherit',
         outline: 'none', resize: 'vertical',
@@ -5750,8 +6369,6 @@ function ContactBadge({ name, cell, email, address }: {
         display: 'inline-flex', alignItems: 'center', gap: 8,
         padding: '6px 12px',
         background: 'rgba(255, 255, 255, 0.55)',
-        backdropFilter: 'blur(15px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(15px) saturate(180%)',
         border: '1px solid rgba(255, 255, 255, 0.6)',
         borderRadius: 999,
         boxShadow: [
@@ -5832,8 +6449,6 @@ function FloorplanTile({ lenderName, payOffAmount, amountFloored, dailyRate, sta
       padding: '16px 18px',
       borderRadius: 16,
       background: 'linear-gradient(135deg, rgba(255,255,255,0.62) 0%, rgba(245,245,245,0.42) 100%)',
-      backdropFilter: 'blur(20px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(20px) saturate(180%)',
       border: '1px solid rgba(255, 255, 255, 0.55)',
       boxShadow: [
         '0 8px 24px -10px rgba(31, 38, 135, 0.18)',
@@ -6124,8 +6739,6 @@ function AnchorRowSelect({ label, value, onChange, options, placeholder }: {
           minWidth: 200, maxHeight: 240,
           borderRadius: 12,
           background: 'rgba(255, 255, 255, 0.78)',
-          backdropFilter: 'blur(28px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(28px) saturate(180%)',
           border: '1px solid rgba(255, 255, 255, 0.55)',
           boxShadow: '0 20px 50px -12px rgba(31, 38, 135, 0.28), inset 0 1px 0 rgba(255,255,255,0.8)',
           overflow: 'hidden', overflowY: 'auto',
@@ -6428,8 +7041,6 @@ function InlineSelectField({
           maxHeight: 280,
           borderRadius: 14,
           background: 'rgba(255, 255, 255, 0.78)',
-          backdropFilter: 'blur(28px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(28px) saturate(180%)',
           border: '1px solid rgba(255, 255, 255, 0.55)',
           boxShadow: [
             '0 20px 50px -12px rgba(31, 38, 135, 0.28)',
@@ -6734,8 +7345,6 @@ function LiveLinkBanner({ url }: { url: string }) {
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         gap: 14, padding: '14px 16px',
         background: hovered ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.45)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
         borderRadius: 14,
         border: '1px solid rgba(255, 255, 255, 0.55)',
         boxShadow: hovered
@@ -7212,8 +7821,6 @@ function FileDropzone({ category, onCategoryChange, onFiles, isUploading, progre
         background: isDragOver
           ? 'rgba(0, 113, 227, 0.07)'
           : 'rgba(255, 255, 255, 0.45)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
         borderRadius: 16,
         border: isDragOver
           ? '1.5px dashed rgba(0, 113, 227, 0.65)'
@@ -7362,7 +7969,6 @@ function MediaLightbox({
       style={{
         position: 'fixed', inset: 0,
         background: 'rgba(0,0,0,0.92)',
-        backdropFilter: 'blur(40px)',
         zIndex: 1000,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 40,
@@ -7391,7 +7997,6 @@ function MediaLightbox({
             width: 36, height: 36, borderRadius: '50%',
             fontSize: 18, lineHeight: 1, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            backdropFilter: 'blur(20px)', pointerEvents: 'auto',
             minHeight: 'auto',
           }}
         >×</button>
@@ -7407,7 +8012,6 @@ function MediaLightbox({
             width: 48, height: 48, borderRadius: '50%',
             fontSize: 22, lineHeight: 1, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            backdropFilter: 'blur(20px)', minHeight: 'auto',
           }}
         >‹</button>
       )}
@@ -7422,7 +8026,6 @@ function MediaLightbox({
             width: 48, height: 48, borderRadius: '50%',
             fontSize: 22, lineHeight: 1, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            backdropFilter: 'blur(20px)', minHeight: 'auto',
           }}
         >›</button>
       )}
@@ -7452,7 +8055,6 @@ function MediaLightbox({
           position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)',
           color: '#fff', fontSize: 14, textAlign: 'center', pointerEvents: 'none',
           padding: '8px 16px', background: 'rgba(0,0,0,0.5)', borderRadius: 8,
-          backdropFilter: 'blur(20px)', maxWidth: '80vw',
         }}>{current.caption}</div>
       )}
     </div>

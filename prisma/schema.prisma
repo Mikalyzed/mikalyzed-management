@@ -85,8 +85,10 @@ model Vehicle {
   askingPrice              Float?    @map("asking_price")
   vehicleCost              Float?    @map("vehicle_cost")
   purchaseType             String?   @map("purchase_type") // PURCHASED / TRADE_IN / CONSIGNMENT — Phase 0.B backfill maps legacy "FLOORING" → "PURCHASED"
+  purchaseSource           String?   @map("purchase_source") // acquisition channel: auction / consignment / private_party / referral / repeat / repo / trade_in / wholesale / other
   purchasedFrom            String?   @map("purchased_from") // raw vendor name string — Vendor FK is Phase 2
-  purchasedFromVendorId    String?   @map("purchased_from_vendor_id") // nullable FK, no relation yet (Vendor model lands Phase 2)
+  purchasedFromVendorId    String?   @map("purchased_from_vendor_id") // Partner.id when source = vendor
+  purchasedFromContactId   String?   @map("purchased_from_contact_id") // Contact.id when source = customer
   titleStatus              String?   @map("title_status") // RECEIVED / NOT_RECEIVED
   dateInStock              DateTime? @map("date_in_stock")
   inventoryStatus          String?   @map("inventory_status") // in_stock / in_recon / external_repair / sold / removed / inventory_only — separate from recon `status`
@@ -583,6 +585,36 @@ model Contact {
   createdById    String?   @map("created_by")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  // --- Identity (matches DealerCenter Buyer Info section)
+  gender             String? // Male / Female / Other / Prefer not to say
+  ssn                String? // plain v1; encryption deferred to security review
+  idType             String? @map("id_type") // Driver License / State ID / Passport / etc.
+  idState            String? @map("id_state")
+  idNo               String? @map("id_no")
+  idIssuedDate       DateTime? @map("id_issued_date")
+  idExpirationDate   DateTime? @map("id_expiration_date")
+  homePhone          String? @map("home_phone")
+  workPhone          String? @map("work_phone")
+
+  // --- Sales pipeline / lead funnel
+  leadType        String?  @map("lead_type") // Walk-in / Internet / Phone / Referral / Trade-In / Repeat / Other
+  leadSource      String?  @map("lead_source") // marketing channel (Website / Facebook / Instagram / Google / etc.)
+  customerStatus  String?  @map("customer_status") // New / Contacted / Hot / Warm / Cold / Negotiating / Sold / Lost / Inactive
+  cashDown        Float?   @map("cash_down")
+  salesRepId      String?  @map("sales_rep_id") // User.id of assigned rep (no FK constraint yet)
+  isInShowroom    Boolean  @default(false) @map("is_in_showroom")
+
+  // --- Employment
+  employerName          String? @map("employer_name")
+  employerPhone         String? @map("employer_phone")
+  employerAddress       String? @map("employer_address")
+  employerYears         Int?    @map("employer_years")
+  employerMonthlyIncome Float?  @map("employer_monthly_income")
+
+  // --- Referrer (who referred this contact)
+  referrerName      String? @map("referrer_name") // free-text fallback when no internal contact match
+  referrerContactId String? @map("referrer_contact_id") // FK-ish reference to another Contact
 
   createdBy        User?             @relation("ContactCreatedBy", fields: [createdById], references: [id])
   opportunities    Opportunity[]
