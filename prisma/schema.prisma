@@ -153,22 +153,103 @@ model MediaAsset {
 
 // Phase 2 — itemized cost tracking that rolls into vehicle true cost
 model CostAdd {
-  id          String   @id @default(uuid())
-  vehicleId   String   @map("vehicle_id")
-  kind        String   // recon | parts | transport | detail | pack | acquisition_fee | other
-  amountCents Int      @map("amount_cents")
-  description String?
-  vendor      String?  // free-form vendor name (proper Vendor FK comes later in Phase 2)
-  receiptUrl  String?  @map("receipt_url")
-  addedById   String   @map("added_by_id")
-  addedAt     DateTime @default(now()) @map("added_at")
+  id            String   @id @default(uuid())
+  vehicleId     String   @map("vehicle_id")
+  kind          String   // free-form, picked from cost_add_categories (admin-managed list) or typed
+  amountCents   Int      @map("amount_cents")
+  description   String?  // free-form, picked from cost_add_descriptions or typed
+  vendor        String?  // legacy free-form vendor name; new rows use partnerId instead
+  partnerId     String?  @map("partner_id")
+  receiptUrl    String?  @map("receipt_url")
+  paymentMethod String?  @map("payment_method") // fixed list (see PAYMENT_METHOD_OPTIONS)
+  memo          String?
+  addedById     String   @map("added_by_id")
+  addedAt       DateTime @default(now()) @map("added_at")
 
-  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  addedBy User    @relation(fields: [addedById], references: [id])
+  vehicle Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  addedBy User     @relation(fields: [addedById], references: [id])
+  partner Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
 
   @@index([vehicleId])
   @@index([addedAt])
+  @@index([partnerId])
   @@map("cost_adds")
+}
+
+// Business entities the dealership works with — vendors, lenders, lienholders,
+// insurance, repo agents, etc. One Partner can carry multiple categories; the
+// `categories` array uses the canonical PARTNER_CATEGORY values defined in app code.
+// AddPartnerModal on the vehicle detail page is the primary write surface.
+model Partner {
+  id          String   @id @default(uuid())
+  categories  String[] @default([])
+
+  // General Info
+  companyName     String  @map("company_name")
+  companyAlias    String? @map("company_alias")
+  dealerNo        String? @map("dealer_no")
+  phone           String?
+  phoneAlternative String? @map("phone_alternative")
+  fax             String?
+  licenseNo       String? @map("license_no")
+  ein             String?
+  salesTaxLicense String? @map("sales_tax_license")
+  lienCode        String? @map("lien_code")
+
+  // Contact Info (primary contact person at this partner)
+  contactName            String? @map("contact_name")
+  contactPhone           String? @map("contact_phone")
+  contactCell            String? @map("contact_cell")
+  contactAddress         String? @map("contact_address")
+  contactEmail           String? @map("contact_email")
+  contactLossPayeeAddress String? @map("contact_loss_payee_address")
+  contactAlias           String? @map("contact_alias")
+
+  // Shipping Info
+  shippingName          String? @map("shipping_name")
+  shippingBusinessPhone String? @map("shipping_business_phone")
+  shippingAddress       String? @map("shipping_address")
+
+  isActive    Boolean   @default(true) @map("is_active")
+  archivedAt  DateTime? @map("archived_at")
+  createdById String?   @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  costAdds CostAdd[]
+
+  @@index([companyName])
+  @@index([archivedAt])
+  @@map("partners")
+}
+
+// Dealership-wide list of common Cost Add description quick-picks. Admins
+// manage the list; any user can free-type any value when adding a cost. The
+// dropdown is a convenience, not a constraint. archived_at supports soft-delete
+// so removing an option doesn't break historical references in cost_adds.description.
+model CostAddDescription {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  createdById String?   @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  archivedAt  DateTime? @map("archived_at")
+
+  @@index([archivedAt])
+  @@map("cost_add_descriptions")
+}
+
+// Sibling table to CostAddDescription — same shape, same admin-managed pattern,
+// holds the Category quick-pick list. Categories are stored on the cost_adds
+// row as `kind` (a free-form string); this table is just the dropdown source.
+model CostAddCategory {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  createdById String?   @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  archivedAt  DateTime? @map("archived_at")
+
+  @@index([archivedAt])
+  @@map("cost_add_categories")
 }
 
 model Part {

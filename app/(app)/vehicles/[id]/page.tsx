@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
 // ─── Types ─────────────────────────────────────────────────────────
@@ -103,9 +103,38 @@ type CostAdd = {
   amountCents: number
   description: string | null
   vendor: string | null
+  partnerId: string | null
+  partner: { id: string; companyName: string } | null
   receiptUrl: string | null
+  paymentMethod: string | null
+  memo: string | null
   addedAt: string
   addedBy: { id: string; name: string } | null
+}
+
+// Partner categories — fixed list mirrors the DealerCenter screen. Values are
+// canonical snake_case used in the DB; labels are what the user sees.
+const PARTNER_CATEGORIES: { value: string; label: string }[] = [
+  { value: 'dealer_or_wholesaler', label: 'Dealer or Wholesaler' },
+  { value: 'flooring',             label: 'Flooring' },
+  { value: 'insurance',            label: 'Insurance' },
+  { value: 'lender',               label: 'Lender' },
+  { value: 'lienholder',           label: 'Lienholder' },
+  { value: 'service_or_warranty',  label: 'Service or Warranty' },
+  { value: 'repo',                 label: 'Repo' },
+  { value: 'vendor',               label: 'Vendor' },
+  { value: 'rebate_vendor',        label: 'Rebate Vendor' },
+  { value: 'tax_and_fee',          label: 'Tax and Fee' },
+]
+
+type PartnerSummary = {
+  id: string
+  companyName: string
+  companyAlias: string | null
+  phone: string | null
+  contactName: string | null
+  contactEmail: string | null
+  categories: string[]
 }
 
 type MediaAsset = {
@@ -302,7 +331,7 @@ export default function VehicleDetailV2() {
   const [canSeeMoney, setCanSeeMoney] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [showEdit, setShowEdit] = useState(false)
-  const [showAddCost, setShowAddCost] = useState(false)
+  const [showCostAddsList, setShowCostAddsList] = useState(false)
   const [showSetFlooring, setShowSetFlooring] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -677,7 +706,7 @@ export default function VehicleDetailV2() {
                     isAdmin={isAdmin}
                     currentUserId={currentUserId}
                     busy={busy}
-                    onAddCost={() => setShowAddCost(true)}
+                    onManageCosts={() => setShowCostAddsList(true)}
                     onDeleteCostAdd={deleteCostAdd}
                     onSavePartial={async (patch) => {
                       // Optimistic: reflect the change locally before the network round-trip
@@ -1242,14 +1271,18 @@ export default function VehicleDetailV2() {
         />
       )}
 
-      {/* ═══ ADD COST MODAL ═══ */}
-      {showAddCost && (
-        <AddCostModal
-          vehicleId={vehicle.id}
-          onClose={() => setShowAddCost(false)}
-          onSaved={async () => {
-            await refreshCostAdds()
-            setShowAddCost(false)
+      {/* ═══ COST ADDS LIST / MANAGER MODAL ═══ */}
+      {showCostAddsList && (
+        <CostAddsListModal
+          vehicle={vehicle}
+          costAdds={costAdds}
+          isAdmin={isAdmin}
+          currentUserId={currentUserId}
+          busy={busy}
+          onClose={() => setShowCostAddsList(false)}
+          onRefresh={refreshCostAdds}
+          onDelete={async (id) => {
+            await deleteCostAdd(id)
           }}
         />
       )}
@@ -1395,6 +1428,1056 @@ function SetFlooringModal({ vehicle, onClose, onSaved }: { vehicle: Vehicle; onC
 }
 
 // ─── Add Cost Modal ─────────────────────────────────────────────────
+
+// ─── Cost Adds List / Manager Modal ─────────────────────────────────
+// Wide spreadsheet-style manager: existing cost adds at the top (read-only),
+// pending new rows appended via "+ Add New" and committed in one Save click.
+// Columns mirror the dealer's familiar layout: Description, Category, Cost,
+// Payment Method, Vendor, Date Added, Memo (+ delete).
+//
+// Existing rows show a small × delete affordance per feedback_destructive_action_protection
+// (planned: move to a less-prominent overflow menu in a follow-up).
+//
+// Cost-adds shape feeds the future Journal Entries tab + QuickBooks sync (Phase 7).
+
+type CostAddDraft = {
+  id: string // local-only key for React + remove
+  description: string
+  kind: string // one of COST_KIND_LABELS keys
+  amount: string // free-form input, parsed at save
+  paymentMethod: string // '' or one of PAYMENT_METHOD_OPTIONS values
+  vendor: string // legacy free-text fallback when no partnerId picked
+  partnerId: string | null // when set, vendor cell renders the partner's companyName
+  partnerName: string // mirror of the picked partner's companyName for instant display without re-fetch
+  addedAt: string // YYYY-MM-DD
+  memo: string
+}
+
+function makeEmptyCostAddDraft(): CostAddDraft {
+  return {
+    id: `draft-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`,
+    description: '',
+    kind: '', // empty so user picks from the Category combobox
+    amount: '',
+    paymentMethod: '',
+    vendor: '',
+    partnerId: null,
+    partnerName: '',
+    addedAt: new Date().toISOString().slice(0, 10),
+    memo: '',
+  }
+}
+
+// Single grid column template shared by header row + every data/draft row so
+// the columns line up exactly without any per-row recalculation.
+const COST_ROW_COLUMNS = '1.4fr 1.2fr 0.8fr 1fr 1.4fr 1fr 1.6fr 32px'
+
+function CostAddsListModal({
+  vehicle, costAdds, isAdmin, currentUserId, busy,
+  onClose, onRefresh, onDelete,
+}: {
+  vehicle: Vehicle
+  costAdds: CostAdd[]
+  isAdmin: boolean
+  currentUserId: string | null
+  busy: boolean
+  onClose: () => void
+  onRefresh: () => Promise<void> | void
+  onDelete: (id: string) => void | Promise<void>
+}) {
+  const [drafts, setDrafts] = useState<CostAddDraft[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [descriptionOptions, setDescriptionOptions] = useState<string[]>([])
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([])
+  // When the user opens AddPartnerModal from a Vendor cell, we track WHICH
+  // draft triggered it so the saved partner can be attached back to that row.
+  const [addPartnerState, setAddPartnerState] = useState<{ draftId: string; initialName: string } | null>(null)
+
+  // Lock body scroll while the modal is open so the page behind doesn't move
+  // when the user scrolls inside the modal. Restores on unmount.
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  // Load the dealership-wide quick-pick lists for Description AND Category.
+  // Both share the same admin-managed pattern; users can free-type anything,
+  // admin can add to the list inline.
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([
+      fetch('/api/cost-add-descriptions').then(r => r.json()).catch(() => null),
+      fetch('/api/cost-add-categories').then(r => r.json()).catch(() => null),
+    ]).then(([descRes, catRes]) => {
+      if (cancelled) return
+      const descNames = Array.isArray(descRes?.descriptions)
+        ? descRes.descriptions.map((x: { name: string }) => x.name)
+        : []
+      const catNames = Array.isArray(catRes?.categories)
+        ? catRes.categories.map((x: { name: string }) => x.name)
+        : []
+      setDescriptionOptions(descNames)
+      setCategoryOptions(catNames)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  function makeAddOption(
+    endpoint: string,
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    payloadKey: 'description' | 'category',
+  ) {
+    return async (name: string): Promise<boolean> => {
+      const trimmed = name.trim()
+      if (!trimmed) return false
+      try {
+        const r = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: trimmed }),
+        })
+        if (!r.ok) return false
+        const data = await r.json()
+        const created = data?.[payloadKey]?.name
+        if (created) {
+          setter((prev) => prev.includes(created)
+            ? prev
+            : [...prev, created].sort((a, b) => a.localeCompare(b)))
+        }
+        return true
+      } catch {
+        return false
+      }
+    }
+  }
+  const addDescriptionOption = makeAddOption('/api/cost-add-descriptions', setDescriptionOptions, 'description')
+  const addCategoryOption = makeAddOption('/api/cost-add-categories', setCategoryOptions, 'category')
+
+  const total = costAdds.reduce((s, c) => s + c.amountCents, 0) / 100
+
+  function addDraft() {
+    setDrafts(prev => [...prev, makeEmptyCostAddDraft()])
+  }
+  function updateDraft(id: string, patch: Partial<CostAddDraft>) {
+    setDrafts(prev => prev.map(d => d.id === id ? { ...d, ...patch } : d))
+  }
+  function removeDraft(id: string) {
+    setDrafts(prev => prev.filter(d => d.id !== id))
+  }
+
+  function tryClose() {
+    if (drafts.length > 0) {
+      const ok = confirm(`You have ${drafts.length} unsaved row${drafts.length > 1 ? 's' : ''}. Discard them?`)
+      if (!ok) return
+    }
+    onClose()
+  }
+
+  async function save() {
+    setSaveError(null)
+    // Front-end validation: both Cost (>0) and Category (non-empty) are
+    // required per row. We surface the first issue rather than POSTing and
+    // letting the API return a raw error string.
+    const validDrafts: { d: CostAddDraft; amount: number }[] = []
+    let firstError: string | null = null
+    drafts.forEach((d, i) => {
+      const amount = parseFloat(d.amount)
+      if (!Number.isFinite(amount) || amount <= 0) {
+        if (!firstError) firstError = `Row ${i + 1}: cost must be a positive number`
+        return
+      }
+      if (!d.kind.trim()) {
+        if (!firstError) firstError = `Row ${i + 1}: pick or type a Category`
+        return
+      }
+      validDrafts.push({ d, amount })
+    })
+    if (validDrafts.length === 0) {
+      setSaveError(firstError ?? 'Add at least one row with a positive cost amount.')
+      return
+    }
+    setSaving(true)
+    try {
+      for (const { d, amount } of validDrafts) {
+        const r = await fetch('/api/cost-adds', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vehicleId: vehicle.id,
+            kind: d.kind,
+            amount,
+            description: d.description.trim() || undefined,
+            // partnerId is the new canonical link to a Partner; vendor stays
+            // as a legacy free-text fallback for any rows where the user
+            // typed a name without picking a partner record.
+            partnerId: d.partnerId ?? undefined,
+            vendor: !d.partnerId ? (d.vendor.trim() || undefined) : undefined,
+            paymentMethod: d.paymentMethod.trim() || undefined,
+            memo: d.memo.trim() || undefined,
+            addedAt: d.addedAt ? new Date(d.addedAt + 'T12:00:00').toISOString() : undefined,
+          }),
+        })
+        if (!r.ok) {
+          const txt = await r.text()
+          throw new Error(`Save failed (${r.status}): ${txt.slice(0, 140)}`)
+        }
+      }
+      await onRefresh()
+      setDrafts([])
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={tryClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 14, width: 'min(96vw, 1400px)',
+          maxHeight: 'calc(100vh - 32px)', display: 'flex', flexDirection: 'column',
+          boxShadow: '0 24px 48px rgba(0,0,0,0.22)',
+          // Force the modal into its own GPU compositor layer so scrolling
+          // inside it doesn't trigger repaints of the blurred glass cards on
+          // the page behind. Combined with `contain` below, this drops scroll
+          // jank dramatically on pages with heavy backdrop-filter usage.
+          transform: 'translateZ(0)',
+          contain: 'layout paint style',
+        }}
+      >
+        {/* Header — title + Add New on the left, totals + close on the right.
+            Single row keeps the modal compact and puts the primary action
+            visually anchored to the title it belongs to. */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '16px 24px', borderBottom: '1px solid rgba(0,0,0,0.06)',
+          gap: 16,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>Cost Adds</h2>
+            <button
+              type="button"
+              onClick={addDraft}
+              style={{
+                padding: '7px 14px', borderRadius: 8,
+                border: '1px solid rgba(0,0,0,0.14)', background: '#fff',
+                fontSize: 13, fontWeight: 600, color: '#1d1d1f',
+                cursor: 'pointer', minHeight: 'auto',
+              }}
+            >+ Add New</button>
+          </div>
+          <button
+            onClick={tryClose}
+            style={{
+              background: 'none', border: 'none', fontSize: 24, cursor: 'pointer',
+              color: 'rgba(0,0,0,0.4)', minHeight: 'auto', padding: 0, lineHeight: 1,
+            }}
+          >×</button>
+        </div>
+
+        {/* Column headers */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: COST_ROW_COLUMNS,
+          gap: 12, padding: '12px 24px',
+          fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+          letterSpacing: '0.08em', color: 'rgba(0,0,0,0.55)',
+          borderBottom: '1px solid rgba(0,0,0,0.08)',
+        }}>
+          <div>Description</div>
+          <div>Category</div>
+          <div>Cost</div>
+          <div>Payment Method</div>
+          <div>Vendor</div>
+          <div>Date Added</div>
+          <div>Memo</div>
+          <div></div>
+        </div>
+
+        {/* Body (existing + drafts) — minHeight guarantees the Description
+            combobox dropdown has vertical room to expand even when only a
+            single draft row exists. overflowY:auto kicks in once there are
+            enough rows that the modal needs scrolling. overflow:visible on
+            the inner container (handled by removing paint containment) lets
+            the absolutely-positioned dropdown extend beyond row height when
+            it opens below an input near the bottom. */}
+        <div style={{
+          flex: 1, overflowY: 'auto', padding: '4px 24px 12px',
+          minHeight: 420,
+          // overscrollBehavior prevents scroll chaining (the gesture from
+          // bouncing the page behind once you hit the modal's edge).
+          // contain:layout/style isolates layout + CSS counter scopes for perf;
+          // we intentionally drop contain:paint so the combobox popover isn't
+          // clipped when it grows beyond its input row.
+          overscrollBehavior: 'contain',
+          contain: 'layout style',
+          transform: 'translateZ(0)',
+        }}>
+          {costAdds.length === 0 && drafts.length === 0 ? (
+            <div style={{
+              padding: '50px 20px', textAlign: 'center', color: 'rgba(0,0,0,0.45)', fontSize: 13,
+            }}>
+              <p style={{ fontSize: 28, marginBottom: 10, opacity: 0.35 }}>＄</p>
+              <p style={{ fontWeight: 600, color: 'rgba(0,0,0,0.55)' }}>No cost adds yet</p>
+              <p style={{ marginTop: 4 }}>Click <strong>Add New</strong> above to start adding one or more.</p>
+            </div>
+          ) : (
+            <>
+              {/* Existing cost adds — read-only */}
+              {costAdds.map((c) => {
+                const canDelete = isAdmin || c.addedBy?.id === currentUserId
+                return (
+                  <div key={c.id} style={{
+                    display: 'grid', gridTemplateColumns: COST_ROW_COLUMNS,
+                    gap: 12, alignItems: 'center', padding: '10px 0',
+                    borderBottom: '1px solid rgba(0,0,0,0.05)',
+                    fontSize: 13, color: '#1d1d1f',
+                  }}>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                         title={c.description ?? ''}>
+                      {c.description || <span style={{ color: 'rgba(0,0,0,0.35)' }}>—</span>}
+                    </div>
+                    <div style={{ color: 'rgba(0,0,0,0.7)' }}>{COST_KIND_LABELS[c.kind] || c.kind}</div>
+                    <div style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{money(c.amountCents / 100)}</div>
+                    <div style={{ color: 'rgba(0,0,0,0.7)' }}>
+                      {c.paymentMethod
+                        ? (PAYMENT_METHOD_OPTIONS.find(p => p.value === c.paymentMethod)?.label ?? c.paymentMethod)
+                        : <span style={{ color: 'rgba(0,0,0,0.35)' }}>—</span>}
+                    </div>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                         title={c.partner?.companyName ?? c.vendor ?? ''}>
+                      {c.partner?.companyName ?? c.vendor ?? <span style={{ color: 'rgba(0,0,0,0.35)' }}>—</span>}
+                    </div>
+                    <div style={{ color: 'rgba(0,0,0,0.7)', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(c.addedAt)}</div>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'rgba(0,0,0,0.65)' }}
+                         title={c.memo ?? ''}>
+                      {c.memo || <span style={{ color: 'rgba(0,0,0,0.35)' }}>—</span>}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      {canDelete && (
+                        <button
+                          onClick={() => onDelete(c.id)}
+                          disabled={busy}
+                          title="Delete this cost add"
+                          style={{
+                            background: 'none', border: 'none', fontSize: 15, cursor: 'pointer',
+                            color: 'rgba(0,0,0,0.3)', padding: '4px 6px', minHeight: 'auto',
+                          }}
+                        >🗑</button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {/* Pending drafts — editable */}
+              {drafts.map((d) => (
+                <div key={d.id} style={{
+                  display: 'grid', gridTemplateColumns: COST_ROW_COLUMNS,
+                  gap: 12, alignItems: 'center', padding: '8px 0',
+                  borderBottom: '1px solid rgba(0,0,0,0.05)',
+                  background: 'rgba(0, 113, 227, 0.03)',
+                }}>
+                  <CreatableCombobox
+                    value={d.description}
+                    options={descriptionOptions}
+                    isAdmin={isAdmin}
+                    onChange={(v) => updateDraft(d.id, { description: v })}
+                    onAddOption={addDescriptionOption}
+                  />
+                  <CreatableCombobox
+                    value={d.kind}
+                    options={categoryOptions}
+                    isAdmin={isAdmin}
+                    placeholder="Category"
+                    onChange={(v) => updateDraft(d.id, { kind: v })}
+                    onAddOption={addCategoryOption}
+                  />
+                  <input
+                    type="number" step="0.01" min="0"
+                    value={d.amount}
+                    onChange={(e) => updateDraft(d.id, { amount: e.target.value })}
+                    placeholder="$0.00"
+                    style={{ ...cellInputStyle, fontVariantNumeric: 'tabular-nums' }}
+                  />
+                  <CreatableCombobox
+                    value={PAYMENT_METHOD_OPTIONS.find(p => p.value === d.paymentMethod)?.label ?? d.paymentMethod}
+                    options={PAYMENT_METHOD_OPTIONS.map(p => p.label)}
+                    isAdmin={isAdmin}
+                    allowCreate={false}
+                    placeholder="Payment Method"
+                    onChange={(newLabel) => {
+                      // Translate the user-visible label back into the canonical
+                      // value we store in cost_adds.payment_method so reports +
+                      // QuickBooks sync see consistent normalized strings.
+                      const option = PAYMENT_METHOD_OPTIONS.find(p => p.label === newLabel)
+                      updateDraft(d.id, { paymentMethod: option?.value ?? newLabel })
+                    }}
+                    onAddOption={async () => false}
+                  />
+                  <VendorPicker
+                    value={d.partnerId ? d.partnerName : d.vendor}
+                    isAdmin={isAdmin}
+                    onChange={(text) => updateDraft(d.id, { vendor: text, partnerId: null, partnerName: '' })}
+                    onPickPartner={(p) => updateDraft(d.id, { partnerId: p.id, partnerName: p.companyName, vendor: p.companyName })}
+                    onRequestAddNew={(typedName) => setAddPartnerState({ draftId: d.id, initialName: typedName })}
+                  />
+                  <input
+                    type="date"
+                    value={d.addedAt}
+                    onChange={(e) => updateDraft(d.id, { addedAt: e.target.value })}
+                    style={cellInputStyle}
+                  />
+                  <input
+                    value={d.memo}
+                    onChange={(e) => updateDraft(d.id, { memo: e.target.value })}
+                    placeholder="Notes"
+                    style={cellInputStyle}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      onClick={() => removeDraft(d.id)}
+                      title="Discard this row"
+                      style={{
+                        background: 'none', border: 'none', fontSize: 15, cursor: 'pointer',
+                        color: 'rgba(0,0,0,0.3)', padding: '4px 6px', minHeight: 'auto',
+                      }}
+                    >×</button>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* Footer — 3-column: unsaved status (left), totals (center), actions (right) */}
+        <div style={{
+          display: 'grid', alignItems: 'center',
+          gridTemplateColumns: '1fr auto 1fr',
+          padding: '14px 24px', borderTop: '1px solid rgba(0,0,0,0.06)',
+          background: 'rgba(0,0,0,0.02)', gap: 16,
+        }}>
+          <p style={{ fontSize: 12, color: saveError ? '#dc2626' : 'rgba(0,0,0,0.5)' }}>
+            {saveError ?? (drafts.length > 0
+              ? `${drafts.length} unsaved row${drafts.length > 1 ? 's' : ''}`
+              : 'No unsaved changes')}
+          </p>
+          <div style={{ textAlign: 'center' }}>
+            <p style={{
+              fontSize: 9, fontWeight: 700, letterSpacing: '0.12em',
+              textTransform: 'uppercase', color: 'rgba(0,0,0,0.5)',
+              lineHeight: 1,
+            }}>Total · {costAdds.length} {costAdds.length === 1 ? 'entry' : 'entries'}</p>
+            <p style={{
+              fontSize: 17, fontWeight: 800, color: '#0a0a0a',
+              letterSpacing: '-0.015em', fontVariantNumeric: 'tabular-nums',
+              marginTop: 3, lineHeight: 1,
+            }}>{money(total)}</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button onClick={tryClose} disabled={saving} style={v2Btn('ghost')}>Close</button>
+            <button onClick={save} disabled={saving || drafts.length === 0} style={v2Btn('primary')}>
+              {saving ? 'Saving…' : `Save${drafts.length > 0 ? ` (${drafts.length})` : ''}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Layered Add-Partner modal — opens when the user clicks "+ Add New Partner"
+        in a Vendor cell. On save the new partner is attached to the originating
+        draft row so the user is back to filling out the cost add with the
+        partner pre-selected. */}
+    {addPartnerState && (
+      <AddPartnerModal
+        initialCompanyName={addPartnerState.initialName}
+        initialCategories={['vendor']}
+        onClose={() => setAddPartnerState(null)}
+        onSaved={(partner) => {
+          const targetId = addPartnerState.draftId
+          setDrafts(prev => prev.map(d => d.id === targetId
+            ? { ...d, partnerId: partner.id, partnerName: partner.companyName, vendor: partner.companyName }
+            : d))
+          setAddPartnerState(null)
+        }}
+      />
+    )}
+    </>
+  )
+}
+
+const cellInputStyle: React.CSSProperties = {
+  width: '100%', padding: '7px 10px', border: '1px solid rgba(0,0,0,0.12)',
+  borderRadius: 7, fontSize: 13, background: '#fff', color: '#1d1d1f',
+  minHeight: 'auto', boxSizing: 'border-box',
+}
+
+/**
+ * Reusable combobox — type freely, click to see a dealership-wide quick-pick list,
+ * admin can add a new option inline. Used for Description AND Category columns
+ * in the Cost Adds modal (each backed by its own dropdown options table).
+ *
+ * Click chevron / focus → popover opens with options filtered by current text.
+ * Click an option → input fills with that name.
+ * Type a value not in the list → bottom of popover shows "+ Add '<value>' to list"
+ *   IF current user is admin. Non-admins just keep their typed value as free text
+ *   — the underlying cost add still saves fine, it just doesn't enrich the
+ *   organization-wide quick-pick list.
+ */
+function CreatableCombobox({
+  value, options, isAdmin, placeholder, allowCreate = true, onChange, onAddOption,
+}: {
+  value: string
+  options: string[]
+  isAdmin: boolean
+  placeholder?: string
+  /** When false, the "+ Add 'X' to list" affordance never appears regardless
+   *  of admin status. Use for fixed lists like Payment Method where the set
+   *  of valid values is closed. Defaults to true. */
+  allowCreate?: boolean
+  onChange: (v: string) => void
+  onAddOption: (name: string) => Promise<boolean>
+}) {
+  const [open, setOpen] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handleDown(e: MouseEvent) {
+      if (!wrapperRef.current) return
+      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleDown)
+    return () => document.removeEventListener('mousedown', handleDown)
+  }, [open])
+
+  const trimmedValue = value.trim()
+  const filtered = trimmedValue
+    ? options.filter(o => o.toLowerCase().includes(trimmedValue.toLowerCase()))
+    : options
+  const exactMatch = options.some(o => o.toLowerCase() === trimmedValue.toLowerCase())
+  const canAdd = allowCreate && isAdmin && trimmedValue.length > 0 && !exactMatch
+
+  async function handleAdd() {
+    if (!canAdd || adding) return
+    setAdding(true)
+    try {
+      await onAddOption(trimmedValue)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setOpen(true)}
+          placeholder={placeholder ?? '—'}
+          style={{ ...cellInputStyle, paddingRight: 26 }}
+        />
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-label="Open description list"
+          style={{
+            position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '4px 6px', minHeight: 'auto',
+            color: 'rgba(0,0,0,0.45)', fontSize: 10, lineHeight: 1,
+          }}
+        >▾</button>
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+          background: '#fff', borderRadius: 8,
+          border: '1px solid rgba(0,0,0,0.1)',
+          boxShadow: '0 12px 28px rgba(0,0,0,0.12)',
+          zIndex: 50,
+          maxHeight: 240, overflowY: 'auto',
+          fontSize: 13,
+        }}>
+          {filtered.length === 0 && !canAdd && (
+            <div style={{ padding: '10px 12px', color: 'rgba(0,0,0,0.45)' }}>
+              {trimmedValue ? 'No matches' : 'No options yet'}
+            </div>
+          )}
+          {filtered.map((o) => (
+            <button
+              key={o}
+              type="button"
+              onClick={() => { onChange(o); setOpen(false) }}
+              style={{
+                display: 'flex', width: '100%', textAlign: 'left',
+                padding: '8px 12px', background: 'none', border: 'none',
+                cursor: 'pointer', color: '#1d1d1f', fontSize: 13,
+                minHeight: 'auto',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,113,227,0.06)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >{o}</button>
+          ))}
+          {canAdd && (
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={adding}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                width: '100%', textAlign: 'left',
+                padding: '10px 12px', background: 'rgba(0,113,227,0.06)',
+                border: 'none', borderTop: filtered.length > 0 ? '1px solid rgba(0,0,0,0.06)' : 'none',
+                cursor: 'pointer', color: '#0071e3', fontWeight: 600,
+                fontSize: 12,
+                minHeight: 'auto',
+              }}
+            >
+              {adding ? `Adding "${trimmedValue}"…` : `+ Add "${trimmedValue}" to list`}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Vendor Picker ──────────────────────────────────────────────────
+// Type-ahead combobox specifically for the Vendor column on Cost Adds. Searches
+// Partners filtered to category='vendor'. If no match exists, admins see a
+// "+ Add New Partner" affordance that opens AddPartnerModal with the typed
+// company name pre-filled and the Vendor category pre-checked.
+function VendorPicker({
+  value, isAdmin, onChange, onPickPartner, onRequestAddNew,
+}: {
+  value: string
+  isAdmin: boolean
+  onChange: (text: string) => void
+  onPickPartner: (partner: { id: string; companyName: string }) => void
+  onRequestAddNew: (typedName: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [results, setResults] = useState<PartnerSummary[]>([])
+  const [loading, setLoading] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const lastQueryRef = useRef('')
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    function handleDown(e: MouseEvent) {
+      if (!wrapperRef.current) return
+      if (!wrapperRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleDown)
+    return () => document.removeEventListener('mousedown', handleDown)
+  }, [open])
+
+  // Debounced search: refetch ~200ms after the value stops changing.
+  useEffect(() => {
+    if (!open) return
+    lastQueryRef.current = value
+    const t = setTimeout(async () => {
+      if (lastQueryRef.current !== value) return
+      setLoading(true)
+      try {
+        const params = new URLSearchParams({ category: 'vendor', take: '25' })
+        if (value.trim()) params.set('search', value.trim())
+        const r = await fetch(`/api/partners?${params}`)
+        const d = await r.json()
+        setResults(Array.isArray(d?.partners) ? d.partners : [])
+      } catch {
+        setResults([])
+      } finally {
+        setLoading(false)
+      }
+    }, 200)
+    return () => clearTimeout(t)
+  }, [value, open])
+
+  const trimmed = value.trim()
+  const exactMatch = results.some(p => p.companyName.toLowerCase() === trimmed.toLowerCase())
+  const canAddNew = isAdmin && trimmed.length > 0 && !exactMatch
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setOpen(true)}
+          placeholder="Vendor"
+          style={{ ...cellInputStyle, paddingRight: 26 }}
+        />
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          aria-label="Open vendor list"
+          style={{
+            position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '4px 6px', minHeight: 'auto',
+            color: 'rgba(0,0,0,0.45)', fontSize: 10, lineHeight: 1,
+          }}
+        >▾</button>
+      </div>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+          background: '#fff', borderRadius: 8,
+          border: '1px solid rgba(0,0,0,0.1)',
+          boxShadow: '0 12px 28px rgba(0,0,0,0.12)',
+          zIndex: 50,
+          maxHeight: 280, overflowY: 'auto',
+          fontSize: 13, minWidth: 240,
+        }}>
+          {loading && results.length === 0 && (
+            <div style={{ padding: '10px 12px', color: 'rgba(0,0,0,0.45)' }}>Searching…</div>
+          )}
+          {!loading && results.length === 0 && !canAddNew && (
+            <div style={{ padding: '10px 12px', color: 'rgba(0,0,0,0.45)' }}>
+              {trimmed ? `No vendor matching "${trimmed}"` : 'No vendors yet'}
+            </div>
+          )}
+          {results.map(p => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => { onPickPartner({ id: p.id, companyName: p.companyName }); setOpen(false) }}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                gap: 2, width: '100%', textAlign: 'left',
+                padding: '8px 12px', background: 'none', border: 'none',
+                cursor: 'pointer', color: '#1d1d1f', minHeight: 'auto',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,113,227,0.06)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <span style={{ fontWeight: 600 }}>{p.companyName}</span>
+              {(p.phone || p.contactName) && (
+                <span style={{ fontSize: 11, color: 'rgba(0,0,0,0.5)' }}>
+                  {[p.contactName, p.phone].filter(Boolean).join(' · ')}
+                </span>
+              )}
+            </button>
+          ))}
+          {canAddNew && (
+            <button
+              type="button"
+              onClick={() => { onRequestAddNew(trimmed); setOpen(false) }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                width: '100%', textAlign: 'left',
+                padding: '10px 12px', background: 'rgba(0,113,227,0.06)',
+                border: 'none', borderTop: results.length > 0 ? '1px solid rgba(0,0,0,0.06)' : 'none',
+                cursor: 'pointer', color: '#0071e3', fontWeight: 600, fontSize: 12,
+                minHeight: 'auto',
+              }}
+            >+ Add new partner "{trimmed}"</button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Add Partner Modal ──────────────────────────────────────────────
+// Matches the DealerCenter "Add New Partner" surface: category checkboxes on
+// top, General Info / Contact Info / Shipping Info three-column grid below.
+// Pre-checks the originating category (e.g. "Vendor" when opened from a Cost
+// Adds vendor cell) and pre-fills the Company Name with whatever text the
+// user typed before clicking + Add new partner.
+function AddPartnerModal({
+  initialCompanyName, initialCategories, onClose, onSaved,
+}: {
+  initialCompanyName: string
+  initialCategories: string[]
+  onClose: () => void
+  onSaved: (partner: { id: string; companyName: string }) => void
+}) {
+  // Lock body scroll while open
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
+  const [categories, setCategories] = useState<Set<string>>(() => new Set(initialCategories))
+  const [companyName, setCompanyName] = useState(initialCompanyName)
+  const [companyAlias, setCompanyAlias] = useState('')
+  const [dealerNo, setDealerNo] = useState('')
+  const [phone, setPhone] = useState('')
+  const [phoneAlternative, setPhoneAlternative] = useState('')
+  const [fax, setFax] = useState('')
+  const [licenseNo, setLicenseNo] = useState('')
+  const [ein, setEin] = useState('')
+  const [salesTaxLicense, setSalesTaxLicense] = useState('')
+  const [lienCode, setLienCode] = useState('')
+
+  const [contactName, setContactName] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
+  const [contactCell, setContactCell] = useState('')
+  const [contactAddress, setContactAddress] = useState('')
+  const [contactEmail, setContactEmail] = useState('')
+  const [contactLossPayeeAddress, setContactLossPayeeAddress] = useState('')
+  const [contactAlias, setContactAlias] = useState('')
+
+  const [shippingName, setShippingName] = useState('')
+  const [shippingBusinessPhone, setShippingBusinessPhone] = useState('')
+  const [shippingAddress, setShippingAddress] = useState('')
+
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  function toggleCategory(v: string) {
+    setCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(v)) next.delete(v)
+      else next.add(v)
+      return next
+    })
+  }
+
+  async function save() {
+    setErr(null)
+    if (!companyName.trim()) { setErr('Company Name is required'); return }
+    setSaving(true)
+    try {
+      const r = await fetch('/api/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyName: companyName.trim(),
+          categories: Array.from(categories),
+          companyAlias, dealerNo, phone, phoneAlternative, fax, licenseNo, ein,
+          salesTaxLicense, lienCode,
+          contactName, contactPhone, contactCell, contactAddress, contactEmail,
+          contactLossPayeeAddress, contactAlias,
+          shippingName, shippingBusinessPhone, shippingAddress,
+        }),
+      })
+      if (!r.ok) {
+        const txt = await r.text()
+        setErr(`Save failed (${r.status}): ${txt.slice(0, 160)}`)
+        setSaving(false)
+        return
+      }
+      const data = await r.json()
+      const created = data?.partner
+      if (!created?.id) {
+        setErr('Save returned no partner record')
+        setSaving(false)
+        return
+      }
+      onSaved({ id: created.id, companyName: created.companyName })
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 110,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 14, width: 'min(92vw, 1280px)',
+          maxHeight: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column',
+          boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
+          transform: 'translateZ(0)', contain: 'layout style',
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '16px 24px', borderBottom: '1px solid rgba(0,0,0,0.06)',
+        }}>
+          <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>Add New Partner</h2>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none', border: 'none', fontSize: 24, cursor: 'pointer',
+              color: 'rgba(0,0,0,0.4)', minHeight: 'auto', padding: 0, lineHeight: 1,
+            }}
+          >×</button>
+        </div>
+
+        {/* Scrollable body */}
+        <div style={{
+          flex: 1, overflowY: 'auto', padding: '20px 24px',
+          overscrollBehavior: 'contain',
+        }}>
+          {/* Category section */}
+          <PartnerSectionLabel>Category</PartnerSectionLabel>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 28 }}>
+            {PARTNER_CATEGORIES.map(c => {
+              const checked = categories.has(c.value)
+              return (
+                <label key={c.value} style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 14px', borderRadius: 10,
+                  border: `1px solid ${checked ? 'rgba(0, 113, 227, 0.4)' : 'rgba(0,0,0,0.12)'}`,
+                  background: checked ? 'rgba(0, 113, 227, 0.06)' : '#fff',
+                  cursor: 'pointer', userSelect: 'none',
+                  fontSize: 13, fontWeight: 500,
+                  color: checked ? '#0071e3' : '#1d1d1f',
+                  transition: 'background 140ms ease, border-color 140ms ease',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleCategory(c.value)}
+                    style={{ accentColor: '#0071e3', margin: 0 }}
+                  />
+                  {c.label}
+                </label>
+              )
+            })}
+          </div>
+
+          {/* 3-column info */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+            gap: 28, alignItems: 'start',
+          }}>
+            {/* General Info */}
+            <div>
+              <PartnerSectionLabel>General Info</PartnerSectionLabel>
+              <PartnerField label="Company Name" value={companyName} onChange={setCompanyName} required />
+              <PartnerRow>
+                <PartnerField label="Company Name Alias" value={companyAlias} onChange={setCompanyAlias} />
+                <PartnerField label="Dealer No" value={dealerNo} onChange={setDealerNo} />
+              </PartnerRow>
+              <PartnerRow>
+                <PartnerField label="Phone" value={phone} onChange={setPhone} placeholder="(___) ___-____" />
+                <PartnerField label="Phone Alternative" value={phoneAlternative} onChange={setPhoneAlternative} placeholder="(___) ___-____" />
+                <PartnerField label="Fax" value={fax} onChange={setFax} placeholder="(___) ___-____" />
+              </PartnerRow>
+              <PartnerRow>
+                <PartnerField label="License No" value={licenseNo} onChange={setLicenseNo} />
+                <PartnerField label="EIN / Federal ID" value={ein} onChange={setEin} />
+                <PartnerField label="Sales Tax License" value={salesTaxLicense} onChange={setSalesTaxLicense} />
+              </PartnerRow>
+              <PartnerField label="Lien Code" value={lienCode} onChange={setLienCode} />
+            </div>
+
+            {/* Contact Info */}
+            <div>
+              <PartnerSectionLabel>Contact Info</PartnerSectionLabel>
+              <PartnerField label="Name" value={contactName} onChange={setContactName} />
+              <PartnerRow>
+                <PartnerField label="Phone" value={contactPhone} onChange={setContactPhone} placeholder="(___) ___-____" />
+                <PartnerField label="Cell" value={contactCell} onChange={setContactCell} placeholder="(___) ___-____" />
+              </PartnerRow>
+              <PartnerField label="Address" value={contactAddress} onChange={setContactAddress} placeholder="Street, City, State, ZIP" />
+              <PartnerField label="Email" value={contactEmail} onChange={setContactEmail} placeholder="name@example.com" />
+              <PartnerField label="Loss Payee Address" value={contactLossPayeeAddress} onChange={setContactLossPayeeAddress} placeholder="Street, City, State, ZIP" />
+              <PartnerField label="Alias" value={contactAlias} onChange={setContactAlias} />
+            </div>
+
+            {/* Shipping Info */}
+            <div>
+              <PartnerSectionLabel>Shipping Info</PartnerSectionLabel>
+              <PartnerRow>
+                <PartnerField label="Name" value={shippingName} onChange={setShippingName} />
+                <PartnerField label="Business Phone" value={shippingBusinessPhone} onChange={setShippingBusinessPhone} placeholder="(___) ___-____" />
+              </PartnerRow>
+              <PartnerField label="Address" value={shippingAddress} onChange={setShippingAddress} placeholder="Street, City, State, ZIP" />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '14px 24px', borderTop: '1px solid rgba(0,0,0,0.06)',
+          background: 'rgba(0,0,0,0.02)', gap: 12,
+        }}>
+          <p style={{ fontSize: 12, color: err ? '#dc2626' : 'rgba(0,0,0,0.5)' }}>
+            {err ?? `${categories.size} categor${categories.size === 1 ? 'y' : 'ies'} selected`}
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={onClose} disabled={saving} style={v2Btn('ghost')}>Cancel</button>
+            <button onClick={save} disabled={saving || !companyName.trim()} style={v2Btn('primary')}>
+              {saving ? 'Saving…' : 'Save Partner'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PartnerSectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 style={{
+      fontSize: 14, fontWeight: 800, color: '#0a0a0a',
+      borderBottom: '1px solid rgba(0,0,0,0.12)',
+      paddingBottom: 8, marginBottom: 16, letterSpacing: '-0.01em',
+    }}>{children}</h3>
+  )
+}
+
+function PartnerRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: `repeat(${React.Children.count(children)}, 1fr)`,
+      gap: 12, marginBottom: 14,
+    }}>{children}</div>
+  )
+}
+
+function PartnerField({
+  label, value, onChange, placeholder, required,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  required?: boolean
+}) {
+  return (
+    <label style={{ display: 'block', marginBottom: 14 }}>
+      <span style={{
+        display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(0,0,0,0.6)',
+        marginBottom: 4, letterSpacing: '-0.005em',
+      }}>{label}{required && <span style={{ color: '#dc2626', marginLeft: 2 }}>*</span>}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          width: '100%', padding: '8px 10px',
+          border: '1px solid rgba(0,0,0,0.14)', borderRadius: 8,
+          fontSize: 13, color: '#1d1d1f', background: '#fff',
+          minHeight: 'auto', boxSizing: 'border-box',
+        }}
+      />
+    </label>
+  )
+}
 
 function AddCostModal({ vehicleId, onClose, onSaved }: { vehicleId: string; onClose: () => void; onSaved: () => void }) {
   const [kind, setKind] = useState<string>('recon')
@@ -1831,7 +2914,7 @@ function GlassEyebrow({ label, subtitle, action }: { label: string; subtitle?: s
 
 function PriceAndCostCard({
   vehicle, costAdds, isAdmin, currentUserId, busy,
-  onSavePartial, onAddCost, onDeleteCostAdd,
+  onSavePartial, onManageCosts, onDeleteCostAdd,
 }: {
   vehicle: Vehicle
   costAdds: CostAdd[]
@@ -1839,7 +2922,7 @@ function PriceAndCostCard({
   currentUserId: string | null
   busy: boolean
   onSavePartial: (patch: Record<string, unknown>) => Promise<void>
-  onAddCost: () => void
+  onManageCosts: () => void
   onDeleteCostAdd: (id: string) => void
 }) {
   const [tab, setTab] = useState<'retail' | 'wholesale'>('retail')
@@ -1942,17 +3025,7 @@ function PriceAndCostCard({
               value={costAddsTotal}
               readonly
               accent
-              trailing={
-                <button
-                  onClick={(e) => { e.stopPropagation(); onAddCost() }}
-                  style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    color: '#0071e3', fontSize: 11, fontWeight: 600,
-                    padding: 0, minHeight: 'auto',
-                    letterSpacing: '-0.005em',
-                  }}
-                >+ Add</button>
-              }
+              onRowClick={onManageCosts}
             />
             <InlineField label="Packs"      value={packs}      onChange={setPacks}      accent />
           </FieldGrid>
@@ -2145,7 +3218,7 @@ function SegmentedToggle({
 // to telegraph "click me to edit inline".
 function InlineField({
   label, value, stringValue, onChange, onCommit, onCommitString,
-  type = 'money', locked, readonly, accent, placeholderEmpty, trailing,
+  type = 'money', locked, readonly, accent, placeholderEmpty, trailing, onRowClick,
 }: {
   label: string
   value?: number
@@ -2159,9 +3232,14 @@ function InlineField({
   accent?: boolean
   placeholderEmpty?: boolean
   trailing?: React.ReactNode
+  /** When set, makes the row itself clickable (cursor + hover lift) and triggers
+   *  this handler on click instead of opening the edit input. Used for drill-in
+   *  patterns like Cost Adds → click the row to open the manager modal. */
+  onRowClick?: () => void
 }) {
   const isReadonly = !!(locked || readonly)
   const isEditable = !isReadonly || !!onChange
+  const isClickable = isEditable || !!onRowClick
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<string>('')
   const [saving, setSaving] = useState(false)
@@ -2208,9 +3286,12 @@ function InlineField({
     <div
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      onClick={() => { if (isEditable && !editing) startEdit() }}
+      onClick={() => {
+        if (onRowClick) { onRowClick(); return }
+        if (isEditable && !editing) startEdit()
+      }}
       style={{
-        ...chipBoxStyle(editing, hover, isEditable),
+        ...chipBoxStyle(editing, hover, isClickable),
         opacity: saving ? 0.55 : 1,
       }}>
       <span style={{
@@ -3850,13 +4931,30 @@ const ACQUIRED_MILEAGE_STATUS_OPTIONS = [
   { value: 'exceeds',  label: 'Exceeds Mechanical Limits' },
 ]
 
+// Fixed payment-method list (not user-editable). Values are canonical
+// snake_case-ish for storage; labels are what the user sees.
 const PAYMENT_METHOD_OPTIONS = [
-  { value: 'cash',    label: 'Cash' },
-  { value: 'check',   label: 'Check' },
-  { value: 'wire',    label: 'Wire' },
-  { value: 'ach',     label: 'ACH' },
-  { value: 'card',    label: 'Card' },
-  { value: 'other',   label: 'Other' },
+  { value: 'cash',               label: 'Cash' },
+  { value: 'check',              label: 'Check' },
+  { value: 'visa',               label: 'Visa' },
+  { value: 'master_card',        label: 'Master Card' },
+  { value: 'discover',           label: 'Discover' },
+  { value: 'american_express',   label: 'American Express' },
+  { value: 'other_credit_card',  label: 'Other Credit Card' },
+  { value: 'debit_card',         label: 'Debit Card' },
+  { value: 'money_order',        label: 'Money Order' },
+  { value: 'voucher',            label: 'Voucher' },
+  { value: 'paypal',             label: 'PayPal' },
+  { value: 'venmo',              label: 'Venmo' },
+  { value: 'zelle',              label: 'Zelle' },
+  { value: 'cashiers_check',     label: "Cashier's Check" },
+  { value: 'wire_transfer',      label: 'Wire Transfer' },
+  { value: 'ach',                label: 'ACH' },
+  { value: 'cash_app',           label: 'Cash App' },
+  { value: 'apple_pay',          label: 'Apple Pay' },
+  { value: 'google_pay',         label: 'Google Pay' },
+  { value: 'trade_in_payoff',    label: 'Trade-In Payoff' },
+  { value: 'other',              label: 'Other' },
 ]
 
 function PurchaseInfoStudio({
