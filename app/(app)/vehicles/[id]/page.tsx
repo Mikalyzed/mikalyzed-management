@@ -2335,16 +2335,17 @@ function LogisticsHubCard({
     <GlassCard>
       <GlassEyebrow label="Logistics" subtitle="Title · Location · Floorplan" />
 
-      <div style={{ borderRadius: 12, overflow: 'hidden' }}>
-        {rows.map((r, i) => (
-          <div key={r.label} style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-            padding: '10px 12px',
-            background: i % 2 === 0 ? 'rgba(0,0,0,0.025)' : 'transparent',
-            gap: 12,
-          }}>
-            <span style={{ fontSize: 12, color: 'rgba(0,0,0,0.55)', fontWeight: 500 }}>{r.label}</span>
-            <span style={{ fontSize: 13, color: '#1d1d1f', fontWeight: 600, textAlign: 'right' }}>{r.value}</span>
+      {/* Read-only chip rows — matches the chipBoxStyle visual language used by every
+          other field card on the page (Mechanical Blueprint, Title Registration, etc.),
+          so the General Info tab reads as one cohesive surface. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {rows.map((r) => (
+          <div key={r.label} style={chipBoxStyle(false, false, false)}>
+            <span style={labelStyle}>{r.label}</span>
+            <span style={{
+              fontSize: 13, color: '#1d1d1f', fontWeight: 600, textAlign: 'right',
+              minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{r.value}</span>
           </div>
         ))}
       </div>
