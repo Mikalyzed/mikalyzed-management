@@ -353,8 +353,9 @@ function SectionHeader({ label, count, color }: { label: string; count: number; 
    Glass card mirroring the inventory ledger aesthetic.  Top edge carries a
    colored accent indicating Active vs Scheduled (no loud frame).  Checklist
    items sit on faint glass tints; CTAs use the inventory dark-pill style. */
-function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
+function ActiveVehicleCard({ job, onToggleTask, onComplete, onStart, adminAction }: {
   job: VehicleJob; onToggleTask: (id: string, idx: number) => void; onComplete: (id: string) => void
+  onStart?: (id: string) => void
   adminAction?: () => void
 }) {
   const v = job.vehicle
@@ -369,6 +370,9 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
   return (
     <div className="active-card" style={{
       position: 'relative',
+      // Column flex so the actions row can be pinned to the bottom across cards
+      // of varying title/content height — keeps Start/Complete/Remove aligned.
+      display: 'flex', flexDirection: 'column',
       flex: '1 1 340px', maxWidth: 420,
       padding: '16px 18px 14px',
       borderRadius: 18,
@@ -455,7 +459,17 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, adminAction }: {
         </div>
       )}
 
-      <div className="active-card-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div className="active-card-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 'auto', paddingTop: 12 }}>
+        {job.status === 'pending' && onStart && (
+          <button onClick={() => onStart(job.id)} style={{
+            padding: '9px 22px', borderRadius: 999,
+            border: '1px solid rgba(255, 255, 255, 0.18)',
+            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95))',
+            color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '-0.005em',
+            cursor: 'pointer',
+            boxShadow: '0 6px 18px -6px rgba(37, 99, 235, 0.45), inset 0 1px 0 rgba(255,255,255,0.25)',
+          }}>Start</button>
+        )}
         {job.status === 'in_progress' && (
           <button onClick={() => onComplete(job.id)} disabled={!allDone} style={{
             padding: '9px 22px', borderRadius: 999, border: 'none',
@@ -517,10 +531,11 @@ function SatinStatusChip({ children, tone }: { children: React.ReactNode; tone: 
 }
 
 /* ── Active Task Card ── */
-function ActiveTaskCard({ task, onComplete, onToggleSubtask, onEdit, adminAction }: {
+function ActiveTaskCard({ task, onComplete, onToggleSubtask, onEdit, onStart, adminAction }: {
   task: ContentTask; onComplete: (id: string) => void
   onToggleSubtask?: (taskId: string, idx: number) => void
   onEdit?: (task: ContentTask) => void
+  onStart?: (id: string) => void
   adminAction?: () => void
 }) {
   const isActive = task.status === 'in_progress'
@@ -534,6 +549,9 @@ function ActiveTaskCard({ task, onComplete, onToggleSubtask, onEdit, adminAction
   return (
     <div className="active-card" style={{
       position: 'relative',
+      // Column flex so the actions row can pin to the bottom regardless of
+      // title length / subtask count, keeping buttons aligned across cards.
+      display: 'flex', flexDirection: 'column',
       flex: '1 1 340px', maxWidth: 420,
       padding: '16px 18px 14px',
       borderRadius: 18,
@@ -660,7 +678,17 @@ function ActiveTaskCard({ task, onComplete, onToggleSubtask, onEdit, adminAction
         </div>
       )}
 
-      <div className="active-card-actions" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <div className="active-card-actions" style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 'auto', paddingTop: 12 }}>
+        {task.status === 'todo' && onStart && (
+          <button onClick={() => onStart(task.id)} style={{
+            padding: '9px 22px', borderRadius: 999,
+            border: '1px solid rgba(255, 255, 255, 0.18)',
+            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95))',
+            color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: '-0.005em',
+            cursor: 'pointer',
+            boxShadow: '0 6px 18px -6px rgba(37, 99, 235, 0.45), inset 0 1px 0 rgba(255,255,255,0.25)',
+          }}>Start</button>
+        )}
         {task.status === 'in_progress' && (
           <button onClick={() => onComplete(task.id)} disabled={!canComplete} style={{
             padding: '9px 22px', borderRadius: 999, border: 'none',
@@ -1696,10 +1724,12 @@ export default function ContentBoard() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
             {dayVehicles.map(job => (
               <ActiveVehicleCard key={job.id} job={job} onToggleTask={toggleTask} onComplete={completeVehicle}
+                onStart={startVehicle}
                 adminAction={isAdmin ? () => unschedule(job.id, 'vehicle') : undefined} />
             ))}
             {dayTasks.map(task => (
               <ActiveTaskCard key={task.id} task={task} onComplete={completeTask} onToggleSubtask={toggleSubtask} onEdit={setEditTask}
+                onStart={startTask}
                 adminAction={isAdmin ? () => unschedule(task.id, 'task') : undefined} />
             ))}
           </div>
