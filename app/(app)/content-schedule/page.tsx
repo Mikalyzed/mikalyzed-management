@@ -411,7 +411,7 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, onStart, adminAction
             {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}{v.color ? ` · ${v.color}` : ''}
           </p>
         </div>
-        <SatinStatusChip tone={accent}>{isActive ? 'Active' : 'Scheduled'}</SatinStatusChip>
+        <SatinStatusChip tone={accent}>{isActive ? 'In Progress' : 'Scheduled'}</SatinStatusChip>
       </div>
 
       <div style={{
@@ -607,7 +607,7 @@ function ActiveTaskCard({ task, onComplete, onToggleSubtask, onEdit, onStart, ad
             }}>{task.description}</p>
           )}
         </div>
-        <SatinStatusChip tone={accent}>{isActive ? 'Active' : 'Scheduled'}</SatinStatusChip>
+        <SatinStatusChip tone={accent}>{isActive ? 'In Progress' : 'Scheduled'}</SatinStatusChip>
       </div>
 
       {task.assignee && (

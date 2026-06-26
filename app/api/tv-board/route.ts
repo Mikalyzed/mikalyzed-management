@@ -30,10 +30,15 @@ export async function GET() {
 
     for (const stage of stageList) {
       const stageItems = allStages.filter(s => s.stage === stage)
-      // A stage is actually "in progress" only when the timer is running.
-      // status='in_progress' with timerStartedAt=null + pauseReason set = paused.
-      const active = stageItems.filter(s => s.status === 'in_progress' && !s.awaitingParts && s.timerStartedAt)
-      const paused = stageItems.filter(s => s.status === 'in_progress' && !s.awaitingParts && !s.timerStartedAt)
+      // Mechanic is the only stage with a real Start/Pause/Resume timer — for
+      // mechanic, in_progress + no timer = paused. Content/detailing/publish
+      // have no timer concept (just pending → in_progress → done), so every
+      // in_progress card there counts as active.
+      const isMechanic = stage === 'mechanic'
+      const active = stageItems.filter(s => s.status === 'in_progress' && !s.awaitingParts && (!isMechanic || s.timerStartedAt))
+      const paused = isMechanic
+        ? stageItems.filter(s => s.status === 'in_progress' && !s.awaitingParts && !s.timerStartedAt)
+        : []
       const pending = stageItems.filter(s => s.status === 'pending')
       const done = stageItems.filter(s => s.status === 'done')
 

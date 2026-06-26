@@ -65,10 +65,10 @@ function LiveTimer({ job, color }: { job: StageVehicle; color: string }) {
 
 function VehicleCard({ job, color }: { job: StageVehicle; color: string }) {
   const isMechanic = job.stage === 'mechanic'
-  // All stages use the same paused-vs-active rule:
-  // in_progress with timer running = active, in_progress without timer = paused.
-  const isActive = job.status === 'in_progress' && job.timerRunning
-  const isPaused = job.status === 'in_progress' && !job.timerRunning
+  // Only mechanic has a real Start/Pause/Resume timer. For all other stages,
+  // in_progress means in progress — there's nothing to be "paused" against.
+  const isActive = job.status === 'in_progress' && (!isMechanic || job.timerRunning)
+  const isPaused = isMechanic && job.status === 'in_progress' && !job.timerRunning
   const isQueued = job.status === 'pending'
 
   return (
