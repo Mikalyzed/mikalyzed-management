@@ -139,6 +139,99 @@ export async function GET(request: Request) {
     }
   }
 
+  // Content shoots — scheduled items from the content board: vehicles in the
+  // content stage plus standalone content tasks. Surface them here so the
+  // calendar shows what the content person is filming and when.
+  // The content board stores "day only" items at noon ET (16:00 UTC) as a
+  // sentinel — render those as all-day rather than a misleading 12:00 PM.
+  const isNoonSentinel = (d: Date) => d.getUTCHours() === 16 && d.getUTCMinutes() === 0
+  const includeContent = !type || type === 'content_shoot'
+  if (includeContent && !eventId) {
+    const hasRange = dateRange.gte || dateRange.lte
+    const schedWhere = hasRange
+      ? { ...(dateRange.gte ? { gte: dateRange.gte } : {}), ...(dateRange.lte ? { lte: dateRange.lte } : {}) }
+      : { not: null }
+
+    const contentStages = await prisma.vehicleStage.findMany({
+      where: {
+        stage: 'content',
+        status: { notIn: ['done', 'skipped'] },
+        scheduledDate: schedWhere,
+        ...(assigneeId ? { assigneeId } : {}),
+        ...(vehicleId ? { vehicleId } : {}),
+      },
+      include: {
+        vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+        assignee: { select: { id: true, name: true, role: true } },
+      },
+    })
+    for (const s of contentStages) {
+      if (!s.scheduledDate) continue
+      const v = s.vehicle
+      const desc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
+      synthItems.push({
+        id: `content-veh-${s.id}`,
+        title: `Content: #${v.stockNumber}${desc ? ` ${desc}` : ''}`,
+        type: 'content_shoot',
+        date: s.scheduledDate as Date,
+        endDate: null,
+        allDay: isNoonSentinel(s.scheduledDate),
+        location: null,
+        notes: null,
+        status: s.status === 'in_progress' ? 'in_progress' : 'scheduled',
+        vehicleId: s.vehicleId,
+        eventId: null,
+        createdById: null,
+        assignees: s.assignee
+          ? [{ user: s.assignee, userId: s.assignee.id, calendarItemId: `content-veh-${s.id}` } as any]
+          : [],
+        vehicle: v,
+        event: null,
+        createdBy: null,
+        createdAt: s.createdAt,
+        updatedAt: s.createdAt,
+      } as any)
+    }
+
+    // Standalone content tasks (skip when filtering to a specific vehicle)
+    if (!vehicleId) {
+      const contentTasks = await prisma.task.findMany({
+        where: {
+          category: 'content',
+          status: { notIn: ['done', 'skipped'] },
+          scheduledDate: schedWhere,
+          ...(assigneeId ? { assigneeId } : {}),
+        },
+        include: { assignee: { select: { id: true, name: true, role: true } } },
+      })
+      for (const t of contentTasks) {
+        if (!t.scheduledDate) continue
+        synthItems.push({
+          id: `content-task-${t.id}`,
+          title: `Content: ${t.title}`,
+          type: 'content_shoot',
+          date: t.scheduledDate as Date,
+          endDate: null,
+          allDay: isNoonSentinel(t.scheduledDate),
+          location: null,
+          notes: t.description,
+          status: t.status === 'in_progress' ? 'in_progress' : 'scheduled',
+          vehicleId: null,
+          eventId: null,
+          createdById: null,
+          assignees: t.assignee
+            ? [{ user: t.assignee, userId: t.assignee.id, calendarItemId: `content-task-${t.id}` } as any]
+            : [],
+          vehicle: null,
+          event: null,
+          createdBy: null,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+        } as any)
+      }
+    }
+  }
+
   const merged = [...items, ...synthItems].sort((a, b) =>
     new Date(a.date).getTime() - new Date(b.date).getTime()
   )

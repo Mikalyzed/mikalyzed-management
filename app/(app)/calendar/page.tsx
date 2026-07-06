@@ -226,6 +226,7 @@ export default function CalendarPage() {
                     <Link key={item.id} href={
                       item.id.startsWith('transport-') ? `/transport/${item.id.slice('transport-'.length)}`
                       : item.id.startsWith('event-') ? `/events/${item.id.slice('event-'.length)}`
+                      : item.id.startsWith('content-') ? '/content-schedule'
                       : `/calendar/${item.id}`
                     } style={{
                       display: 'block',
@@ -260,6 +261,7 @@ function ItemCard({ item }: { item: CalendarItem }) {
   const href =
     item.id.startsWith('transport-') ? `/transport/${item.id.slice('transport-'.length)}`
     : item.id.startsWith('event-') ? `/events/${item.id.slice('event-'.length)}`
+    : item.id.startsWith('content-') ? '/content-schedule'
     : `/calendar/${item.id}`
 
   return (

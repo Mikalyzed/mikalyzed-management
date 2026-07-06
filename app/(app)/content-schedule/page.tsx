@@ -58,6 +58,38 @@ type BoardData = {
   stats: { total: number; activeCount: number; todayCount: number; completedToday: number; completedThisWeek: number }
 }
 
+// Short ET clock label for a scheduled item, e.g. "9:00 AM". Noon is the legacy
+// "day only, no time set" sentinel, so we hide the chip for those to avoid noise.
+function schedTimeLabel(iso: string | null): string | null {
+  if (!iso) return null
+  const h24 = new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/New_York' })
+  if (h24 === '12:00') return null
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })
+}
+
+// Small clock pill shown on scheduled cards next to the status chip.
+function SchedTimeChip({ iso }: { iso: string | null }) {
+  const label = schedTimeLabel(iso)
+  if (!label) return null
+  return (
+    <span style={{
+      fontSize: 11, fontWeight: 700, color: '#1d4ed8', letterSpacing: '-0.005em',
+      background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)',
+      padding: '2px 8px', borderRadius: 999,
+      display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
+    }}>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+      {label}
+    </span>
+  )
+}
+
+// Sort scheduled items chronologically by their scheduledDate. Full ISO strings
+// sort correctly lexicographically; nulls sink to the bottom.
+function bySchedTime(a: { scheduledDate: string | null }, b: { scheduledDate: string | null }): number {
+  return (a.scheduledDate || '~').localeCompare(b.scheduledDate || '~')
+}
+
 function StatBox({ label, value, color, onClick, active }: { label: string; value: number; color?: string; onClick?: () => void; active?: boolean }) {
   const [hovered, setHovered] = useState(false)
   const isClickable = !!onClick
@@ -411,7 +443,10 @@ function ActiveVehicleCard({ job, onToggleTask, onComplete, onStart, adminAction
             {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}{v.color ? ` · ${v.color}` : ''}
           </p>
         </div>
-        <SatinStatusChip tone={accent}>{isActive ? 'In Progress' : 'Scheduled'}</SatinStatusChip>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
+          <SatinStatusChip tone={accent}>{isActive ? 'In Progress' : 'Scheduled'}</SatinStatusChip>
+          {!isActive && <SchedTimeChip iso={job.scheduledDate} />}
+        </div>
       </div>
 
       <div style={{
@@ -607,7 +642,10 @@ function ActiveTaskCard({ task, onComplete, onToggleSubtask, onEdit, onStart, ad
             }}>{task.description}</p>
           )}
         </div>
-        <SatinStatusChip tone={accent}>{isActive ? 'In Progress' : 'Scheduled'}</SatinStatusChip>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
+          <SatinStatusChip tone={accent}>{isActive ? 'In Progress' : 'Scheduled'}</SatinStatusChip>
+          {!isActive && <SchedTimeChip iso={task.scheduledDate} />}
+        </div>
       </div>
 
       {task.assignee && (
@@ -960,12 +998,111 @@ function QueueTaskCard({ task, onStart, isAdmin, onSchedule, onDelete, onEdit, i
   )
 }
 
+/* ── Custom glass time picker (replaces the un-styleable native time input) ── */
+function TimeColumn({ isOpen, onToggle, display, options, selected, onPick }: {
+  isOpen: boolean; onToggle: () => void
+  display: string
+  options: { value: number; label: string }[]
+  selected: number; onPick: (v: number) => void
+}) {
+  const selRef = useRef<HTMLButtonElement>(null)
+  // Center the current value in the list each time the popover opens.
+  useEffect(() => {
+    if (isOpen) selRef.current?.scrollIntoView({ block: 'center' })
+  }, [isOpen])
+
+  return (
+    <div style={{ position: 'relative', flex: 1 }}>
+      <button type="button" onClick={onToggle} style={{
+        width: '100%', padding: '10px 12px', borderRadius: 12,
+        border: isOpen ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid rgba(255, 255, 255, 0.55)',
+        background: isOpen ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.55)',
+        backdropFilter: 'blur(10px) saturate(180%)', WebkitBackdropFilter: 'blur(10px) saturate(180%)',
+        color: isOpen ? '#1d4ed8' : '#0a0a0a', fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
+        transition: 'background 160ms ease, color 160ms ease, border-color 160ms ease',
+      }}>
+        {display}
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.55, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 180ms ease' }}><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+      {isOpen && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 6,
+          maxHeight: 176, overflowY: 'auto', padding: 5, borderRadius: 14,
+          background: 'rgba(255, 255, 255, 0.82)',
+          backdropFilter: 'blur(28px) saturate(180%)', WebkitBackdropFilter: 'blur(28px) saturate(180%)',
+          border: '1px solid rgba(255, 255, 255, 0.6)',
+          boxShadow: '0 18px 44px -16px rgba(31, 38, 135, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.85)',
+        }}>
+          {options.map(o => {
+            const sel = o.value === selected
+            return (
+              <button key={o.value} type="button" ref={sel ? selRef : undefined}
+                onClick={() => onPick(o.value)} style={{
+                  width: '100%', textAlign: 'center', padding: '8px 0', borderRadius: 9, border: 'none',
+                  background: sel ? 'rgba(59, 130, 246, 0.14)' : 'transparent',
+                  color: sel ? '#1d4ed8' : 'rgba(0, 0, 0, 0.7)',
+                  fontSize: 14, fontWeight: sel ? 800 : 600, letterSpacing: '-0.01em', cursor: 'pointer',
+                  transition: 'background 140ms ease',
+                }}
+                onMouseEnter={e => { if (!sel) e.currentTarget.style.background = 'rgba(0,0,0,0.04)' }}
+                onMouseLeave={e => { if (!sel) e.currentTarget.style.background = 'transparent' }}
+              >{o.label}</button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TimePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [h24, mRaw] = value.split(':').map(n => parseInt(n, 10))
+  const minute = isNaN(mRaw) ? 0 : Math.round(mRaw / 5) * 5
+  const period: 0 | 1 = h24 >= 12 ? 1 : 0 // 0 = AM, 1 = PM
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
+  const [open, setOpen] = useState<null | 'h' | 'm' | 'p'>(null)
+
+  const emit = (nh12: number, nMin: number, nPer: 0 | 1) => {
+    const nh = nPer === 1 ? (nh12 === 12 ? 12 : nh12 + 12) : (nh12 === 12 ? 0 : nh12)
+    onChange(`${String(nh).padStart(2, '0')}:${String(nMin).padStart(2, '0')}`)
+    setOpen(null)
+  }
+
+  const hourOpts = Array.from({ length: 12 }, (_, i) => ({ value: i + 1, label: String(i + 1).padStart(2, '0') }))
+  const minOpts = Array.from({ length: 12 }, (_, i) => ({ value: i * 5, label: String(i * 5).padStart(2, '0') }))
+  const perOpts = [{ value: 0, label: 'AM' }, { value: 1, label: 'PM' }]
+
+  return (
+    <div style={{ position: 'relative', marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <TimeColumn isOpen={open === 'h'} onToggle={() => setOpen(open === 'h' ? null : 'h')}
+          display={String(h12).padStart(2, '0')} options={hourOpts} selected={h12}
+          onPick={v => emit(v, minute, period)} />
+        <span style={{ fontSize: 18, fontWeight: 800, color: 'rgba(0,0,0,0.35)' }}>:</span>
+        <TimeColumn isOpen={open === 'm'} onToggle={() => setOpen(open === 'm' ? null : 'm')}
+          display={String(minute).padStart(2, '0')} options={minOpts} selected={minute}
+          onPick={v => emit(h12, v, period)} />
+        <TimeColumn isOpen={open === 'p'} onToggle={() => setOpen(open === 'p' ? null : 'p')}
+          display={period === 1 ? 'PM' : 'AM'} options={perOpts} selected={period}
+          onPick={v => emit(h12, minute, v as 0 | 1)} />
+      </div>
+      {/* Click-away layer to dismiss an open column. */}
+      {open && <div onClick={() => setOpen(null)} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />}
+    </div>
+  )
+}
+
 /* ── Schedule Modal ── */
-function ScheduleModal({ onConfirm, onCancel }: {
-  onConfirm: (date: string) => void; onCancel: () => void
+function ScheduleModal({ initialDate, initialTime, onConfirm, onCancel }: {
+  initialDate?: string | null; initialTime?: string | null
+  onConfirm: (date: string, time: string) => void; onCancel: () => void
 }) {
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
-  const [date, setDate] = useState(today)
+  const [date, setDate] = useState(initialDate || today)
+  // Time-of-day the content person plans to shoot. Defaults to 9:00 AM.
+  const [time, setTime] = useState(initialTime || '09:00')
 
   // Generate next 7 days as quick picks
   const days: { label: string; value: string }[] = []
@@ -1007,8 +1144,12 @@ function ScheduleModal({ onConfirm, onCancel }: {
         <h3 style={{
           fontSize: 18, fontWeight: 800, margin: '0 0 16px',
           letterSpacing: '-0.02em', color: '#0a0a0a',
-        }}>Pick a day</h3>
+        }}>Pick a day &amp; time</h3>
 
+        <p style={{
+          fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase',
+          color: 'rgba(0, 0, 0, 0.5)', margin: '0 0 8px',
+        }}>Day</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
           {days.map(d => {
             const isActive = date === d.value
@@ -1031,8 +1172,14 @@ function ScheduleModal({ onConfirm, onCancel }: {
           })}
         </div>
 
+        <p style={{
+          fontSize: 10, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase',
+          color: 'rgba(0, 0, 0, 0.5)', margin: '0 0 8px',
+        }}>Time</p>
+        <TimePicker value={time} onChange={setTime} />
+
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => onConfirm(date)} style={{
+          <button onClick={() => onConfirm(date, time)} style={{
             flex: 1, padding: '11px 0', borderRadius: 999, border: 'none',
             background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95))',
             color: '#fff', fontSize: 13, fontWeight: 700, letterSpacing: '-0.005em',
@@ -1423,11 +1570,11 @@ export default function ContentBoard() {
 
   const openSchedule = (id: string, type: 'vehicle' | 'task') => setScheduling({ id, type })
 
-  const confirmSchedule = async (date: string) => {
+  const confirmSchedule = async (date: string, time: string) => {
     if (!scheduling) return
     await fetch('/api/content-board/schedule', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: [{ id: scheduling.id, type: scheduling.type, date }] }),
+      body: JSON.stringify({ items: [{ id: scheduling.id, type: scheduling.type, date, time }] }),
     })
     setScheduling(null)
     fetchData()
@@ -1553,13 +1700,13 @@ export default function ContentBoard() {
   const isViewingToday = selectedDay === todayET
   const dayVehicles = [
     ...(isViewingToday ? data.active : []),
-    ...(isViewingToday ? overdueVehicles : []),
-    ...data.scheduled.filter(j => dayKey(j.scheduledDate) === selectedDay),
+    ...(isViewingToday ? [...overdueVehicles].sort(bySchedTime) : []),
+    ...data.scheduled.filter(j => dayKey(j.scheduledDate) === selectedDay).sort(bySchedTime),
   ]
   const dayTasks = [
     ...(isViewingToday ? data.activeTasks : []),
-    ...(isViewingToday ? overdueTasks : []),
-    ...data.scheduledTasks.filter(t => dayKey(t.scheduledDate) === selectedDay),
+    ...(isViewingToday ? [...overdueTasks].sort(bySchedTime) : []),
+    ...data.scheduledTasks.filter(t => dayKey(t.scheduledDate) === selectedDay).sort(bySchedTime),
   ]
   const dayLabel = (() => {
     if (selectedDay === todayET) return 'Today'
@@ -1883,8 +2030,18 @@ export default function ContentBoard() {
         fetchData()
       }} onCancel={() => setEditTask(null)} />}
 
-      {/* Schedule Modal */}
-      {scheduling && <ScheduleModal onConfirm={confirmSchedule} onCancel={() => setScheduling(null)} />}
+      {/* Schedule Modal — pre-fill with the item's current day/time when re-scheduling */}
+      {scheduling && (() => {
+        const pool = scheduling.type === 'vehicle'
+          ? [...data.active, ...data.scheduled, ...data.queuedVehicles]
+          : [...data.activeTasks, ...data.scheduledTasks, ...data.queuedTasks]
+        const iso = pool.find(i => i.id === scheduling.id)?.scheduledDate || null
+        const initDate = iso ? new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) : null
+        // 24h ET clock; skip the noon sentinel so the 9:00 AM default applies to day-only items.
+        const h24 = iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/New_York' }) : null
+        const initTime = h24 && h24 !== '12:00' ? h24 : null
+        return <ScheduleModal initialDate={initDate} initialTime={initTime} onConfirm={confirmSchedule} onCancel={() => setScheduling(null)} />
+      })()}
     </div>
   )
 }

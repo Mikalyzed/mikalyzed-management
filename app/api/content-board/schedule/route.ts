@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
 
-// POST: assign items to a date
-// body: { items: [{ id, type: 'vehicle'|'task', date: 'YYYY-MM-DD' | null }] }
+// POST: assign items to a date (and optional time-of-day)
+// body: { items: [{ id, type: 'vehicle'|'task', date: 'YYYY-MM-DD' | null, time?: 'HH:MM' }] }
 export async function POST(request: Request) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -16,7 +16,10 @@ export async function POST(request: Request) {
   if (!Array.isArray(items)) return NextResponse.json({ error: 'items required' }, { status: 400 })
 
   for (const item of items) {
-    const date = item.date ? new Date(item.date + 'T12:00:00-04:00') : null
+    // Time-of-day the content person plans to shoot. Defaults to noon (the legacy
+    // "day only, no time set" sentinel) when omitted, so old callers keep working.
+    const time = typeof item.time === 'string' && /^\d{2}:\d{2}$/.test(item.time) ? item.time : '12:00'
+    const date = item.date ? new Date(`${item.date}T${time}:00-04:00`) : null
     if (item.type === 'vehicle') {
       await prisma.vehicleStage.update({
         where: { id: item.id },
