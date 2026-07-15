@@ -444,6 +444,9 @@ export async function GET() {
     paused: paused.map(format),
     queued: queuedWithReturned.map(format),
     completedToday: completedToday.map(format),
+    // Cars completed in the mechanic stage since Monday (formatted w/ assignees so
+    // the lane filter applies) — powers the "Completed This Week" KPI.
+    completedThisWeek: stages.filter(s => s.status === 'done' && s.completedAt && s.completedAt >= weekStart).map(format),
     workedToday: workedToday.map(format),
     pausedNotToday: [],
     awaitingParts: awaitingPartsAll.map(format),

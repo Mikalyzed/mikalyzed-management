@@ -96,7 +96,7 @@ type JobCard = {
 type DayBucket = { day: string; jobs: JobCard[] }
 
 type BoardData = {
-  active: JobCard[]; paused: JobCard[]; queued: JobCard[]; completedToday: JobCard[]
+  active: JobCard[]; paused: JobCard[]; queued: JobCard[]; completedToday: JobCard[]; completedThisWeek?: JobCard[]
   workedToday: JobCard[]; pausedNotToday: JobCard[]; awaitingParts: JobCard[]; today: JobCard[]; remainingDays: DayBucket[]
   weeklyEstimatedHours: number; weeklyWorkedHours: number; remainingHoursThisWeek: number; hoursLeftToday: number
   isWorkHours: boolean
@@ -681,6 +681,7 @@ export default function MechanicBoard() {
   const vPaused = visible(data.paused)
   const vAwaiting = visible(data.awaitingParts)
   const vCompletedToday = visible(data.completedToday)
+  const vCompletedThisWeek = visible(data.completedThisWeek || [])
 
   const renderCard = (job: JobCard, showActions = true) => {
     const colorKey = getJobColorKey(job)
@@ -1056,25 +1057,29 @@ export default function MechanicBoard() {
         <StatBox value={vQueued.length} label="Queued" color="#94a3b8" />
         <StatBox value={vPaused.length} label="Paused" color="#f59e0b" />
         <StatBox value={vCompletedToday.length} label="Done Today" color="#22c55e" />
-        {mechList.length > 0 && (
-          <div className="pipeline-chip">
-            <p className="pipeline-chip-value" style={{ fontSize: 18 }}>{workedTodayFiltered}h</p>
-            <p className="pipeline-chip-label">{workedTodayLabel}</p>
-          </div>
-        )}
-        <div className="pipeline-chip">
-          <p className="pipeline-chip-value" style={{ fontSize: 18 }}>{data.weeklyEstimatedHours}h</p>
-          <p className="pipeline-chip-label">Est. This Week</p>
-        </div>
-        <div className="pipeline-chip" style={{ position: 'relative' }}>
-          <p className="pipeline-chip-value" style={{ fontSize: 18 }}>{data.weeklyWorkedHours}h</p>
-          <p className="pipeline-chip-label">Worked This Week</p>
-          {data.weeklyEstimatedHours > 0 && (
-            <span className="desktop-only" style={{ fontSize: 10, fontWeight: 700, color: effColor, marginTop: 2 }}>
-              {effPct}% — {effLabel}
-            </span>
+        <StatBox value={vCompletedThisWeek.length} label="Completed This Week" color="#16a34a" />
+        {/* Hours + efficiency chips are ADMIN-ONLY. Mechanics get the clean five counts. */}
+        {isAdmin && (<>
+          {mechList.length > 0 && (
+            <div className="pipeline-chip">
+              <p className="pipeline-chip-value" style={{ fontSize: 18 }}>{workedTodayFiltered}h</p>
+              <p className="pipeline-chip-label">{workedTodayLabel}</p>
+            </div>
           )}
-        </div>
+          <div className="pipeline-chip">
+            <p className="pipeline-chip-value" style={{ fontSize: 18 }}>{data.weeklyEstimatedHours}h</p>
+            <p className="pipeline-chip-label">Est. This Week</p>
+          </div>
+          <div className="pipeline-chip" style={{ position: 'relative' }}>
+            <p className="pipeline-chip-value" style={{ fontSize: 18 }}>{data.weeklyWorkedHours}h</p>
+            <p className="pipeline-chip-label">Worked This Week</p>
+            {data.weeklyEstimatedHours > 0 && (
+              <span className="desktop-only" style={{ fontSize: 10, fontWeight: 700, color: effColor, marginTop: 2 }}>
+                {effPct}% — {effLabel}
+              </span>
+            )}
+          </div>
+        </>)}
       </div>
 
       {/* Working Today */}
@@ -1104,7 +1109,13 @@ export default function MechanicBoard() {
 
       {/* Remaining This Week — collapsed by default, broken down by day */}
       {data.remainingDays.length > 0 && (() => {
-        const totalRemaining = data.remainingDays.reduce((sum, d) => sum + d.jobs.length, 0)
+        // Filter each day to the active lane — a mechanic only sees THEIR remaining
+        // jobs — and drop any day that becomes empty.
+        const days = data.remainingDays
+          .map(d => ({ ...d, jobs: visible(d.jobs) }))
+          .filter(d => d.jobs.length > 0)
+        if (days.length === 0) return null
+        const totalRemaining = days.reduce((sum, d) => sum + d.jobs.length, 0)
         return (
           <div style={{ marginBottom: 24 }}>
             <button
@@ -1127,7 +1138,7 @@ export default function MechanicBoard() {
             </button>
             {showRemainingWeek && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {data.remainingDays.map((bucket) => {
+                {days.map((bucket) => {
                   const dayHours = bucket.jobs.reduce((sum, j) => sum + (j.estimatedHours || 2), 0)
                   return (
                     <div key={bucket.day}>
