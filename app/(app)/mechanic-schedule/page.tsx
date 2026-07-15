@@ -775,33 +775,8 @@ export default function MechanicBoard() {
           </div>
         </div>
 
-        {/* Per-mechanic split — only on shared cars, so you can see each person's time even though the total combines */}
-        {(job.timers || []).filter(t => t.userId).length > 1 && (
-          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5, padding: '8px 10px', background: 'rgba(0,0,0,0.03)', borderRadius: 8 }}>
-            {(job.timers || []).filter(t => t.userId).map(t => {
-              const secs = getLiveEntry(t)
-              return (
-                <div key={t.userId} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <span style={{
-                    width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
-                    background: chipColor(t.userId!), color: '#fff',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 8, fontWeight: 800,
-                  }}>{initialsOf(t.name || '?')}</span>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{(t.name || '').split(' ')[0]}</span>
-                  {t.running && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }} />}
-                  {t.done && (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                  )}
-                  <span style={{
-                    marginLeft: 'auto', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-                    color: t.done ? '#16a34a' : t.running ? '#3b82f6' : 'var(--text-secondary)',
-                  }}>{formatTime(secs)}</span>
-                </div>
-              )
-            })}
-          </div>
-        )}
+        {/* Per-mechanic breakdown lives in the detail modal (tap the card) so the
+            board stays scannable — the card shows just the combined total + who's on it. */}
 
         {/* Progress bar */}
         <div style={{ marginTop: 8, height: 5, background: '#e2e5ea', borderRadius: 3, overflow: 'hidden' }}>
@@ -1331,6 +1306,36 @@ export default function MechanicBoard() {
                       <p style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-muted)', lineHeight: 1.2 }}>{selectedJob.estimatedHours || 2}h</p>
                     </div>
                   </div>
+
+                  {/* Time by mechanic — only when more than one worked this car. The
+                      Labor Time above is the combined total; this breaks it out. */}
+                  {(selectedJob.timers || []).filter(t => t.userId).length > 1 && (
+                    <div style={{ marginTop: 12, padding: '12px 16px', borderRadius: 12, background: '#f9fafb', border: '1px solid #e2e5ea' }}>
+                      <p style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Time by mechanic</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {(selectedJob.timers || []).filter(t => t.userId).map(t => {
+                          const secs = getLiveEntry(t)
+                          return (
+                            <div key={t.userId} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                              <span style={{
+                                width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
+                                background: chipColor(t.userId!), color: '#fff',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 10, fontWeight: 800,
+                              }}>{initialsOf(t.name || '?')}</span>
+                              <span style={{ fontSize: 14, fontWeight: 600 }}>{(t.name || '').split(' ')[0]}</span>
+                              {t.running && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, color: '#3b82f6' }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }} />Working</span>}
+                              {t.done && <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a' }}>✓ Done</span>}
+                              <span style={{
+                                marginLeft: 'auto', fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                                color: t.done ? '#16a34a' : t.running ? '#3b82f6' : 'var(--text-primary)',
+                              }}>{formatTime(secs)}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Checklist */}

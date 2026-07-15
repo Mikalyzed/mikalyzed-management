@@ -172,10 +172,16 @@ export async function POST(request: Request) {
   const newInventory = !!rawNewInventory && startingStage === 'mechanic'
 
   // Helpers to normalize checklist items: accept either string or { item, type }
-  type ChecklistInput = string | { item: string; type?: string }
+  type ChecklistInput = string | { item: string; type?: string; assigneeId?: string | null; assigneeName?: string | null }
   const toChecklistObj = (entry: ChecklistInput) => {
     if (typeof entry === 'string') return { item: entry, done: false, note: '' }
-    return { item: entry.item, done: false, note: '', ...(entry.type ? { type: entry.type } : {}) }
+    return {
+      item: entry.item, done: false, note: '',
+      ...(entry.type ? { type: entry.type } : {}),
+      // Preserve per-task mechanic assignment set in the Add Vehicle form so the
+      // stage is created with tasks already handed to specific mechanics.
+      ...(entry.assigneeId ? { assigneeId: entry.assigneeId, assigneeName: entry.assigneeName ?? null } : {}),
+    }
   }
 
   const SOLD_DELIVERY_TASKS = [
