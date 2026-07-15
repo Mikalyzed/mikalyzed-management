@@ -1,7 +1,5 @@
 'use client'
 
-import { StatusBadge } from './StageBadge'
-
 type ReturnQueueEntry = { stage: string; fromStage?: string; reason?: string }
 
 type VehicleCardProps = {
@@ -20,6 +18,11 @@ type VehicleCardProps = {
   partsLabel?: string | null
   returnQueue?: ReturnQueueEntry[]
   pauseReason?: string | null
+  // Display-only checklist progress (already loaded on the board) — drives the
+  // slim progress bar. Rendered only when checklistTotal > 0.
+  checklistDone?: number
+  checklistTotal?: number
+  progressLabel?: string | null
   onClick?: () => void
 }
 
@@ -28,6 +31,22 @@ const PARTS_COLORS: Record<string, string> = {
   'Parts pending approval': '#a16207',
   'Parts need to be ordered': '#2563eb',
   'Parts ordered': '#eab308',
+}
+
+// Stable, friendly avatar tints keyed off the assignee's name.
+const AVATAR_COLORS = ['#6366f1', '#0d9488', '#8b5cf6', '#16a34a', '#d97706', '#e11d48', '#2563eb', '#0891b2']
+
+function avatarColor(name: string): string {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 function titleCase(s: string) {
@@ -45,9 +64,29 @@ function sentenceCase(s: string): string {
   return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
 
+// Map the computed stage status → a calm pill (dot + label) + a spine colour.
+// Colour encodes state so a busy board reads at a glance: green active, amber
+// paused, blue parts, red blocked, neutral queued. `spine` is a solid hex
+// (never a CSS var) so the glowing left edge always renders.
+function statusPill(status?: string, detail?: string): { label: string; fg: string; bg: string; spine: string } | null {
+  const s = detail || status
+  if (!s) return null
+  switch (s) {
+    case 'in_progress': return { label: 'Active', fg: '#16a34a', bg: '#edfaf0', spine: '#16a34a' }
+    case 'paused':
+    case 'auto_paused': return { label: 'Paused', fg: '#d97706', bg: '#fdf3e7', spine: '#f59e0b' }
+    case 'awaiting_parts': return { label: 'Parts', fg: '#2563eb', bg: '#eaf0fe', spine: '#2563eb' }
+    case 'blocked': return { label: 'Blocked', fg: '#e11d48', bg: '#fdecef', spine: '#e11d48' }
+    case 'done': return { label: 'Done', fg: '#16a34a', bg: '#edfaf0', spine: '#16a34a' }
+    case 'pending': return { label: 'Queued', fg: 'var(--text-secondary)', bg: 'var(--bg-primary)', spine: '#c7c7c1' }
+    default: return { label: titleCase(s.replace(/_/g, ' ')), fg: 'var(--text-secondary)', bg: 'var(--bg-primary)', spine: '#c7c7c1' }
+  }
+}
+
 export default function VehicleCard({
   stockNumber, year, make, model, color,
-  status, stageStatus, stageDetail, stageScope, assigneeName, timeInStage, partsLabel, returnQueue, pauseReason, onClick,
+  status, stageStatus, stageDetail, stageScope, assigneeName, timeInStage, partsLabel, returnQueue, pauseReason,
+  checklistDone, checklistTotal, progressLabel, onClick,
 }: VehicleCardProps) {
   const isCompleted = status === 'completed'
   // Skip queue entries whose target stage equals the vehicle's current stage —
@@ -57,27 +96,43 @@ export default function VehicleCard({
     : null
   const isSold = stageScope === 'Sold Delivery'
   // "New Inventory" is the legacy toggle scope; "New Vehicle Inspection" is
-  // the current template name. Both mark a fresh-intake mechanic stage and
-  // should fly the same blue "New Inspection" badge.
+  // the current template name. Both mark a fresh-intake mechanic stage.
   const isNewInventory = stageScope === 'New Inventory' || stageScope === 'New Vehicle Inspection'
 
-  const accentColor = isSold ? '#f59e0b'
-    : nextReturn ? '#f59e0b'
-    : isNewInventory ? '#3b82f6'
-    : null
-
-  let alertLabel: string | null = null
-  let alertColor: string | null = null
-  if (nextReturn) {
-    alertLabel = `Returns to ${titleCase(nextReturn.stage)}`
-    alertColor = '#92400e'
-  } else if (partsLabel) {
-    alertLabel = partsLabel
-    alertColor = PARTS_COLORS[partsLabel] || '#6b7280'
-  }
-
+  const pill = statusPill(stageStatus, stageDetail)
   const title = [year, titleCase(make), titleCase(model)].filter(Boolean).join(' ')
   const colorLabel = color ? titleCase(color) : null
+
+  const total = checklistTotal ?? 0
+  const done = Math.min(checklistDone ?? 0, total)
+  const pct = total > 0 ? Math.max(4, Math.round((done / total) * 100)) : 0
+  const allDone = total > 0 && done >= total
+
+  // Attention strips — one small inset per relevant signal (usually 0–1).
+  type Strip = { fg: string; bg: string; dot: string; label: React.ReactNode; title?: string }
+  const strips: Strip[] = []
+  if (nextReturn) {
+    strips.push({
+      fg: '#b45309', bg: '#fdf3e7', dot: '#f59e0b',
+      label: <><b style={{ fontWeight: 700 }}>Returns to {titleCase(nextReturn.stage)}</b>{nextReturn.reason ? ` · ${nextReturn.reason}` : ''}</>,
+      title: nextReturn.reason,
+    })
+  } else if (partsLabel) {
+    const c = PARTS_COLORS[partsLabel] || '#6b7280'
+    strips.push({ fg: c, bg: '#f6f7f9', dot: c, label: <b style={{ fontWeight: 700 }}>{partsLabel}</b> })
+  }
+  if (isSold) {
+    strips.push({ fg: '#b45309', bg: '#fdf3e7', dot: '#f59e0b', label: <><b style={{ fontWeight: 700 }}>Sold</b> · delivery prep</> })
+  }
+  if (isNewInventory) {
+    strips.push({ fg: '#1d4ed8', bg: '#eaf0fe', dot: '#2563eb', label: <b style={{ fontWeight: 700 }}>New inspection</b> })
+  }
+  if (pauseReason) {
+    strips.push({
+      fg: '#b45309', bg: '#fdf3e7', dot: '#ea580c',
+      label: <><b style={{ fontWeight: 700 }}>Paused</b> · {sentenceCase(pauseReason)}</>,
+    })
+  }
 
   return (
     <div
@@ -86,162 +141,143 @@ export default function VehicleCard({
       style={{
         cursor: onClick ? 'pointer' : undefined,
         position: 'relative',
-        background: '#ffffff',
-        borderRadius: 14,
-        padding: '16px 18px',
-        paddingLeft: accentColor ? 18 : 18,
-        border: '1px solid rgba(0,0,0,0.04)',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.04)',
+        background: 'var(--bg-card)',
+        borderRadius: 16,
+        padding: '14px 15px',
+        border: '1px solid var(--border)',
+        boxShadow: '0 1px 2px rgba(24,24,27,.04), 0 6px 16px -6px rgba(24,24,27,.10)',
         overflow: 'hidden',
-        transition: 'transform 0.14s ease, box-shadow 0.14s ease',
+        transition: 'transform 0.16s cubic-bezier(.2,.7,.3,1), box-shadow 0.16s ease, border-color 0.16s ease',
       }}
     >
-      {accentColor && (
-        <div style={{
-          position: 'absolute', top: 0, bottom: 0, left: 0, width: 3,
-          background: accentColor,
-          opacity: 0.85,
-        }} />
-      )}
-
-      {/* Title row */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
-        <p style={{
-          fontSize: 14, fontWeight: 600, lineHeight: 1.3,
-          color: '#1a1a1a', letterSpacing: '-0.01em',
-          wordBreak: 'break-word', flex: 1, minWidth: 0,
+      {/* Title row: vehicle name (truncates — full name on hover) + status */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 9 }}>
+        <p title={title} style={{
+          fontSize: 13.5, fontWeight: 640, lineHeight: 1.3, letterSpacing: '-0.015em',
+          color: 'var(--text-primary)', flex: 1, minWidth: 0,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {title}
         </p>
-        {stageStatus && <StatusBadge status={stageStatus} detail={stageDetail} />}
-      </div>
-
-      {/* Sub-row: stock # · color · scope tag */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 14 }}>
-        <span style={{
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-          fontSize: 10.5, fontWeight: 600,
-          color: '#9a9a96',
-          letterSpacing: '0.01em',
-        }}>
-          #{stockNumber}
-        </span>
-        {colorLabel && (
-          <>
-            <span style={{ fontSize: 10.5, color: '#cfcfca' }}>·</span>
-            <span style={{ fontSize: 10.5, color: '#9a9a96' }}>{colorLabel}</span>
-          </>
-        )}
-        {isSold && (
+        {pill && (
           <span style={{
-            marginLeft: 'auto',
-            fontSize: 9, fontWeight: 700,
-            padding: '3px 8px', borderRadius: 100,
-            background: '#fef3c7',
-            color: '#92400e',
-            textTransform: 'uppercase', letterSpacing: '0.06em',
+            display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0,
+            fontSize: 10.5, fontWeight: 600, letterSpacing: '-0.005em',
+            padding: '3px 8px 3px 7px', borderRadius: 100,
+            color: pill.fg, background: pill.bg,
+            border: pill.bg.startsWith('var') ? '1px solid var(--border)' : 'none',
+            whiteSpace: 'nowrap',
           }}>
-            Sold
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: pill.fg, flexShrink: 0 }} />
+            {pill.label}
           </span>
         )}
       </div>
 
-      {/* Meta row: assignee · time */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, lineHeight: 1.2 }}>
+      {/* Meta row: stock chip · color */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 8, minWidth: 0 }}>
         <span style={{
-          fontSize: 12,
-          color: assigneeName ? '#3a3a3a' : '#a8a8a4',
-          fontWeight: 500,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          minWidth: 0,
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+          fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '-0.01em',
+          background: 'var(--bg-primary)', border: '1px solid var(--border)',
+          padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0,
         }}>
-          {assigneeName || 'Unassigned'}
+          #{stockNumber}
         </span>
+        {colorLabel && (
+          <span style={{ fontSize: 11.5, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {colorLabel}
+          </span>
+        )}
+      </div>
+
+      {/* Progress */}
+      {total > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 10 }}>
+            <span style={{
+              fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)', letterSpacing: '-0.005em',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+            }}>
+              {progressLabel || 'Checklist'}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+              {done}/{total}
+            </span>
+          </div>
+          <div style={{ height: 5, borderRadius: 100, background: 'var(--border-light)', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', width: `${pct}%`, borderRadius: 100,
+              background: allDone ? '#16a34a' : 'var(--text-primary)',
+              transition: 'width 0.3s ease',
+            }} />
+          </div>
+        </div>
+      )}
+
+      <div style={{ height: 1, background: 'var(--border-light)', margin: '14px 0' }} />
+
+      {/* Footer: assignee · time */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          {assigneeName ? (
+            <span style={{
+              width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+              display: 'grid', placeItems: 'center',
+              fontSize: 10.5, fontWeight: 700, color: '#fff', letterSpacing: '-0.01em',
+              background: avatarColor(assigneeName),
+            }}>
+              {initials(assigneeName)}
+            </span>
+          ) : (
+            <span style={{
+              width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+              display: 'grid', placeItems: 'center',
+              fontSize: 12, fontWeight: 600, color: 'var(--text-muted)',
+              background: 'var(--bg-primary)', border: '1.5px dashed var(--border)',
+            }}>?</span>
+          )}
+          <span style={{
+            fontSize: 12.5, fontWeight: assigneeName ? 500 : 500,
+            color: assigneeName ? 'var(--text-primary)' : 'var(--text-muted)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+          }}>
+            {assigneeName || 'Unassigned'}
+          </span>
+        </div>
         {timeInStage && (
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
-            color: '#737373',
-            fontSize: 12, fontWeight: 500,
-            fontVariantNumeric: 'tabular-nums',
-            flexShrink: 0,
+            color: 'var(--text-secondary)', fontSize: 12, fontWeight: 500,
+            fontVariantNumeric: 'tabular-nums', flexShrink: 0,
           }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
               <circle cx="12" cy="12" r="9" />
-              <polyline points="12 7 12 12 15.5 13.5" />
+              <path d="M12 7v5l3.5 1.8" />
             </svg>
             {timeInStage}
           </span>
         )}
       </div>
 
-      {/* Alert row: parts or returns */}
-      {alertLabel && alertColor && (
+      {/* Attention strips */}
+      {strips.map((s, i) => (
         <div
-          title={nextReturn?.reason}
+          key={i}
+          title={s.title}
           style={{
-            marginTop: 12, paddingTop: 10,
-            borderTop: '1px solid #f0f0ec',
-            display: 'flex', alignItems: 'center', gap: 8,
-            fontSize: 11, fontWeight: 600,
-            color: alertColor,
+            display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: i === 0 ? 12 : 6,
+            padding: '9px 11px', borderRadius: 9, background: s.bg, color: s.fg,
+            fontSize: 11.5, fontWeight: 550, lineHeight: 1.35,
           }}
         >
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: s.dot, flexShrink: 0, marginTop: 3 }} />
           <span style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: alertColor, flexShrink: 0,
-          }} />
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {alertLabel}
-          </span>
-        </div>
-      )}
-
-      {/* Pause reason */}
-      {pauseReason && (
-        <div style={{
-          marginTop: alertLabel ? 6 : 12,
-          paddingTop: alertLabel ? 0 : 10,
-          borderTop: alertLabel ? 'none' : '1px solid #f0f0ec',
-          display: 'flex', alignItems: 'flex-start', gap: 8,
-          fontSize: 10.5, fontWeight: 600,
-          color: '#b45309',
-          textTransform: 'none',
-        }}>
-          <span style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: '#ea580c', flexShrink: 0,
-            marginTop: 5,
-          }} />
-          <span style={{
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
             overflow: 'hidden',
-            lineHeight: 1.35,
-            textTransform: 'none',
-          }}>
-            <span style={{ color: '#9a3412' }}>Paused:</span> <span>{sentenceCase(pauseReason)}</span>
-          </span>
+          }}>{s.label}</span>
         </div>
-      )}
-
-      {/* New Inspection footer */}
-      {isNewInventory && (
-        <div style={{
-          marginTop: alertLabel ? 6 : 12,
-          paddingTop: alertLabel ? 0 : 10,
-          borderTop: alertLabel ? 'none' : '1px solid #f0f0ec',
-          display: 'flex', alignItems: 'center', gap: 8,
-          fontSize: 11, fontWeight: 600,
-          color: '#1d4ed8',
-        }}>
-          <span style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: '#1d4ed8', flexShrink: 0,
-          }} />
-          <span>New Inspection</span>
-        </div>
-      )}
+      ))}
     </div>
   )
 }

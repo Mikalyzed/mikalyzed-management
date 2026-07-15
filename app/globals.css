@@ -82,6 +82,11 @@ html[data-scrolling="1"] {
   --bg-secondary: #ffffff;
   --bg-card: #ffffff;
   --bg-card-hover: #fafaf8;
+  /* Recon board depth: clean solid canvas (covers the glass-page mesh so a
+     data-dense board reads calm) → subtly recessed column lanes → white cards. */
+  --board-canvas: #f2f2f4;
+  --lane-bg: #eaeaed;
+  --lane-border: #e2e2e6;
   --bg-sidebar: #1a1a1a;
   --bg-sidebar-hover: rgba(255, 255, 255, 0.08);
   --bg-sidebar-active: rgba(223, 253, 110, 0.15);
@@ -177,9 +182,83 @@ input, select, textarea { font-size: 14px; font-family: inherit; }
   border-color: #ddddd8;
 }
 .vehicle-card-modern:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.04), 0 12px 28px rgba(0,0,0,0.08);
-  border-color: rgba(0,0,0,0.06);
+  transform: translateY(-3px);
+  box-shadow: 0 2px 4px rgba(24,24,27,0.06), 0 14px 30px -10px rgba(24,24,27,0.18);
+  border-color: var(--border-light);
+}
+.routing-card {
+  transition: box-shadow 0.16s ease, border-color 0.16s ease;
+}
+.routing-card:hover {
+  border-color: var(--border-light);
+  box-shadow: 0 2px 4px rgba(24,24,27,0.05), 0 8px 20px -10px rgba(24,24,27,0.14);
+}
+
+/* ═══ Modal system — one consistent shell across recon-board pop-ups ═══ */
+@keyframes mm-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mm-pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+.mm-backdrop {
+  position: fixed; inset: 0; z-index: 1000;
+  /* Solid scrim — no backdrop-filter blur: compositing a blur over the whole
+     board (many cards + the fixed mesh) is what made the modal feel laggy. */
+  background: rgba(18, 18, 20, 0.52);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  animation: mm-fade 0.15s ease;
+}
+.mm-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  width: 100%;
+  display: flex; flex-direction: column;
+  max-height: 88vh; overflow: hidden;
+  box-shadow: 0 24px 64px -16px rgba(24, 24, 27, 0.40), 0 6px 16px -8px rgba(24, 24, 27, 0.20);
+  animation: mm-pop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.mm-close {
+  width: 32px; height: 32px; border-radius: 9px; border: none; cursor: pointer;
+  background: var(--bg-primary); color: var(--text-secondary);
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  font-size: 20px; line-height: 1;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.mm-close:hover { background: var(--border); color: var(--text-primary); }
+.mm-label {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--text-muted);
+}
+.mm-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; }
+.mm-2col > * { min-width: 0; }
+@media (max-width: 640px) { .mm-2col { grid-template-columns: 1fr; gap: 20px; } }
+
+/* Segmented tabs inside a modal (Tasks / Parts) */
+.mm-tabs {
+  display: flex; gap: 4px; padding: 4px; margin-bottom: 16px;
+  background: var(--bg-primary); border: 1px solid var(--border); border-radius: 12px;
+}
+.mm-tabs button {
+  flex: 1; padding: 8px 12px; border: none; background: transparent; border-radius: 9px;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary);
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.mm-tabs button:hover { color: var(--text-primary); }
+.mm-tabs button.active {
+  background: var(--bg-card); color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(24,24,27,.06);
+}
+.mm-tabs .cnt {
+  font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 100px;
+  background: var(--border); color: var(--text-muted);
+  font-variant-numeric: tabular-nums; min-width: 20px; text-align: center;
+}
+.mm-tabs button.active .cnt { background: var(--accent); color: var(--accent-text); }
+@media (prefers-reduced-motion: reduce) {
+  .mm-backdrop, .mm-panel { animation: none; }
 }
 .lead-card {
   transition: transform 0.12s ease, box-shadow 0.12s ease;
@@ -660,24 +739,31 @@ input, select, textarea { font-size: 14px; font-family: inherit; }
 .kanban-column-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 4px;
+  gap: 9px;
+  padding: 2px 4px;
   margin-bottom: 12px;
 }
+.kanban-col-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 .kanban-column-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 12.5px;
+  font-weight: 680;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 .kanban-column-count {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
-  background: #f0f0ec;
-  padding: 2px 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 1px 8px;
   border-radius: 100px;
+  font-variant-numeric: tabular-nums;
 }
 @media (min-width: 1024px) {
   .kanban-column { min-width: 320px; width: 320px; }

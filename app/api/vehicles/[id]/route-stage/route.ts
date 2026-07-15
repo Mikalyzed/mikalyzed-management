@@ -26,8 +26,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const body = await request.json().catch(() => ({}))
   const nextStage = body.nextStage as NextStage | undefined
   const reason = (body.reason as string | undefined)?.trim() || null
-  const customTasks = Array.isArray(body.tasks)
-    ? (body.tasks as string[]).map(t => String(t).trim()).filter(Boolean)
+  // Tasks may arrive as plain strings (admin-typed) OR as structured objects
+  // ({ item, type, fields }) when they come from a checklist template. Preserve
+  // the type/fields so rich items (tire PSI, brake pads, fluids, …) render as
+  // structured inputs for the mechanic instead of collapsing to bare checkboxes.
+  type TaskInput = { item: string; type?: string; fields?: unknown }
+  const customTasks: TaskInput[] | null = Array.isArray(body.tasks)
+    ? (body.tasks as unknown[])
+        .map((t): TaskInput | null => {
+          if (typeof t === 'string') {
+            const item = t.trim()
+            return item ? { item } : null
+          }
+          if (t && typeof t === 'object' && typeof (t as { item?: unknown }).item === 'string') {
+            const raw = t as { item: string; type?: unknown; fields?: unknown }
+            const item = raw.item.trim()
+            if (!item) return null
+            const entry: TaskInput = { item }
+            if (typeof raw.type === 'string' && raw.type) entry.type = raw.type
+            if (raw.fields != null) entry.fields = raw.fields
+            return entry
+          }
+          return null
+        })
+        .filter((x): x is TaskInput => x !== null)
     : null
   const estimatedHours = body.estimatedHours != null && body.estimatedHours !== ''
     ? parseFloat(String(body.estimatedHours))
@@ -93,10 +115,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ? (config!.defaultChecklist as string[])
       : DEFAULT_CHECKLISTS[nextStage as Stage] || []
   // Sold delivery: replace defaults with the sold prep checklist (admin-supplied custom tasks still override)
-  const tasks = soldDelivery
+  const tasks: (string | TaskInput)[] = soldDelivery
     ? (customTasks && customTasks.length > 0 ? customTasks : SOLD_DELIVERY_TASKS)
     : baseTasks
-  const templateChecklist = tasks.map((item: string) => ({ item, done: false, note: '' }))
+  type ChecklistEntry = { item: string; done: boolean; note: string; type?: string; fields?: unknown }
+  const toChecklistEntry = (t: string | TaskInput): ChecklistEntry => {
+    if (typeof t === 'string') return { item: t, done: false, note: '' }
+    const entry: ChecklistEntry = { item: t.item, done: false, note: '' }
+    if (t.type) entry.type = t.type
+    if (t.fields != null) entry.fields = t.fields
+    return entry
+  }
+  const templateChecklist = tasks.map(toChecklistEntry)
 
   // RESUME-FROM-EXTERNAL: when a vehicle returns from external repair (or any
   // other awaiting_routing state) and the admin routes it back to the same
@@ -109,7 +139,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   //  - The admin chose soldDelivery (a different stage shape entirely).
   //  - The prior skipped stage is older than 60 days (safety hatch: don't
   //    accidentally resurrect a stage from months ago).
-  type ChecklistEntry = { item: string; done: boolean; note: string; type?: string }
   let resumedFromStageId: string | null = null
   let checklist: ChecklistEntry[] = templateChecklist
   let resumedScopeName: string | null = null
@@ -135,7 +164,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
   }
 
-  const newAssigneeId = config?.defaultAssigneeId || null
+  // Admin may pick the assignee in the routing modal (e.g. which mechanic owns
+  // this scope). Falls back to the stage config default when not supplied.
+  const requestedAssigneeId = typeof body.assigneeId === 'string' && body.assigneeId.trim()
+    ? body.assigneeId.trim()
+    : null
+  const newAssigneeId = requestedAssigneeId || config?.defaultAssigneeId || null
+  // Optional scope label for the stage (e.g. "Engine", "Brakes") so a car split
+  // across two mechanics reads clearly on the board. Custom label wins over resume.
+  const requestedScopeName = typeof body.scopeName === 'string' && body.scopeName.trim()
+    ? body.scopeName.trim()
+    : null
 
   await prisma.$transaction(async (tx) => {
     const maxPriority = await tx.vehicleStage.aggregate({
@@ -149,10 +188,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         stage: nextStage,
         status: 'pending',
         assigneeId: newAssigneeId,
-        checklist,
+        checklist: checklist as unknown as Prisma.InputJsonValue,
         priority: (maxPriority._max.priority ?? -1) + 1,
         estimatedHours,
-        scopeName: soldDelivery ? 'Sold Delivery' : resumedScopeName,
+        scopeName: soldDelivery ? 'Sold Delivery' : (requestedScopeName || resumedScopeName),
         notes: resumedFromStageId ? 'Resumed from prior stage on return' : null,
       },
     })

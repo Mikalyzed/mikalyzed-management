@@ -5,9 +5,18 @@ import { getSessionUser } from '@/lib/auth'
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const role = searchParams.get('role')
+  // Comma-separated list of roles for pickers that span multiple roles —
+  // e.g. the Sales Rep picker on the customer profile needs both
+  // `sales` and `sales_manager`.
+  const roles = searchParams.get('roles')
 
   const where: Record<string, unknown> = { isActive: true }
-  if (role) where.role = role
+  if (roles) {
+    const list = roles.split(',').map(r => r.trim()).filter(Boolean)
+    if (list.length > 0) where.role = { in: list }
+  } else if (role) {
+    where.role = role
+  }
 
   const users = await prisma.user.findMany({
     where,

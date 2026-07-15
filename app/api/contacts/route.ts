@@ -63,6 +63,8 @@ export async function POST(request: Request) {
     employerName, employerPhone, employerAddress, employerYears, employerMonthlyIncome,
     // Referrer
     referrerName, referrerContactId,
+    // Optional: attach the new contact to a vehicle via VehicleInterest
+    interestedVehicleId,
   } = body
 
   if (!firstName || !lastName) {
@@ -105,6 +107,19 @@ export async function POST(request: Request) {
     return Number.isFinite(n) ? Math.trunc(n) : null
   }
 
+  // SSN — accept only exactly 9 digits.  Strip any non-digit the caller
+  // sends (paste-from-anywhere tolerance), then reject anything that
+  // isn't a clean 9-digit string.  Empty/missing is fine.
+  const cleanSsn = (() => {
+    const raw = trimStr(ssn)
+    if (!raw) return null
+    const digits = raw.replace(/\D/g, '')
+    return digits.length === 9 ? digits : null
+  })()
+  if (ssn != null && ssn !== '' && cleanSsn == null) {
+    return NextResponse.json({ error: 'SSN must be exactly 9 digits' }, { status: 400 })
+  }
+
   const contact = await prisma.contact.create({
     data: {
       firstName, lastName,
@@ -122,7 +137,7 @@ export async function POST(request: Request) {
       dateOfBirth: parseDate(dateOfBirth) ?? undefined,
       // Identity
       gender: trimStr(gender) ?? undefined,
-      ssn: trimStr(ssn) ?? undefined,
+      ssn: cleanSsn ?? undefined,
       idType: trimStr(idType) ?? undefined,
       idState: trimStr(idState) ?? undefined,
       idNo: trimStr(idNo) ?? undefined,
@@ -149,6 +164,22 @@ export async function POST(request: Request) {
       createdById: user.id,
     },
   })
+
+  // Optional VehicleInterest link — created best-effort; swallow errors so a
+  // bad vehicle id doesn't fail the whole contact creation.
+  const interestedVehicleIdStr = trimStr(interestedVehicleId)
+  if (interestedVehicleIdStr) {
+    try {
+      await prisma.vehicleInterest.create({
+        data: {
+          contactId: contact.id,
+          vehicleId: interestedVehicleIdStr,
+        },
+      })
+    } catch (e) {
+      console.warn('[contacts] interested vehicle link failed', e)
+    }
+  }
 
   return NextResponse.json(contact, { status: 201 })
 }

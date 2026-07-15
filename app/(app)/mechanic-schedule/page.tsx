@@ -18,6 +18,10 @@ type ChecklistItem = {
   estimatedHours?: number | null
   sourceItem?: string
   sourceSubField?: string
+  // Per-task hand-off: when set, this task belongs to a specific mechanic
+  // (vs the car's default owner). Name cached for display without a join.
+  assigneeId?: string | null
+  assigneeName?: string | null
 }
 
 // Status pills can store either a plain string (legacy) or { status, note } (new)
@@ -63,6 +67,12 @@ type JobCard = {
   vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null; returnQueue?: ReturnQueueEntry[] }
   scopeName?: string | null
   assignee: { id: string; name: string } | null
+  // Everyone with tasks on this car (default owner + per-task hand-offs).
+  assignees?: { id: string; name: string }[]
+  // Per-mechanic timers on a shared car.
+  timers?: { userId: string | null; name: string | null; elapsedSeconds: number; running: boolean; timerStartedAt: string | null; done: boolean; autoPaused: boolean; pauseReason: string | null; pauseDetail: string | null; pausedAt: string | null }[]
+  myElapsedSeconds?: number
+  myTimerRunning?: boolean
   status: string
   estimatedHours: number | null
   checklist: ChecklistItem[]
@@ -90,6 +100,24 @@ type BoardData = {
   workedToday: JobCard[]; pausedNotToday: JobCard[]; awaitingParts: JobCard[]; today: JobCard[]; remainingDays: DayBucket[]
   weeklyEstimatedHours: number; weeklyWorkedHours: number; remainingHoursThisWeek: number; hoursLeftToday: number
   isWorkHours: boolean
+  mechanics?: { id: string; name: string; workedTodayHours: number; workedWeekHours: number }[]
+  currentUserId?: string
+  currentUserRole?: string
+}
+
+// Initials for an assignee chip, e.g. "Mike Rowe" → "MR", "Carlos" → "CA"
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+// Deterministic chip color per userId so a mechanic reads the same everywhere.
+const CHIP_COLORS = ['#2563eb', '#db2777', '#16a34a', '#d97706', '#7c3aed', '#0891b2']
+function chipColor(id: string): string {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+  return CHIP_COLORS[h % CHIP_COLORS.length]
 }
 
 function formatTime(seconds: number): string {
@@ -191,6 +219,10 @@ export default function MechanicBoard() {
   const [mechPartsSaving, setMechPartsSaving] = useState(false)
   const [mechOrderModal, setMechOrderModal] = useState<{ id: string; name: string } | null>(null)
   const [externalSubmitting, setExternalSubmitting] = useState(false)
+  // Which mechanic's lane is shown. 'all' = everyone (main board). Mechanics
+  // default to their own lane once data arrives (see effect below).
+  const [mechFilter, setMechFilter] = useState<string>('all')
+  const mechFilterInitRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchData = useCallback(() => {
@@ -206,6 +238,16 @@ export default function MechanicBoard() {
       if (d.user?.role === 'admin') setIsAdmin(true)
     }).catch(() => {})
   }, [fetchData])
+
+  // Default a mechanic to their own lane; admins stay on "All".
+  useEffect(() => {
+    if (mechFilterInitRef.current || !data) return
+    mechFilterInitRef.current = true
+    if (data.currentUserRole && data.currentUserRole !== 'admin' && data.currentUserId
+        && (data.mechanics || []).some(m => m.id === data.currentUserId)) {
+      setMechFilter(data.currentUserId)
+    }
+  }, [data])
 
   useEffect(() => {
     timerRef.current = setInterval(() => setTick(t => t + 1), 1000)
@@ -534,6 +576,15 @@ export default function MechanicBoard() {
     return job.elapsedSeconds
   }
 
+  // Live seconds for one mechanic's timer entry on a shared car.
+  const getLiveEntry = (t: { elapsedSeconds: number; running: boolean; timerStartedAt: string | null }): number => {
+    void tick
+    if (t.running && t.timerStartedAt) {
+      return t.elapsedSeconds + Math.floor((Date.now() - new Date(t.timerStartedAt).getTime()) / 1000)
+    }
+    return t.elapsedSeconds
+  }
+
   const getJobColorKey = (job: JobCard): string => {
     if (job.awaitingParts) return 'awaiting_parts'
     if (job.autoPaused) return 'auto_paused'
@@ -558,11 +609,25 @@ export default function MechanicBoard() {
   if (!data) return <p style={{ textAlign: 'center', padding: 40 }}>Failed to load</p>
 
   const doneCount = modalChecklist.filter(c => c.done).length
+  // Board-level aliases — inside the checklist map `data` is shadowed by the
+  // item's own `data` field, so grab what the per-task assign control needs here.
+  const boardMechanics = data.mechanics || []
+  const boardCurrentUserId = data.currentUserId
 
   // Efficiency
   const effPct = data.weeklyEstimatedHours > 0 ? Math.round((data.weeklyWorkedHours / data.weeklyEstimatedHours) * 100) : 0
   const effLabel = effPct >= 90 && effPct <= 110 ? 'On Track' : effPct > 110 ? 'Over Estimate' : 'Under Estimate'
   const effColor = effPct >= 90 && effPct <= 110 ? '#22c55e' : effPct > 110 ? '#ef4444' : '#f59e0b'
+
+  // "Worked Today" follows the lane filter: All = whole team's total today,
+  // a specific mechanic = just that mechanic's total today (across all their cars).
+  const mechList = data.mechanics || []
+  const workedTodayFiltered = mechFilter === 'all'
+    ? Math.round(mechList.reduce((s, m) => s + m.workedTodayHours, 0) * 10) / 10
+    : (mechList.find(m => m.id === mechFilter)?.workedTodayHours ?? 0)
+  const workedTodayLabel = mechFilter === 'all'
+    ? 'Worked Today'
+    : `${(mechList.find(m => m.id === mechFilter)?.name || '').split(' ')[0]} Today`
 
   const COLORS: Record<string, { bg: string; border: string; badge: string; text: string }> = {
     active: { bg: '#eff6ff', border: '#3b82f6', badge: '#3b82f6', text: '#1e40af' },
@@ -573,6 +638,23 @@ export default function MechanicBoard() {
     completed: { bg: '#f0fdf4', border: '#22c55e', badge: '#22c55e', text: '#166534' },
     overdue: { bg: '#fef2f2', border: '#ef4444', badge: '#ef4444', text: '#991b1b' },
   }
+
+  // Lane filter: 'all' shows every car; a mechanic id shows only cars they have
+  // tasks on (default owner or a handed-off task).
+  const jobAssignees = (job: JobCard) =>
+    (job.assignees && job.assignees.length ? job.assignees : (job.assignee ? [job.assignee] : []))
+  const jobMatchesFilter = (job: JobCard) =>
+    mechFilter === 'all' || jobAssignees(job).some(a => a.id === mechFilter)
+  const visible = (jobs: JobCard[]) => jobs.filter(jobMatchesFilter)
+
+  // Filter each section once per render (not repeatedly inline) and drive the
+  // stat boxes + empty state off the SAME filtered lists so counts, sections,
+  // and the "all clear" message all agree with the active lane filter.
+  const vActive = visible(data.active)
+  const vQueued = visible(data.queued)
+  const vPaused = visible(data.paused)
+  const vAwaiting = visible(data.awaitingParts)
+  const vCompletedToday = visible(data.completedToday)
 
   const renderCard = (job: JobCard, showActions = true) => {
     const colorKey = getJobColorKey(job)
@@ -585,6 +667,20 @@ export default function MechanicBoard() {
     const isOver = elapsed > estSeconds && job.status !== 'done'
     const tasksDone = (job.checklist as ChecklistItem[]).filter(c => c.done).length
     const tasksTotal = (job.checklist as ChecklistItem[]).length
+    // Timer control is per-mechanic: if I work this car, my buttons reflect MY
+    // timer; otherwise (admin/observer) fall back to the car's aggregate state.
+    const iAmOnCar = !!data.currentUserId && (job.assignees || []).some(a => a.id === data.currentUserId)
+    const myRunning = iAmOnCar ? !!job.myTimerRunning : job.timerRunning
+    const isShared = (job.assignees?.length || 0) > 1
+    // On a shared car "my part" = tasks handed to me + (if I'm the car's default
+    // owner) any unassigned tasks. I can Complete my part once those are done;
+    // finishing my part stops MY clock but leaves co-workers running.
+    const isDefaultOwner = !!data.currentUserId && job.assignee?.id === data.currentUserId
+    const myEntry = (job.timers || []).find(t => t.userId === data.currentUserId)
+    const myPartDone = !!myEntry?.done
+    const myChecklist = (job.checklist as ChecklistItem[]).filter(c =>
+      c.approved !== 'declined' && (c.assigneeId ? c.assigneeId === data.currentUserId : isDefaultOwner))
+    const myTasksAllDone = myChecklist.length === 0 || myChecklist.every(c => c.done)
 
     return (
       <div key={job.id} onClick={() => openJob(job)} style={{
@@ -592,6 +688,7 @@ export default function MechanicBoard() {
         border: job.scopeName === 'Sold Delivery' ? '2px solid #f59e0b' : `1px solid ${colors.border}`,
         borderLeft: job.scopeName === 'Sold Delivery' ? '4px solid #f59e0b' : `4px solid ${colors.border}`,
         borderRadius: 14, padding: '16px 18px', cursor: 'pointer', transition: 'box-shadow 0.15s',
+        height: '100%', display: 'flex', flexDirection: 'column',
       }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -615,6 +712,24 @@ export default function MechanicBoard() {
               <ReturnBadge returnQueue={v.returnQueue} />
             </div>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{desc}{v.color ? ` · ${v.color}` : ''}</p>
+            {(job.assignees && job.assignees.length > 0) && (
+              <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                {job.assignees.map(a => (
+                  <span key={a.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 5, padding: '2px 9px 2px 2px',
+                    borderRadius: 100, background: '#f1f3f5',
+                  }}>
+                    <span style={{
+                      width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                      background: chipColor(a.id), color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 8, fontWeight: 800,
+                    }}>{initialsOf(a.name)}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>{a.name.split(' ')[0]}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {job.timerRunning && <Badge text="Active" color={colors.badge} />}
@@ -645,7 +760,7 @@ export default function MechanicBoard() {
             <span style={{ fontWeight: 700, color: isOver ? '#ef4444' : colors.text, fontVariantNumeric: 'tabular-nums' }}>
               {formatHours(elapsed)}
             </span>
-            <span style={{ color: 'var(--text-muted)' }}> / {job.estimatedHours || 2}h est.</span>
+            <span style={{ color: 'var(--text-muted)' }}> / {job.estimatedHours || 2}h est.{(job.timers || []).filter(t => t.userId).length > 1 ? ' combined' : ''}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {tasksTotal > 0 && (
@@ -659,6 +774,34 @@ export default function MechanicBoard() {
             )}
           </div>
         </div>
+
+        {/* Per-mechanic split — only on shared cars, so you can see each person's time even though the total combines */}
+        {(job.timers || []).filter(t => t.userId).length > 1 && (
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 5, padding: '8px 10px', background: 'rgba(0,0,0,0.03)', borderRadius: 8 }}>
+            {(job.timers || []).filter(t => t.userId).map(t => {
+              const secs = getLiveEntry(t)
+              return (
+                <div key={t.userId} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span style={{
+                    width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                    background: chipColor(t.userId!), color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 8, fontWeight: 800,
+                  }}>{initialsOf(t.name || '?')}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{(t.name || '').split(' ')[0]}</span>
+                  {t.running && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6', animation: 'pulse 2s infinite' }} />}
+                  {t.done && (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  )}
+                  <span style={{
+                    marginLeft: 'auto', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                    color: t.done ? '#16a34a' : t.running ? '#3b82f6' : 'var(--text-secondary)',
+                  }}>{formatTime(secs)}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Progress bar */}
         <div style={{ marginTop: 8, height: 5, background: '#e2e5ea', borderRadius: 3, overflow: 'hidden' }}>
@@ -701,20 +844,41 @@ export default function MechanicBoard() {
           </button>
         )}
 
-        {/* Quick actions */}
-        {showActions && (
-          <div className="mech-actions" style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
-            {job.status === 'pending' && (
-              <ActionBtn label="Start" color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('start', job.id)} />
-            )}
-            {job.timerRunning && (
+        {/* Quick actions — mechanics only act on cars they're assigned to; admins
+            keep full control (override/fix). Unassigned cars must be assigned by
+            an admin first, so a mechanic sees no Start until it's theirs. */}
+        {showActions && (isAdmin || iAmOnCar) && (
+          <div className="mech-actions" style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
+            {myPartDone ? (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0',
+                color: '#166534', fontSize: 13, fontWeight: 700,
+              }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                Your part done
+              </span>
+            ) : (
               <>
-                <ActionBtn label="Pause" color="#f59e0b" disabled={acting} onClick={() => { openJob(job); setShowPauseModal(true) }} />
-                <ActionBtn label="Complete" color="#22c55e" disabled={acting} onClick={() => doAction('complete', job.id)} />
+                {job.status === 'pending' && !myRunning && (
+                  <ActionBtn label="Start" color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('start', job.id)} />
+                )}
+                {myRunning && (
+                  <>
+                    <ActionBtn label="Pause" color="#f59e0b" disabled={acting} onClick={() => { openJob(job); setShowPauseModal(true) }} />
+                    <ActionBtn
+                      label={isShared && tasksDone < tasksTotal ? 'Finish My Part' : 'Complete'}
+                      color="#22c55e"
+                      disabled={acting || (isShared && !myTasksAllDone)}
+                      title={isShared && !myTasksAllDone ? 'Finish your own tasks first' : undefined}
+                      onClick={() => doAction('complete', job.id)}
+                    />
+                  </>
+                )}
+                {!myRunning && job.status === 'in_progress' && (
+                  <ActionBtn label={iAmOnCar ? 'Resume' : 'Start'} color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction(iAmOnCar ? 'resume' : 'start', job.id)} />
+                )}
               </>
-            )}
-            {!job.timerRunning && job.status === 'in_progress' && (
-              <ActionBtn label="Resume" color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('resume', job.id)} />
             )}
             {job.status === 'in_progress' && (
               <ActionBtn label="Add Task" color="#8b5cf6" disabled={acting} onClick={() => setAddTaskJob(job)} />
@@ -808,6 +972,73 @@ export default function MechanicBoard() {
         </div>
       </div>
 
+      {/* Mechanic lane filter — only when there's more than one mechanic to split across */}
+      {viewMode !== 'plan' && (data.mechanics?.length || 0) >= 2 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+          {[{ id: 'all', name: 'All' }, ...(data.mechanics || [])].map(m => {
+            const active = mechFilter === m.id
+            const isAll = m.id === 'all'
+            const mech = !isAll ? (data.mechanics || []).find(x => x.id === m.id) : null
+            return (
+              <button
+                key={m.id}
+                onClick={() => setMechFilter(m.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 7,
+                  padding: '7px 14px', borderRadius: 100,
+                  border: active ? '1.5px solid #1a1a1a' : '1px solid var(--border)',
+                  background: active ? '#1a1a1a' : '#fff',
+                  color: active ? '#fff' : 'var(--text-secondary)',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
+                }}
+              >
+                {!isAll && (
+                  <span style={{
+                    width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                    background: chipColor(m.id), color: '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 9, fontWeight: 800, letterSpacing: '0.02em',
+                  }}>{initialsOf(m.name)}</span>
+                )}
+                {m.name}
+                {mech != null && (
+                  <span style={{ fontWeight: 400, opacity: 0.7, fontSize: 12 }}>
+                    · {mech.workedTodayHours}h
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Selected mechanic's own worked-time summary */}
+      {viewMode !== 'plan' && mechFilter !== 'all' && (() => {
+        const mech = (data.mechanics || []).find(m => m.id === mechFilter)
+        if (!mech) return null
+        return (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+            marginBottom: 20, padding: '12px 16px', borderRadius: 12,
+            background: '#f8fafc', border: '1px solid var(--border)',
+          }}>
+            <span style={{
+              width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+              background: chipColor(mech.id), color: '#fff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 11, fontWeight: 800,
+            }}>{initialsOf(mech.name)}</span>
+            <span style={{ fontSize: 15, fontWeight: 700 }}>{mech.name}</span>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              Worked today <b style={{ color: 'var(--text-primary)' }}>{mech.workedTodayHours}h</b>
+            </span>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+              This week <b style={{ color: 'var(--text-primary)' }}>{mech.workedWeekHours}h</b>
+            </span>
+          </div>
+        )
+      })()}
+
       {viewMode === 'plan' ? (
         <PlanView />
       ) : viewMode === 'schedule' ? (
@@ -816,10 +1047,16 @@ export default function MechanicBoard() {
 
       {/* Stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 24 }}>
-        <StatBox value={data.active.length} label="Active" color="#3b82f6" />
-        <StatBox value={data.queued.length} label="Queued" color="#94a3b8" />
-        <StatBox value={data.paused.length} label="Paused" color="#f59e0b" />
-        <StatBox value={data.completedToday.length} label="Done Today" color="#22c55e" />
+        <StatBox value={vActive.length} label="Active" color="#3b82f6" />
+        <StatBox value={vQueued.length} label="Queued" color="#94a3b8" />
+        <StatBox value={vPaused.length} label="Paused" color="#f59e0b" />
+        <StatBox value={vCompletedToday.length} label="Done Today" color="#22c55e" />
+        {mechList.length > 0 && (
+          <div className="pipeline-chip">
+            <p className="pipeline-chip-value" style={{ fontSize: 18 }}>{workedTodayFiltered}h</p>
+            <p className="pipeline-chip-label">{workedTodayLabel}</p>
+          </div>
+        )}
         <div className="pipeline-chip">
           <p className="pipeline-chip-value" style={{ fontSize: 18 }}>{data.weeklyEstimatedHours}h</p>
           <p className="pipeline-chip-label">Est. This Week</p>
@@ -836,26 +1073,29 @@ export default function MechanicBoard() {
       </div>
 
       {/* Working Today */}
-      {(data.workedToday.length > 0 || data.completedToday.length > 0) && (
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 4, height: 20, borderRadius: 2, background: '#16a34a' }} />
-              <h2 style={{ fontSize: 16, fontWeight: 700 }}>Working Today</h2>
-              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{data.workedToday.length + data.completedToday.length} vehicles</span>
+      {(() => {
+        const seen = new Set<string>()
+        const todayCars = [...visible(data.workedToday), ...visible(data.completedToday)]
+          .filter(j => { if (seen.has(j.id)) return false; seen.add(j.id); return true })
+        if (todayCars.length === 0) return null
+        return (
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 4, height: 20, borderRadius: 2, background: '#16a34a' }} />
+                <h2 style={{ fontSize: 16, fontWeight: 700 }}>Working Today</h2>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{todayCars.length} vehicles</span>
+              </div>
+            </div>
+            <div style={{
+              display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
+              WebkitOverflowScrolling: 'touch',
+            }}>
+              {todayCars.map((job, i) => <WeekCard key={job.id} job={job} index={i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)}
             </div>
           </div>
-          <div style={{
-            display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8,
-            WebkitOverflowScrolling: 'touch',
-          }}>
-            {(() => {
-              const seen = new Set<string>()
-              return [...data.workedToday, ...data.completedToday].filter(j => { if (seen.has(j.id)) return false; seen.add(j.id); return true }).map((job, i) => <WeekCard key={job.id} job={job} index={i} getLiveElapsed={getLiveElapsed} openJob={openJob} />)
-            })()}
-          </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Remaining This Week — collapsed by default, broken down by day */}
       {data.remainingDays.length > 0 && (() => {
@@ -909,46 +1149,46 @@ export default function MechanicBoard() {
       })()}
 
       {/* Active Jobs */}
-      {data.active.length > 0 && (
-        <Section title="Active Jobs" count={data.active.length} color="#3b82f6">
-          <CardGrid>{data.active.map(j => renderCard(j))}</CardGrid>
+      {vActive.length > 0 && (
+        <Section title="Active Jobs" count={vActive.length} color="#3b82f6">
+          <CardGrid>{vActive.map(j => renderCard(j))}</CardGrid>
         </Section>
       )}
 
       {/* Queue */}
-      {data.queued.length > 0 && (
-        <Section title="Queue" count={data.queued.length} color="#94a3b8">
-          <CardGrid>{(showAllQueued ? data.queued : data.queued.slice(0, 6)).map(j => renderCard(j))}</CardGrid>
-          {data.queued.length > 6 && (
+      {vQueued.length > 0 && (
+        <Section title="Queue" count={vQueued.length} color="#94a3b8">
+          <CardGrid>{(showAllQueued ? vQueued : vQueued.slice(0, 6)).map(j => renderCard(j))}</CardGrid>
+          {vQueued.length > 6 && (
             <button onClick={() => setShowAllQueued(prev => !prev)} style={{
               marginTop: 12, padding: '10px 20px', borderRadius: 10, border: '1px solid #d1d5db',
               background: '#f9fafb', fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#64748b', width: '100%',
             }}>
-              {showAllQueued ? 'Show Less' : `Show ${data.queued.length - 6} More`}
+              {showAllQueued ? 'Show Less' : `Show ${vQueued.length - 6} More`}
             </button>
           )}
         </Section>
       )}
 
       {/* Waiting for Parts */}
-      {data.awaitingParts.length > 0 && (
-        <Section title="Waiting for Parts" count={data.awaitingParts.length} color="#eab308">
-          <CardGrid>{data.awaitingParts.map(j => renderCard(j))}</CardGrid>
+      {vAwaiting.length > 0 && (
+        <Section title="Waiting for Parts" count={vAwaiting.length} color="#eab308">
+          <CardGrid>{vAwaiting.map(j => renderCard(j))}</CardGrid>
         </Section>
       )}
 
       {/* On Lunch */}
-      {data.paused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').length > 0 && (
-        <Section title="🍽️ On Lunch" count={data.paused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').length} color="#8b5cf6">
-          <CardGrid>{data.paused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').map(j => renderCard(j))}</CardGrid>
+      {vPaused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').length > 0 && (
+        <Section title="🍽️ On Lunch" count={vPaused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').length} color="#8b5cf6">
+          <CardGrid>{vPaused.filter(j => !j.awaitingParts && j.pauseReason === 'Lunch').map(j => renderCard(j))}</CardGrid>
         </Section>
       )}
 
       {/* Completed Today */}
-      {data.completedToday.length > 0 && (
-        <Section title="Completed Today" count={data.completedToday.length} color="#22c55e">
+      {vCompletedToday.length > 0 && (
+        <Section title="Completed Today" count={vCompletedToday.length} color="#22c55e">
           <CardGrid>
-            {data.completedToday.map(j => {
+            {vCompletedToday.map(j => {
               const v = j.vehicle
               return (
                 <div key={j.id} style={{
@@ -975,8 +1215,10 @@ export default function MechanicBoard() {
         </Section>
       )}
 
-      {data.active.length === 0 && data.queued.length === 0 && data.paused.length === 0 && data.completedToday.length === 0 && (
-        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>No mechanic jobs. All clear.</div>
+      {vActive.length === 0 && vQueued.length === 0 && vPaused.length === 0 && vCompletedToday.length === 0 && (
+        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+          {mechFilter === 'all' ? 'No mechanic jobs. All clear.' : 'No jobs for this mechanic.'}
+        </div>
       )}
 
       </>)}
@@ -1193,12 +1435,59 @@ export default function MechanicBoard() {
                                     {item.approved === 'approved' ? 'Approved' : 'Requested'}
                                   </span>
                                 )}
+                                {item.assigneeId && item.assigneeName && (
+                                  <span title={item.assigneeName} style={{
+                                    width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                                    background: chipColor(item.assigneeId), color: '#fff',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: 8, fontWeight: 800,
+                                  }}>{initialsOf(item.assigneeName)}</span>
+                                )}
                                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{isExpanded ? '▾' : '▸'}</span>
                               </div>
                             </div>
 
                             {isExpanded && (
                               <div style={{ padding: '0 12px 12px 46px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {/* Per-task hand-off: give this single task to a specific mechanic */}
+                                {boardMechanics.length >= 2 && (isAdmin || (!!boardCurrentUserId && (selectedJob.assignees || []).some(a => a.id === boardCurrentUserId))) && (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Assign to:</span>
+                                    {boardMechanics.map(m => {
+                                      const active = item.assigneeId === m.id
+                                      return (
+                                        <button
+                                          key={m.id}
+                                          onClick={() => updateChecklistItem(i, { assigneeId: m.id, assigneeName: m.name })}
+                                          style={{
+                                            display: 'flex', alignItems: 'center', gap: 6,
+                                            padding: '4px 10px 4px 4px', borderRadius: 100,
+                                            border: active ? '1.5px solid #1a1a1a' : '1px solid var(--border)',
+                                            background: active ? '#1a1a1a' : '#fff',
+                                            color: active ? '#fff' : 'var(--text-secondary)',
+                                            fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                                          }}
+                                        >
+                                          <span style={{
+                                            width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                                            background: chipColor(m.id), color: '#fff',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: 8, fontWeight: 800,
+                                          }}>{initialsOf(m.name)}</span>
+                                          {m.name.split(' ')[0]}
+                                        </button>
+                                      )
+                                    })}
+                                    {item.assigneeId && (
+                                      <button
+                                        onClick={() => updateChecklistItem(i, { assigneeId: null, assigneeName: null })}
+                                        style={{ padding: '4px 10px', borderRadius: 100, border: '1px solid var(--border)', background: '#fff', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                                      >
+                                        Unassign
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                                 {item.addedByMechanic && item.approved === 'pending' && (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
                                     {isAdmin ? (
@@ -2574,12 +2863,14 @@ function Section({ title, count, color, children }: { title: string; count: numb
 }
 
 function CardGrid({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>{children}</div>
+  // gridAutoRows: 1fr + stretch → every card in the grid is the same height
+  // (as tall as the tallest), instead of each sizing to its own content.
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gridAutoRows: '1fr', alignItems: 'stretch', gap: 12 }}>{children}</div>
 }
 
-function ActionBtn({ label, color, disabled, onClick, className }: { label: string; color: string; disabled?: boolean; onClick: () => void; className?: string }) {
+function ActionBtn({ label, color, disabled, onClick, className, title }: { label: string; color: string; disabled?: boolean; onClick: () => void; className?: string; title?: string }) {
   return (
-    <button onClick={onClick} disabled={disabled} className={className} style={{
+    <button onClick={onClick} disabled={disabled} className={className} title={title} style={{
       padding: '8px 16px', borderRadius: 10, border: 'none',
       background: disabled ? '#e5e5e5' : color, color: disabled ? '#999' : '#fff',
       fontSize: 13, fontWeight: 700, cursor: disabled ? 'default' : 'pointer',

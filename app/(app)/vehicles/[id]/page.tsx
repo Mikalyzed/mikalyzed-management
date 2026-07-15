@@ -1,7 +1,13 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useRouter } from 'next/navigation'
+import { AddCustomerModal } from '@/components/AddCustomerModal'
+import {
+  SectionCard, SectionCardLabel, FieldStack, FieldRow, FieldBackplate,
+  PremiumField, PremiumPillButton, formatPhone,
+} from '@/components/customer-form-ui'
 
 // ─── Types ─────────────────────────────────────────────────────────
 
@@ -58,6 +64,8 @@ type Vehicle = {
   purchaseType: string | null
   purchaseSource: string | null
   purchasedFrom: string | null
+  purchasedFromVendorId: string | null
+  purchasedFromContactId: string | null
   titleStatus: string | null
   dateInStock: string | null
   inventoryStatus: string | null
@@ -713,9 +721,9 @@ export default function VehicleDetailV2() {
             tabs={[
               { id: 'general',       label: 'General Info' },
               { id: 'build_title',   label: 'Build / Title' },
-              { id: 'description',   label: 'Description' },
               // Purchase Info holds money + lien data — admin / sales_manager only.
               ...(canSeeMoney ? [{ id: 'purchase_info' as const, label: 'Purchase Info' }] : []),
+              { id: 'description',   label: 'Description' },
             ]}
             activeId={vehicleInfoSubTab}
             onChange={(id) => setVehicleInfoSubTab(id as typeof vehicleInfoSubTab)}
@@ -784,6 +792,20 @@ export default function VehicleDetailV2() {
                   canSeeMoney={canSeeMoney}
                   isAdmin={isAdmin}
                   onEditFlooring={() => setShowSetFlooring(true)}
+                  onSavePartial={async (patch) => {
+                    setVehicle((prev) => (prev ? { ...prev, ...patch } as Vehicle : prev))
+                    const r = await fetch(`/api/vehicles/${vehicle.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(patch),
+                    })
+                    if (r.ok) {
+                      const data = await r.json().catch(() => null)
+                      if (data?.vehicle) setVehicle((prev) => (prev ? { ...prev, ...data.vehicle } : data.vehicle))
+                    } else {
+                      await refreshVehicle()
+                    }
+                  }}
                 />
                 <PrintHubCard />
               </div>
@@ -2090,14 +2112,28 @@ function CreatableCombobox({
 // "+ Add New Partner" affordance that opens AddPartnerModal with the typed
 // company name pre-filled and the Vendor category pre-checked.
 function VendorPicker({
-  value, isAdmin, onChange, onPickPartner, onRequestAddNew,
+  isAdmin, onPickPartner, onRequestAddNew, value, onChange,
 }: {
-  value: string
   isAdmin: boolean
-  onChange: (text: string) => void
   onPickPartner: (partner: { id: string; companyName: string }) => void
   onRequestAddNew: (typedName: string) => void
+  /** Controlled mode (Cost Adds row needs the typed text to land in a draft).
+   *  Leave undefined for uncontrolled mode — used by the Purchase Info
+   *  picker where typing only filters the dropdown, never commits. */
+  value?: string
+  onChange?: (text: string) => void
 }) {
+  // Picker supports both controlled (parent passes value+onChange) and
+  // uncontrolled (picker owns the typing state).  Purchase Info uses
+  // uncontrolled because its parent's onChange was a no-op — the input
+  // appeared read-only to the user.
+  const isControlled = value !== undefined && onChange !== undefined
+  const [internalQuery, setInternalQuery] = useState('')
+  const query = isControlled ? value! : internalQuery
+  const setQuery = (v: string) => {
+    if (isControlled) onChange!(v)
+    else setInternalQuery(v)
+  }
   const [open, setOpen] = useState(false)
   const [results, setResults] = useState<PartnerSummary[]>([])
   const [loading, setLoading] = useState(false)
@@ -2115,16 +2151,16 @@ function VendorPicker({
     return () => document.removeEventListener('mousedown', handleDown)
   }, [open])
 
-  // Debounced search: refetch ~200ms after the value stops changing.
+  // Debounced search: refetch ~200ms after the query stops changing.
   useEffect(() => {
     if (!open) return
-    lastQueryRef.current = value
+    lastQueryRef.current = query
     const t = setTimeout(async () => {
-      if (lastQueryRef.current !== value) return
+      if (lastQueryRef.current !== query) return
       setLoading(true)
       try {
         const params = new URLSearchParams({ category: 'vendor', take: '25' })
-        if (value.trim()) params.set('search', value.trim())
+        if (query.trim()) params.set('search', query.trim())
         const r = await fetch(`/api/partners?${params}`)
         const d = await r.json()
         setResults(Array.isArray(d?.partners) ? d.partners : [])
@@ -2135,9 +2171,9 @@ function VendorPicker({
       }
     }, 200)
     return () => clearTimeout(t)
-  }, [value, open])
+  }, [query, open])
 
-  const trimmed = value.trim()
+  const trimmed = query.trim()
   const exactMatch = results.some(p => p.companyName.toLowerCase() === trimmed.toLowerCase())
   const canAddNew = isAdmin && trimmed.length > 0 && !exactMatch
 
@@ -2145,10 +2181,10 @@ function VendorPicker({
     <div ref={wrapperRef} style={{ position: 'relative', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(true)}
-          placeholder="Vendor"
+          placeholder="Search vendors…"
           style={{ ...cellInputStyle, paddingRight: 26 }}
         />
         <button
@@ -2251,7 +2287,6 @@ function AddPartnerModal({
   const [dealerNo, setDealerNo] = useState('')
   const [phone, setPhone] = useState('')
   const [phoneAlternative, setPhoneAlternative] = useState('')
-  const [fax, setFax] = useState('')
   const [licenseNo, setLicenseNo] = useState('')
   const [ein, setEin] = useState('')
   const [salesTaxLicense, setSalesTaxLicense] = useState('')
@@ -2292,7 +2327,7 @@ function AddPartnerModal({
         body: JSON.stringify({
           companyName: companyName.trim(),
           categories: Array.from(categories),
-          companyAlias, dealerNo, phone, phoneAlternative, fax, licenseNo, ein,
+          companyAlias, dealerNo, phone, phoneAlternative, licenseNo, ein,
           salesTaxLicense, lienCode,
           contactName, contactPhone, contactCell, contactAddress, contactEmail,
           contactLossPayeeAddress, contactAlias,
@@ -2319,150 +2354,496 @@ function AddPartnerModal({
     }
   }
 
-  return (
+  // Render via portal at document.body so the modal escapes any transformed
+  // ancestor.
+  return createPortal((
     <div
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 110,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+        position: 'fixed', inset: 0, zIndex: 110,
+        background: 'rgba(15, 23, 42, 0.32)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: '#fff', borderRadius: 14, width: 'min(92vw, 1280px)',
-          maxHeight: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column',
-          boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
+          // Mesh-gradient backdrop matching the vehicle detail page hero:
+          // soft pink/purple/cyan/blue radial blobs layered over an off-white
+          // base at ~85% opacity. Same blob palette as the hero on
+          // /vehicles/[id] so the modal reads as part of that page.
+          background: [
+            'radial-gradient(at 18% 24%, hsla(220, 90%, 72%, 0.22) 0px, transparent 55%)',
+            'radial-gradient(at 82% 8%, hsla(280, 80%, 68%, 0.20) 0px, transparent 55%)',
+            'radial-gradient(at 72% 76%, hsla(190, 70%, 78%, 0.16) 0px, transparent 50%)',
+            'radial-gradient(at 4% 96%, hsla(340, 75%, 72%, 0.18) 0px, transparent 55%)',
+            'radial-gradient(at 50% 50%, hsla(40, 80%, 80%, 0.10) 0px, transparent 50%)',
+            'rgba(248, 248, 246, 0.85)',
+          ].join(', '),
+          backdropFilter: 'blur(20px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+          borderRadius: 22,
+          border: '1px solid rgba(255, 255, 255, 0.7)',
+          width: 'min(92vw, 1240px)',
+          maxHeight: 'calc(100vh - 40px)',
+          display: 'flex', flexDirection: 'column',
+          boxShadow: [
+            '0 30px 80px -20px rgba(15, 23, 42, 0.45)',
+            '0 12px 32px -10px rgba(15, 23, 42, 0.18)',
+            'inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+            'inset 0 0 0 0.5px rgba(255, 255, 255, 0.5)',
+          ].join(', '),
           transform: 'translateZ(0)', contain: 'layout style',
+          overflow: 'hidden',
         }}
       >
-        {/* Header */}
+        {/* Header — no divider line, glass continues edge-to-edge */}
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '16px 24px', borderBottom: '1px solid rgba(0,0,0,0.06)',
+          padding: '14px 28px 18px',
         }}>
-          <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>Add New Partner</h2>
+          <h2 style={{
+            fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em',
+            color: '#0a0a0a', lineHeight: 1, margin: 0,
+          }}>Add New Partner</h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             style={{
-              background: 'none', border: 'none', fontSize: 24, cursor: 'pointer',
-              color: 'rgba(0,0,0,0.4)', minHeight: 'auto', padding: 0, lineHeight: 1,
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'rgba(255, 255, 255, 0.55)',
+              border: '1px solid rgba(255, 255, 255, 0.6)',
+              boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(15, 23, 42, 0.06)',
+              fontSize: 18, cursor: 'pointer', color: 'rgba(0,0,0,0.55)',
+              minHeight: 'auto', padding: 0, lineHeight: 1,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >×</button>
         </div>
 
-        {/* Scrollable body */}
+        {/* Scrollable body — Category card on top (full width), three section
+            cards side-by-side below. Each section card is its own
+            glassmorphic surface; fields inside use label-above + bold-value
+            on a faint white backplate for the Apple-style data entry feel. */}
         <div style={{
-          flex: 1, overflowY: 'auto', padding: '20px 24px',
+          flex: 1, overflowY: 'auto', padding: '0 24px 20px',
           overscrollBehavior: 'contain',
         }}>
-          {/* Category section */}
-          <PartnerSectionLabel>Category</PartnerSectionLabel>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 28 }}>
-            {PARTNER_CATEGORIES.map(c => {
-              const checked = categories.has(c.value)
-              return (
-                <label key={c.value} style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '8px 14px', borderRadius: 10,
-                  border: `1px solid ${checked ? 'rgba(0, 113, 227, 0.4)' : 'rgba(0,0,0,0.12)'}`,
-                  background: checked ? 'rgba(0, 113, 227, 0.06)' : '#fff',
-                  cursor: 'pointer', userSelect: 'none',
-                  fontSize: 13, fontWeight: 500,
-                  color: checked ? '#0071e3' : '#1d1d1f',
-                  transition: 'background 140ms ease, border-color 140ms ease',
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleCategory(c.value)}
-                    style={{ accentColor: '#0071e3', margin: 0 }}
-                  />
-                  {c.label}
-                </label>
-              )
-            })}
-          </div>
+          {/* ── Category card ── */}
+          <SectionCard>
+            <SectionCardLabel>Category</SectionCardLabel>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {PARTNER_CATEGORIES.map(c => (
+                <SatinTagChip
+                  key={c.value}
+                  label={c.label}
+                  selected={categories.has(c.value)}
+                  onToggle={() => toggleCategory(c.value)}
+                />
+              ))}
+            </div>
+          </SectionCard>
 
-          {/* 3-column info */}
+          {/* ── Three section cards side-by-side ── */}
           <div style={{
             display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
-            gap: 28, alignItems: 'start',
+            gap: 16, alignItems: 'start',
           }}>
             {/* General Info */}
-            <div>
-              <PartnerSectionLabel>General Info</PartnerSectionLabel>
-              <PartnerField label="Company Name" value={companyName} onChange={setCompanyName} required />
-              <PartnerRow>
-                <PartnerField label="Company Name Alias" value={companyAlias} onChange={setCompanyAlias} />
-                <PartnerField label="Dealer No" value={dealerNo} onChange={setDealerNo} />
-              </PartnerRow>
-              <PartnerRow>
-                <PartnerField label="Phone" value={phone} onChange={setPhone} placeholder="(___) ___-____" />
-                <PartnerField label="Phone Alternative" value={phoneAlternative} onChange={setPhoneAlternative} placeholder="(___) ___-____" />
-                <PartnerField label="Fax" value={fax} onChange={setFax} placeholder="(___) ___-____" />
-              </PartnerRow>
-              <PartnerRow>
-                <PartnerField label="License No" value={licenseNo} onChange={setLicenseNo} />
-                <PartnerField label="EIN / Federal ID" value={ein} onChange={setEin} />
-                <PartnerField label="Sales Tax License" value={salesTaxLicense} onChange={setSalesTaxLicense} />
-              </PartnerRow>
-              <PartnerField label="Lien Code" value={lienCode} onChange={setLienCode} />
-            </div>
+            <SectionCard>
+              <SectionCardLabel>General Info</SectionCardLabel>
+              <FieldStack>
+                <FieldBackplate>
+                  <PremiumField label="Company Name" value={companyName} onChange={setCompanyName} required />
+                </FieldBackplate>
+                <FieldBackplate>
+                  <PremiumField label="Company Name Alias" value={companyAlias} onChange={setCompanyAlias} />
+                </FieldBackplate>
+                <FieldBackplate>
+                  <PremiumField label="Dealer No" value={dealerNo} onChange={setDealerNo} />
+                </FieldBackplate>
+                <FieldRow cols={[1, 1]}>
+                  <FieldBackplate>
+                    <PremiumField label="Phone" value={phone} onChange={(v) => setPhone(formatPhone(v))} />
+                  </FieldBackplate>
+                  <FieldBackplate>
+                    <PremiumField label="Phone Alt" value={phoneAlternative} onChange={(v) => setPhoneAlternative(formatPhone(v))} />
+                  </FieldBackplate>
+                </FieldRow>
+                <FieldRow cols={[1, 1]}>
+                  <FieldBackplate>
+                    <PremiumField label="License No" value={licenseNo} onChange={setLicenseNo} />
+                  </FieldBackplate>
+                  <FieldBackplate>
+                    <PremiumField label="EIN / Federal ID" value={ein} onChange={setEin} />
+                  </FieldBackplate>
+                </FieldRow>
+                <FieldRow cols={[1, 1]}>
+                  <FieldBackplate>
+                    <PremiumField label="Sales Tax License" value={salesTaxLicense} onChange={setSalesTaxLicense} />
+                  </FieldBackplate>
+                  <FieldBackplate>
+                    <PremiumField label="Lien Code" value={lienCode} onChange={setLienCode} />
+                  </FieldBackplate>
+                </FieldRow>
+              </FieldStack>
+            </SectionCard>
 
             {/* Contact Info */}
-            <div>
-              <PartnerSectionLabel>Contact Info</PartnerSectionLabel>
-              <PartnerField label="Name" value={contactName} onChange={setContactName} />
-              <PartnerRow>
-                <PartnerField label="Phone" value={contactPhone} onChange={setContactPhone} placeholder="(___) ___-____" />
-                <PartnerField label="Cell" value={contactCell} onChange={setContactCell} placeholder="(___) ___-____" />
-              </PartnerRow>
-              <PartnerField label="Address" value={contactAddress} onChange={setContactAddress} placeholder="Street, City, State, ZIP" />
-              <PartnerField label="Email" value={contactEmail} onChange={setContactEmail} placeholder="name@example.com" />
-              <PartnerField label="Loss Payee Address" value={contactLossPayeeAddress} onChange={setContactLossPayeeAddress} placeholder="Street, City, State, ZIP" />
-              <PartnerField label="Alias" value={contactAlias} onChange={setContactAlias} />
-            </div>
+            <SectionCard>
+              <SectionCardLabel>Contact Info</SectionCardLabel>
+              <FieldStack>
+                <FieldBackplate>
+                  <PremiumField label="Name" value={contactName} onChange={setContactName} />
+                </FieldBackplate>
+                <FieldRow cols={[1, 1]}>
+                  <FieldBackplate>
+                    <PremiumField label="Phone" value={contactPhone} onChange={(v) => setContactPhone(formatPhone(v))} />
+                  </FieldBackplate>
+                  <FieldBackplate>
+                    <PremiumField label="Cell" value={contactCell} onChange={(v) => setContactCell(formatPhone(v))} />
+                  </FieldBackplate>
+                </FieldRow>
+                <FieldBackplate>
+                  <PremiumField label="Address" value={contactAddress} onChange={setContactAddress} placeholder="Street, City, State, ZIP" />
+                </FieldBackplate>
+                <FieldBackplate>
+                  <PremiumField label="Email" value={contactEmail} onChange={setContactEmail} placeholder="name@example.com" />
+                </FieldBackplate>
+                <FieldBackplate>
+                  <PremiumField label="Loss Payee Address" value={contactLossPayeeAddress} onChange={setContactLossPayeeAddress} placeholder="Street, City, State, ZIP" />
+                </FieldBackplate>
+                <FieldBackplate>
+                  <PremiumField label="Alias" value={contactAlias} onChange={setContactAlias} />
+                </FieldBackplate>
+              </FieldStack>
+            </SectionCard>
 
             {/* Shipping Info */}
-            <div>
-              <PartnerSectionLabel>Shipping Info</PartnerSectionLabel>
-              <PartnerRow>
-                <PartnerField label="Name" value={shippingName} onChange={setShippingName} />
-                <PartnerField label="Business Phone" value={shippingBusinessPhone} onChange={setShippingBusinessPhone} placeholder="(___) ___-____" />
-              </PartnerRow>
-              <PartnerField label="Address" value={shippingAddress} onChange={setShippingAddress} placeholder="Street, City, State, ZIP" />
-            </div>
+            <SectionCard>
+              <SectionCardLabel>Shipping Info</SectionCardLabel>
+              <FieldStack>
+                <FieldRow cols={[1, 1]}>
+                  <FieldBackplate>
+                    <PremiumField label="Name" value={shippingName} onChange={setShippingName} />
+                  </FieldBackplate>
+                  <FieldBackplate>
+                    <PremiumField label="Business Phone" value={shippingBusinessPhone} onChange={(v) => setShippingBusinessPhone(formatPhone(v))} />
+                  </FieldBackplate>
+                </FieldRow>
+                <FieldBackplate>
+                  <PremiumField label="Address" value={shippingAddress} onChange={setShippingAddress} placeholder="Street, City, State, ZIP" />
+                </FieldBackplate>
+              </FieldStack>
+            </SectionCard>
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Footer — floating glass strip, no harsh divider */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 24px', borderTop: '1px solid rgba(0,0,0,0.06)',
-          background: 'rgba(0,0,0,0.02)', gap: 12,
+          padding: '14px 28px 18px', gap: 12,
+          background: 'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 100%)',
         }}>
-          <p style={{ fontSize: 12, color: err ? '#dc2626' : 'rgba(0,0,0,0.5)' }}>
+          <p style={{ fontSize: 12, fontWeight: 500, color: err ? '#dc2626' : 'rgba(0,0,0,0.5)', letterSpacing: '-0.005em' }}>
             {err ?? `${categories.size} categor${categories.size === 1 ? 'y' : 'ies'} selected`}
           </p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onClose} disabled={saving} style={v2Btn('ghost')}>Cancel</button>
-            <button onClick={save} disabled={saving || !companyName.trim()} style={v2Btn('primary')}>
-              {saving ? 'Saving…' : 'Save Partner'}
-            </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <button
+              onClick={onClose}
+              disabled={saving}
+              style={{
+                background: 'none', border: 'none',
+                padding: '8px 4px', fontSize: 13, fontWeight: 600,
+                color: 'rgba(0,0,0,0.55)', cursor: 'pointer', minHeight: 'auto',
+                letterSpacing: '-0.005em',
+                opacity: saving ? 0.5 : 1,
+              }}
+            >Cancel</button>
+            <PremiumPillButton
+              label={saving ? 'Saving…' : 'Save Partner'}
+              onClick={save}
+              disabled={saving || !companyName.trim()}
+            />
           </div>
         </div>
       </div>
     </div>
+  ), document.body)
+}
+
+// ─── Premium components for AddPartnerModal ─────────────────────────
+// SectionCard, SectionCardLabel, FieldStack, FieldRow, FieldBackplate,
+// PremiumField, PremiumFieldSelect, PremiumFieldDate, PremiumPillButton and
+// formatPhone now live in components/customer-form-ui.tsx (shared with
+// AddCustomerModal, which was extracted to components/AddCustomerModal.tsx
+// because Next.js forbids non-page exports from a page.tsx route file).
+
+// Card shown when the vehicle's Source is locked to a Partner (vendor) or
+// Contact (customer). Fetches the full record by id and surfaces the
+// phone / email / address inline below the name so the user doesn't have to
+// click through to the partner / contact detail page to see it.
+function AttachedSourceCard({
+  kind, partnerId, contactId, fallbackName,
+}: {
+  kind: 'vendor' | 'customer'
+  partnerId: string | null
+  contactId: string | null
+  fallbackName: string
+}) {
+  const [detail, setDetail] = useState<{
+    name: string
+    phone: string | null
+    email: string | null
+    address: string | null
+  } | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        if (kind === 'vendor' && partnerId) {
+          const r = await fetch(`/api/partners/${partnerId}`)
+          if (!r.ok) return
+          const d = await r.json()
+          const p = d?.partner
+          if (cancelled || !p) return
+          setDetail({
+            name: p.companyName ?? fallbackName,
+            phone: p.contactCell || p.contactPhone || p.phone || null,
+            email: p.contactEmail || null,
+            address: p.contactAddress || p.shippingAddress || null,
+          })
+        } else if (kind === 'customer' && contactId) {
+          const r = await fetch(`/api/contacts/${contactId}`)
+          if (!r.ok) return
+          const c = await r.json()
+          if (cancelled || !c?.id) return
+          const name = [c.firstName, c.lastName].filter(Boolean).join(' ').trim() || fallbackName
+          const address = [c.address, c.city, c.state, c.zip].filter(Boolean).join(', ')
+          setDetail({
+            name,
+            phone: c.phone || c.homePhone || null,
+            email: c.email || null,
+            address: address || null,
+          })
+        }
+      } catch { /* swallow */ }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [kind, partnerId, contactId, fallbackName])
+
+  const name = detail?.name ?? fallbackName
+
+  return (
+    <div style={{
+      padding: '10px 14px',
+      background: 'rgba(0, 113, 227, 0.05)',
+      border: '1px solid rgba(0, 113, 227, 0.18)',
+      borderRadius: 10,
+    }}>
+      <p style={{
+        fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
+        textTransform: 'uppercase', color: 'rgba(0,0,0,0.5)',
+      }}>Attached {kind}</p>
+      {kind === 'customer' && contactId ? (
+        <a
+          href={`/contacts/${contactId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open customer profile (new tab)"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            fontSize: 14, fontWeight: 700, color: '#0a0a0a',
+            marginTop: 2, textDecoration: 'none',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            maxWidth: '100%',
+            transition: 'color 140ms ease',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = '#0071e3' }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = '#0a0a0a' }}
+        >
+          {name}
+          <span style={{ fontSize: 11, color: '#0071e3', flexShrink: 0 }}>↗</span>
+        </a>
+      ) : (
+        <p style={{
+          fontSize: 14, fontWeight: 700, color: '#0a0a0a',
+          marginTop: 2,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{name}</p>
+      )}
+
+      {detail && (detail.phone || detail.email || detail.address) && (
+        <div style={{
+          marginTop: 12,
+          display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+          {detail.phone && (
+            <AttachedRow label="Phone" value={formatPhone(detail.phone)} />
+          )}
+          {detail.email && (
+            <AttachedRow label="Email" value={detail.email} />
+          )}
+          {detail.address && (
+            <AttachedRow label="Address" value={detail.address} />
+          )}
+        </div>
+      )}
+    </div>
   )
 }
+
+// Single row inside AttachedSourceCard — chip-style backplate with label LEFT
+// and value RIGHT, matched to the chip rows on the Source/Purchase Info card
+// so it reads as one of "our" rows rather than a floating definition list.
+function AttachedRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '8px 12px',
+      background: 'rgba(255, 255, 255, 0.55)',
+      border: '1px solid rgba(255, 255, 255, 0.65)',
+      borderRadius: 10,
+      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(15, 23, 42, 0.04)',
+    }}>
+      <span style={{
+        fontSize: 12, fontWeight: 600,
+        color: 'rgba(15, 23, 42, 0.55)',
+        letterSpacing: '-0.005em',
+        flexShrink: 0, width: 56,
+        lineHeight: 1,
+      }}>{label}</span>
+      <span style={{
+        fontSize: 13.5, fontWeight: 700, color: '#0a0a0a',
+        letterSpacing: '-0.005em', lineHeight: 1,
+        flex: 1, minWidth: 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        fontVariantNumeric: 'tabular-nums',
+      }}>{value}</span>
+    </div>
+  )
+}
+
+// SalesRepPicker, CollapsibleSectionToggle, CollapsibleStubInline and
+// InterestedVehiclePicker now live in components/customer-form-ui.tsx (see
+// note above) — they were only used by AddCustomerModal.
+
+function SatinTagChip({
+  label, selected, onToggle,
+}: { label: string; selected: boolean; onToggle: () => void }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding: '8px 16px', borderRadius: 999,
+        fontSize: 12.5, fontWeight: 600, letterSpacing: '-0.005em',
+        cursor: 'pointer', minHeight: 'auto', userSelect: 'none',
+        transition: 'background 200ms ease, color 200ms ease, transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease',
+        transform: hover && !selected ? 'translateY(-0.5px)' : 'none',
+        ...(selected
+          ? {
+              // Dark satin capsule when selected: deep gradient, subtle glow,
+              // crisp top highlight to mimic satin sheen.
+              background: 'linear-gradient(180deg, #2a2a2c 0%, #18181b 100%)',
+              color: '#fafafa',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              boxShadow: [
+                '0 4px 14px -4px rgba(15, 23, 42, 0.35)',
+                '0 0 0 1px rgba(10, 132, 255, 0.18)',
+                'inset 0 1px 0 rgba(255, 255, 255, 0.18)',
+              ].join(', '),
+            }
+          : {
+              // Translucent floating tag — soft white blur, dark text.
+              background: hover ? 'rgba(255, 255, 255, 0.72)' : 'rgba(255, 255, 255, 0.5)',
+              color: '#1d1d1f',
+              border: '1px solid rgba(255, 255, 255, 0.65)',
+              boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 1px 2px rgba(15, 23, 42, 0.05)',
+            }),
+      }}
+    >{label}</button>
+  )
+}
+
+function GlassFieldGroup({ children }: { children: React.ReactNode }) {
+  // Faint translucent row backplate that visually groups related fields.
+  return (
+    <div style={{
+      background: 'rgba(255, 255, 255, 0.32)',
+      borderRadius: 12,
+      border: '1px solid rgba(255, 255, 255, 0.55)',
+      boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(15, 23, 42, 0.04)',
+      padding: '6px 14px',
+      marginBottom: 10,
+    }}>{children}</div>
+  )
+}
+
+function GlassField({
+  label, value, onChange, placeholder, required,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  required?: boolean
+}) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <label style={{
+      display: 'block', padding: '8px 0',
+      borderBottom: '1px solid rgba(15, 23, 42, 0.06)',
+    }}>
+      <span style={{
+        display: 'block', fontSize: 10.5, fontWeight: 600,
+        color: 'rgba(15, 23, 42, 0.5)',
+        letterSpacing: '0.06em', textTransform: 'uppercase',
+        marginBottom: 3,
+      }}>
+        {label}{required && <span style={{ color: '#dc2626', marginLeft: 2 }}>*</span>}
+      </span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          width: '100%', padding: '2px 0',
+          border: 'none', outline: 'none', background: 'transparent',
+          fontSize: 14, fontWeight: 700, color: '#0a0a0a',
+          letterSpacing: '-0.005em',
+          boxShadow: focused ? 'inset 0 -2px 0 -1px #0071e3' : 'none',
+          transition: 'box-shadow 160ms ease',
+        }}
+      />
+    </label>
+  )
+}
+
+// PremiumPillButton now lives in components/customer-form-ui.tsx (see note
+// above).
+
+// ─── V2 chip-row form helpers (Build/Title aesthetic) ───────────────
+// Same visual language as the InlineTextField chip rows on Build/Title and
+// Title Registration sub-tabs. Each field is a glass chip: label on the
+// left, always-editable input on the right, translucent fill, inset highlight
+// at top edge, soft drop shadow, subtle dark border. Focus = blue ring.
 
 function PartnerSectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <h3 style={{
-      fontSize: 14, fontWeight: 800, color: '#0a0a0a',
-      borderBottom: '1px solid rgba(0,0,0,0.12)',
-      paddingBottom: 8, marginBottom: 16, letterSpacing: '-0.01em',
+      fontSize: 10.5, fontWeight: 700, color: 'rgba(0,0,0,0.5)',
+      marginBottom: 12, letterSpacing: '0.14em',
+      textTransform: 'uppercase',
     }}>{children}</h3>
   )
 }
@@ -2472,9 +2853,53 @@ function PartnerRow({ children }: { children: React.ReactNode }) {
     <div style={{
       display: 'grid',
       gridTemplateColumns: `repeat(${React.Children.count(children)}, 1fr)`,
-      gap: 12, marginBottom: 14,
+      gap: 8, marginBottom: 8,
     }}>{children}</div>
   )
+}
+
+// Pill-shaped chip row matching the Acquisition column on the Purchase Info
+// card: very rounded, soft translucent fill, barely-visible border, inset
+// highlight at the top edge, label LEFT (muted weight 600), value RIGHT
+// (bold black). Hover lift on the whole chip; blue focus ring on input.
+function chipFieldStyle(focused: boolean, hover: boolean): React.CSSProperties {
+  const bg = focused
+    ? 'rgba(255, 255, 255, 0.86)'
+    : hover
+      ? 'rgba(255, 255, 255, 0.72)'
+      : 'rgba(255, 255, 255, 0.46)'
+  return {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    gap: 12, minWidth: 0,
+    padding: '11px 18px',
+    borderRadius: 14,
+    border: focused
+      ? '1px solid rgba(10, 132, 255, 0.45)'
+      : '1px solid rgba(255, 255, 255, 0.6)',
+    background: bg,
+    boxShadow: focused
+      ? '0 0 0 3px rgba(10, 132, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(31, 38, 135, 0.05)'
+      : 'inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 0 0 0.5px rgba(255, 255, 255, 0.45), 0 1px 2px rgba(31, 38, 135, 0.04)',
+    transform: hover && !focused ? 'translateY(-0.5px)' : 'none',
+    transition: 'background 180ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 180ms ease',
+    cursor: 'text',
+  }
+}
+
+const chipFieldLabelStyle: React.CSSProperties = {
+  fontSize: 13, fontWeight: 600, color: 'rgba(0,0,0,0.55)',
+  letterSpacing: '-0.005em',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+  flexShrink: 0, minWidth: 0, maxWidth: '50%',
+}
+
+const chipFieldInputStyle: React.CSSProperties = {
+  flex: 1, minWidth: 0, textAlign: 'right',
+  border: 'none', outline: 'none', background: 'transparent',
+  fontSize: 14, fontWeight: 700, color: '#0a0a0a',
+  padding: 0, margin: 0,
+  fontVariantNumeric: 'tabular-nums',
+  letterSpacing: '-0.005em',
 }
 
 function PartnerField({
@@ -2486,83 +2911,34 @@ function PartnerField({
   placeholder?: string
   required?: boolean
 }) {
+  const [focused, setFocused] = useState(false)
+  const [hover, setHover] = useState(false)
   return (
-    <label style={{ display: 'block', marginBottom: 14 }}>
-      <span style={{
-        display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(0,0,0,0.6)',
-        marginBottom: 4, letterSpacing: '-0.005em',
-      }}>{label}{required && <span style={{ color: '#dc2626', marginLeft: 2 }}>*</span>}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        style={{
-          width: '100%', padding: '8px 10px',
-          border: '1px solid rgba(0,0,0,0.14)', borderRadius: 8,
-          fontSize: 13, color: '#1d1d1f', background: '#fff',
-          minHeight: 'auto', boxSizing: 'border-box',
-        }}
-      />
+    <label
+      style={{ display: 'block', marginBottom: 8 }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <div style={chipFieldStyle(focused, hover)}>
+        <span style={chipFieldLabelStyle}>
+          {label}{required && <span style={{ color: '#dc2626', marginLeft: 2 }}>*</span>}
+        </span>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder ?? '—'}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={chipFieldInputStyle}
+        />
+      </div>
     </label>
   )
 }
 
-// ─── Customer dropdown option lists ─────────────────────────────────
-// Fixed lists v1; could become admin-managed tables later (same pattern as
-// cost_add_descriptions / cost_add_categories) if the dealership wants to
-// extend them per market segment.
-const GENDER_OPTIONS = [
-  { value: 'male',          label: 'Male' },
-  { value: 'female',        label: 'Female' },
-  { value: 'other',         label: 'Other' },
-  { value: 'prefer_not',    label: 'Prefer not to say' },
-]
-
-const ID_TYPE_OPTIONS = [
-  { value: 'drivers_license', label: 'Driver License' },
-  { value: 'state_id',        label: 'State ID' },
-  { value: 'passport',        label: 'Passport' },
-  { value: 'military_id',     label: 'Military ID' },
-  { value: 'permanent_resident_card', label: 'Permanent Resident Card' },
-  { value: 'other',           label: 'Other' },
-]
-
-const LEAD_TYPE_OPTIONS = [
-  { value: 'walk_in',   label: 'Walk-in' },
-  { value: 'internet',  label: 'Internet' },
-  { value: 'phone',     label: 'Phone' },
-  { value: 'referral',  label: 'Referral' },
-  { value: 'trade_in',  label: 'Trade-In' },
-  { value: 'repeat',    label: 'Repeat' },
-  { value: 'other',     label: 'Other' },
-]
-
-const LEAD_SOURCE_OPTIONS = [
-  { value: 'website',       label: 'Website' },
-  { value: 'facebook',      label: 'Facebook' },
-  { value: 'instagram',     label: 'Instagram' },
-  { value: 'google',        label: 'Google' },
-  { value: 'craigslist',    label: 'Craigslist' },
-  { value: 'newspaper',     label: 'Newspaper' },
-  { value: 'radio',         label: 'Radio' },
-  { value: 'tv',            label: 'TV' },
-  { value: 'word_of_mouth', label: 'Word of Mouth' },
-  { value: 'repeat',        label: 'Repeat Customer' },
-  { value: 'trade_in',      label: 'Trade-In' },
-  { value: 'other',         label: 'Other' },
-]
-
-const CUSTOMER_STATUS_OPTIONS = [
-  { value: 'new',         label: 'New' },
-  { value: 'contacted',   label: 'Contacted' },
-  { value: 'hot',         label: 'Hot' },
-  { value: 'warm',        label: 'Warm' },
-  { value: 'cold',        label: 'Cold' },
-  { value: 'negotiating', label: 'Negotiating' },
-  { value: 'sold',        label: 'Sold' },
-  { value: 'lost',        label: 'Lost' },
-  { value: 'inactive',    label: 'Inactive' },
-]
+// GENDER_OPTIONS, ID_TYPE_OPTIONS, LEAD_TYPE_OPTIONS, LEAD_SOURCE_OPTIONS
+// and CUSTOMER_STATUS_OPTIONS now live in components/customer-form-ui.tsx
+// (see note above) — they were only used by AddCustomerModal.
 
 // Subset of Contact returned from /api/contacts for the picker dropdown.
 type ContactSummary = {
@@ -2578,13 +2954,21 @@ type ContactSummary = {
 // contactType='customer'. "+ Add new customer" opens AddCustomerModal which
 // captures the full DealerCenter-equivalent Buyer Info on save.
 function CustomerPicker({
-  value, onChange, onPickContact, onRequestAddNew,
+  onPickContact, onRequestAddNew, value, onChange,
 }: {
-  value: string
-  onChange: (text: string) => void
   onPickContact: (contact: { id: string; firstName: string; lastName: string }) => void
   onRequestAddNew: (typedName: string) => void
+  /** See VendorPicker — same controlled/uncontrolled dual mode. */
+  value?: string
+  onChange?: (text: string) => void
 }) {
+  const isControlled = value !== undefined && onChange !== undefined
+  const [internalQuery, setInternalQuery] = useState('')
+  const query = isControlled ? value! : internalQuery
+  const setQuery = (v: string) => {
+    if (isControlled) onChange!(v)
+    else setInternalQuery(v)
+  }
   const [open, setOpen] = useState(false)
   const [results, setResults] = useState<ContactSummary[]>([])
   const [loading, setLoading] = useState(false)
@@ -2603,13 +2987,13 @@ function CustomerPicker({
 
   useEffect(() => {
     if (!open) return
-    lastQueryRef.current = value
+    lastQueryRef.current = query
     const t = setTimeout(async () => {
-      if (lastQueryRef.current !== value) return
+      if (lastQueryRef.current !== query) return
       setLoading(true)
       try {
         const params = new URLSearchParams({ contactType: 'customer', limit: '25' })
-        if (value.trim()) params.set('search', value.trim())
+        if (query.trim()) params.set('search', query.trim())
         const r = await fetch(`/api/contacts?${params}`)
         const d = await r.json()
         setResults(Array.isArray(d?.contacts) ? d.contacts : [])
@@ -2620,9 +3004,9 @@ function CustomerPicker({
       }
     }, 200)
     return () => clearTimeout(t)
-  }, [value, open])
+  }, [query, open])
 
-  const trimmed = value.trim()
+  const trimmed = query.trim()
   const exactMatch = results.some(c => `${c.firstName} ${c.lastName}`.toLowerCase() === trimmed.toLowerCase())
   const canAddNew = trimmed.length > 0 && !exactMatch
 
@@ -2630,10 +3014,10 @@ function CustomerPicker({
     <div ref={wrapperRef} style={{ position: 'relative', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(true)}
-          placeholder="Customer"
+          placeholder="Search customers…"
           style={{ ...cellInputStyle, paddingRight: 26 }}
         />
         <button
@@ -2709,271 +3093,9 @@ function CustomerPicker({
   )
 }
 
-// ─── Add Customer Modal ─────────────────────────────────────────────
-// Mirrors the DealerCenter "Add New Customer" surface: Buyer Info as the
-// primary section, with collapsible Employment + Referrer sub-sections, and
-// stub buttons for Interested Vehicle / Customer Wishlist / Campaign which
-// tie into the future sales-pipeline + campaigns work.
-function AddCustomerModal({
-  initialFirstName, initialLastName, onClose, onSaved,
-}: {
-  initialFirstName: string
-  initialLastName: string
-  onClose: () => void
-  onSaved: (contact: { id: string; firstName: string; lastName: string }) => void
-}) {
-  useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [])
-
-  // Buyer Info
-  const [firstName, setFirstName] = useState(initialFirstName)
-  const [lastName, setLastName] = useState(initialLastName)
-  const [gender, setGender] = useState('')
-  const [ssn, setSsn] = useState('')
-  const [dateOfBirth, setDateOfBirth] = useState('')
-  const [idType, setIdType] = useState('')
-  const [idState, setIdState] = useState('')
-  const [idNo, setIdNo] = useState('')
-  const [idIssuedDate, setIdIssuedDate] = useState('')
-  const [idExpirationDate, setIdExpirationDate] = useState('')
-  const [phone, setPhone] = useState('')
-  const [homePhone, setHomePhone] = useState('')
-  const [workPhone, setWorkPhone] = useState('')
-  const [email, setEmail] = useState('')
-  const [leadType, setLeadType] = useState('')
-  const [customerStatus, setCustomerStatus] = useState('')
-  const [leadSource, setLeadSource] = useState('')
-  const [address, setAddress] = useState('')
-  const [cashDown, setCashDown] = useState('')
-  const [salesRepId, setSalesRepId] = useState('')
-  const [isInShowroom, setIsInShowroom] = useState(false)
-
-  // Collapsible sections
-  const [showEmployment, setShowEmployment] = useState(false)
-  const [showReferrer, setShowReferrer] = useState(false)
-  // Employment
-  const [employerName, setEmployerName] = useState('')
-  const [employerPhone, setEmployerPhone] = useState('')
-  const [employerAddress, setEmployerAddress] = useState('')
-  const [employerYears, setEmployerYears] = useState('')
-  const [employerMonthlyIncome, setEmployerMonthlyIncome] = useState('')
-  // Referrer
-  const [referrerName, setReferrerName] = useState('')
-
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-
-  async function save() {
-    setErr(null)
-    if (!firstName.trim() || !lastName.trim()) {
-      setErr('First and Last Name are required')
-      return
-    }
-    setSaving(true)
-    try {
-      const r = await fetch('/api/contacts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          contactType: 'customer',
-          gender, ssn, dateOfBirth: dateOfBirth || null,
-          idType, idState, idNo,
-          idIssuedDate: idIssuedDate || null,
-          idExpirationDate: idExpirationDate || null,
-          phone, homePhone, workPhone, email,
-          leadType, leadSource, customerStatus,
-          address, cashDown,
-          salesRepId, isInShowroom,
-          employerName, employerPhone, employerAddress,
-          employerYears, employerMonthlyIncome,
-          referrerName,
-        }),
-      })
-      if (!r.ok) {
-        const txt = await r.text()
-        setErr(`Save failed (${r.status}): ${txt.slice(0, 160)}`)
-        setSaving(false)
-        return
-      }
-      const data = await r.json()
-      if (!data?.id) {
-        setErr('Save returned no contact id')
-        setSaving(false)
-        return
-      }
-      onSaved({ id: data.id, firstName: data.firstName, lastName: data.lastName })
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 110,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: '#fff', borderRadius: 14, width: 'min(92vw, 1280px)',
-          maxHeight: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column',
-          boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
-          transform: 'translateZ(0)', contain: 'layout style',
-        }}
-      >
-        {/* Header */}
-        <div style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '16px 24px', borderBottom: '1px solid rgba(0,0,0,0.06)',
-        }}>
-          <h2 style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em' }}>Add New Customer</h2>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none', border: 'none', fontSize: 24, cursor: 'pointer',
-              color: 'rgba(0,0,0,0.4)', minHeight: 'auto', padding: 0, lineHeight: 1,
-            }}
-          >×</button>
-        </div>
-
-        {/* Save-and-close banner (matches DealerCenter — a quick-action area
-            anchored to the top of the form for power users who fill out only
-            the required fields and dismiss). */}
-        <div style={{
-          display: 'flex', justifyContent: 'flex-end', alignItems: 'center',
-          padding: '10px 24px',
-          background: 'rgba(0, 113, 227, 0.04)',
-          borderBottom: '1px solid rgba(0, 113, 227, 0.08)',
-        }}>
-          <button
-            onClick={save}
-            disabled={saving || !firstName.trim() || !lastName.trim()}
-            style={{
-              padding: '7px 14px', borderRadius: 8,
-              border: '1px solid rgba(0, 113, 227, 0.4)', background: 'transparent',
-              color: '#0071e3', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              minHeight: 'auto',
-              opacity: (saving || !firstName.trim() || !lastName.trim()) ? 0.5 : 1,
-            }}
-          >Save and Close</button>
-        </div>
-
-        {/* Body */}
-        <div style={{
-          flex: 1, overflowY: 'auto', padding: '20px 24px',
-          overscrollBehavior: 'contain',
-        }}>
-          {/* ── Buyer Info ── */}
-          <PartnerSectionLabel>Buyer Info</PartnerSectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
-            <PartnerField label="First Name" value={firstName} onChange={setFirstName} required />
-            <PartnerField label="Last Name" value={lastName} onChange={setLastName} required />
-            <PartnerFieldSelect label="Gender" value={gender} onChange={setGender} options={GENDER_OPTIONS} />
-            <PartnerField label="SSN" value={ssn} onChange={setSsn} placeholder="___-__-____" />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
-            <PartnerFieldDate label="Date of Birth" value={dateOfBirth} onChange={setDateOfBirth} />
-            <PartnerFieldSelect label="ID Type" value={idType} onChange={setIdType} options={ID_TYPE_OPTIONS} />
-            <PartnerField label="ID State" value={idState} onChange={setIdState} placeholder="FL" />
-            <PartnerField label="ID No." value={idNo} onChange={setIdNo} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
-            <PartnerFieldDate label="Issued Date" value={idIssuedDate} onChange={setIdIssuedDate} />
-            <PartnerFieldDate label="Expiration Date" value={idExpirationDate} onChange={setIdExpirationDate} />
-            <PartnerField label="Cell Phone" value={phone} onChange={setPhone} placeholder="(___) ___-____" />
-            <PartnerField label="Home Phone" value={homePhone} onChange={setHomePhone} placeholder="(___) ___-____" />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
-            <PartnerField label="Work Phone" value={workPhone} onChange={setWorkPhone} placeholder="(___) ___-____" />
-            <PartnerField label="Email" value={email} onChange={setEmail} placeholder="name@example.com" />
-            <PartnerFieldSelect label="Lead Type" value={leadType} onChange={setLeadType} options={LEAD_TYPE_OPTIONS} />
-            <PartnerFieldSelect label="Customer Status" value={customerStatus} onChange={setCustomerStatus} options={CUSTOMER_STATUS_OPTIONS} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
-            <PartnerField label="Current Address" value={address} onChange={setAddress} placeholder="Street, City, State, ZIP" />
-            <PartnerField label="Cash Down" value={cashDown} onChange={setCashDown} placeholder="$0.00" />
-            <PartnerFieldSelect label="Lead Source" value={leadSource} onChange={setLeadSource} options={LEAD_SOURCE_OPTIONS} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 14 }}>
-            <PartnerField label="Sales Rep" value={salesRepId} onChange={setSalesRepId} placeholder="user id or name (lookup wires when sales rep picker lands)" />
-          </div>
-          <label style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            fontSize: 13, fontWeight: 500, color: '#1d1d1f',
-            marginBottom: 24, cursor: 'pointer',
-          }}>
-            <input
-              type="checkbox"
-              checked={isInShowroom}
-              onChange={(e) => setIsInShowroom(e.target.checked)}
-              style={{ accentColor: '#0071e3' }}
-            />
-            Is in Showroom (Check-In after Prospect is created)
-          </label>
-
-          {/* ── Interested Vehicle ── stub */}
-          <CollapsibleStub label="Interested Vehicle" />
-
-          {/* ── Employment ── */}
-          <CollapsibleSection
-            label="+ Employment"
-            open={showEmployment}
-            onToggle={() => setShowEmployment(s => !s)}
-          >
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <PartnerField label="Employer Name" value={employerName} onChange={setEmployerName} />
-              <PartnerField label="Employer Phone" value={employerPhone} onChange={setEmployerPhone} placeholder="(___) ___-____" />
-            </div>
-            <PartnerField label="Employer Address" value={employerAddress} onChange={setEmployerAddress} placeholder="Street, City, State, ZIP" />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <PartnerField label="Years at Employer" value={employerYears} onChange={setEmployerYears} placeholder="0" />
-              <PartnerField label="Monthly Income" value={employerMonthlyIncome} onChange={setEmployerMonthlyIncome} placeholder="$0.00" />
-            </div>
-          </CollapsibleSection>
-
-          {/* ── Referrer ── */}
-          <CollapsibleSection
-            label="+ Referrer"
-            open={showReferrer}
-            onToggle={() => setShowReferrer(s => !s)}
-          >
-            <PartnerField label="Referrer Name" value={referrerName} onChange={setReferrerName} placeholder="Who referred this customer" />
-          </CollapsibleSection>
-
-          {/* ── Customer Wishlist & Campaign — stubs ── */}
-          <CollapsibleStub label="+ Customer Wishlist" />
-          <CollapsibleStub label="+ Associate with a Campaign" />
-        </div>
-
-        {/* Footer */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 24px', borderTop: '1px solid rgba(0,0,0,0.06)',
-          background: 'rgba(0,0,0,0.02)', gap: 12,
-        }}>
-          <p style={{ fontSize: 12, color: err ? '#dc2626' : 'rgba(0,0,0,0.5)' }}>
-            {err ?? 'Customer record will be tagged contactType="customer"'}
-          </p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onClose} disabled={saving} style={v2Btn('ghost')}>Cancel</button>
-            <button onClick={save} disabled={saving || !firstName.trim() || !lastName.trim()} style={v2Btn('primary')}>
-              {saving ? 'Saving…' : 'Save Customer'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+// AddCustomerModal was extracted to components/AddCustomerModal.tsx —
+// Next.js forbids a page.tsx route file from exporting anything besides the
+// default page component, so it can no longer live here.
 
 function PartnerFieldSelect({
   label, value, onChange, options,
@@ -2983,25 +3105,27 @@ function PartnerFieldSelect({
   onChange: (v: string) => void
   options: { value: string; label: string }[]
 }) {
+  const [focused, setFocused] = useState(false)
+  const [hover, setHover] = useState(false)
   return (
-    <label style={{ display: 'block' }}>
-      <span style={{
-        display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(0,0,0,0.6)',
-        marginBottom: 4, letterSpacing: '-0.005em',
-      }}>{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: '100%', padding: '8px 10px',
-          border: '1px solid rgba(0,0,0,0.14)', borderRadius: 8,
-          fontSize: 13, color: '#1d1d1f', background: '#fff',
-          minHeight: 'auto', boxSizing: 'border-box',
-        }}
-      >
-        <option value="">—</option>
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+    <label
+      style={{ display: 'block', marginBottom: 8 }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <div style={chipFieldStyle(focused, hover)}>
+        <span style={chipFieldLabelStyle}>{label}</span>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={{ ...chipFieldInputStyle, appearance: 'none', cursor: 'pointer' }}
+        >
+          <option value="">—</option>
+          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
     </label>
   )
 }
@@ -3009,23 +3133,25 @@ function PartnerFieldSelect({
 function PartnerFieldDate({
   label, value, onChange,
 }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [focused, setFocused] = useState(false)
+  const [hover, setHover] = useState(false)
   return (
-    <label style={{ display: 'block' }}>
-      <span style={{
-        display: 'block', fontSize: 12, fontWeight: 600, color: 'rgba(0,0,0,0.6)',
-        marginBottom: 4, letterSpacing: '-0.005em',
-      }}>{label}</span>
-      <input
-        type="date"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: '100%', padding: '8px 10px',
-          border: '1px solid rgba(0,0,0,0.14)', borderRadius: 8,
-          fontSize: 13, color: '#1d1d1f', background: '#fff',
-          minHeight: 'auto', boxSizing: 'border-box',
-        }}
-      />
+    <label
+      style={{ display: 'block', marginBottom: 8 }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      <div style={chipFieldStyle(focused, hover)}>
+        <span style={chipFieldLabelStyle}>{label}</span>
+        <input
+          type="date"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={chipFieldInputStyle}
+        />
+      </div>
     </label>
   )
 }
@@ -3992,41 +4118,70 @@ function SoftDivider() {
 
 // Logistics Hub — merged Title & Location + Source + Floorplan
 function LogisticsHubCard({
-  vehicle, flooring, canSeeMoney, isAdmin, onEditFlooring,
+  vehicle, flooring, canSeeMoney, isAdmin, onEditFlooring, onSavePartial,
 }: {
   vehicle: Vehicle
   flooring: ReturnType<typeof computeFlooring>
   canSeeMoney: boolean
   isAdmin: boolean
   onEditFlooring: () => void
+  onSavePartial: (patch: Record<string, unknown>) => Promise<void>
 }) {
-  const rows: { label: string; value: string }[] = [
+  // Read-only rows (everything except Inventory + Purchase Type which are now
+  // editable dropdowns below so the card can change inventory state without
+  // round-tripping to Purchase Info).
+  const readOnlyRows: { label: string; value: string }[] = [
     { label: 'Title', value: vehicle.titleStatus || '—' },
     { label: 'Location', value: vehicle.location || '—' },
-    { label: 'Inventory', value: vehicle.inventoryStatus || '—' },
-    { label: 'Purchase Type', value: vehicle.purchaseType || '—' },
   ]
-  if (vehicle.purchasedFrom) rows.push({ label: 'Source', value: vehicle.purchasedFrom })
-  if (vehicle.dateInStock) rows.push({ label: 'Date In', value: fmtDate(vehicle.dateInStock) })
-  if (vehicle.consignmentCommissionPct !== null) rows.push({ label: 'Consign %', value: `${vehicle.consignmentCommissionPct}%` })
+  if (vehicle.purchasedFrom) readOnlyRows.push({ label: 'Source', value: vehicle.purchasedFrom })
+  if (vehicle.dateInStock) readOnlyRows.push({ label: 'Date In', value: fmtDate(vehicle.dateInStock) })
+  if (vehicle.consignmentCommissionPct !== null) readOnlyRows.push({ label: 'Consign %', value: `${vehicle.consignmentCommissionPct}%` })
 
   return (
     <GlassCard>
       <GlassEyebrow label="Logistics" subtitle="Title · Location · Floorplan" />
 
-      {/* Read-only chip rows — matches the chipBoxStyle visual language used by every
-          other field card on the page (Mechanical Blueprint, Title Registration, etc.),
-          so the General Info tab reads as one cohesive surface. */}
+      {/* Mix of read-only chip rows and editable AnchorRowSelect dropdowns —
+          read-only typography matches AnchorRowSelect exactly (14/700/#0a0a0a)
+          so the whole stack reads as one cohesive surface. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {rows.map((r) => (
+        {readOnlyRows.map((r) => (
           <div key={r.label} style={chipBoxStyle(false, false, false)}>
             <span style={labelStyle}>{r.label}</span>
             <span style={{
-              fontSize: 13, color: '#1d1d1f', fontWeight: 600, textAlign: 'right',
+              fontSize: 14, fontWeight: 700, color: '#0a0a0a',
+              letterSpacing: '-0.005em',
+              textAlign: 'right',
               minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>{r.value}</span>
           </div>
         ))}
+        <AnchorRowSelect
+          label="Inventory"
+          value={vehicle.inventoryStatus ?? ''}
+          onChange={(v) => onSavePartial({ inventoryStatus: v || null })}
+          options={[
+            { value: 'in_stock',         label: 'In Stock' },
+            { value: 'in_recon',         label: 'In Recon' },
+            { value: 'external_repair',  label: 'External Repair' },
+            { value: 'sold',             label: 'Sold' },
+            { value: 'removed',          label: 'Removed' },
+          ]}
+          placeholder="—"
+        />
+        <AnchorRowSelect
+          label="Purchase Type"
+          value={vehicle.purchaseType ?? ''}
+          onChange={(v) => onSavePartial({ purchaseType: v || null })}
+          options={[
+            { value: 'PURCHASED',   label: 'Purchased' },
+            { value: 'TRADE_IN',    label: 'Trade-In' },
+            { value: 'CONSIGNMENT', label: 'Consignment' },
+            { value: 'FLOORING',    label: 'Flooring' },
+          ]}
+          placeholder="—"
+        />
       </div>
 
       {canSeeMoney && (
@@ -5740,68 +5895,128 @@ function PurchaseInfoStudio({
                 />
               </div>
 
-              {/* Type pill toggle (Vendor / Customer) */}
-              <div style={{
-                display: 'inline-flex', padding: 3, gap: 2,
-                background: 'rgba(0,0,0,0.05)', borderRadius: 999,
-                marginBottom: 12,
-              }}>
-                {(['vendor', 'customer'] as const).map((t) => {
-                  const active = sourceType === t
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setSourceType(t)}
-                      style={{
-                        padding: '5px 14px', borderRadius: 999, border: 'none',
-                        background: active ? '#fff' : 'transparent',
-                        boxShadow: active ? '0 1px 2px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)' : 'none',
-                        color: active ? '#1d1d1f' : 'rgba(0,0,0,0.5)',
-                        fontSize: 12, fontWeight: 600, letterSpacing: '-0.005em',
-                        cursor: 'pointer', minHeight: 'auto',
-                        textTransform: 'capitalize',
-                        transition: 'background 180ms ease, color 180ms ease',
-                      }}
-                    >{t}</button>
+              {/* Source lock — once a Partner or Contact is attached, the
+                  Vendor/Customer toggle is locked. Switching freely would
+                  silently clear the attached link, which is destructive. The
+                  effective sourceType is derived from what's actually saved
+                  (falls back to the local toggle when nothing is attached). */}
+              {(() => {
+                const hasVendor = !!vehicle.purchasedFromVendorId
+                const hasContact = !!vehicle.purchasedFromContactId
+                const attached = hasVendor || hasContact
+                const effectiveType: 'vendor' | 'customer' =
+                  hasVendor ? 'vendor' : hasContact ? 'customer' : sourceType
+
+                async function clearSource() {
+                  const label = effectiveType === 'vendor' ? 'vendor' : 'customer'
+                  const ok = confirm(
+                    `This will clear the attached ${label} (${vehicle.purchasedFrom ?? 'current source'}). ` +
+                    `You can pick a different ${label} or switch types after. Continue?`
                   )
-                })}
-              </div>
+                  if (!ok) return
+                  await onSavePartial({
+                    purchasedFrom: null,
+                    purchasedFromVendorId: null,
+                    purchasedFromContactId: null,
+                  })
+                }
 
-              {sourceType === 'vendor' && (
-                <VendorPicker
-                  value={vehicle.purchasedFrom ?? ''}
-                  isAdmin={isAdmin}
-                  onChange={() => { /* free-typing here doesn't commit; the user must pick or add */ }}
-                  onPickPartner={(p) => {
-                    void onSavePartial({ purchasedFrom: p.companyName, purchasedFromVendorId: p.id })
-                  }}
-                  onRequestAddNew={(typedName) => setAddSourcePartnerName(typedName)}
-                />
-              )}
+                return (
+                  <>
+                    {/* Toggle */}
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      marginBottom: 12, flexWrap: 'wrap',
+                    }}>
+                      <div style={{
+                        display: 'inline-flex', padding: 3, gap: 2,
+                        background: 'rgba(0,0,0,0.05)', borderRadius: 999,
+                        opacity: attached ? 0.7 : 1,
+                      }}>
+                        {(['vendor', 'customer'] as const).map((t) => {
+                          const active = effectiveType === t
+                          const locked = attached && !active
+                          return (
+                            <button
+                              key={t}
+                              type="button"
+                              disabled={locked}
+                              onClick={() => !attached && setSourceType(t)}
+                              title={locked ? 'Clear the current source to switch types' : undefined}
+                              style={{
+                                padding: '5px 14px', borderRadius: 999, border: 'none',
+                                background: active ? '#fff' : 'transparent',
+                                boxShadow: active ? '0 1px 2px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9)' : 'none',
+                                color: active ? '#1d1d1f' : 'rgba(0,0,0,0.5)',
+                                fontSize: 12, fontWeight: 600, letterSpacing: '-0.005em',
+                                cursor: locked ? 'not-allowed' : attached ? 'default' : 'pointer',
+                                minHeight: 'auto',
+                                textTransform: 'capitalize',
+                                transition: 'background 180ms ease, color 180ms ease',
+                              }}
+                            >
+                              {t}{active && attached ? ' 🔒' : ''}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      {attached && (
+                        <button
+                          type="button"
+                          onClick={() => { void clearSource() }}
+                          style={{
+                            background: 'none', border: 'none', padding: 0,
+                            color: '#0071e3', fontSize: 11, fontWeight: 600,
+                            cursor: 'pointer', minHeight: 'auto',
+                          }}
+                        >Change source</button>
+                      )}
+                    </div>
 
-              {sourceType === 'customer' && (
-                <CustomerPicker
-                  value={vehicle.purchasedFrom ?? ''}
-                  onChange={() => { /* typing alone doesn't commit; user picks or adds new */ }}
-                  onPickContact={(c) => {
-                    const displayName = `${c.firstName} ${c.lastName}`.trim()
-                    void onSavePartial({
-                      purchasedFrom: displayName,
-                      purchasedFromContactId: c.id,
-                      purchasedFromVendorId: null,
-                    })
-                  }}
-                  onRequestAddNew={(typedName) => {
-                    // Split typed text into first / last on the first space so
-                    // the modal pre-fills both fields when possible.
-                    const parts = typedName.trim().split(/\s+/)
-                    const first = parts[0] ?? ''
-                    const last = parts.slice(1).join(' ')
-                    setAddSourceCustomerName({ first, last })
-                  }}
-                />
-              )}
+                    {/* Picker — locked to whichever type is attached, else
+                        follows the local toggle. When attached, the picker is
+                        replaced by a static display so accidental retypes can't
+                        overwrite the saved link. */}
+                    {attached ? (
+                      <AttachedSourceCard
+                        kind={effectiveType}
+                        partnerId={hasVendor ? vehicle.purchasedFromVendorId : null}
+                        contactId={hasContact ? vehicle.purchasedFromContactId : null}
+                        fallbackName={vehicle.purchasedFrom ?? '—'}
+                      />
+                    ) : effectiveType === 'vendor' ? (
+                      <VendorPicker
+                        isAdmin={isAdmin}
+                        onPickPartner={(p) => {
+                          void onSavePartial({
+                            purchasedFrom: p.companyName,
+                            purchasedFromVendorId: p.id,
+                            purchasedFromContactId: null,
+                          })
+                        }}
+                        onRequestAddNew={(typedName) => setAddSourcePartnerName(typedName)}
+                      />
+                    ) : (
+                      <CustomerPicker
+                        onPickContact={(c) => {
+                          const displayName = `${c.firstName} ${c.lastName}`.trim()
+                          void onSavePartial({
+                            purchasedFrom: displayName,
+                            purchasedFromContactId: c.id,
+                            purchasedFromVendorId: null,
+                          })
+                        }}
+                        onRequestAddNew={(typedName) => {
+                          const parts = typedName.trim().split(/\s+/)
+                          const first = parts[0] ?? ''
+                          const last = parts.slice(1).join(' ')
+                          setAddSourceCustomerName({ first, last })
+                        }}
+                      />
+                    )}
+                  </>
+                )
+              })()}
 
               {/* AddPartnerModal layered for the Source vendor picker */}
               {isAdmin && addSourcePartnerName !== null && (
@@ -6769,12 +6984,22 @@ function AnchorRowSelect({ label, value, onChange, options, placeholder }: {
       {open && (
         <div style={{
           position: 'absolute', top: '100%', right: 0, marginTop: 6,
-          minWidth: 200, maxHeight: 240,
+          minWidth: 220,
+          // Keep the dropdown inside the parent card — small enough that the
+          // scroll kicks in for >~4 options instead of the panel ballooning
+          // past the card edge.  Parent GlassCard has `contain: paint`, so
+          // anything spilling past the card bottom would be clipped, not
+          // scrollable.
+          maxHeight: 160,
           borderRadius: 12,
-          background: 'rgba(255, 255, 255, 0.78)',
-          border: '1px solid rgba(255, 255, 255, 0.55)',
-          boxShadow: '0 20px 50px -12px rgba(31, 38, 135, 0.28), inset 0 1px 0 rgba(255,255,255,0.8)',
-          overflow: 'hidden', overflowY: 'auto',
+          background: '#ffffff',
+          border: '1px solid rgba(15, 23, 42, 0.08)',
+          boxShadow: [
+            '0 20px 50px -12px rgba(15, 23, 42, 0.25)',
+            '0 8px 16px -4px rgba(15, 23, 42, 0.12)',
+            'inset 0 1px 0 rgba(255, 255, 255, 0.95)',
+          ].join(', '),
+          overflowY: 'auto',
           padding: 4, zIndex: 100,
         }}>
           {options.map(o => {

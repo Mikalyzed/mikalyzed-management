@@ -175,8 +175,18 @@ export async function POST(req: NextRequest) {
 
     // Cross-reference existing recon (Vehicle) + external repair records
     const [activeRecon, activeExternal] = await Promise.all([
+      // A vehicle is "actively in recon" only when it has at least one
+      // non-done / non-skipped stage AND its recon-side status is a real
+      // recon state (excludes 'inventory_only' / 'archived' / 'completed').
+      // Without this, ANY vehicle with completedAt: null gets false-flagged
+      // as in_recon on CSV import — caught with N136471 Caprice + N449594
+      // Buick Grand National.
       prisma.vehicle.findMany({
-        where: { completedAt: null },
+        where: {
+          completedAt: null,
+          status: { notIn: ['inventory_only', 'archived', 'completed'] },
+          stages: { some: { status: { notIn: ['done', 'skipped'] } } },
+        },
         select: { stockNumber: true },
       }),
       prisma.externalRepair.findMany({

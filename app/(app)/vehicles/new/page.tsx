@@ -34,6 +34,15 @@ export default function AddVehiclePage() {
   const [soldDelivery, setSoldDelivery] = useState(false)
   const [templates, setTemplates] = useState<Template[]>([])
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([])
+  const [mechanics, setMechanics] = useState<{ id: string; name: string }[]>([])
+  const [mechanicAssigneeId, setMechanicAssigneeId] = useState('')
+
+  useEffect(() => {
+    fetch('/api/users?role=mechanic')
+      .then(r => r.json())
+      .then(d => setMechanics((d.users || []).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name }))))
+      .catch(() => {})
+  }, [])
 
   // Load templates for the starting stage and pre-check default (if any)
   useEffect(() => {
@@ -131,6 +140,7 @@ export default function AddVehiclePage() {
       startingStage,
       mechanicChecklist,
       mechanicScopeName,
+      assigneeId: startingStage === 'mechanic' ? (mechanicAssigneeId || null) : null,
       estimatedHours: form.get('estimatedHours') ? parseFloat(form.get('estimatedHours') as string) : null,
       soldDelivery: startingStage === 'detailing' ? soldDelivery : false,
       ...(soldReason ? { reason: soldReason } : {}),
@@ -322,6 +332,37 @@ export default function AddVehiclePage() {
           <input type="number" name="estimatedHours" className="input" step="0.5" min="0"
             placeholder="How long should this stage take? (e.g. 4)" />
         </div>
+
+        {/* Assign mechanic (whole car) — individual tasks can still be handed off later on the board */}
+        {startingStage === 'mechanic' && mechanics.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <label className="form-label">Assign Mechanic (optional)</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {mechanics.map(m => {
+                const active = mechanicAssigneeId === m.id
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setMechanicAssigneeId(active ? '' : m.id)}
+                    style={{
+                      padding: '10px 16px', borderRadius: 10,
+                      border: active ? '2px solid #1a1a1a' : '1px solid var(--border)',
+                      background: active ? '#fafaf8' : '#fff',
+                      fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    {m.name}
+                  </button>
+                )
+              })}
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+              Assigns the whole car. You can hand individual tasks to the other mechanic later from the board.
+            </p>
+          </div>
+        )}
 
         {/* Tasks Card */}
         <div style={{

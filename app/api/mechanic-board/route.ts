@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 
-const WORK_START = 9
-const WORK_END = 21
+// Work-hours window (ET). Overridable via env for local dev/testing —
+// e.g. MECH_WORK_START=0 MECH_WORK_END=24 disables the gate entirely.
+const WORK_START = Number(process.env.MECH_WORK_START ?? 5)
+const WORK_END = Number(process.env.MECH_WORK_END ?? 22)
 const HOURS_PER_DAY = WORK_END - WORK_START
 const TZ = 'America/New_York'
+
+// Synthetic key for legacy/unowned single-timer work (car with no assignee).
+const UNASSIGNED = '__unassigned__'
 
 function etHour(d: Date): number {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(d)
@@ -14,17 +20,118 @@ function etHour(d: Date): number {
   return h + m / 60
 }
 
-function getElapsed(stage: { activeSeconds: number; timerStartedAt: Date | null }): number {
-  let elapsed = stage.activeSeconds
-  if (stage.timerStartedAt) {
-    const now = new Date()
-    // Cap at work hours
-    const h = etHour(now)
-    if (h >= WORK_START && h < WORK_END) {
-      elapsed += Math.floor((now.getTime() - stage.timerStartedAt.getTime()) / 1000)
-    }
+// ET calendar day as 'YYYY-MM-DD' (en-CA yields that format) — used to bucket
+// time-log sessions by the day the work actually happened.
+function etDate(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
+}
+
+// Record one completed work session (a timer start→stop) so daily/weekly
+// per-mechanic hours stay accurate even when a car spans multiple days.
+async function logSession(stageId: string, vehicleId: string, userId: string, startedAtISO: string | null | undefined, endedAt: Date, seconds: number) {
+  if (!userId || userId === UNASSIGNED || !startedAtISO || seconds <= 0) return
+  await prisma.mechanicTimeLog.create({
+    data: {
+      stageId, vehicleId, userId,
+      seconds,
+      startedAt: new Date(startedAtISO),
+      endedAt,
+      workDate: etDate(endedAt),
+    },
+  }).catch(() => {})
+}
+
+// ── Per-mechanic timers ──────────────────────────────────────────────────────
+// A car may be worked by more than one mechanic (each owning their own tasks).
+// Timing is therefore keyed by userId in `stage.timers`. Cars worked by a single
+// mechanic (the common case) never grow a map — they fall back to the legacy
+// single-timer columns and behave exactly as before.
+
+type TimerEntry = {
+  activeSeconds: number
+  timerStartedAt: string | null
+  autoPaused?: boolean
+  pauseReason?: string | null
+  pauseDetail?: string | null
+  pausedAt?: string | null
+  // This mechanic has finished their part of a shared car (clock stopped).
+  done?: boolean
+}
+
+type StageTimerFields = {
+  timers: Prisma.JsonValue | null
+  assigneeId: string | null
+  activeSeconds: number
+  timerStartedAt: Date | null
+  autoPaused: boolean
+  pauseReason: string | null
+  pauseDetail: string | null
+  pausedAt: Date | null
+}
+
+// Read the per-user timer map, seeding from the legacy single-timer columns when
+// the map is absent (existing cars, and any car ever worked by one mechanic).
+function readTimers(stage: StageTimerFields): Record<string, TimerEntry> {
+  const raw = stage.timers as Record<string, TimerEntry> | null
+  if (raw && typeof raw === 'object' && Object.keys(raw).length > 0) return raw
+  const key = stage.assigneeId || UNASSIGNED
+  return {
+    [key]: {
+      activeSeconds: stage.activeSeconds || 0,
+      timerStartedAt: stage.timerStartedAt ? stage.timerStartedAt.toISOString() : null,
+      autoPaused: stage.autoPaused,
+      pauseReason: stage.pauseReason,
+      pauseDetail: stage.pauseDetail,
+      pausedAt: stage.pausedAt ? stage.pausedAt.toISOString() : null,
+    },
   }
-  return elapsed
+}
+
+// Live elapsed for one timer entry — accrues only during work hours (parity with
+// the auto-pause behaviour so numbers don't drift overnight).
+function entryElapsed(entry: TimerEntry, nowMs: number, withinHours: boolean): number {
+  let sec = entry.activeSeconds || 0
+  if (entry.timerStartedAt && withinHours) {
+    sec += Math.floor((nowMs - new Date(entry.timerStartedAt).getTime()) / 1000)
+  }
+  return Math.max(0, sec)
+}
+
+function anyRunning(timers: Record<string, TimerEntry>): boolean {
+  return Object.values(timers).some(t => !!t.timerStartedAt)
+}
+
+// Aggregate elapsed across every mechanic who worked the car — used by the
+// car-level scheduling math (which cares about total labour, not who did it).
+function totalElapsed(timers: Record<string, TimerEntry>, nowMs: number, withinHours: boolean): number {
+  return Object.values(timers).reduce((sum, t) => sum + entryElapsed(t, nowMs, withinHours), 0)
+}
+
+// ── Checklist / per-task assignment ──────────────────────────────────────────
+type ChecklistItem = {
+  item?: string
+  done?: boolean
+  assigneeId?: string | null
+  assigneeName?: string | null
+  [k: string]: unknown
+}
+
+// The set of mechanics "on" a car = its default owner (stage.assigneeId) plus
+// anyone a task was explicitly handed to. Names resolved via `nameOf`.
+function assigneesOnCar(
+  stage: { assigneeId: string | null; assignee: { id: string; name: string } | null; checklist: Prisma.JsonValue },
+  nameOf: (id: string) => string | null,
+): { id: string; name: string }[] {
+  const ids = new Set<string>()
+  if (stage.assigneeId) ids.add(stage.assigneeId)
+  const list = Array.isArray(stage.checklist) ? (stage.checklist as ChecklistItem[]) : []
+  for (const it of list) {
+    if (it && typeof it.assigneeId === 'string' && it.assigneeId) ids.add(it.assigneeId)
+  }
+  return [...ids].map(id => ({
+    id,
+    name: (id === stage.assignee?.id ? stage.assignee?.name : null) || nameOf(id) || 'Unknown',
+  }))
 }
 
 export async function GET() {
@@ -40,26 +147,48 @@ export async function GET() {
     orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
   })
 
+  // Resolve mechanic names for per-user timers + per-task assignees.
+  const mechUsers = await prisma.user.findMany({
+    where: { role: 'mechanic', isActive: true },
+    select: { id: true, name: true },
+    orderBy: { createdAt: 'asc' },
+  })
+  const nameMap = new Map<string, string>(mechUsers.map(u => [u.id, u.name]))
+  for (const s of stages) if (s.assignee) nameMap.set(s.assignee.id, s.assignee.name)
+  const nameOf = (id: string) => nameMap.get(id) || null
+
   const now = new Date()
+  const nowMs = now.getTime()
   const todayStart = new Date(now)
   todayStart.setHours(0, 0, 0, 0)
 
-  // Auto-pause any active jobs outside working hours
   const h = etHour(now)
-  if (h < WORK_START || h >= WORK_END) {
+  const withinHours = h >= WORK_START && h < WORK_END
+
+  // Auto-pause any running timer (across all mechanics) outside working hours.
+  if (!withinHours) {
     for (const s of stages) {
-      if (s.timerStartedAt && s.status === 'in_progress') {
-        const elapsed = Math.floor((now.getTime() - s.timerStartedAt.getTime()) / 1000)
-        await prisma.vehicleStage.update({
-          where: { id: s.id },
-          data: {
-            activeSeconds: s.activeSeconds + Math.max(0, elapsed),
+      const timers = readTimers(s)
+      let changed = false
+      for (const [uid, t] of Object.entries(timers)) {
+        if (t.timerStartedAt) {
+          const elapsed = Math.floor((nowMs - new Date(t.timerStartedAt).getTime()) / 1000)
+          await logSession(s.id, s.vehicleId, uid, t.timerStartedAt, now, Math.max(0, elapsed))
+          timers[uid] = {
+            ...t,
+            activeSeconds: (t.activeSeconds || 0) + Math.max(0, elapsed),
             timerStartedAt: null,
             autoPaused: true,
-            status: 'in_progress',
-          },
+          }
+          changed = true
+        }
+      }
+      if (changed) {
+        await prisma.vehicleStage.update({
+          where: { id: s.id },
+          data: { timers: timers as Prisma.InputJsonValue, timerStartedAt: null, autoPaused: true },
         })
-        s.activeSeconds += Math.max(0, elapsed)
+        s.timers = timers as Prisma.JsonValue
         s.timerStartedAt = null
         s.autoPaused = true
       }
@@ -82,42 +211,67 @@ export async function GET() {
     else if (vParts.includes('ordered')) partsMap[vid] = 'Parts ordered'
   }
 
-  const active = stages.filter(s => s.status === 'in_progress' && !s.awaitingParts && s.timerStartedAt)
+  const active = stages.filter(s => s.status === 'in_progress' && !s.awaitingParts && anyRunning(readTimers(s)))
   // Completed/skipped stages are excluded from `paused` even if an orphaned
   // `awaitingParts` flag is lingering on the row — a completed job is not
   // pending, paused, or waiting on anything.
   const paused = stages.filter(s =>
-    (s.status === 'in_progress' && !s.timerStartedAt && !s.awaitingParts) ||
+    (s.status === 'in_progress' && !anyRunning(readTimers(s)) && !s.awaitingParts) ||
     (s.status === 'blocked' && !s.awaitingParts) ||
     (s.awaitingParts && s.status !== 'pending' && s.status !== 'done' && s.status !== 'skipped')
   )
   const queued = stages.filter(s => s.status === 'pending')
   const completedToday = stages.filter(s => s.status === 'done' && s.completedAt && s.completedAt >= todayStart)
 
-  const format = (s: typeof stages[0]) => ({
-    id: s.id,
-    vehicle: s.vehicle,
-    scopeName: s.scopeName,
-    assignee: s.assignee,
-    status: s.status,
-    estimatedHours: s.estimatedHours,
-    checklist: s.checklist,
-    priority: s.priority,
-    elapsedSeconds: getElapsed(s),
-    timerRunning: !!s.timerStartedAt,
-    timerStartedAt: s.timerStartedAt?.toISOString() || null,
-    autoPaused: s.autoPaused,
-    pauseReason: s.pauseReason,
-    pauseDetail: s.pauseDetail,
-    pausedAt: s.pausedAt?.toISOString() || null,
-    awaitingParts: s.awaitingParts,
-    awaitingPartsName: s.awaitingPartsName,
-    awaitingPartsDate: s.awaitingPartsDate?.toISOString() || null,
-    awaitingPartsTracking: s.awaitingPartsTracking,
-    completedAt: s.completedAt?.toISOString() || null,
-    startedAt: s.startedAt?.toISOString() || null,
-    partsLabel: partsMap[s.vehicleId] || null,
-  })
+  const format = (s: typeof stages[0]) => {
+    const timers = readTimers(s)
+    // Only real mechanics appear in the per-user split. Legacy time banked under
+    // the synthetic UNASSIGNED bucket (a car worked before it had an assignee)
+    // stays in the car's aggregate total below, but isn't shown as a nameless row.
+    const perUser = Object.entries(timers)
+      .filter(([uid]) => uid !== UNASSIGNED)
+      .map(([uid, t]) => ({
+        userId: uid,
+        name: nameOf(uid) || 'Unknown',
+        elapsedSeconds: entryElapsed(t, nowMs, withinHours),
+        running: !!t.timerStartedAt,
+        timerStartedAt: t.timerStartedAt ?? null,
+        done: !!t.done,
+        autoPaused: !!t.autoPaused,
+        pauseReason: t.pauseReason ?? null,
+        pauseDetail: t.pauseDetail ?? null,
+        pausedAt: t.pausedAt ?? null,
+      }))
+    // The current viewer's own timer entry (drives their Start/Stop button).
+    const mine = perUser.find(p => p.userId === user.id) || null
+    return {
+      id: s.id,
+      vehicle: s.vehicle,
+      scopeName: s.scopeName,
+      assignee: s.assignee,
+      assignees: assigneesOnCar(s, nameOf),
+      status: s.status,
+      estimatedHours: s.estimatedHours,
+      checklist: s.checklist,
+      priority: s.priority,
+      elapsedSeconds: totalElapsed(timers, nowMs, withinHours),
+      timers: perUser,
+      myElapsedSeconds: mine?.elapsedSeconds ?? 0,
+      myTimerRunning: mine?.running ?? false,
+      timerRunning: anyRunning(timers),
+      autoPaused: s.autoPaused,
+      pauseReason: s.pauseReason,
+      pauseDetail: s.pauseDetail,
+      pausedAt: s.pausedAt?.toISOString() || null,
+      awaitingParts: s.awaitingParts,
+      awaitingPartsName: s.awaitingPartsName,
+      awaitingPartsDate: s.awaitingPartsDate?.toISOString() || null,
+      awaitingPartsTracking: s.awaitingPartsTracking,
+      completedAt: s.completedAt?.toISOString() || null,
+      startedAt: s.startedAt?.toISOString() || null,
+      partsLabel: partsMap[s.vehicleId] || null,
+    }
+  }
 
   // Weekly stats
   const weekStart = new Date(now)
@@ -134,17 +288,15 @@ export async function GET() {
         { completedAt: { gte: weekStart } },
       ],
     },
-    select: { estimatedHours: true, activeSeconds: true, timerStartedAt: true, status: true },
+    select: {
+      estimatedHours: true, status: true,
+      timers: true, assigneeId: true, activeSeconds: true, timerStartedAt: true,
+      autoPaused: true, pauseReason: true, pauseDetail: true, pausedAt: true,
+    },
   })
 
   const weeklyEstimatedHours = weekStages.reduce((sum, s) => sum + (s.estimatedHours || 2), 0)
-  const weeklyWorkedSeconds = weekStages.reduce((sum, s) => {
-    let sec = s.activeSeconds
-    if (s.timerStartedAt && h >= WORK_START && h < WORK_END) {
-      sec += Math.floor((now.getTime() - s.timerStartedAt.getTime()) / 1000)
-    }
-    return sum + sec
-  }, 0)
+  const weeklyWorkedSeconds = weekStages.reduce((sum, s) => sum + totalElapsed(readTimers(s), nowMs, withinHours), 0)
 
   const etDayOfWeek = new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short' }).format(now)
   const dayIndex = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].indexOf(etDayOfWeek)
@@ -166,7 +318,7 @@ export async function GET() {
   const awaitingPartsAll: typeof stages = []
 
   for (const s of [...active, ...paused]) {
-    const touchedToday = s.timerStartedAt || (s.pausedAt && s.pausedAt >= todayStart)
+    const touchedToday = anyRunning(readTimers(s)) || (s.pausedAt && s.pausedAt >= todayStart)
     if (s.awaitingParts) {
       if (touchedToday) workedToday.push(s)
       else backToQueue.push(s) // surface awaiting-parts vehicles in the queue too (parity with pending+awaiting-parts)
@@ -191,7 +343,7 @@ export async function GET() {
 
   const workedTodayHours = workedToday.reduce((sum, s) => {
     const est = s.estimatedHours || 2
-    const elapsed = getElapsed(s) / 3600
+    const elapsed = totalElapsed(readTimers(s), nowMs, withinHours) / 3600
     return sum + Math.max(0, est - elapsed)
   }, 0)
 
@@ -220,18 +372,15 @@ export async function GET() {
       todayJobs.push(s)
       todayBudget = 0
     } else {
-      let placed = false
       while (currentBucketIdx < dayBuckets.length) {
         const bucket = dayBuckets[currentBucketIdx]
         if (bucket.budget >= est) {
           bucket.jobs.push(s)
           bucket.budget -= est
-          placed = true
           break
         } else if (bucket.budget > 0 && bucket.budget >= est * 0.5) {
           bucket.jobs.push(s)
           bucket.budget = 0
-          placed = true
           break
         } else if (bucket.budget <= 0 || bucket.budget < est * 0.5) {
           currentBucketIdx++
@@ -246,6 +395,49 @@ export async function GET() {
       remainingDays.push({ day: bucket.day, jobs: bucket.jobs.map(format) })
     }
   }
+
+  // Per-mechanic worked-hours summary (today + this week) from the time LOG —
+  // accurate per day even when a car spans multiple days. Banked sessions come
+  // from the log; the currently-running session is added live on top.
+  const todayET = etDate(now)
+  // Monday of the current week in ET. Derived from the ET weekday (dayIndex,
+  // Mon=0) and today's ET date so the boundary can't slip a day on a UTC server
+  // the way `etDate(weekStart)` (a server-local midnight) could.
+  const weekStartET = (() => {
+    const d = new Date(todayET + 'T00:00:00Z')
+    d.setUTCDate(d.getUTCDate() - (dayIndex >= 0 ? dayIndex : 0))
+    return d.toISOString().slice(0, 10)
+  })()
+  const weekLogs = await prisma.mechanicTimeLog.findMany({
+    where: { workDate: { gte: weekStartET } },
+    select: { userId: true, seconds: true, workDate: true },
+  })
+  const perMechanic = mechUsers.map(m => {
+    let todaySec = 0
+    let weekSec = 0
+    for (const l of weekLogs) {
+      if (l.userId !== m.id) continue
+      weekSec += l.seconds
+      if (l.workDate === todayET) todaySec += l.seconds
+    }
+    // Add the in-progress session (not yet logged) so live numbers keep moving.
+    if (withinHours) {
+      for (const s of stages) {
+        const t = readTimers(s)[m.id]
+        if (t?.timerStartedAt) {
+          const running = Math.max(0, Math.floor((nowMs - new Date(t.timerStartedAt).getTime()) / 1000))
+          todaySec += running
+          weekSec += running
+        }
+      }
+    }
+    return {
+      id: m.id,
+      name: m.name,
+      workedTodayHours: Math.round(todaySec / 360) / 10,
+      workedWeekHours: Math.round(weekSec / 360) / 10,
+    }
+  })
 
   return NextResponse.json({
     active: active.map(format),
@@ -263,11 +455,15 @@ export async function GET() {
     hoursLeftToday: Math.round(hoursLeftToday * 10) / 10,
     workHours: { start: WORK_START, end: WORK_END },
     currentHour: h,
-    isWorkHours: h >= WORK_START && h < WORK_END,
+    isWorkHours: withinHours,
+    mechanics: perMechanic,
+    currentUserId: user.id,
+    currentUserRole: user.role,
   })
 }
 
-// Actions: start, pause, resume, complete
+// Actions: start, pause, resume, complete — each operates on the ACTING
+// mechanic's own timer entry (keyed by the logged-in user id).
 export async function POST(req: NextRequest) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -280,116 +476,164 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date()
+  const nowMs = now.getTime()
   const h = etHour(now)
+  const withinHours = h >= WORK_START && h < WORK_END
+
+  // The acting user's timer key. Fall back to the car's assignee bucket only when
+  // the actor has no identity (shouldn't happen — session is required above).
+  const uid = user.id
+  const timers = readTimers(stage)
+  const cur: TimerEntry = timers[uid] || { activeSeconds: 0, timerStartedAt: null }
+
+  const persist = (extra: Prisma.VehicleStageUpdateInput = {}) =>
+    prisma.vehicleStage.update({
+      where: { id: stageId },
+      data: { timers: timers as Prisma.InputJsonValue, ...extra },
+    })
 
   switch (action) {
     case 'start': {
-      if (h < WORK_START || h >= WORK_END) {
-        return NextResponse.json({ error: 'Outside working hours (9 AM - 7 PM)' }, { status: 400 })
+      if (!withinHours) {
+        return NextResponse.json({ error: 'Outside working hours (5 AM - 10 PM)' }, { status: 400 })
       }
-      await prisma.vehicleStage.update({
-        where: { id: stageId },
-        data: {
-          status: 'in_progress',
-          timerStartedAt: now,
-          autoPaused: false,
-          pauseReason: null,
-          pauseDetail: null,
-          pausedAt: null,
-        },
-      })
+      timers[uid] = { ...cur, timerStartedAt: now.toISOString(), autoPaused: false, pauseReason: null, pauseDetail: null, pausedAt: null, done: false }
+      await persist({ status: 'in_progress' })
       break
     }
 
     case 'pause': {
-      let addSeconds = 0
-      if (stage.timerStartedAt) {
-        addSeconds = Math.floor((now.getTime() - stage.timerStartedAt.getTime()) / 1000)
-      }
-      const updateData: Record<string, unknown> = {
+      let add = 0
+      if (cur.timerStartedAt) add = Math.floor((nowMs - new Date(cur.timerStartedAt).getTime()) / 1000)
+      const paused: TimerEntry = {
+        ...cur,
+        activeSeconds: (cur.activeSeconds || 0) + Math.max(0, add),
         timerStartedAt: null,
-        activeSeconds: stage.activeSeconds + Math.max(0, addSeconds),
         autoPaused: false,
-        pausedAt: now,
+        pausedAt: now.toISOString(),
       }
+      const extra: Prisma.VehicleStageUpdateInput = {}
       if (pauseReason === 'waiting_on_parts') {
-        updateData.awaitingParts = true
-        updateData.awaitingPartsName = partName || null
-        updateData.awaitingPartsDate = expectedDate ? new Date(expectedDate) : null
-        updateData.awaitingPartsTracking = trackingNumber || null
-        updateData.awaitingPartsSince = now
-        updateData.pauseReason = 'Waiting on Parts'
-        updateData.pauseDetail = partName || null
+        // Waiting-on-parts is a car-level state (parts block everyone), kept on the stage.
+        extra.awaitingParts = true
+        extra.awaitingPartsName = partName || null
+        extra.awaitingPartsDate = expectedDate ? new Date(expectedDate) : null
+        extra.awaitingPartsTracking = trackingNumber || null
+        extra.awaitingPartsSince = now
+        paused.pauseReason = 'Waiting on Parts'
+        paused.pauseDetail = partName || null
       } else {
-        updateData.pauseReason = pauseReason === 'other' ? 'Other' : pauseReason === 'lunch' ? 'Lunch' : (pauseReason || 'Paused')
-        updateData.pauseDetail = pauseDetail || null
+        paused.pauseReason = pauseReason === 'other' ? 'Other' : pauseReason === 'lunch' ? 'Lunch' : (pauseReason || 'Paused')
+        paused.pauseDetail = pauseDetail || null
       }
-      await prisma.vehicleStage.update({ where: { id: stageId }, data: updateData })
+      timers[uid] = paused
+      await persist(extra)
+      await logSession(stageId, stage.vehicleId, uid, cur.timerStartedAt, now, Math.max(0, add))
       break
     }
 
     case 'resume': {
-      if (h < WORK_START || h >= WORK_END) {
-        return NextResponse.json({ error: 'Outside working hours (9 AM - 7 PM)' }, { status: 400 })
+      if (!withinHours) {
+        return NextResponse.json({ error: 'Outside working hours (5 AM - 10 PM)' }, { status: 400 })
       }
-      await prisma.vehicleStage.update({
-        where: { id: stageId },
-        data: {
-          timerStartedAt: now,
-          autoPaused: false,
-          pauseReason: null,
-          pauseDetail: null,
-          status: 'in_progress',
-          awaitingParts: false,
-          awaitingPartsName: null,
-          awaitingPartsDate: null,
-          awaitingPartsTracking: null,
-          awaitingPartsSince: null,
-          pausedAt: null,
-        },
+      timers[uid] = { ...cur, timerStartedAt: now.toISOString(), autoPaused: false, pauseReason: null, pauseDetail: null, pausedAt: null, done: false }
+      await persist({
+        status: 'in_progress',
+        awaitingParts: false,
+        awaitingPartsName: null,
+        awaitingPartsDate: null,
+        awaitingPartsTracking: null,
+        awaitingPartsSince: null,
       })
       break
     }
 
     case 'complete': {
-      let addSeconds = 0
-      if (stage.timerStartedAt) {
-        addSeconds = Math.floor((now.getTime() - stage.timerStartedAt.getTime()) / 1000)
+      // Who's on this car? default owner + anyone a task was handed to. If two
+      // or more, it's a shared car and completion is PER MECHANIC.
+      const checklist = Array.isArray(stage.checklist) ? (stage.checklist as ChecklistItem[]) : []
+      const assigneeIds = new Set<string>()
+      if (stage.assigneeId) assigneeIds.add(stage.assigneeId)
+      for (const it of checklist) if (it && typeof it.assigneeId === 'string' && it.assigneeId) assigneeIds.add(it.assigneeId)
+      const shared = assigneeIds.size > 1
+      // The car is finished when every non-declined task is checked off.
+      const allTasksDone = checklist.filter(it => it?.approved !== 'declined').length > 0
+        && checklist.filter(it => it?.approved !== 'declined').every(it => !!it?.done)
+
+      // Bank + stop the acting mechanic's timer and mark their part done.
+      const actorStarted = cur.timerStartedAt
+      let add = 0
+      if (cur.timerStartedAt) add = Math.floor((nowMs - new Date(cur.timerStartedAt).getTime()) / 1000)
+      timers[uid] = { ...cur, activeSeconds: (cur.activeSeconds || 0) + Math.max(0, add), timerStartedAt: null, autoPaused: false, pauseReason: null, pauseDetail: null, pausedAt: null, done: true }
+
+      // On a SHARED car that isn't fully done yet, this only finishes the acting
+      // mechanic's part — the car stays open and co-workers' clocks keep running.
+      if (shared && !allTasksDone) {
+        await persist()
+        await logSession(stageId, stage.vehicleId, uid, actorStarted, now, Math.max(0, add))
+        await prisma.activityLog.create({
+          data: {
+            entityType: 'vehicle',
+            entityId: stage.vehicleId,
+            action: 'stage_scope_completed',
+            actorId: user.id,
+            details: { stage: stage.stage, scopeName: stage.scopeName, via: 'mechanic_board_complete', partialBy: uid },
+          },
+        }).catch(() => {})
+        break
       }
-      await prisma.vehicleStage.update({
-        where: { id: stageId },
-        data: {
-          status: 'done',
-          completedAt: now,
-          timerStartedAt: null,
-          activeSeconds: stage.activeSeconds + Math.max(0, addSeconds),
-          autoPaused: false,
-          pauseReason: null,
-          pauseDetail: null,
-          pausedAt: null,
-          awaitingParts: false,
-          awaitingPartsName: null,
-          awaitingPartsDate: null,
-          awaitingPartsTracking: null,
-          awaitingPartsSince: null,
+
+      // Final completion — bank any other still-running timers too, then finish the car.
+      // Collect every banked session (actor + co-workers) to write to the time log.
+      const sessions: { userId: string; started: string | null; secs: number }[] = []
+      if (add > 0) sessions.push({ userId: uid, started: actorStarted, secs: add })
+      for (const [k, t] of Object.entries(timers)) {
+        if (k !== uid && t.timerStartedAt) {
+          const banked = Math.floor((nowMs - new Date(t.timerStartedAt).getTime()) / 1000)
+          sessions.push({ userId: k, started: t.timerStartedAt, secs: Math.max(0, banked) })
+          timers[k] = { ...t, activeSeconds: (t.activeSeconds || 0) + Math.max(0, banked), timerStartedAt: null, autoPaused: false }
+        }
+        timers[k] = { ...timers[k], done: true }
+      }
+      for (const sess of sessions) await logSession(stageId, stage.vehicleId, sess.userId, sess.started, now, sess.secs)
+      await persist({
+        status: 'done',
+        completedAt: now,
+        awaitingParts: false,
+        awaitingPartsName: null,
+        awaitingPartsDate: null,
+        awaitingPartsTracking: null,
+        awaitingPartsSince: null,
+      })
+
+      // Legacy separate-stage guard (kept harmless): if some other mechanic STAGE
+      // on this vehicle is still open, don't advance the vehicle yet.
+      const openSiblings = await prisma.vehicleStage.count({
+        where: {
+          vehicleId: stage.vehicleId,
+          stage: 'mechanic',
+          id: { not: stageId },
+          status: { notIn: ['done', 'skipped'] },
         },
       })
-      // All stage completions park in awaiting_routing for admin review — never auto-advance.
-      // Admin decides next stage in the routing modal (which may pre-fill Fix/Install tasks).
-      await prisma.vehicle.update({
-        where: { id: stage.vehicleId },
-        data: { status: 'awaiting_routing', currentAssigneeId: null },
-      })
+
       await prisma.activityLog.create({
         data: {
           entityType: 'vehicle',
           entityId: stage.vehicleId,
-          action: 'stage_completed',
+          action: openSiblings > 0 ? 'stage_scope_completed' : 'stage_completed',
           actorId: user.id,
-          details: { stage: stage.stage, via: 'mechanic_board_complete' },
+          details: { stage: stage.stage, scopeName: stage.scopeName, via: 'mechanic_board_complete', openSiblings },
         },
       }).catch(() => {})
-      // Notify admins if there's anything to review (issues, added tasks, pending install parts)
+
+      if (openSiblings > 0) break
+
+      // Car fully done — park in awaiting_routing for admin review (never auto-advance).
+      await prisma.vehicle.update({
+        where: { id: stage.vehicleId },
+        data: { status: 'awaiting_routing', currentAssigneeId: null },
+      })
       const vehicleForNotify = await prisma.vehicle.findUnique({
         where: { id: stage.vehicleId },
         select: { stockNumber: true, year: true, make: true, model: true },

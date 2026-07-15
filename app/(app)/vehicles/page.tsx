@@ -20,6 +20,9 @@ type ChecklistItem = {
   addedByMechanic?: boolean
   approved?: string
   estimatedHours?: number
+  // Per-task hand-off to a specific mechanic (mirrors the mechanic board).
+  assigneeId?: string | null
+  assigneeName?: string | null
 }
 
 type VehicleWithStage = {
@@ -101,6 +104,17 @@ type ModalData = {
 
 const COLUMNS = ['mechanic', 'detailing', 'content', 'publish', 'completed'] as const
 
+// Per-stage identity colour. Each pipeline gets its own hue — a glowing header
+// dot, an accent underline, and a faintly tinted lane — so columns read apart
+// instantly instead of sitting in identical grey boxes.
+const STAGE_HUE: Record<string, { dot: string; tint: string; tintHover: string; border: string }> = {
+  mechanic:  { dot: '#6366f1', tint: 'rgba(99,102,241,0.055)',  tintHover: 'rgba(99,102,241,0.11)',  border: 'rgba(99,102,241,0.20)' },
+  detailing: { dot: '#0d9488', tint: 'rgba(13,148,136,0.055)',  tintHover: 'rgba(13,148,136,0.11)',  border: 'rgba(13,148,136,0.20)' },
+  content:   { dot: '#8b5cf6', tint: 'rgba(139,92,246,0.055)',  tintHover: 'rgba(139,92,246,0.11)',  border: 'rgba(139,92,246,0.20)' },
+  publish:   { dot: '#16a34a', tint: 'rgba(22,163,74,0.055)',   tintHover: 'rgba(22,163,74,0.11)',   border: 'rgba(22,163,74,0.20)' },
+  completed: { dot: '#9a9a96', tint: 'rgba(154,154,150,0.05)',  tintHover: 'rgba(154,154,150,0.09)', border: 'rgba(154,154,150,0.22)' },
+}
+
 function partActionBtn(color: string, bg: string): React.CSSProperties {
   return {
     flex: 1, minHeight: 0,
@@ -130,6 +144,7 @@ export default function VehiclesPage() {
   const [modalSaving, setModalSaving] = useState(false)
   const [modalLoading, setModalLoading] = useState(false)
   const [modalParts, setModalParts] = useState<any[]>([])
+  const [modalTab, setModalTab] = useState<'tasks' | 'parts'>('tasks')
   const [advancing, setAdvancing] = useState(false)
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([])
   const [assigningUser, setAssigningUser] = useState(false)
@@ -145,8 +160,18 @@ export default function VehiclesPage() {
   const [routingCarry, setRoutingCarry] = useState<Set<number>>(new Set())
   const [routingNewTask, setRoutingNewTask] = useState('')
   const [routingEstHours, setRoutingEstHours] = useState('')
+  const [routingAssigneeId, setRoutingAssigneeId] = useState('')
+  const [routingScopeName, setRoutingScopeName] = useState('')
+  const [mechanics, setMechanics] = useState<{ id: string; name: string }[]>([])
   const [routingSoldDelivery, setRoutingSoldDelivery] = useState(false)
   const [routingSaving, setRoutingSaving] = useState(false)
+  // Pre-made checklist templates for the target stage (e.g. "New Vehicle
+  // Inspection", "Sold Vehicle Inspection"). Fetched when the routing modal is
+  // open, per selected stage. Admin can check any on to drop its items into the
+  // task list below.
+  type RoutingTemplate = { id: string; name: string; isDefault: boolean; items: { item: string; type?: string; fields?: unknown }[] }
+  const [routingTemplates, setRoutingTemplates] = useState<RoutingTemplate[]>([])
+  const [routingSelectedTemplateIds, setRoutingSelectedTemplateIds] = useState<string[]>([])
   const [moveModal, setMoveModal] = useState<{
     vehicleId: string
     fromStage: string
@@ -189,6 +214,11 @@ export default function VehiclesPage() {
       .then((data) => setTeamMembers((data.users || []).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name }))))
       .catch(() => {})
 
+    fetch('/api/users?role=mechanic')
+      .then((r) => r.json())
+      .then((data) => setMechanics((data.users || []).map((u: { id: string; name: string }) => ({ id: u.id, name: u.name }))))
+      .catch(() => {})
+
     const ghost = document.createElement('div')
     ghost.style.position = 'fixed'
     ghost.style.top = '-9999px'
@@ -198,6 +228,45 @@ export default function VehiclesPage() {
     dragGhostRef.current = ghost
     return () => { document.body.removeChild(ghost) }
   }, [])
+
+  // Load checklist templates for the routing modal's target stage. Refires when
+  // the admin switches the destination (Mechanic / Detailing / …). Selection is
+  // reset on every stage change — the stage-switch handler strips the old
+  // template's items from the task list so nothing lingers.
+  useEffect(() => {
+    if (!routingVehicle || routingNext === 'completed') {
+      setRoutingTemplates([])
+      setRoutingSelectedTemplateIds([])
+      return
+    }
+    let cancelled = false
+    fetch(`/api/checklist-templates?stage=${routingNext}`)
+      .then(async r => {
+        if (!r.ok) return { templates: [] }
+        const text = await r.text()
+        if (!text) return { templates: [] }
+        try { return JSON.parse(text) } catch { return { templates: [] } }
+      })
+      .then(d => { if (!cancelled) setRoutingTemplates((d.templates || []) as RoutingTemplate[]) })
+      .catch(() => { if (!cancelled) setRoutingTemplates([]) })
+    return () => { cancelled = true }
+  }, [routingVehicle, routingNext])
+
+  // Toggle a template: add/remove its items in the task list and reflect the
+  // selection in the scope label (so the stage reads e.g. "New Vehicle Inspection").
+  function toggleRoutingTemplate(tpl: RoutingTemplate) {
+    const items = tpl.items.map(it => it.item)
+    const isOn = routingSelectedTemplateIds.includes(tpl.id)
+    const nextIds = isOn
+      ? routingSelectedTemplateIds.filter(id => id !== tpl.id)
+      : [...routingSelectedTemplateIds, tpl.id]
+    setRoutingSelectedTemplateIds(nextIds)
+    setRoutingTasks(prev => isOn
+      ? prev.filter(x => !items.includes(x))
+      : [...prev, ...items.filter(x => !prev.includes(x))])
+    const names = routingTemplates.filter(t => nextIds.includes(t.id)).map(t => t.name)
+    setRoutingScopeName(names.join(' + '))
+  }
 
   const getColumnVehicles = useCallback(
     (col: string) => {
@@ -428,6 +497,7 @@ export default function VehiclesPage() {
     setModalLoading(true)
     setModalData(null)
     setModalParts([])
+    setModalTab('tasks')
     try {
       const [vehicleRes, partsRes] = await Promise.all([
         fetch(`/api/vehicles/${vehicleId}`),
@@ -473,6 +543,27 @@ export default function VehiclesPage() {
     } catch { /* ignore */ }
     setModalSaving(false)
   }, [modalChecklist, getCurrentStage])
+
+  // Hand a single task to a specific mechanic (or clear it) — mirrors the
+  // mechanic board's per-task assignment, writing assigneeId/assigneeName onto
+  // the checklist item.
+  const assignChecklistItem = useCallback(async (index: number, mechId: string | null) => {
+    const stage = getCurrentStage()
+    if (!stage) return
+    const mech = mechId ? mechanics.find(m => m.id === mechId) : null
+    const updated = [...modalChecklist]
+    updated[index] = { ...updated[index], assigneeId: mechId, assigneeName: mech?.name ?? null }
+    setModalChecklist(updated)
+    setModalSaving(true)
+    try {
+      await fetch(`/api/stages/${stage.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: updated }),
+      })
+    } catch { /* ignore */ }
+    setModalSaving(false)
+  }, [modalChecklist, getCurrentStage, mechanics])
 
   const addChecklistItem = useCallback(async (taskText: string) => {
     const trimmed = taskText.trim()
@@ -588,8 +679,42 @@ export default function VehiclesPage() {
     return `${Math.floor(hours / 24)}d ${hours % 24}h`
   }
 
+  // ─── KPI summary (computed live from the loaded vehicles, no extra fetch) ───
+  const ACTIVE_STAGES = ['mechanic', 'detailing', 'content', 'publish']
+  const reconVehicles = vehicles.filter(v => ACTIVE_STAGES.includes(v.status))
+  const kpiInRecon = reconVehicles.length
+  const kpiUnassigned = reconVehicles.filter(v => !v.currentAssignee).length
+  const kpiNeedsAttention = reconVehicles.filter(v => {
+    const s = v.stages[0]
+    const paused = !!(s && s.status === 'in_progress' && !s.timerStartedAt && s.pauseReason)
+    const awaitingParts = !!(s && s.awaitingParts)
+    const parts = !!(v as { partsLabel?: string }).partsLabel
+    const hasReturn = !!(v.returnQueue && v.returnQueue.some(r => r.stage !== v.status))
+    return paused || awaitingParts || parts || hasReturn
+  }).length
+  const kpiPendingRouting = vehicles.filter(v => v.status === 'awaiting_routing').length
+  const kpiAvgSec = (() => {
+    const times = reconVehicles.map(v => {
+      const s = v.stages[0]
+      if (!s) return 0
+      return (Date.now() - new Date(s.startedAt).getTime()) / 1000 - s.totalBlockedSeconds
+    }).filter(t => t > 0)
+    return times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0
+  })()
+  const fmtDuration = (sec: number): string => {
+    if (sec <= 0) return '—'
+    const h = Math.floor(sec / 3600)
+    if (h < 1) return `${Math.max(1, Math.floor(sec / 60))}m`
+    if (h < 24) return `${h}h`
+    return `${Math.floor(h / 24)}d ${h % 24}h`
+  }
+
   return (
     <div>
+      {/* Clean solid canvas just for the recon board — sits over the app-wide
+          glass mesh (z-index:-1) so a data-dense board reads calm and white
+          cards keep their contrast instead of floating on coloured haze. */}
+      <div aria-hidden style={{ position: 'fixed', inset: 0, background: 'var(--board-canvas)', zIndex: -1, pointerEvents: 'none' }} />
       <div className="page-header recon-page-header" style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Recon Board</h1>
         <div className="recon-controls" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
@@ -606,16 +731,65 @@ export default function VehiclesPage() {
         </div>
       </div>
 
+      {/* KPI summary strip */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(158px, 1fr))',
+        gap: 12, marginBottom: 24,
+      }}>
+        {[
+          { label: 'In recon', value: String(kpiInRecon), unit: kpiInRecon === 1 ? 'vehicle' : 'vehicles', trend: kpiPendingRouting > 0 ? `${kpiPendingRouting} pending routing` : 'all routed', dot: kpiPendingRouting > 0 ? '#f59e0b' : '#16a34a' },
+          { label: 'Needs attention', value: String(kpiNeedsAttention), unit: '', trend: kpiNeedsAttention > 0 ? 'parts, paused & returns' : 'nothing flagged', dot: kpiNeedsAttention > 0 ? '#e11d48' : '#16a34a' },
+          { label: 'Unassigned', value: String(kpiUnassigned), unit: '', trend: kpiUnassigned > 0 ? 'waiting on a tech' : 'all assigned', dot: kpiUnassigned > 0 ? '#f59e0b' : '#16a34a' },
+          { label: 'Avg time in stage', value: fmtDuration(kpiAvgSec), unit: '', trend: 'across active stages', dot: '#9a9a96' },
+        ].map((k, i) => (
+          <div key={i} style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14,
+            padding: '15px 17px', boxShadow: '0 1px 2px rgba(24,24,27,.04), 0 4px 12px -8px rgba(24,24,27,.12)',
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>
+              {k.label}
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.03em', marginTop: 7, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'baseline', gap: 6, lineHeight: 1.1 }}>
+              {k.value}
+              {k.unit && <span style={{ fontSize: 13, fontWeight: 550, color: 'var(--text-secondary)', letterSpacing: '-0.01em' }}>{k.unit}</span>}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: k.dot, flexShrink: 0 }} />
+              {k.trend}
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Pending Routing — admin only */}
       {isAdmin && vehicles.some(v => v.status === 'awaiting_routing') && (
         <div style={{
-          background: '#fffbeb', border: '1px solid #fcd34d', borderLeft: '4px solid #f59e0b',
-          borderRadius: 12, padding: '16px 20px', marginBottom: 20,
+          position: 'relative', overflow: 'hidden',
+          background: 'linear-gradient(180deg, #fffdf6, var(--bg-card) 64%)',
+          border: '1px solid var(--border)',
+          borderRadius: 16, padding: '18px 20px', marginBottom: 24,
+          boxShadow: '0 1px 2px rgba(24,24,27,.04), 0 6px 16px -6px rgba(24,24,27,.10)',
         }}>
-          <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
-            Pending Routing · {vehicles.filter(v => v.status === 'awaiting_routing').length}
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: '#f59e0b' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 14 }}>
+            <span style={{
+              width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+              background: '#f59e0b', color: '#fff', display: 'grid', placeItems: 'center',
+            }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12h4l2 3h6l2-3h4" /><path d="M5 12V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6" />
+              </svg>
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-primary)' }}>
+                Pending Routing
+              </p>
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 1 }}>
+                {(() => { const n = vehicles.filter(v => v.status === 'awaiting_routing').length; return `${n} ${n === 1 ? 'vehicle' : 'vehicles'} finished a stage and need their next assignment` })()}
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {vehicles.filter(v => v.status === 'awaiting_routing').map(v => {
               const expanded = expandedRoutingId === v.id
               const last = v.lastCompleted
@@ -624,47 +798,78 @@ export default function VehiclesPage() {
               const review = last?.checklist ? summarizeReview(last.checklist as any) : { issueCount: 0, addedTaskCount: 0, hasAnything: false }
               const pendingInstalls = v.pendingInstalls || []
               const partsInPipeline = v.partsInPipeline || []
-              const reviewChips: { label: string; bg: string; fg: string; border: string }[] = []
-              if (review.issueCount > 0) reviewChips.push({ label: `${review.issueCount} issue${review.issueCount === 1 ? '' : 's'}`, bg: '#fee2e2', fg: '#991b1b', border: '#fca5a5' })
-              if (review.addedTaskCount > 0) reviewChips.push({ label: `${review.addedTaskCount} added task${review.addedTaskCount === 1 ? '' : 's'}`, bg: '#ede9fe', fg: '#5b21b6', border: '#c4b5fd' })
-              if (pendingInstalls.length > 0) reviewChips.push({ label: `🔧 ${pendingInstalls.length} part${pendingInstalls.length === 1 ? '' : 's'} to install`, bg: '#dbeafe', fg: '#1d4ed8', border: '#93c5fd' })
-              if (partsInPipeline.length > 0) reviewChips.push({ label: `${partsInPipeline.length} part${partsInPipeline.length === 1 ? '' : 's'} in pipeline`, bg: '#fef3c7', fg: '#92400e', border: '#fcd34d' })
+              const reviewChips: { label: string; fg: string; bg: string; dot: string }[] = []
+              if (review.issueCount > 0) reviewChips.push({ label: `${review.issueCount} issue${review.issueCount === 1 ? '' : 's'}`, fg: '#b91c1c', bg: '#fdecef', dot: '#e11d48' })
+              if (review.addedTaskCount > 0) reviewChips.push({ label: `${review.addedTaskCount} added task${review.addedTaskCount === 1 ? '' : 's'}`, fg: '#6d28d9', bg: '#f1edfd', dot: '#8b5cf6' })
+              if (pendingInstalls.length > 0) reviewChips.push({ label: `${pendingInstalls.length} part${pendingInstalls.length === 1 ? '' : 's'} to install`, fg: '#1d4ed8', bg: '#eaf0fe', dot: '#2563eb' })
+              if (partsInPipeline.length > 0) reviewChips.push({ label: `${partsInPipeline.length} part${partsInPipeline.length === 1 ? '' : 's'} in pipeline`, fg: '#b45309', bg: '#fdf3e7', dot: '#f59e0b' })
+              const allTasksDone = totalCount > 0 && doneCount >= totalCount
+              const showDonePill = !!v.lastCompletedStage && totalCount > 0
+              const routingSub: string[] = []
+              if (!showDonePill) routingSub.push(v.lastCompletedStage ? `Completed ${STAGE_LABELS[v.lastCompletedStage as keyof typeof STAGE_LABELS] || v.lastCompletedStage}` : 'Awaiting next stage assignment')
+              if (last?.scopeName) routingSub.push(last.scopeName)
+              if (last?.assignee) routingSub.push(last.assignee.name)
               return (
-                <div key={v.id} style={{
-                  background: '#fff', borderRadius: 10, border: '1px solid #fde68a', overflow: 'hidden',
+                <div key={v.id} className="routing-card" style={{
+                  background: 'var(--bg-card)', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden',
+                  boxShadow: '0 1px 2px rgba(24,24,27,.04)',
                 }}>
                   <div
                     className="routing-row"
                     onClick={() => setExpandedRoutingId(expanded ? null : v.id)}
                     style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '10px 14px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                      padding: '13px 15px', cursor: 'pointer',
                     }}
                   >
-                    <div className="routing-info" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{expanded ? '▾' : '▸'}</span>
+                    <div className="routing-info" style={{ display: 'flex', alignItems: 'center', gap: 11, flex: 1, minWidth: 0 }}>
+                      <span style={{
+                        fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, lineHeight: 1,
+                        transition: 'transform .18s ease', transform: expanded ? 'rotate(90deg)' : 'none',
+                      }}>▸</span>
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>
-                          #{v.stockNumber}
-                        </p>
-                        <p style={{ fontSize: 14, fontWeight: 700 }}>
+                        <p title={`${v.year ?? ''} ${v.make} ${v.model}`.trim()} style={{
+                          fontSize: 13.5, fontWeight: 640, letterSpacing: '-0.015em', color: 'var(--text-primary)',
+                          lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
                           {v.year} {v.make} {v.model}
                         </p>
-                        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                          {v.lastCompletedStage
-                            ? `Just completed ${STAGE_LABELS[v.lastCompletedStage as keyof typeof STAGE_LABELS] || v.lastCompletedStage}${totalCount > 0 ? ` · ${doneCount}/${totalCount} tasks done` : ''}`
-                            : 'Awaiting next stage assignment'}
-                          {last?.scopeName && ` · ${last.scopeName}`}
-                          {last?.assignee && ` · ${last.assignee.name}`}
-                        </p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 8, flexWrap: 'wrap' }}>
+                          <span style={{
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                            fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '-0.01em',
+                            background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                            padding: '2px 7px', borderRadius: 6, whiteSpace: 'nowrap',
+                          }}>#{v.stockNumber}</span>
+                          {showDonePill && (
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 5,
+                              fontSize: 10.5, fontWeight: 650, padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap',
+                              color: allTasksDone ? '#16a34a' : 'var(--text-secondary)',
+                              background: allTasksDone ? '#edfaf0' : 'var(--bg-primary)',
+                              border: allTasksDone ? 'none' : '1px solid var(--border)',
+                            }}>
+                              {allTasksDone && <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#16a34a', flexShrink: 0 }} />}
+                              {STAGE_LABELS[v.lastCompletedStage as keyof typeof STAGE_LABELS] || v.lastCompletedStage} · {doneCount}/{totalCount}
+                            </span>
+                          )}
+                        </div>
+                        {routingSub.length > 0 && (
+                          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>
+                            {routingSub.join(' · ')}
+                          </p>
+                        )}
                         {reviewChips.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
                             {reviewChips.map((c, ci) => (
                               <span key={ci} style={{
-                                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
-                                background: c.bg, color: c.fg, border: `1px solid ${c.border}`,
-                                textTransform: 'uppercase', letterSpacing: '0.04em',
-                              }}>{c.label}</span>
+                                display: 'inline-flex', alignItems: 'center', gap: 6,
+                                fontSize: 10.5, fontWeight: 650, padding: '3px 9px', borderRadius: 100,
+                                background: c.bg, color: c.fg, letterSpacing: '-0.005em',
+                              }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot, flexShrink: 0 }} />
+                                {c.label}
+                              </span>
                             ))}
                           </div>
                         )}
@@ -699,14 +904,19 @@ export default function VehiclesPage() {
                         setRoutingCarry(new Set(addedTasks.map(({ i }) => i)))
                         setRoutingNewTask('')
                         setRoutingEstHours('')
+                        setRoutingAssigneeId('')
+                        setRoutingScopeName('')
                         setRoutingSoldDelivery(false)
+                        setRoutingSelectedTemplateIds([])
                       }}
                       style={{
-                        padding: '8px 14px', borderRadius: 8, border: 'none',
+                        display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+                        padding: '9px 15px', borderRadius: 10, border: 'none',
                         background: '#1a1a1a', color: '#dffd6e', fontSize: 13, fontWeight: 600, cursor: 'pointer',
                       }}
                     >
                       Route
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
                     </button>
                   </div>
                   {expanded && last?.checklist && last.checklist.length > 0 && (() => {
@@ -793,8 +1003,8 @@ export default function VehiclesPage() {
                       )
                     }
                     return (
-                      <div style={{ borderTop: '1px solid #fde68a', background: '#fffbeb', padding: '10px 14px 12px 36px' }}>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 8 }}>
+                      <div style={{ borderTop: '1px solid var(--border-light)', background: 'var(--bg-primary)', padding: '12px 16px 14px 40px' }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
                           {last.scopeName === 'New Inventory' ? 'Inspection' : `Tasks from ${STAGE_LABELS[last.stage as keyof typeof STAGE_LABELS] || last.stage}`}
                         </p>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -868,7 +1078,7 @@ export default function VehiclesPage() {
                     )
                   })()}
                   {expanded && (!last?.checklist || last.checklist.length === 0) && (
-                    <div style={{ borderTop: '1px solid #fde68a', background: '#fffbeb', padding: '10px 14px', fontSize: 12, color: 'var(--text-muted)' }}>
+                    <div style={{ borderTop: '1px solid var(--border-light)', background: 'var(--bg-primary)', padding: '12px 16px', fontSize: 12, color: 'var(--text-muted)' }}>
                       No tasks recorded for this stage.
                     </div>
                   )}
@@ -882,14 +1092,23 @@ export default function VehiclesPage() {
       <div className="kanban-board" ref={kanbanRef} style={{ marginTop: 8 }}>
         {COLUMNS.map((col) => {
           const colVehicles = getColumnVehicles(col)
+          const hue = STAGE_HUE[col] || STAGE_HUE.completed
           return (
             <div key={col} className="kanban-column">
-              <div className="kanban-column-header">
+              <div className="kanban-column-header" style={{ marginBottom: 8 }}>
+                <span className="kanban-col-dot" style={{
+                  background: hue.dot,
+                  boxShadow: `0 0 0 3px ${hue.dot}22, 0 0 9px ${hue.dot}88`,
+                }} />
                 <span className="kanban-column-title">
                   {STAGE_LABELS[col as keyof typeof STAGE_LABELS]}
                 </span>
                 <span className="kanban-column-count">{colVehicles.length}</span>
               </div>
+              <div aria-hidden style={{
+                height: 2, borderRadius: 2, marginBottom: 10,
+                background: `linear-gradient(90deg, ${hue.dot} 0%, ${hue.dot}55 32%, transparent 92%)`,
+              }} />
               <div
                 className="flex flex-col gap-2"
                 ref={(el) => { columnRefs.current[col] = el }}
@@ -897,12 +1116,13 @@ export default function VehiclesPage() {
                 onDrop={(e) => handleDrop(e, col)}
                 onDragLeave={() => { if (hoverColumn === col) setHoverColumn(null) }}
                 style={{
-                  minHeight: '80px',
+                  minHeight: '120px',
                   borderRadius: '12px',
                   padding: '2px',
-                  transition: 'background 0.2s, border-color 0.2s',
-                  background: hoverColumn === col ? 'rgba(223, 253, 110, 0.08)' : undefined,
-                  border: hoverColumn === col ? '2px dashed #dffd6e' : '2px dashed transparent',
+                  transition: 'background 0.2s, border-color 0.2s, box-shadow 0.2s',
+                  background: hoverColumn === col ? 'rgba(223, 253, 110, 0.14)' : 'transparent',
+                  border: hoverColumn === col ? '1px solid #cfe85a' : '1px solid transparent',
+                  boxShadow: hoverColumn === col ? 'inset 0 0 0 1px #dffd6e' : 'none',
                 }}
               >
                 {colVehicles.map((v) => {
@@ -924,23 +1144,6 @@ export default function VehiclesPage() {
                         cursor: isAdmin ? 'grab' : undefined,
                       }}
                     >
-                      {isAdmin && (
-                        <div
-                          className="kanban-drag-handle"
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            padding: '0 6px 0 2px',
-                            color: 'var(--text-muted)',
-                            fontSize: '12px',
-                            userSelect: 'none',
-                            opacity: 0.4,
-                            cursor: 'grab',
-                          }}
-                        >
-                          ⠿
-                        </div>
-                      )}
                       <div
                         style={{ flex: 1, minWidth: 0 }}
                         className="vehicle-card-inner"
@@ -981,6 +1184,9 @@ export default function VehiclesPage() {
                           partsLabel={(v as any).partsLabel}
                           returnQueue={v.returnQueue}
                           stageScope={(v.stages[0] as any)?.scopeName || null}
+                          checklistDone={(v.stages[0]?.checklist || []).filter(c => c.done).length}
+                          checklistTotal={(v.stages[0]?.checklist || []).length}
+                          progressLabel={(v.stages[0] as any)?.scopeName || STAGE_LABELS[v.status as keyof typeof STAGE_LABELS] || null}
                           pauseReason={(() => {
                             const s = v.stages[0]
                             if (!s || s.status !== 'in_progress' || s.timerStartedAt) return null
@@ -1177,12 +1383,19 @@ export default function VehiclesPage() {
                         ? extractIssueFixTasks((routingVehicle.lastCompleted?.checklist || []) as any).map(f => f.item)
                         : []
                       const installs = Object.keys(routingInstallMap)
-                      const autoSet = new Set<string>([...fixes, ...installs])
+                      // Template items belong to the stage they were picked for —
+                      // drop them when switching stages (templates reload per stage).
+                      const tplItems = routingTemplates
+                        .filter(t => routingSelectedTemplateIds.includes(t.id))
+                        .flatMap(t => t.items.map(i => i.item))
+                      const autoSet = new Set<string>([...fixes, ...installs, ...tplItems])
                       const userTasks = routingTasks.filter(t => !autoSet.has(t))
                       const next = opt.v === 'mechanic'
                         ? [...fixes, ...installs, ...userTasks]
                         : userTasks
                       setRoutingTasks(next)
+                      setRoutingSelectedTemplateIds([])
+                      setRoutingScopeName('')
                       setRoutingNext(opt.v)
                     }}
                     style={{
@@ -1223,6 +1436,52 @@ export default function VehiclesPage() {
 
             {routingNext !== 'completed' && (
               <>
+                {routingTemplates.length > 0 && (
+                  <>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                      Checklists
+                      <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>
+                        (adds the template&apos;s items to the task list)
+                      </span>
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                      {routingTemplates.map(tpl => {
+                        const active = routingSelectedTemplateIds.includes(tpl.id)
+                        return (
+                          <label
+                            key={tpl.id}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                              borderRadius: 10, cursor: 'pointer',
+                              border: active ? '2px solid #1a1a1a' : '1px solid var(--border)',
+                              background: active ? '#fafaf8' : '#fff',
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={active}
+                              onChange={() => toggleRoutingTemplate(tpl)}
+                              style={{ width: 18, height: 18 }}
+                            />
+                            <div style={{ minWidth: 0 }}>
+                              <p style={{ fontSize: 14, fontWeight: 600 }}>
+                                {tpl.name}
+                                {tpl.isDefault && (
+                                  <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6, fontSize: 12 }}>
+                                    (default)
+                                  </span>
+                                )}
+                              </p>
+                              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                                {tpl.items.length} item{tpl.items.length === 1 ? '' : 's'}
+                              </p>
+                            </div>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </>
+                )}
                 <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
                   Tasks for {routingNext}
                   <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>
@@ -1283,6 +1542,45 @@ export default function VehiclesPage() {
                       placeholder="e.g. 4"
                       style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, marginBottom: 12 }}
                     />
+
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Assign mechanic (optional)</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: mechanics.length > 1 ? '1fr 1fr' : '1fr', gap: 8, marginBottom: 12 }}>
+                      {mechanics.map(m => {
+                        const active = routingAssigneeId === m.id
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setRoutingAssigneeId(active ? '' : m.id)}
+                            style={{
+                              padding: '10px 14px', borderRadius: 10,
+                              border: active ? '2px solid #1a1a1a' : '1px solid var(--border)',
+                              background: active ? '#fafaf8' : '#fff',
+                              fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                              color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                            }}
+                          >
+                            {m.name}
+                          </button>
+                        )
+                      })}
+                      {mechanics.length === 0 && (
+                        <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No users with the mechanic role yet.</p>
+                      )}
+                    </div>
+
+                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+                      Scope label (optional)
+                      <span style={{ fontWeight: 400, color: 'var(--text-muted)', marginLeft: 6 }}>
+                        e.g. Engine, Brakes — helps when two mechanics split one car
+                      </span>
+                    </p>
+                    <input
+                      value={routingScopeName}
+                      onChange={e => setRoutingScopeName(e.target.value)}
+                      placeholder="e.g. Engine work"
+                      style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, marginBottom: 12 }}
+                    />
                   </>
                 )}
               </>
@@ -1319,6 +1617,25 @@ export default function VehiclesPage() {
                     }
                   })
                   const mergedTasks = [...carriedNames, ...routingTasks]
+                  // Enrich task names that came from a selected template with their
+                  // type/fields so structured items (tire PSI, brake pads, fluids…)
+                  // stay rich in the new stage instead of collapsing to plain checkboxes.
+                  const richByName = new Map<string, { type?: string; fields?: unknown }>()
+                  for (const tpl of routingTemplates) {
+                    if (!routingSelectedTemplateIds.includes(tpl.id)) continue
+                    for (const it of tpl.items) {
+                      if (it.type || it.fields != null) {
+                        richByName.set(it.item, {
+                          ...(it.type ? { type: it.type } : {}),
+                          ...(it.fields != null ? { fields: it.fields } : {}),
+                        })
+                      }
+                    }
+                  }
+                  const tasksPayload = mergedTasks.map(name => {
+                    const rich = richByName.get(name)
+                    return rich ? { item: name, ...rich } : name
+                  })
                   // Which install part IDs are still in the task list (admin may have un-checked some)
                   const installPartIds = routingTasks
                     .map(t => routingInstallMap[t])
@@ -1336,8 +1653,10 @@ export default function VehiclesPage() {
                     body: JSON.stringify({
                       nextStage: routingNext,
                       reason: routingReason || null,
-                      tasks: mergedTasks,
+                      tasks: tasksPayload,
                       estimatedHours: routingEstHours || null,
+                      assigneeId: routingNext === 'mechanic' ? (routingAssigneeId || null) : null,
+                      scopeName: routingNext === 'mechanic' ? (routingScopeName.trim() || null) : null,
                       soldDelivery: routingNext === 'detailing' ? routingSoldDelivery : false,
                       installPartIds,
                       previousStageId: routingVehicle.lastCompleted?.id || null,
@@ -1365,21 +1684,11 @@ export default function VehiclesPage() {
 
       {/* Vehicle Detail Modal */}
       {selectedVehicleId && (
-        <div
-          onClick={closeModal}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000, padding: 20,
-          }}
-        >
+        <div className="mm-backdrop" onClick={closeModal}>
           <div
             onClick={e => e.stopPropagation()}
-            style={{
-              background: '#fff', borderRadius: 20, width: '100%', maxWidth: 500,
-              maxHeight: '85vh', display: 'flex', flexDirection: 'column',
-              boxShadow: '0 -4px 30px rgba(0,0,0,0.15)',
-            }}
+            className="mm-panel"
+            style={{ maxWidth: 600 }}
           >
             {modalLoading ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 20px' }}>
@@ -1388,6 +1697,7 @@ export default function VehiclesPage() {
             ) : modalData?.vehicle ? (() => {
               const v = modalData.vehicle
               const currentStage = getCurrentStage()
+              const stageHue = currentStage ? (STAGE_HUE[currentStage.stage]?.dot ?? '#9a9a96') : '#9a9a96'
               const vehicleDesc = `${v.year ?? ''} ${v.make} ${v.model}`.trim()
               const doneCount = modalChecklist.filter(c => c.done).length
               const allDone = modalChecklist.length > 0 && modalChecklist.every(c => c.done)
@@ -1398,15 +1708,22 @@ export default function VehiclesPage() {
 
               return (
                 <>
-                  <div style={{ flex: 1, overflow: 'auto', padding: '24px 20px 0' }}>
+                  {/* Stage accent — ties the modal to its pipeline colour */}
+                  <div aria-hidden style={{ height: 3, flexShrink: 0, background: `linear-gradient(90deg, ${stageHue}, ${stageHue}66 55%, transparent)` }} />
+                  <div style={{ flex: 1, overflow: 'auto', padding: '22px 24px 0' }}>
                   {/* Header */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-                    <div>
-                      <p style={{ fontSize: 18, fontWeight: 700 }}>#{v.stockNumber}</p>
-                      <p style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
-                        {vehicleDesc}{v.color ? ` · ${v.color}` : ''}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 18 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
+                        {vehicleDesc}
                       </p>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: 7, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span style={{
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                          fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '-0.01em',
+                          background: 'var(--bg-primary)', border: '1px solid var(--border)', padding: '2px 7px', borderRadius: 6,
+                        }}>#{v.stockNumber}</span>
+                        {v.color && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{v.color}</span>}
                         {currentStage && (() => {
                           // Match the card top-right badge logic so the modal shows the same display state.
                           const displayStatus =
@@ -1416,10 +1733,11 @@ export default function VehiclesPage() {
                             : currentStage.status.replace('_', ' ')
                           return (
                             <span style={{
-                              fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 100,
-                              background: '#dffd6e40', color: '#555',
-                              textTransform: 'uppercase', letterSpacing: '0.04em',
+                              display: 'inline-flex', alignItems: 'center', gap: 6,
+                              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 100,
+                              background: '#dffd6e40', color: '#4a5300', letterSpacing: '-0.005em',
                             }}>
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#b9d94a' }} />
                               {STAGE_LABELS[currentStage.stage as keyof typeof STAGE_LABELS] || currentStage.stage}
                               {currentStage.status !== 'done' ? ` · ${displayStatus}` : ''}
                             </span>
@@ -1428,23 +1746,18 @@ export default function VehiclesPage() {
                       </div>
                       <Link
                         href={`/vehicles/${v.id}`}
-                        style={{ fontSize: 12, color: '#3b82f6', textDecoration: 'none', marginTop: 4, display: 'inline-block' }}
+                        style={{ fontSize: 12, fontWeight: 500, color: '#2563eb', textDecoration: 'none', marginTop: 8, display: 'inline-block' }}
                       >
-                        View Full Details →
+                        View full details →
                       </Link>
                     </div>
-                    <button onClick={closeModal} style={{
-                      background: 'none', border: 'none', fontSize: 22, cursor: 'pointer',
-                      color: 'var(--text-muted)', padding: '0 4px', lineHeight: 1,
-                    }}>
-                      &times;
-                    </button>
+                    <button className="mm-close" onClick={closeModal} aria-label="Close">&times;</button>
                   </div>
 
-                  {/* Info row */}
-                  <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-                    <div>
-                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Assigned to</p>
+                  {/* Stat tiles */}
+                  <div style={{ display: 'grid', gridTemplateColumns: currentStage ? '1fr 1fr' : '1fr', gap: 10, marginBottom: 16 }}>
+                    <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 12px' }}>
+                      <p className="mm-label" style={{ marginBottom: 6 }}>Assigned to</p>
                       {isAdmin ? (
                         <select
                           value={currentStage?.assignee?.id || ''}
@@ -1468,9 +1781,9 @@ export default function VehiclesPage() {
                             setAssigningUser(false)
                           }}
                           style={{
-                            padding: '4px 8px', borderRadius: 8, border: '1px solid #e5e5e5',
-                            fontSize: 13, fontWeight: 600, background: '#f8f8f6', cursor: 'pointer',
-                            color: currentStage?.assignee ? 'var(--text-primary)' : '#f59e0b',
+                            width: '100%', padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)',
+                            fontSize: 13.5, fontWeight: 600, background: 'var(--bg-card)', cursor: 'pointer',
+                            color: currentStage?.assignee ? 'var(--text-primary)' : '#d97706',
                           }}
                         >
                           <option value="">Unassigned</option>
@@ -1479,39 +1792,55 @@ export default function VehiclesPage() {
                           ))}
                         </select>
                       ) : (
-                        <p style={{ fontSize: 13, fontWeight: 600, color: currentStage?.assignee ? 'var(--text-primary)' : '#f59e0b' }}>
+                        <p style={{ fontSize: 13.5, fontWeight: 600, color: currentStage?.assignee ? 'var(--text-primary)' : '#d97706' }}>
                           {currentStage?.assignee?.name || 'Unassigned'}
                         </p>
                       )}
                     </div>
                     {currentStage && (
-                      <div>
-                        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 2 }}>Time in stage</p>
-                        <p style={{ fontSize: 13, fontWeight: 600 }}>{timeStr}</p>
+                      <div style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 12, padding: '10px 12px' }}>
+                        <p className="mm-label" style={{ marginBottom: 6 }}>Time in stage</p>
+                        <p style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{timeStr}</p>
                       </div>
                     )}
                   </div>
 
-                  {/* Progress bar */}
+                  {/* Progress */}
                   {modalChecklist.length > 0 && (
-                    <div style={{ marginBottom: 16 }}>
-                      <div style={{ height: 6, borderRadius: 3, background: '#e5e5e5', overflow: 'hidden' }}>
+                    <div style={{ marginBottom: 18 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Checklist progress</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums' }}>{doneCount}/{modalChecklist.length}</span>
+                      </div>
+                      <div style={{ height: 6, borderRadius: 100, background: 'var(--border-light)', overflow: 'hidden' }}>
                         <div style={{
-                          height: '100%', borderRadius: 3,
-                          background: allDone ? '#22c55e' : '#dffd6e',
+                          height: '100%', borderRadius: 100,
+                          background: allDone ? '#16a34a' : 'var(--text-primary)',
                           width: `${(doneCount / modalChecklist.length) * 100}%`,
-                          transition: 'width 0.2s',
+                          transition: 'width 0.25s',
                         }} />
                       </div>
                     </div>
                   )}
 
+                  {/* Tabs: Tasks / Parts */}
+                  <div className="mm-tabs">
+                    <button className={modalTab === 'tasks' ? 'active' : ''} onClick={() => setModalTab('tasks')}>
+                      Tasks <span className="cnt">{modalChecklist.length}</span>
+                    </button>
+                    <button className={modalTab === 'parts' ? 'active' : ''} onClick={() => setModalTab('parts')}>
+                      Parts <span className="cnt">{modalParts.length}</span>
+                    </button>
+                  </div>
+
                   {/* Checklist */}
-                  <div style={{ marginBottom: 20 }}>
-                    <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--text-secondary)' }}>
-                      Tasks ({doneCount}/{modalChecklist.length})
-                      {modalSaving && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 8, color: 'var(--text-muted)' }}>Saving...</span>}
-                    </p>
+                  <div style={{ display: modalTab === 'tasks' ? 'block' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <p className="mm-label">Tasks</p>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+                        {doneCount}/{modalChecklist.length}{modalSaving ? ' · Saving…' : ''}
+                      </span>
+                    </div>
                     {modalChecklist.length === 0 ? (
                       <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No checklist items</p>
                     ) : (
@@ -1521,16 +1850,16 @@ export default function VehiclesPage() {
                             key={i}
                             onClick={() => toggleChecklistItem(i)}
                             style={{
-                              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px',
-                              background: item.done ? '#f0fdf4' : '#f8f8f6', borderRadius: 10,
-                              cursor: 'pointer', border: '1px solid', borderColor: item.done ? '#bbf7d0' : '#e5e5e5',
+                              display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px',
+                              background: item.done ? '#f2fbf5' : 'var(--bg-card)', borderRadius: 10,
+                              cursor: 'pointer', border: '1px solid', borderColor: item.done ? '#c7ecd3' : 'var(--border)',
                               transition: 'all 0.15s',
                             }}
                           >
                             <div style={{
-                              width: 22, height: 22, borderRadius: 6, border: '2px solid',
-                              borderColor: item.done ? '#22c55e' : '#d1d5db',
-                              background: item.done ? '#22c55e' : '#fff',
+                              width: 20, height: 20, borderRadius: 6, border: '2px solid',
+                              borderColor: item.done ? '#16a34a' : '#d1d5db',
+                              background: item.done ? '#16a34a' : 'transparent',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                               flexShrink: 0, transition: 'all 0.15s',
                             }}>
@@ -1547,6 +1876,35 @@ export default function VehiclesPage() {
                             }}>
                               {item.item}
                             </span>
+                            {/* Read-only assignee chip for non-admins */}
+                            {!isAdmin && item.assigneeId && item.assigneeName && (
+                              <span title={item.assigneeName} style={{
+                                flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
+                                padding: '2px 8px 2px 2px', borderRadius: 100, background: '#eef2ff',
+                              }}>
+                                <span style={{
+                                  width: 18, height: 18, borderRadius: '50%', background: '#4f46e5', color: '#fff',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800,
+                                }}>{item.assigneeName.trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase()}</span>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#4338ca' }}>{item.assigneeName.split(' ')[0]}</span>
+                              </span>
+                            )}
+                            {/* Admin: hand this single task to a mechanic (mechanic stage only) */}
+                            {isAdmin && currentStage?.stage === 'mechanic' && mechanics.length > 0 && (
+                              <select
+                                value={item.assigneeId || ''}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => { e.stopPropagation(); assignChecklistItem(i, e.target.value || null) }}
+                                style={{
+                                  flexShrink: 0, maxWidth: 128, padding: '4px 6px', borderRadius: 8,
+                                  border: '1px solid #e5e5e5', fontSize: 12, background: '#fff',
+                                  color: item.assigneeId ? 'var(--text-primary)' : 'var(--text-muted)', cursor: 'pointer',
+                                }}
+                              >
+                                <option value="">Assign…</option>
+                                {mechanics.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                              </select>
+                            )}
                             {/* Admin remove — small × on the right of each item */}
                             {isAdmin && (
                               <button
@@ -1603,7 +1961,7 @@ export default function VehiclesPage() {
                           placeholder="+ Add task..."
                           style={{
                             flex: 1, padding: '9px 12px', borderRadius: 10,
-                            border: '1px solid #e5e5e5', fontSize: 13, background: '#fff',
+                            border: '1px solid var(--border)', fontSize: 13, background: 'var(--bg-card)',
                             outline: 'none',
                           }}
                         />
@@ -1621,11 +1979,13 @@ export default function VehiclesPage() {
                   </div>
 
                   {/* Parts Section — Full Interactive */}
+                  <div style={{ display: modalTab === 'parts' ? 'block' : 'none' }}>
                   <ModalPartsSection vehicleId={v.id} parts={modalParts} isAdmin={isAdmin} onPartsChange={() => {
                     fetch(`/api/parts?vehicleId=${v.id}`).then(r => r.json()).then(d => setModalParts(d.parts || [])).catch(() => {})
                     // Refresh vehicles list too for card labels
                     fetch('/api/vehicles').then(r => r.json()).then(d => setVehicles(d.vehicles || [])).catch(() => {})
                   }} />
+                  </div>
 
                   {/* Breathing room before the sticky footer so the parts area
                       doesn't crash into the action buttons below. */}
@@ -1633,21 +1993,23 @@ export default function VehiclesPage() {
 
                   </div>
                   {/* Advance Stage Button — sticky footer */}
-                  <div style={{ padding: '12px 20px 20px', borderTop: '1px solid #e5e5e5', flexShrink: 0 }}>
+                  <div style={{ padding: '16px 24px 22px', borderTop: '1px solid var(--border)', background: 'var(--bg-card)', flexShrink: 0 }}>
                     <button
                       onClick={handleAdvanceStage}
                       disabled={!allDone || advancing}
                       style={{
-                        width: '100%', padding: '14px 0', borderRadius: 12, border: 'none',
-                        background: allDone ? '#dffd6e' : '#e5e5e5',
-                        color: allDone ? '#1a1a1a' : '#999',
-                        fontSize: 15, fontWeight: 700,
+                        width: '100%', padding: '13px 0', borderRadius: 12,
+                        border: allDone ? 'none' : '1px solid var(--border)',
+                        background: allDone ? '#dffd6e' : 'var(--bg-primary)',
+                        color: allDone ? '#1a1a1a' : 'var(--text-muted)',
+                        fontSize: 14.5, fontWeight: 700, letterSpacing: '-0.01em',
                         cursor: !allDone || advancing ? 'default' : 'pointer',
                         opacity: advancing ? 0.6 : 1,
+                        boxShadow: allDone ? '0 1px 2px rgba(24,24,27,.06), 0 8px 18px -8px rgba(185,217,74,.6)' : 'none',
                         transition: 'all 0.15s',
                       }}
                     >
-                      {advancing ? 'Advancing...' : allDone ? 'Advance Stage' : 'Complete all tasks to advance'}
+                      {advancing ? 'Advancing…' : allDone ? 'Advance Stage' : 'Complete all tasks to advance'}
                     </button>
 
                     {/* Admin actions */}

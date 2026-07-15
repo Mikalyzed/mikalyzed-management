@@ -62,6 +62,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     'titleStatus',
     // Purchase Info sub-tab — acquisition source + structure
     'mileage', 'purchaseType', 'purchaseSource', 'purchasedFrom', 'purchasedFromVendorId', 'purchasedFromContactId',
+    // Logistics card (General Info tab)
+    'inventoryStatus', 'location',
     // Phase 2 — flooring
     'floorLender', 'floorPrincipal', 'floorDailyRate', 'floorAdvanceDate', 'floorStatus',
   ]
