@@ -120,6 +120,20 @@ function chipColor(id: string): string {
   return CHIP_COLORS[h % CHIP_COLORS.length]
 }
 
+// Who a task belongs to:
+//  - explicit per-task assignee wins,
+//  - a mechanic-ADDED task belongs to NO ONE until an admin assigns it,
+//  - an original task inherits the car's owner.
+// Returns null when the task needs admin assignment (added + unassigned).
+function taskOwner(
+  item: ChecklistItem,
+  carOwner: { id: string; name: string } | null,
+): { id: string; name: string } | null {
+  if (item.assigneeId) return { id: item.assigneeId, name: item.assigneeName || '?' }
+  if (item.addedByMechanic) return null
+  return carOwner
+}
+
 function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
@@ -500,10 +514,19 @@ export default function MechanicBoard() {
   const toggleChecklist = async (index: number) => {
     if (!selectedJob) return
     const target = modalChecklist[index]
-    // Block check-on if mechanic-added task isn't approved yet
+    // Block check-on if mechanic-added task isn't approved (+ assigned) yet
     if (!target.done && target.addedByMechanic && target.approved !== 'approved') {
       setExpandedTaskIdx(index)
       return
+    }
+    // A mechanic can only check off tasks that belong to THEM (their explicit
+    // assignment, or an original task on a car they own). Admins can check any.
+    if (!isAdmin && !target.done) {
+      const owner = taskOwner(target, selectedJob.assignee)
+      if (!owner || owner.id !== data?.currentUserId) {
+        setExpandedTaskIdx(index)
+        return
+      }
     }
     // Block check-on if structured fields aren't filled — mark for red ! highlights
     if (!target.done && !isStructuredComplete(target)) {
@@ -622,12 +645,15 @@ export default function MechanicBoard() {
   // "Worked Today" follows the lane filter: All = whole team's total today,
   // a specific mechanic = just that mechanic's total today (across all their cars).
   const mechList = data.mechanics || []
-  const workedTodayFiltered = mechFilter === 'all'
+  // Non-admins are HARD-LOCKED to their own lane regardless of the (hidden) chip
+  // state — they only ever see their own to-do list.
+  const activeFilter = isAdmin ? mechFilter : (data.currentUserId || mechFilter)
+  const workedTodayFiltered = activeFilter === 'all'
     ? Math.round(mechList.reduce((s, m) => s + m.workedTodayHours, 0) * 10) / 10
-    : (mechList.find(m => m.id === mechFilter)?.workedTodayHours ?? 0)
-  const workedTodayLabel = mechFilter === 'all'
+    : (mechList.find(m => m.id === activeFilter)?.workedTodayHours ?? 0)
+  const workedTodayLabel = activeFilter === 'all'
     ? 'Worked Today'
-    : `${(mechList.find(m => m.id === mechFilter)?.name || '').split(' ')[0]} Today`
+    : `${(mechList.find(m => m.id === activeFilter)?.name || '').split(' ')[0]} Today`
 
   const COLORS: Record<string, { bg: string; border: string; badge: string; text: string }> = {
     active: { bg: '#eff6ff', border: '#3b82f6', badge: '#3b82f6', text: '#1e40af' },
@@ -644,7 +670,7 @@ export default function MechanicBoard() {
   const jobAssignees = (job: JobCard) =>
     (job.assignees && job.assignees.length ? job.assignees : (job.assignee ? [job.assignee] : []))
   const jobMatchesFilter = (job: JobCard) =>
-    mechFilter === 'all' || jobAssignees(job).some(a => a.id === mechFilter)
+    activeFilter === 'all' || jobAssignees(job).some(a => a.id === activeFilter)
   const visible = (jobs: JobCard[]) => jobs.filter(jobMatchesFilter)
 
   // Filter each section once per render (not repeatedly inline) and drive the
@@ -672,14 +698,17 @@ export default function MechanicBoard() {
     const iAmOnCar = !!data.currentUserId && (job.assignees || []).some(a => a.id === data.currentUserId)
     const myRunning = iAmOnCar ? !!job.myTimerRunning : job.timerRunning
     const isShared = (job.assignees?.length || 0) > 1
-    // On a shared car "my part" = tasks handed to me + (if I'm the car's default
-    // owner) any unassigned tasks. I can Complete my part once those are done;
-    // finishing my part stops MY clock but leaves co-workers running.
-    const isDefaultOwner = !!data.currentUserId && job.assignee?.id === data.currentUserId
+    // "My part" on a shared car = tasks I own (explicit to me, or original tasks
+    // on a car I own). Finishing it stops MY clock but leaves co-workers running.
     const myEntry = (job.timers || []).find(t => t.userId === data.currentUserId)
     const myPartDone = !!myEntry?.done
-    const myChecklist = (job.checklist as ChecklistItem[]).filter(c =>
-      c.approved !== 'declined' && (c.assigneeId ? c.assigneeId === data.currentUserId : isDefaultOwner))
+    // "My tasks" via the shared ownership rule — added-but-unassigned tasks
+    // belong to no one (they need admin), so they never count against a mechanic.
+    const myChecklist = (job.checklist as ChecklistItem[]).filter(c => {
+      if (c.approved === 'declined') return false
+      const owner = taskOwner(c, job.assignee)
+      return !!owner && owner.id === data.currentUserId
+    })
     const myTasksAllDone = myChecklist.length === 0 || myChecklist.every(c => c.done)
 
     return (
@@ -905,7 +934,7 @@ export default function MechanicBoard() {
             <Badge text="Outside Working Hours" color="#a855f7" />
           </span>
         )}
-        <div className="msch-tabs">
+        {isAdmin && (<div className="msch-tabs">
             <button
               onClick={() => setViewMode('board')}
               style={{
@@ -944,11 +973,12 @@ export default function MechanicBoard() {
                 Plan
               </button>
             )}
-        </div>
+        </div>)}
       </div>
 
-      {/* Mechanic lane filter — only when there's more than one mechanic to split across */}
-      {viewMode !== 'plan' && (data.mechanics?.length || 0) >= 2 && (
+      {/* Mechanic lane filter — ADMIN ONLY. A mechanic is locked to their own
+          lane (mechFilter defaults to their id) and never sees All/other lanes. */}
+      {isAdmin && viewMode !== 'plan' && (data.mechanics?.length || 0) >= 2 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
           {[{ id: 'all', name: 'All' }, ...(data.mechanics || [])].map(m => {
             const active = mechFilter === m.id
@@ -987,9 +1017,9 @@ export default function MechanicBoard() {
         </div>
       )}
 
-      {/* Selected mechanic's own worked-time summary */}
-      {viewMode !== 'plan' && mechFilter !== 'all' && (() => {
-        const mech = (data.mechanics || []).find(m => m.id === mechFilter)
+      {/* Selected mechanic's own worked-time summary (also a mechanic's own header) */}
+      {viewMode !== 'plan' && activeFilter !== 'all' && (() => {
+        const mech = (data.mechanics || []).find(m => m.id === activeFilter)
         if (!mech) return null
         return (
           <div style={{
@@ -1192,7 +1222,7 @@ export default function MechanicBoard() {
 
       {vActive.length === 0 && vQueued.length === 0 && vPaused.length === 0 && vCompletedToday.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-          {mechFilter === 'all' ? 'No mechanic jobs. All clear.' : 'No jobs for this mechanic.'}
+          {activeFilter === 'all' ? 'No mechanic jobs. All clear.' : (isAdmin ? 'No jobs for this mechanic.' : "You're all caught up — nothing assigned to you right now.")}
         </div>
       )}
 
@@ -1440,22 +1470,35 @@ export default function MechanicBoard() {
                                     {item.approved === 'approved' ? 'Approved' : 'Requested'}
                                   </span>
                                 )}
-                                {item.assigneeId && item.assigneeName && (
-                                  <span title={item.assigneeName} style={{
-                                    width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
-                                    background: chipColor(item.assigneeId), color: '#fff',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: 8, fontWeight: 800,
-                                  }}>{initialsOf(item.assigneeName)}</span>
-                                )}
+                                {(() => {
+                                  const owner = taskOwner(item, selectedJob.assignee)
+                                  if (owner) return (
+                                    <span title={owner.name} style={{
+                                      width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                                      background: chipColor(owner.id), color: '#fff',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      fontSize: 8, fontWeight: 800,
+                                    }}>{initialsOf(owner.name)}</span>
+                                  )
+                                  // added task not yet assigned → needs admin
+                                  return (
+                                    <span style={{
+                                      fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 100,
+                                      background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca',
+                                      textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap',
+                                    }}>Needs assign</span>
+                                  )
+                                })()}
                                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{isExpanded ? '▾' : '▸'}</span>
                               </div>
                             </div>
 
                             {isExpanded && (
                               <div style={{ padding: '0 12px 12px 46px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                {/* Per-task hand-off: give this single task to a specific mechanic */}
-                                {boardMechanics.length >= 2 && (isAdmin || (!!boardCurrentUserId && (selectedJob.assignees || []).some(a => a.id === boardCurrentUserId))) && (
+                                {/* Per-task hand-off: give this single task to a specific mechanic.
+                                    Hidden for not-yet-approved added tasks — those use the
+                                    Approve & assign control below (one action). */}
+                                {boardMechanics.length >= 2 && !(item.addedByMechanic && item.approved !== 'approved') && (isAdmin || (!!boardCurrentUserId && (selectedJob.assignees || []).some(a => a.id === boardCurrentUserId))) && (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Assign to:</span>
                                     {boardMechanics.map(m => {
@@ -1494,15 +1537,39 @@ export default function MechanicBoard() {
                                   </div>
                                 )}
                                 {item.addedByMechanic && item.approved === 'pending' && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
+                                  <div style={{ padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
                                     {isAdmin ? (
-                                      <>
-                                        <span style={{ fontSize: 12, color: '#92400e', flex: 1 }}>Approve this task?</span>
-                                        <button onClick={() => updateChecklistItem(i, { approved: 'approved' })} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✓ Approve</button>
-                                        <button onClick={() => declineFollowupTask(i)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✗ Decline</button>
-                                      </>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        <span style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>Approve &amp; assign this task:</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                          {boardMechanics.map(m => (
+                                            <button
+                                              key={m.id}
+                                              onClick={() => updateChecklistItem(i, { approved: 'approved', assigneeId: m.id, assigneeName: m.name })}
+                                              style={{
+                                                display: 'flex', alignItems: 'center', gap: 6,
+                                                padding: '4px 10px 4px 4px', borderRadius: 100,
+                                                border: '1px solid #16a34a', background: '#f0fdf4', color: '#166534',
+                                                fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                                              }}
+                                            >
+                                              <span style={{
+                                                width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
+                                                background: chipColor(m.id), color: '#fff',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                fontSize: 8, fontWeight: 800,
+                                              }}>{initialsOf(m.name)}</span>
+                                              {m.name.split(' ')[0]}
+                                            </button>
+                                          ))}
+                                          {boardMechanics.length === 0 && (
+                                            <button onClick={() => updateChecklistItem(i, { approved: 'approved' })} style={{ padding: '4px 10px', borderRadius: 100, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✓ Approve</button>
+                                          )}
+                                          <button onClick={() => declineFollowupTask(i)} style={{ padding: '4px 10px', borderRadius: 100, border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>✗ Decline</button>
+                                        </div>
+                                      </div>
                                     ) : (
-                                      <span style={{ fontSize: 12, color: '#92400e' }}>Waiting on admin approval before this can be worked on.</span>
+                                      <span style={{ fontSize: 12, color: '#92400e' }}>Waiting on admin to approve &amp; assign before this can be worked on.</span>
                                     )}
                                   </div>
                                 )}

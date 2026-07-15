@@ -25,6 +25,29 @@ type ChecklistItem = {
   assigneeName?: string | null
 }
 
+// Initials + deterministic color for an assignee chip (mirror of the mechanic board).
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+const CHIP_COLORS = ['#2563eb', '#db2777', '#16a34a', '#d97706', '#7c3aed', '#0891b2']
+function chipColor(id: string): string {
+  let h = 0
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+  return CHIP_COLORS[h % CHIP_COLORS.length]
+}
+// Effective owner of a task: explicit assignee → them; added-but-unassigned →
+// none (needs admin); otherwise inherits the car's owner.
+function taskOwner(
+  item: ChecklistItem,
+  carOwner: { id: string; name: string } | null | undefined,
+): { id: string; name: string } | null {
+  if (item.assigneeId) return { id: item.assigneeId, name: item.assigneeName || '?' }
+  if (item.addedByMechanic) return null
+  return carOwner ?? null
+}
+
 type VehicleWithStage = {
   id: string
   stockNumber: string
@@ -1876,19 +1899,30 @@ export default function VehiclesPage() {
                             }}>
                               {item.item}
                             </span>
-                            {/* Read-only assignee chip for non-admins */}
-                            {!isAdmin && item.assigneeId && item.assigneeName && (
-                              <span title={item.assigneeName} style={{
-                                flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
-                                padding: '2px 8px 2px 2px', borderRadius: 100, background: '#eef2ff',
-                              }}>
+                            {/* Effective-owner chip on EVERY task so it's never ambiguous who's on it.
+                                Explicit assignee → them; original task → car owner; added+unassigned → needs admin. */}
+                            {currentStage?.stage === 'mechanic' && (() => {
+                              const owner = taskOwner(item, currentStage?.assignee)
+                              if (owner) return (
+                                <span title={owner.name} style={{
+                                  flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5,
+                                  padding: '2px 8px 2px 2px', borderRadius: 100, background: 'var(--bg-subtle, #f1f3f5)',
+                                }}>
+                                  <span style={{
+                                    width: 18, height: 18, borderRadius: '50%', background: chipColor(owner.id), color: '#fff',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800,
+                                  }}>{initialsOf(owner.name)}</span>
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>{owner.name.split(' ')[0]}</span>
+                                </span>
+                              )
+                              return (
                                 <span style={{
-                                  width: 18, height: 18, borderRadius: '50%', background: '#4f46e5', color: '#fff',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 800,
-                                }}>{item.assigneeName.trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase()}</span>
-                                <span style={{ fontSize: 11, fontWeight: 600, color: '#4338ca' }}>{item.assigneeName.split(' ')[0]}</span>
-                              </span>
-                            )}
+                                  flexShrink: 0, fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 100,
+                                  background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca',
+                                  textTransform: 'uppercase', letterSpacing: '0.03em', whiteSpace: 'nowrap',
+                                }}>Needs assign</span>
+                              )
+                            })()}
                             {/* Admin: hand this single task to a mechanic (mechanic stage only) */}
                             {isAdmin && currentStage?.stage === 'mechanic' && mechanics.length > 0 && (
                               <select
