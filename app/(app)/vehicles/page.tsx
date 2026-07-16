@@ -186,6 +186,11 @@ export default function VehiclesPage() {
   const [routingAssigneeId, setRoutingAssigneeId] = useState('')
   const [routingScopeName, setRoutingScopeName] = useState('')
   const [mechanics, setMechanics] = useState<{ id: string; name: string }[]>([])
+  // Per-mechanic "Schedule" popup — lets admin reorder a single mechanic's
+  // mechanic-stage queue (or the unassigned pile) via up/down arrows.
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [scheduleMechanicId, setScheduleMechanicId] = useState<string>('unassigned')
+  const [scheduleSaving, setScheduleSaving] = useState(false)
   const [routingSoldDelivery, setRoutingSoldDelivery] = useState(false)
   const [routingSaving, setRoutingSaving] = useState(false)
   // Pre-made checklist templates for the target stage (e.g. "New Vehicle
@@ -732,6 +737,50 @@ export default function VehiclesPage() {
     return `${Math.floor(h / 24)}d ${h % 24}h`
   }
 
+  // ─── Schedule popup: selected mechanic's (or Unassigned's) mechanic-stage
+  // cars, ordered by that stage's priority ───
+  const scheduleQueue = vehicles
+    .filter(v => v.status === 'mechanic' && (
+      scheduleMechanicId === 'unassigned'
+        ? !v.stages[0]?.assignee
+        : v.stages[0]?.assignee?.id === scheduleMechanicId
+    ))
+    .slice()
+    .sort((a, b) => (a.stages[0]?.priority ?? 0) - (b.stages[0]?.priority ?? 0))
+
+  const moveScheduleRow = useCallback(async (index: number, direction: -1 | 1) => {
+    const newIndex = index + direction
+    if (newIndex < 0 || newIndex >= scheduleQueue.length) return
+    const a = scheduleQueue[index]
+    const b = scheduleQueue[newIndex]
+    const aPriority = a.stages[0]?.priority ?? 0
+    const bPriority = b.stages[0]?.priority ?? 0
+
+    // Optimistic swap so the row moves instantly, ahead of the persist + refetch.
+    setVehicles(prev => prev.map(v => {
+      if (v.id === a.id) return { ...v, stages: v.stages.map((s, si) => (si === 0 ? { ...s, priority: bPriority } : s)) }
+      if (v.id === b.id) return { ...v, stages: v.stages.map((s, si) => (si === 0 ? { ...s, priority: aPriority } : s)) }
+      return v
+    }))
+
+    const reordered = [...scheduleQueue]
+    ;[reordered[index], reordered[newIndex]] = [reordered[newIndex], reordered[index]]
+    const orderedIds = reordered.map(v => v.id)
+
+    setScheduleSaving(true)
+    try {
+      await fetch('/api/stages/reorder-lane', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedIds }),
+      })
+      const res = await fetch('/api/vehicles')
+      const data = await res.json()
+      setVehicles(data.vehicles || [])
+    } catch { /* ignore */ }
+    setScheduleSaving(false)
+  }, [scheduleQueue])
+
   return (
     <div>
       {/* Clean solid canvas just for the recon board — sits over the app-wide
@@ -747,6 +796,23 @@ export default function VehiclesPage() {
             className="recon-search"
             style={{ flex: 1, minWidth: 0, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}
           />
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setScheduleMechanicId(prev => (prev === 'unassigned' && mechanics.length > 0 ? mechanics[0].id : prev))
+                setScheduleOpen(true)
+              }}
+              className="btn"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                borderRadius: 8, border: '1px solid var(--border)', background: '#fff',
+                fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer', whiteSpace: 'nowrap',
+              }}
+            >
+              Schedule
+            </button>
+          )}
           <Link href="/vehicles/new" className="btn btn-primary gap-2 recon-add-btn">
             <span style={{ fontSize: '18px', lineHeight: 1 }}>+</span>
             <span className="hidden sm:inline">Add Vehicle</span>
@@ -2586,6 +2652,137 @@ export default function VehiclesPage() {
                 {moveModal.saving ? 'Moving...' : 'Move Vehicle'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Modal — per-mechanic queue reorder, admin only */}
+      {scheduleOpen && (
+        <div
+          onClick={() => setScheduleOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 480, maxHeight: '85vh', overflowY: 'auto' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Mechanic Schedule
+                </p>
+                <h2 style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>Queue order</h2>
+              </div>
+              <button className="mm-close" onClick={() => setScheduleOpen(false)} aria-label="Close">&times;</button>
+            </div>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+              Pick a mechanic, then reorder their mechanic-stage queue.
+            </p>
+
+            {/* Mechanic pills + Unassigned */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 18 }}>
+              {mechanics.map(m => {
+                const active = scheduleMechanicId === m.id
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setScheduleMechanicId(m.id)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 7,
+                      padding: '6px 12px 6px 6px', borderRadius: 100,
+                      border: active ? '2px solid #1a1a1a' : '1px solid var(--border)',
+                      background: active ? '#fafaf8' : '#fff',
+                      fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                      color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    }}
+                  >
+                    <span style={{
+                      width: 20, height: 20, borderRadius: '50%', background: chipColor(m.id), color: '#fff',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, flexShrink: 0,
+                    }}>{initialsOf(m.name)}</span>
+                    {m.name}
+                  </button>
+                )
+              })}
+              <button
+                type="button"
+                onClick={() => setScheduleMechanicId('unassigned')}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  padding: '6px 12px', borderRadius: 100,
+                  border: scheduleMechanicId === 'unassigned' ? '2px solid #1a1a1a' : '1px solid var(--border)',
+                  background: scheduleMechanicId === 'unassigned' ? '#fafaf8' : '#fff',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  color: scheduleMechanicId === 'unassigned' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                }}
+              >
+                Unassigned
+              </button>
+              {mechanics.length === 0 && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>No users with the mechanic role yet.</p>
+              )}
+            </div>
+
+            {/* Queue list */}
+            {scheduleQueue.length === 0 ? (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', padding: '20px 0', textAlign: 'center' }}>
+                No cars queued for this mechanic.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {scheduleQueue.map((v, i) => (
+                  <div key={v.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 12px', borderRadius: 10,
+                    border: '1px solid var(--border)', background: '#f8f8f6',
+                  }}>
+                    <span style={{
+                      width: 22, height: 22, borderRadius: '50%', background: '#eee', color: 'var(--text-secondary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0,
+                    }}>{i + 1}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      #{v.stockNumber} — {v.year} {v.make} {v.model}
+                    </span>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      <button
+                        type="button"
+                        disabled={i === 0 || scheduleSaving}
+                        onClick={() => moveScheduleRow(i, -1)}
+                        aria-label="Move up"
+                        style={{
+                          width: 28, height: 28, borderRadius: 7, border: '1px solid var(--border)',
+                          background: '#fff', cursor: i === 0 || scheduleSaving ? 'default' : 'pointer',
+                          opacity: i === 0 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="18 15 12 9 6 15" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={i === scheduleQueue.length - 1 || scheduleSaving}
+                        onClick={() => moveScheduleRow(i, 1)}
+                        aria-label="Move down"
+                        style={{
+                          width: 28, height: 28, borderRadius: 7, border: '1px solid var(--border)',
+                          background: '#fff', cursor: i === scheduleQueue.length - 1 || scheduleSaving ? 'default' : 'pointer',
+                          opacity: i === scheduleQueue.length - 1 ? 0.35 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
