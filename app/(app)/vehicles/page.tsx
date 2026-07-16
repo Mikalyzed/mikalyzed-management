@@ -748,7 +748,9 @@ export default function VehiclesPage() {
     .slice()
     .sort((a, b) => (a.stages[0]?.priority ?? 0) - (b.stages[0]?.priority ?? 0))
 
-  const moveScheduleRow = useCallback(async (index: number, direction: -1 | 1) => {
+  // Plain function (NOT a hook) — it lives after early returns / derived state,
+  // so it must not be useCallback or it breaks the Rules of Hooks.
+  const moveScheduleRow = async (index: number, direction: -1 | 1) => {
     const newIndex = index + direction
     if (newIndex < 0 || newIndex >= scheduleQueue.length) return
     const a = scheduleQueue[index]
@@ -779,7 +781,7 @@ export default function VehiclesPage() {
       setVehicles(data.vehicles || [])
     } catch { /* ignore */ }
     setScheduleSaving(false)
-  }, [scheduleQueue])
+  }
 
   return (
     <div>
