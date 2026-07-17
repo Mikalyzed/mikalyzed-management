@@ -4450,9 +4450,19 @@ type StudioCategory = {
 const STUDIO_CATEGORIES: StudioCategory[] = [
   { id: 'exterior',      label: 'Exterior',      types: ['exterior'],                            accept: 'image/*', defaultType: 'exterior',         variant: 'photo' },
   { id: 'interior',      label: 'Interior',      types: ['interior'],                            accept: 'image/*', defaultType: 'interior',         variant: 'photo' },
+  { id: 'engine',        label: 'Engine',        types: ['engine'],                              accept: 'image/*', defaultType: 'engine',           variant: 'photo' },
   { id: 'undercarriage', label: 'Undercarriage', types: ['undercarriage'],                       accept: 'image/*', defaultType: 'undercarriage',    variant: 'photo' },
   { id: 'videos',        label: 'Videos',        types: ['walkaround_video', 'turntable_video'], accept: 'video/*', defaultType: 'walkaround_video', variant: 'video' },
 ]
+
+// Sections a photo can be placed into (used by the Unsorted strip + Manage mode).
+const PHOTO_SECTION_OPTS = [
+  { value: 'exterior', label: 'Exterior' },
+  { value: 'interior', label: 'Interior' },
+  { value: 'engine', label: 'Engine' },
+  { value: 'undercarriage', label: 'Undercarriage' },
+]
+const PHOTO_TYPES = ['exterior', 'interior', 'engine', 'undercarriage', 'unsorted']
 
 function MediaStudio({
   vehicleId, media, onChange, currentUserId, isAdmin,
@@ -4467,47 +4477,60 @@ function MediaStudio({
   const [progress, setProgress] = useState(0)
   const [err, setErr] = useState<string | null>(null)
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
+  const [manage, setManage] = useState(false)
+  const [aiStatus, setAiStatus] = useState<string | null>(null)
+  const [aiBusy, setAiBusy] = useState(false)
+  const [galleryStart, setGalleryStart] = useState<string | null>(null)
+  const [galleryOpen, setGalleryOpen] = useState(false)
 
   const viewable = media.filter(m => m.type !== 'doc')
+  const unsortedItems = media.filter(m => m.type === 'unsorted')
+  const photoItems = media.filter(m => PHOTO_TYPES.includes(m.type))
 
+  // Core upload: presign -> PUT to R2 -> confirm. No global UI state / refetch,
+  // so it can be run many-at-once. onProgress optional (single-tile path uses it).
+  async function uploadOne(file: File, type: string, onProgress?: (pct: number) => void) {
+    const presignRes = await fetch('/api/media/presign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vehicleId, filename: file.name, contentType: file.type }),
+    })
+    if (!presignRes.ok) throw new Error(`Presign failed (${presignRes.status})`)
+    const { uploadUrl, r2Key } = await presignRes.json()
+
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      if (onProgress) xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+      })
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve()
+        else reject(new Error(`R2 upload failed (${xhr.status})`))
+      })
+      xhr.addEventListener('error', () => reject(new Error('R2 network error')))
+      xhr.open('PUT', uploadUrl)
+      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
+      xhr.send(file)
+    })
+
+    const confirmRes = await fetch('/api/media/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vehicleId, r2Key, type,
+        contentType: file.type, sizeBytes: file.size, filename: file.name,
+      }),
+    })
+    if (!confirmRes.ok) throw new Error(`Confirm failed (${confirmRes.status})`)
+  }
+
+  // Single-tile upload path (per category "+ Add").
   async function uploadFile(file: File, type: string) {
     setErr(null)
     setUploadingType(type)
     setProgress(0)
     try {
-      const presignRes = await fetch('/api/media/presign', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vehicleId, filename: file.name, contentType: file.type }),
-      })
-      if (!presignRes.ok) throw new Error(`Presign failed (${presignRes.status})`)
-      const { uploadUrl, r2Key } = await presignRes.json()
-
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest()
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100))
-        })
-        xhr.addEventListener('load', () => {
-          if (xhr.status >= 200 && xhr.status < 300) resolve()
-          else reject(new Error(`R2 upload failed (${xhr.status})`))
-        })
-        xhr.addEventListener('error', () => reject(new Error('R2 network error')))
-        xhr.open('PUT', uploadUrl)
-        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream')
-        xhr.send(file)
-      })
-
-      const confirmRes = await fetch('/api/media/confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vehicleId, r2Key, type,
-          contentType: file.type, sizeBytes: file.size, filename: file.name,
-        }),
-      })
-      if (!confirmRes.ok) throw new Error(`Confirm failed (${confirmRes.status})`)
-
+      await uploadOne(file, type, setProgress)
       await onChange()
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -4530,50 +4553,218 @@ function MediaStudio({
     await onChange()
   }
 
+  // Bulk drop: upload everything as 'unsorted', then let AI file it.
+  // Takes a real File[] (not a live FileList) — the caller must copy before
+  // resetting the input, or the list empties out from under us.
+  async function bulkUploadAndSort(files: File[]) {
+    if (!files || files.length === 0) return
+    setErr(null)
+    setAiBusy(true)
+    const total = files.length
+    let done = 0
+    let firstErr: string | null = null
+    setAiStatus(`Uploading 0/${total}…`)
+
+    // Upload several photos at once instead of one-by-one, and refresh only
+    // once at the end (not after every file) — the big speedup.
+    const CONCURRENCY = 5
+    let idx = 0
+    async function worker() {
+      while (idx < files.length) {
+        const my = idx++
+        try {
+          await uploadOne(files[my], 'unsorted')
+        } catch (e) {
+          if (!firstErr) firstErr = e instanceof Error ? e.message : String(e)
+        }
+        done++
+        setAiStatus(`Uploading ${done}/${total}…`)
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker))
+    await onChange()
+
+    if (firstErr) setErr(`Some photos didn't upload: ${firstErr}`)
+    await runAiSort()
+  }
+
+  async function runAiSort() {
+    setErr(null)
+    setAiBusy(true)
+    setAiStatus('Sorting with AI…')
+    try {
+      const res = await fetch('/api/media/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId, scope: 'unsorted' }),
+      })
+      if (!res.ok) throw new Error(`AI sort failed (${res.status})`)
+      const data = await res.json()
+      await onChange()
+      setAiStatus(
+        (data.unsure ?? 0) > 0
+          ? `Sorted ${data.classified} · ${data.unsure} left for you to place`
+          : `Sorted ${data.classified} photo${data.classified === 1 ? '' : 's'} ✓`,
+      )
+      setTimeout(() => setAiStatus(null), 5000)
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+      setAiStatus(null)
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
+  async function setSection(id: string, type: string) {
+    await fetch(`/api/media/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type }),
+    })
+    await onChange()
+  }
+
+  const pillStyle: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    padding: '8px 14px', borderRadius: 999,
+    background: 'rgba(255, 255, 255, 0.66)',
+    border: '1px solid rgba(255, 255, 255, 0.6)',
+    color: '#1d1d1f', fontSize: 12, fontWeight: 600, letterSpacing: '-0.005em',
+    cursor: 'pointer', minHeight: 'auto',
+    boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+  }
+
   return (
     <GlassCard padding={24}>
-      <GlassEyebrow
-        label="Visual Asset Studio"
-        subtitle={media.length === 0
-          ? 'Drop or click any tile to upload photos, videos, documents'
-          : `${media.length} asset${media.length === 1 ? '' : 's'} across ${STUDIO_CATEGORIES.length} categories`}
-      />
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <GlassEyebrow
+          label="Visual Asset Studio"
+          subtitle={media.length === 0
+            ? 'Upload all your shots at once — AI sorts them into sections'
+            : `${media.length} asset${media.length === 1 ? '' : 's'}${unsortedItems.length ? ` · ${unsortedItems.length} to sort` : ''}`}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {aiStatus && (
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#1d1d1f', opacity: 0.72 }}>{aiStatus}</span>
+          )}
+          <label style={{ ...pillStyle, cursor: aiBusy ? 'wait' : 'pointer', opacity: aiBusy ? 0.6 : 1 }}>
+            ✨ Upload &amp; AI-Sort
+            <input
+              type="file" accept="image/*" multiple hidden disabled={aiBusy}
+              onChange={(e) => { const f = e.target.files ? Array.from(e.target.files) : []; e.currentTarget.value = ''; bulkUploadAndSort(f) }}
+            />
+          </label>
+          {viewable.length > 0 && (
+            <button type="button" onClick={() => { setGalleryStart('all'); setGalleryOpen(true) }} style={pillStyle}>
+              View all
+            </button>
+          )}
+          {photoItems.length > 0 && (
+            <button type="button" onClick={() => setManage(m => !m)} style={pillStyle}>
+              {manage ? 'Done' : 'Manage'}
+            </button>
+          )}
+        </div>
+      </div>
 
       {err && (
         <p style={{
-          color: '#d70015', fontSize: 13, marginBottom: 14,
+          color: '#d70015', fontSize: 13, margin: '14px 0 0',
           padding: '8px 12px', background: 'rgba(255, 59, 48, 0.08)', borderRadius: 10,
           border: '1px solid rgba(255, 59, 48, 0.18)',
         }}>{err}</p>
       )}
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-        gap: 16,
-      }}>
-        {STUDIO_CATEGORIES.map((cat) => {
-          const items = media.filter(m => cat.types.includes(m.type))
-          const isUploading = uploadingType === cat.defaultType
-          return (
-            <AssetTile
-              key={cat.id}
-              category={cat}
-              items={items}
-              isUploading={isUploading}
-              uploadProgress={progress}
-              onFiles={(files) => handleFiles(files, cat.defaultType)}
-              onDelete={deleteAsset}
-              onOpen={(asset) => {
-                const idx = viewable.findIndex(v => v.id === asset.id)
-                if (idx >= 0) setLightboxIdx(idx)
-              }}
-              currentUserId={currentUserId}
-              isAdmin={isAdmin}
-            />
-          )
-        })}
-      </div>
+      {unsortedItems.length > 0 && (
+        <div style={{
+          marginTop: 16, padding: 14, borderRadius: 14,
+          background: 'rgba(255, 214, 10, 0.10)',
+          border: '1px solid rgba(255, 214, 10, 0.35)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#1d1d1f' }}>
+              {unsortedItems.length} photo{unsortedItems.length === 1 ? '' : 's'} to sort
+            </p>
+            <button type="button" onClick={runAiSort} disabled={aiBusy}
+              style={{ ...pillStyle, opacity: aiBusy ? 0.6 : 1, cursor: aiBusy ? 'wait' : 'pointer' }}>
+              ✨ Sort with AI
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+            {unsortedItems.map((item) => (
+              <div key={item.id} style={{ width: 130, flex: '0 0 auto' }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={item.url} alt={item.filename || 'unsorted'}
+                  style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', borderRadius: 10, display: 'block', background: '#1d1d1f' }} />
+                <select
+                  defaultValue=""
+                  onChange={(e) => { if (e.target.value) setSection(item.id, e.target.value) }}
+                  style={{ marginTop: 6, width: '100%', fontSize: 12, padding: '5px 8px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.15)', background: '#fff', color: '#1d1d1f' }}
+                >
+                  <option value="">Place in…</option>
+                  {PHOTO_SECTION_OPTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {manage ? (
+        <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
+          {photoItems.map((item) => (
+            <div key={item.id} style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid rgba(0,0,0,0.08)', background: '#fff' }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={item.url} alt={item.filename || 'photo'}
+                style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block', background: '#1d1d1f' }} />
+              <div style={{ padding: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+                <select
+                  value={PHOTO_SECTION_OPTS.some(s => s.value === item.type) ? item.type : ''}
+                  onChange={(e) => { if (e.target.value) setSection(item.id, e.target.value) }}
+                  style={{ flex: 1, fontSize: 12, padding: '5px 6px', borderRadius: 8, border: '1px solid rgba(0,0,0,0.15)', background: '#fff', color: '#1d1d1f' }}
+                >
+                  {!PHOTO_SECTION_OPTS.some(s => s.value === item.type) && <option value="">Unsorted</option>}
+                  {PHOTO_SECTION_OPTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+                {(isAdmin || item.uploadedBy?.id === currentUserId) && (
+                  <button type="button" onClick={() => deleteAsset(item.id)} title="Delete"
+                    style={{ border: 'none', background: 'rgba(255,59,48,0.1)', color: '#d70015', width: 28, height: 28, borderRadius: 8, cursor: 'pointer', fontSize: 14, minHeight: 'auto' }}>×</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{
+          marginTop: 16,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: 16,
+        }}>
+          {STUDIO_CATEGORIES.map((cat) => {
+            const items = media.filter(m => cat.types.includes(m.type))
+            const isUploading = uploadingType === cat.defaultType
+            return (
+              <AssetTile
+                key={cat.id}
+                category={cat}
+                items={items}
+                isUploading={isUploading}
+                uploadProgress={progress}
+                onFiles={(files) => handleFiles(files, cat.defaultType)}
+                onDelete={deleteAsset}
+                onOpen={(asset) => {
+                  const cat = STUDIO_CATEGORIES.find(c => c.types.includes(asset.type))
+                  setGalleryStart(cat ? cat.id : 'all')
+                  setGalleryOpen(true)
+                }}
+                currentUserId={currentUserId}
+                isAdmin={isAdmin}
+              />
+            )
+          })}
+        </div>
+      )}
 
       {lightboxIdx !== null && viewable[lightboxIdx] && (
         <MediaLightbox
@@ -4581,6 +4772,16 @@ function MediaStudio({
           startIdx={lightboxIdx}
           onClose={() => setLightboxIdx(null)}
           onChangeIdx={setLightboxIdx}
+        />
+      )}
+
+      {galleryOpen && (
+        <MediaGalleryModal
+          media={viewable}
+          vehicleId={vehicleId}
+          initialSection={galleryStart}
+          onClose={() => setGalleryOpen(false)}
+          onChange={onChange}
         />
       )}
     </GlassCard>
@@ -8190,6 +8391,170 @@ function CloudUploadIcon() {
 }
 
 // Full-screen lightbox with arrow-key navigation
+// Full gallery: photos by section, tabs to switch, click to zoom (full-res).
+// View mode = masonry full-aspect thumbnails (smooth). Reorder mode = drag grid
+// that saves sortOrder (the order photos syndicate to the website in).
+function MediaGalleryModal({
+  media, vehicleId, initialSection, onClose, onChange,
+}: {
+  media: MediaAsset[]
+  vehicleId: string
+  initialSection: string | null
+  onClose: () => void
+  onChange: () => void | Promise<void>
+}) {
+  const [order, setOrder] = useState<string[]>(media.map(m => m.id))
+  const [reorder, setReorder] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [zoom, setZoom] = useState<{ items: MediaAsset[]; idx: number } | null>(null)
+
+  // Re-sync local order whenever the parent media list changes (after a save refetch).
+  useEffect(() => { setOrder(media.map(m => m.id)) }, [media])
+
+  const byId = new Map(media.map(a => [a.id, a]))
+  const ordered = order.map(id => byId.get(id)).filter(Boolean) as MediaAsset[]
+
+  const groups = STUDIO_CATEGORIES
+    .map(cat => ({ cat, items: ordered.filter(m => cat.types.includes(m.type)) }))
+    .filter(g => g.items.length > 0)
+
+  const [active, setActive] = useState<string>(
+    initialSection && STUDIO_CATEGORIES.some(c => c.id === initialSection) ? initialSection : 'all',
+  )
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { if (zoom) setZoom(null); else onClose() }
+    }
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = ''; window.removeEventListener('keydown', onKey) }
+  }, [zoom, onClose])
+
+  async function persist(newOrder: string[]) {
+    setSaving(true)
+    try {
+      await fetch('/api/media/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId, orderedIds: newOrder }),
+      })
+      await onChange()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleDrop(targetId: string) {
+    if (!dragId || dragId === targetId) { setDragId(null); return }
+    const arr = order.filter(id => id !== dragId)
+    const ti = arr.indexOf(targetId)
+    arr.splice(ti < 0 ? arr.length : ti, 0, dragId)
+    setOrder(arr)
+    setDragId(null)
+    persist(arr)
+  }
+
+  const tabs = [{ id: 'all', label: `All (${media.length})` },
+    ...groups.map(g => ({ id: g.cat.id, label: `${g.cat.label} (${g.items.length})` }))]
+  const visibleGroups = active === 'all' ? groups : groups.filter(g => g.cat.id === active)
+
+  const cover: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }
+  const pill = (on: boolean): React.CSSProperties => ({
+    padding: '6px 14px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 'auto',
+    border: `1px solid ${on ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.22)'}`,
+    background: on ? '#fff' : 'transparent', color: on ? '#000' : 'rgba(255,255,255,0.82)',
+  })
+
+  return createPortal((
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.94)', zIndex: 900, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <p style={{ color: '#fff', fontSize: 15, fontWeight: 700, flex: '0 0 auto' }}>Photos</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flex: 1 }}>
+          {tabs.map(t => (
+            <button key={t.id} type="button" onClick={() => setActive(t.id)} style={pill(active === t.id)}>{t.label}</button>
+          ))}
+        </div>
+        {saving && <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 600 }}>Saving order…</span>}
+        <button type="button" onClick={() => setReorder(r => !r)} style={pill(reorder)}>
+          {reorder ? 'Done' : 'Reorder'}
+        </button>
+        <button type="button" onClick={onClose} aria-label="Close" style={{
+          border: 'none', background: 'rgba(255,255,255,0.12)', color: '#fff',
+          width: 34, height: 34, borderRadius: '50%', cursor: 'pointer', fontSize: 15, minHeight: 'auto', flex: '0 0 auto',
+        }}>✕</button>
+      </div>
+
+      {reorder && (
+        <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, padding: '10px 24px 0' }}>
+          Drag photos to set the order they appear in on the website. Saves automatically.
+        </p>
+      )}
+
+      <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '18px 24px 60px' }}>
+        {visibleGroups.map(g => (
+          <div key={g.cat.id} style={{ marginBottom: 30 }}>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 12 }}>
+              {g.cat.label} · {g.items.length}
+            </p>
+            {reorder ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+                {g.items.map((m, i) => (
+                  <div
+                    key={m.id}
+                    draggable
+                    onDragStart={() => setDragId(m.id)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => handleDrop(m.id)}
+                    onDragEnd={() => setDragId(null)}
+                    style={{
+                      position: 'relative', aspectRatio: '4 / 3', borderRadius: 10, overflow: 'hidden',
+                      background: '#111', cursor: 'grab', opacity: dragId === m.id ? 0.35 : 1,
+                      outline: '1px solid rgba(255,255,255,0.14)',
+                    }}
+                  >
+                    {isVideoType(m.type)
+                      ? <video src={m.url} muted playsInline preload="metadata" style={cover} />
+                      : /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={`/api/media/thumb?id=${m.id}&w=400`} alt={m.caption || g.cat.label} loading="lazy" decoding="async" style={cover} />}
+                    <span style={{
+                      position: 'absolute', top: 6, left: 6, zIndex: 2, minWidth: 20, height: 20, padding: '0 6px',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 999,
+                    }}>{i + 1}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ columnWidth: 260, columnGap: 12 }}>
+                {g.items.map((m, i) => (
+                  <div key={m.id} onClick={() => setZoom({ items: g.items, idx: i })}
+                    style={{ breakInside: 'avoid', marginBottom: 12, cursor: 'zoom-in', borderRadius: 10, overflow: 'hidden', background: '#111' }}>
+                    {isVideoType(m.type)
+                      ? <video src={m.url} muted playsInline preload="metadata" style={{ width: '100%', display: 'block' }} />
+                      : /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={`/api/media/thumb?id=${m.id}&w=600`} alt={m.caption || g.cat.label} loading="lazy" decoding="async" style={{ width: '100%', display: 'block' }} />}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {zoom && (
+        <MediaLightbox
+          items={zoom.items}
+          startIdx={zoom.idx}
+          onClose={() => setZoom(null)}
+          onChangeIdx={(idx) => setZoom(z => (z ? { ...z, idx } : z))}
+        />
+      )}
+    </div>
+  ), document.body)
+}
+
 function MediaLightbox({
   items, startIdx, onClose, onChangeIdx,
 }: {

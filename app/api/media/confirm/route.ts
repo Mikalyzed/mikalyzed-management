@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 
-const VALID_TYPES = ['exterior', 'interior', 'undercarriage', 'walkaround_video', 'turntable_video', 'doc', 'other']
+const VALID_TYPES = ['exterior', 'interior', 'engine', 'undercarriage', 'walkaround_video', 'turntable_video', 'doc', 'other', 'unsorted']
 
 /**
  * POST /api/media/confirm
