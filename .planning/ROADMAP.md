@@ -1,5 +1,7 @@
 # Roadmap: Mikalyzed DMS
 
+> ⚠️ **The phase status table below is stale.** Features shipped out of the planned order (parts of Phases 0, 2, 3 are built; the "Phase 0 hard gate" was not honored in practice). This roadmap is a **menu of remaining work, not a live tracker.** For code-verified status, see **CLAUDE.md §7**.
+
 ## Overview
 
 A ten-phase plan to replace DealerCenter for Mikalyzed by layering a full Dealer Management System onto the existing Next.js 15 + Prisma 6 + Postgres production app. The journey starts with a hard gate — collapsing two disconnected vehicle identities into one canonical record (Phase 0) — then lays cross-cutting infra (RBAC + background jobs + storage consolidation in Phases 1a/1b), builds the inventory/media/deal/document/credit/QBO/reporting features that replace DealerCenter (Phases 2–8), and ends with a controlled cutover (Phase 9). Every phase ships behind feature flags in 1–2 week sub-deliverables; compliance-sensitive phases (5 docs/e-sign and 6 credit) require attorney sign-off before flag-on in production.

@@ -1,5 +1,7 @@
 # Project State
 
+> ⚠️ **This file's status numbers are stale (last real update 2026-06-16).** Work shipped out of phase order. For the code-verified current status, see **CLAUDE.md §7** at the repo root.
+
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-06-02)
