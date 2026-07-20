@@ -151,6 +151,7 @@ export default function MechanicBoard() {
   const [selectedJob, setSelectedJob] = useState<JobCard | null>(null)
   const [modalChecklist, setModalChecklist] = useState<ChecklistItem[]>([])
   const [expandedTaskIdx, setExpandedTaskIdx] = useState<number | null>(null)
+  const [showOthers, setShowOthers] = useState(false)
   const [followupDrafts, setFollowupDrafts] = useState<Record<number, string>>({})
   const [followupHourDrafts, setFollowupHourDrafts] = useState<Record<number, string>>({})
   // Per sub-item draft for "add as task" inline form (key = `${parentIdx}-${subKey}`)
@@ -632,6 +633,21 @@ export default function MechanicBoard() {
   if (!data) return <p style={{ textAlign: 'center', padding: 40 }}>Failed to load</p>
 
   const doneCount = modalChecklist.filter(c => c.done).length
+  // Non-admins see THEIR tasks first; other mechanics' tasks collapse behind a toggle
+  // (visibility is fine, but a mechanic shouldn't have to wade through others' work).
+  // We carry each item's ORIGINAL index so checkbox/assign mutations stay correct.
+  const meId = data.currentUserId
+  const isMineTask = (it: ChecklistItem) => {
+    const owner = taskOwner(it, selectedJob?.assignee ?? null)
+    return (!!owner && owner.id === meId) || (!!it.addedByMechanic && it.approved !== 'approved')
+  }
+  const hideOthers = !isAdmin && !showOthers
+  const othersCount = modalChecklist.filter(it => it.approved !== 'declined' && !isMineTask(it)).length
+  const visibleChecklist = modalChecklist
+    .map((item, i) => ({ item, i, mine: isMineTask(item) }))
+    .filter(({ item }) => item.approved !== 'declined')
+    .filter(({ mine }) => !hideOthers || mine)
+  if (!isAdmin) visibleChecklist.sort((a, b) => (a.mine === b.mine ? 0 : a.mine ? -1 : 1))
   // Board-level aliases — inside the checklist map `data` is shadowed by the
   // item's own `data` field, so grab what the per-task assign control needs here.
   const boardMechanics = data.mechanics || []
@@ -1403,18 +1419,30 @@ export default function MechanicBoard() {
                     <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No tasks assigned</p>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {modalChecklist.map((item, i) => {
-                        // Hide declined follow-ups so they're effectively removed
-                        if (item.approved === 'declined') return null
+                      {!isAdmin && othersCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowOthers(s => !s)}
+                          style={{
+                            alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6,
+                            padding: '6px 12px', marginBottom: 2, borderRadius: 100,
+                            border: '1px solid var(--border)', background: '#fff',
+                            color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          <span style={{ fontSize: 11 }}>{showOthers ? '▾' : '▸'}</span>
+                          {showOthers ? "Hide other mechanics' tasks" : `Show ${othersCount} other mechanic task${othersCount === 1 ? '' : 's'}`}
+                        </button>
+                      )}
+                      {visibleChecklist.map(({ item, i }, vi) => {
                         const isExpanded = expandedTaskIdx === i
                         const hasStructured = item.type === 'tirePsi' || item.type === 'brakePads' || item.type === 'fluids' || item.type === 'engineCheck' || item.type === 'electrical' || item.type === 'steeringCheck' || item.type === 'suspensionCheck'
                         const data = (item.data || {}) as any
-                        const visiblePrev = modalChecklist.slice(0, i).reverse().find(x => x.approved !== 'declined')
+                        const visiblePrev = visibleChecklist[vi - 1]?.item
                         const isFirstFollowup = item.addedByMechanic && (!visiblePrev || !visiblePrev.addedByMechanic)
-                        const followupTotal = modalChecklist.filter(x => x.addedByMechanic && x.approved !== 'declined').length
-                        const followupDone = modalChecklist.filter(x => x.addedByMechanic && x.done && x.approved !== 'declined').length
-                        // Detect if this is the last visible inspection item (next item is undefined or a follow-up)
-                        const visibleNext = modalChecklist.slice(i + 1).find(x => x.approved !== 'declined')
+                        const followupTotal = visibleChecklist.filter(x => x.item.addedByMechanic).length
+                        const followupDone = visibleChecklist.filter(x => x.item.addedByMechanic && x.item.done).length
+                        const visibleNext = visibleChecklist[vi + 1]?.item
                         const isLastInspectionItem = !item.addedByMechanic && (!visibleNext || visibleNext.addedByMechanic)
                         const isNewInventory = selectedJob.scopeName === 'New Inventory'
                         return (
@@ -1509,7 +1537,7 @@ export default function MechanicBoard() {
                                 {/* Per-task hand-off: give this single task to a specific mechanic.
                                     Hidden for not-yet-approved added tasks — those use the
                                     Approve & assign control below (one action). */}
-                                {boardMechanics.length >= 2 && !(item.addedByMechanic && item.approved !== 'approved') && (isAdmin || (!!boardCurrentUserId && (selectedJob.assignees || []).some(a => a.id === boardCurrentUserId))) && (
+                                {boardMechanics.length >= 2 && !(item.addedByMechanic && item.approved !== 'approved') && isAdmin && (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Assign to:</span>
                                     {boardMechanics.map(m => {

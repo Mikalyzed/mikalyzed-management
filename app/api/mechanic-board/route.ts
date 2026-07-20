@@ -569,10 +569,21 @@ export async function POST(req: NextRequest) {
       if (cur.timerStartedAt) add = Math.floor((nowMs - new Date(cur.timerStartedAt).getTime()) / 1000)
       timers[uid] = { ...cur, activeSeconds: (cur.activeSeconds || 0) + Math.max(0, add), timerStartedAt: null, autoPaused: false, pauseReason: null, pauseDetail: null, pausedAt: null, done: true }
 
+      // Owner of a task: explicit assignee → them; mechanic-added-unassigned → nobody; else the car owner.
+      const ownerOf = (it: ChecklistItem): string | null => {
+        if (typeof it?.assigneeId === 'string' && it.assigneeId) return it.assigneeId
+        if (it?.addedByMechanic) return null
+        return stage.assigneeId
+      }
+
       // On a SHARED car that isn't fully done yet, this only finishes the acting
       // mechanic's part — the car stays open and co-workers' clocks keep running.
       if (shared && !allTasksDone) {
-        await persist()
+        // Check off the tasks THIS mechanic owns so the checkboxes match "your part done".
+        const partialChecklist = checklist.map(it =>
+          it?.approved !== 'declined' && ownerOf(it) === uid ? { ...it, done: true } : it,
+        )
+        await persist({ checklist: partialChecklist as unknown as Prisma.InputJsonValue })
         await logSession(stageId, stage.vehicleId, uid, actorStarted, now, Math.max(0, add))
         await prisma.activityLog.create({
           data: {
@@ -599,7 +610,13 @@ export async function POST(req: NextRequest) {
         timers[k] = { ...timers[k], done: true }
       }
       for (const sess of sessions) await logSession(stageId, stage.vehicleId, sess.userId, sess.started, now, sess.secs)
+      // Whole car is finishing → mark every non-declined task done so the checklist
+      // reflects completion instead of showing stale unchecked boxes.
+      const finalChecklist = checklist.map(it =>
+        it?.approved !== 'declined' ? { ...it, done: true } : it,
+      )
       await persist({
+        checklist: finalChecklist as unknown as Prisma.InputJsonValue,
         status: 'done',
         completedAt: now,
         awaitingParts: false,
