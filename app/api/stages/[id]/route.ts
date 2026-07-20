@@ -83,6 +83,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // Update checklist
   if (body.checklist) {
     data.checklist = body.checklist
+
+    // Invariant: a mechanic must not stay "done" while they still own an unchecked
+    // task. Assigning a task to (or unchecking one on) a finished mechanic re-opens
+    // them. Conservative — only ever clears a stale `done`, never sets one.
+    const timers = (stage.timers as Record<string, { done?: boolean; [k: string]: unknown }> | null) || {}
+    const list = Array.isArray(body.checklist) ? (body.checklist as Array<Record<string, unknown>>) : []
+    const ownerOf = (it: Record<string, unknown>): string | null => {
+      if (typeof it.assigneeId === 'string' && it.assigneeId) return it.assigneeId
+      if (it.addedByMechanic) return null
+      return stage.assigneeId
+    }
+    let changed = false
+    for (const [uid, t] of Object.entries(timers)) {
+      if (t?.done && list.some(it => it.approved !== 'declined' && !it.done && ownerOf(it) === uid)) {
+        timers[uid] = { ...t, done: false }
+        changed = true
+      }
+    }
+    if (changed) data.timers = timers
   }
 
   // Update notes
