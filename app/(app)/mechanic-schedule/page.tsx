@@ -1262,8 +1262,8 @@ export default function MechanicBoard() {
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
         }}>
           <div onClick={e => e.stopPropagation()} style={{
-            background: '#fff', borderRadius: 20, width: '100%', maxWidth: 720,
-            maxHeight: '92vh', display: 'flex', flexDirection: 'column',
+            background: '#fff', borderRadius: 20, width: '100%', maxWidth: 900,
+            maxHeight: '95vh', display: 'flex', flexDirection: 'column',
             boxShadow: '0 25px 60px rgba(0,0,0,0.2)',
           }}>
             {showPauseModal ? (

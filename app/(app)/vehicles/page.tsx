@@ -980,7 +980,7 @@ export default function VehiclesPage() {
                         setRoutingReason('')
                         // Pre-fill the new checklist with Fix tasks + Install tasks
                         const prefilledTasks = [
-                          ...fixes.map(f => f.item),
+                          ...fixes.map(f => f.note ? `${f.item} — ${f.note}` : f.item),
                           ...installs.map(p => `Install: ${p.name}`),
                         ]
                         setRoutingTasks(prefilledTasks)
@@ -1471,7 +1471,7 @@ export default function VehiclesPage() {
                       // content / publish stage as bogus checklist items. Re-add
                       // them if the user switches back to mechanic.
                       const fixes = routingVehicle
-                        ? extractIssueFixTasks((routingVehicle.lastCompleted?.checklist || []) as any).map(f => f.item)
+                        ? extractIssueFixTasks((routingVehicle.lastCompleted?.checklist || []) as any).map(f => f.note ? `${f.item} — ${f.note}` : f.item)
                         : []
                       const installs = Object.keys(routingInstallMap)
                       // Template items belong to the stage they were picked for —
