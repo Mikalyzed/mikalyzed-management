@@ -122,9 +122,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const taskName = `Install: ${part.name}`
         const alreadyOnList = existing.some(c => typeof c?.item === 'string' && c.item.trim().toLowerCase() === taskName.trim().toLowerCase())
         if (!alreadyOnList) {
+          // Create it UNASSIGNED / "needs assign" (addedByMechanic + approved so it
+          // skips the approval step) — an admin must hand it to a mechanic; it never
+          // silently lands on the car's owner. `fromPart` marks it for the board alert.
           await prisma.vehicleStage.update({
             where: { id: currentStage.id },
-            data: { checklist: [...existing, { item: taskName, done: false, note: '' }] },
+            data: { checklist: [...existing, {
+              item: taskName, done: false, note: '',
+              addedByMechanic: true, approved: 'approved',
+              assigneeId: null, assigneeName: null, fromPart: true,
+            }] },
           })
           await prisma.part.update({
             where: { id },

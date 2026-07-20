@@ -77,6 +77,8 @@ type VehicleWithStage = {
   } | null
   inventoryStatus?: string | null
   pendingInstalls?: { id: string; name: string; sourceItem?: string | null; sourceSubField?: string | null }[]
+  unassignedInstalls?: { stageId: string; item: string }[]
+  partsToInstall?: number
   partsInPipeline?: { id: string; name: string; status: string; sourceItem?: string | null; sourceSubField?: string | null }[]
   returnQueue?: { stage: string; fromStage?: string; reason?: string }[]
   routeHistory?: { stage: string; status: string; completedAt: string | null; scopeName: string | null }[]
@@ -852,6 +854,67 @@ export default function VehiclesPage() {
         ))}
       </div>
 
+      {/* Parts Arrived — Assign Install: an install task was auto-created when a
+          part was received while the car is in mechanic, but no mechanic is on it
+          yet. Sits ABOVE Pending Routing so an arrived part can't go unnoticed. */}
+      {isAdmin && vehicles.some(v => (v.unassignedInstalls?.length ?? 0) > 0) && (
+        <div style={{
+          position: 'relative', overflow: 'hidden',
+          background: 'linear-gradient(180deg, #fff5f5, var(--bg-card) 70%)',
+          border: '1px solid #fca5a5', borderRadius: 16, padding: '18px 20px', marginBottom: 24,
+          boxShadow: '0 1px 2px rgba(24,24,27,.04), 0 6px 16px -6px rgba(220,38,38,.18)',
+        }}>
+          <div aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: '#dc2626' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 14 }}>
+            <span style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, background: '#dc2626', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 15 }}>🔧</span>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-primary)' }}>Parts Arrived — Assign Install</p>
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 1 }}>
+                {(() => { const n = vehicles.filter(v => (v.unassignedInstalls?.length ?? 0) > 0).length; return `${n} ${n === 1 ? 'car has' : 'cars have'} a received part with an unassigned install task` })()}
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {vehicles.filter(v => (v.unassignedInstalls?.length ?? 0) > 0).map(v => (
+              <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', padding: '10px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700 }}>#{v.stockNumber} <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{`${v.year ?? ''} ${v.make} ${v.model}`.trim()}</span></p>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                    {(v.unassignedInstalls || []).map((u, i) => (
+                      <span key={i} style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 100, background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>{u.item}</span>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)' }}>Assign to:</span>
+                  {mechanics.map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={async () => {
+                        const stageIds = Array.from(new Set((v.unassignedInstalls || []).map(u => u.stageId)))
+                        for (const sid of stageIds) {
+                          await fetch(`/api/stages/${sid}/assign-task`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ assigneeId: m.id }),
+                          })
+                        }
+                        const res = await fetch('/api/vehicles')
+                        const data = await res.json()
+                        setVehicles(data.vehicles || [])
+                      }}
+                      style={{ padding: '5px 11px', borderRadius: 100, border: '1px solid var(--border)', background: 'var(--bg-card)', color: 'var(--text-secondary)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      {m.name.split(' ')[0]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Pending Routing — admin only */}
       {isAdmin && vehicles.some(v => v.status === 'awaiting_routing') && (
         <div style={{
@@ -1273,6 +1336,7 @@ export default function VehiclesPage() {
                           assigneeName={v.currentAssignee?.name}
                           timeInStage={getTimeInStage(v)}
                           partsLabel={(v as any).partsLabel}
+                          partsToInstall={v.status !== 'mechanic' ? ((v as any).partsToInstall ?? 0) : 0}
                           returnQueue={v.returnQueue}
                           stageScope={(v.stages[0] as any)?.scopeName || null}
                           checklistDone={(v.stages[0]?.checklist || []).filter(c => c.done).length}

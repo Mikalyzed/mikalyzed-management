@@ -16,6 +16,7 @@ type VehicleCardProps = {
   assigneeName?: string | null
   timeInStage?: string
   partsLabel?: string | null
+  partsToInstall?: number
   returnQueue?: ReturnQueueEntry[]
   pauseReason?: string | null
   // Display-only checklist progress (already loaded on the board) — drives the
@@ -85,7 +86,7 @@ function statusPill(status?: string, detail?: string): { label: string; fg: stri
 
 export default function VehicleCard({
   stockNumber, year, make, model, color,
-  status, stageStatus, stageDetail, stageScope, assigneeName, timeInStage, partsLabel, returnQueue, pauseReason,
+  status, stageStatus, stageDetail, stageScope, assigneeName, timeInStage, partsLabel, partsToInstall, returnQueue, pauseReason,
   checklistDone, checklistTotal, progressLabel, onClick,
 }: VehicleCardProps) {
   const isCompleted = status === 'completed'
@@ -131,6 +132,14 @@ export default function VehicleCard({
     strips.push({
       fg: '#b45309', bg: '#fdf3e7', dot: '#ea580c',
       label: <><b style={{ fontWeight: 700 }}>Paused</b> · {sentenceCase(pauseReason)}</>,
+    })
+  }
+  // Received part(s) waiting to be installed while the car isn't in mechanic —
+  // caller passes this only for non-mechanic stages.
+  if (partsToInstall && partsToInstall > 0) {
+    strips.push({
+      fg: '#1d4ed8', bg: '#eaf0fe', dot: '#2563eb',
+      label: <b style={{ fontWeight: 700 }}>{partsToInstall} part{partsToInstall === 1 ? '' : 's'} to install</b>,
     })
   }
 

@@ -55,6 +55,17 @@ export async function GET(request: Request) {
     : []
   const invByStock = Object.fromEntries(inventoryRows.map(i => [i.stockNumber, i.status]))
 
+  // Received parts not yet turned into an install task — powers the "N parts to
+  // install" card pill on cars that aren't currently in mechanic.
+  const partsToInstallByVehicle: Record<string, number> = {}
+  {
+    const rows = await prisma.part.findMany({
+      where: { vehicleId: { in: vehicles.map(v => v.id) }, status: 'received', installTaskCreatedAt: null },
+      select: { vehicleId: true },
+    })
+    for (const p of rows) partsToInstallByVehicle[p.vehicleId] = (partsToInstallByVehicle[p.vehicleId] || 0) + 1
+  }
+
   // For routing UI: fetch the most recent completed stage for any awaiting_routing vehicles
   const awaitingIds = vehicles.filter(v => v.status === 'awaiting_routing').map(v => v.id)
   const lastCompletedByVehicle: Record<string, {
@@ -144,6 +155,13 @@ export async function GET(request: Request) {
       pendingInstalls: pendingInstallsByVehicle[v.id] || [],
       partsInPipeline: partsInPipelineByVehicle[v.id] || [],
       inventoryStatus: invByStock[v.stockNumber] || null,
+      partsToInstall: partsToInstallByVehicle[v.id] || 0,
+      // Auto-created install tasks (from a received part) still waiting for an
+      // admin to assign a mechanic — drives the "parts arrived, assign install" alert.
+      unassignedInstalls: v.stages
+        .flatMap(s => (Array.isArray(s.checklist) ? (s.checklist as any[]).map(c => ({ c, stageId: s.id })) : []))
+        .filter(x => x.c?.fromPart && !x.c?.assigneeId && !x.c?.done)
+        .map(x => ({ stageId: x.stageId, item: String(x.c?.item ?? '') })),
     }
   })
 
