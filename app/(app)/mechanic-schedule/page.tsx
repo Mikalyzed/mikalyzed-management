@@ -152,6 +152,7 @@ export default function MechanicBoard() {
   const [modalChecklist, setModalChecklist] = useState<ChecklistItem[]>([])
   const [expandedTaskIdx, setExpandedTaskIdx] = useState<number | null>(null)
   const [showOthers, setShowOthers] = useState(false)
+  const [modalTab, setModalTab] = useState<'tasks' | 'parts'>('tasks')
   const [followupDrafts, setFollowupDrafts] = useState<Record<number, string>>({})
   const [followupHourDrafts, setFollowupHourDrafts] = useState<Record<number, string>>({})
   // Per sub-item draft for "add as task" inline form (key = `${parentIdx}-${subKey}`)
@@ -563,6 +564,7 @@ export default function MechanicBoard() {
 
   const openJob = (job: JobCard) => {
     setSelectedJob(job)
+    setModalTab('tasks')
     setModalChecklist(JSON.parse(JSON.stringify(job.checklist || [])))
     setShowPauseModal(false)
     setPauseType(null)
@@ -1396,6 +1398,23 @@ export default function MechanicBoard() {
                 </div>
 
                 {/* Checklist */}
+                {/* Tasks | Parts tabs */}
+                <div style={{ display: 'flex', gap: 8, padding: '12px 24px 0' }}>
+                  {(['tasks', 'parts'] as const).map(t => {
+                    const on = modalTab === t
+                    const count = t === 'tasks' ? modalChecklist.length : mechParts.filter(p => p.status !== 'received').length
+                    return (
+                      <button key={t} type="button" onClick={() => setModalTab(t)} style={{
+                        flex: 1, padding: '9px 0', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                        border: on ? '1px solid #1a1a1a' : '1px solid #e5e5e5',
+                        background: on ? '#1a1a1a' : '#fff', color: on ? '#fff' : 'var(--text-secondary)',
+                        textTransform: 'capitalize',
+                      }}>{t}{count > 0 ? ` (${count})` : ''}</button>
+                    )
+                  })}
+                </div>
+
+                {modalTab === 'tasks' && (
                 <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
                   {(() => {
                     const isInspection = modalChecklist.some(it => !!it.type)
@@ -2311,10 +2330,11 @@ export default function MechanicBoard() {
                   )}
 
                 </div>
+                )}
 
                 {/* Admin: inline + Add Task — appends to the current stage's
                     checklist directly (no admin-approval round-trip). */}
-                {isAdmin && (
+                {modalTab === 'tasks' && isAdmin && (
                   <div style={{ padding: '0 24px 14px' }}>
                     <form
                       onSubmit={async (e) => {
@@ -2358,7 +2378,8 @@ export default function MechanicBoard() {
                 )}
 
                 {/* Parts Section */}
-                <div style={{ padding: '0 24px 16px' }}>
+                {modalTab === 'parts' && (
+                <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }}>
                   <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
                     Parts {mechParts.length > 0 ? `(${mechParts.length})` : ''}
                   </p>
@@ -2430,6 +2451,7 @@ export default function MechanicBoard() {
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* Footer actions */}
                 <div style={{ padding: '12px 24px 20px', borderTop: '1px solid #e5e5e5', display: 'flex', gap: 10 }}>
