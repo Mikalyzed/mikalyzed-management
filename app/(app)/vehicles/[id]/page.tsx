@@ -2,6 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { extractIssueFixTasks } from '@/lib/inspection-issues'
+import RichTypeReadout from '@/components/RichTypeReadout'
 import { useParams, useRouter } from 'next/navigation'
 import { AddCustomerModal } from '@/components/AddCustomerModal'
 import {
@@ -4278,13 +4280,21 @@ function VehicleInspectionCard({
   stages: ReconStage[]
   onOpenInRecon: (stageId: string) => void
 }) {
+  const mechanics = (stages || []).filter(s => s.stage === 'mechanic')
+  // The inspection to show is the ORIGINAL report — the mechanic stage that logged
+  // the most findings (the New Vehicle Inspection), NOT the current Fix stage.
+  // Fall back to the earliest mechanic stage when nothing was flagged.
   const inspection = (() => {
-    const mechanics = (stages || []).filter(s => s.stage === 'mechanic')
     if (mechanics.length === 0) return null
+    const ranked = mechanics
+      .map(s => ({ s, n: extractIssueFixTasks((s.checklist || []) as any).length }))
+      .filter(x => x.n > 0)
+      .sort((a, b) => b.n - a.n)
+    if (ranked.length > 0) return ranked[0].s
     return mechanics.slice().sort((a, b) => {
       const at = a.startedAt ? new Date(a.startedAt).getTime() : 0
       const bt = b.startedAt ? new Date(b.startedAt).getTime() : 0
-      return bt - at
+      return at - bt
     })[0]
   })()
 
@@ -4294,6 +4304,28 @@ function VehicleInspectionCard({
   const doneCount = checklist.filter(c => c.done).length
   const totalCount = checklist.length
   const isActive = inspection.status !== 'done' && inspection.status !== 'skipped' && !inspection.completedAt
+
+  // Issues flagged in the original inspection, marked ✓ fixed once the matching
+  // "Fix:" task is checked off in any later mechanic stage.
+  const fixLabel = (s: string) => s.replace(/^Fix:\s*/i, '').split(' — ')[0].trim().toLowerCase()
+  const fixTasks = mechanics.flatMap(s => (s.checklist || [])).filter(c => /^Fix:/i.test(String(c.item)))
+  const doneFixLabels = new Set(fixTasks.filter(c => c.done).map(c => fixLabel(String(c.item))))
+  const openFixLabels = new Set(fixTasks.filter(c => !c.done).map(c => fixLabel(String(c.item))))
+  const issues = extractIssueFixTasks(checklist as any).map(f => {
+    const lbl = fixLabel(f.item)
+    const resolved = doneFixLabels.has(lbl)
+    return {
+      parentItem: f.parentItem,
+      label: String(f.item).replace(/^Fix:\s*/i, ''),
+      note: f.note,
+      source: f.source,
+      resolved,
+      // "Being fixed" ONLY if an open Fix task actually exists for it; otherwise
+      // it was flagged but never routed into a fix — that's "Not addressed".
+      inProgress: !resolved && openFixLabels.has(lbl),
+    }
+  })
+  const resolvedCount = issues.filter(i => i.resolved).length
 
   return (
     <GlassCard>
@@ -4321,34 +4353,67 @@ function VehicleInspectionCard({
         {totalCount > 0 && <span>{doneCount}/{totalCount} tasks</span>}
       </div>
 
+      {issues.length > 0 && (
+        <p style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'rgba(0,0,0,0.5)', marginBottom: 10 }}>
+          {resolvedCount}/{issues.length} issue{issues.length === 1 ? '' : 's'} fixed
+        </p>
+      )}
+
       {checklist.length > 0 ? (
-        <div>
-          {checklist.map((item, i) => (
-            <div key={i} style={{
-              display: 'flex', gap: 10, alignItems: 'flex-start',
-              padding: '8px 10px',
-              background: item.done ? '#f0fdf4' : 'transparent',
-              border: item.done ? '1px solid #bbf7d0' : '1px solid rgba(0,0,0,0.06)',
-              borderRadius: 8, marginBottom: 4,
-            }}>
-              <span style={{
-                display: 'inline-flex', width: 18, height: 18, borderRadius: 4,
-                background: item.done ? '#22c55e' : 'transparent',
-                border: `2px solid ${item.done ? '#22c55e' : 'rgba(0,0,0,0.2)'}`,
-                alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1,
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {checklist.filter(c => !(c as any).addedByMechanic).map((item, i) => {
+            const itemIssues = issues.filter(iss => iss.parentItem === item.item)
+            const hasIssue = itemIssues.length > 0
+            return (
+              <div key={i} style={{
+                padding: '9px 11px', borderRadius: 8,
+                background: item.done ? '#f0fdf4' : 'transparent',
+                border: `1px solid ${hasIssue ? '#fed7aa' : item.done ? '#bbf7d0' : 'rgba(0,0,0,0.06)'}`,
               }}>
-                {item.done && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700, lineHeight: 1 }}>✓</span>}
-              </span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: 13, color: item.done ? 'rgba(0,0,0,0.55)' : '#1d1d1f', textDecoration: item.done ? 'line-through' : 'none' }}>
-                  {item.item}
-                </span>
-                {item.note && (
-                  <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.55)', marginTop: 2, fontStyle: 'italic' }}>↳ {item.note}</p>
-                )}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <span style={{
+                    display: 'inline-flex', width: 18, height: 18, borderRadius: 4,
+                    background: item.done ? '#22c55e' : 'transparent',
+                    border: `2px solid ${item.done ? '#22c55e' : 'rgba(0,0,0,0.2)'}`,
+                    alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1,
+                  }}>
+                    {item.done && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                  </span>
+                  <span style={{ flex: 1, fontSize: 13, fontWeight: hasIssue ? 600 : 400, color: item.done && !hasIssue ? 'rgba(0,0,0,0.55)' : '#1d1d1f' }}>
+                    {item.item}
+                  </span>
+                </div>
+                <div style={{ paddingLeft: 28 }}>
+                  <RichTypeReadout item={item as any} />
+                  {item.note && !hasIssue && (
+                    <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.55)', margin: '4px 0 0', fontStyle: 'italic' }}>↳ {item.note}</p>
+                  )}
+                  {itemIssues.map((iss, j) => {
+                    const st = iss.resolved
+                      ? { text: '✓ Fixed', fg: '#16a34a', bg: '#f0fdf4', bd: '#bbf7d0' }
+                      : iss.inProgress
+                        ? { text: '🔧 Being fixed', fg: '#c2410c', bg: '#fff7ed', bd: '#fed7aa' }
+                        : { text: '⚠ Not addressed', fg: '#b91c1c', bg: '#fef2f2', bd: '#fecaca' }
+                    return (
+                      <div key={j} style={{
+                        display: 'flex', gap: 8, alignItems: 'flex-start', justifyContent: 'space-between',
+                        marginTop: 6, padding: '6px 9px', borderRadius: 7,
+                        background: st.bg, border: `1px solid ${st.bd}`,
+                      }}>
+                        <span style={{ fontSize: 12, minWidth: 0 }}>
+                          <span style={{ fontWeight: 700 }}>{iss.source === 'subfield' ? iss.label : 'Issue'}</span>
+                          {iss.note ? <span style={{ color: 'rgba(0,0,0,0.6)' }}> — {iss.note}</span> : null}
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, flexShrink: 0, color: st.fg, whiteSpace: 'nowrap' }}>
+                          {st.text}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       ) : (
         <p style={{ fontSize: 13, color: 'rgba(0,0,0,0.5)', fontStyle: 'italic', margin: 0 }}>No checklist on this stage yet.</p>
