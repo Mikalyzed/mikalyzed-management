@@ -778,6 +778,7 @@ export default function VehicleDetailV2() {
 
                 <VehicleInspectionCard
                   stages={vehicle.stages || []}
+                  externalRepairs={vehicle.externalRepairs || []}
                   onOpenInRecon={(stageId) => {
                     setActiveTab('recon')
                     setExpandedStageId(stageId)
@@ -4275,9 +4276,10 @@ function PrintHubCard() {
 // sub-tab so the technician's findings are visible without having to dig
 // through the Recon timeline.
 function VehicleInspectionCard({
-  stages, onOpenInRecon,
+  stages, externalRepairs, onOpenInRecon,
 }: {
   stages: ReconStage[]
+  externalRepairs?: ExternalRepairRecord[]
   onOpenInRecon: (stageId: string) => void
 }) {
   const mechanics = (stages || []).filter(s => s.stage === 'mechanic')
@@ -4311,18 +4313,30 @@ function VehicleInspectionCard({
   const fixTasks = mechanics.flatMap(s => (s.checklist || [])).filter(c => /^Fix:/i.test(String(c.item)))
   const doneFixLabels = new Set(fixTasks.filter(c => c.done).map(c => fixLabel(String(c.item))))
   const openFixLabels = new Set(fixTasks.filter(c => !c.done).map(c => fixLabel(String(c.item))))
+  // Issues can also be handled at an outside shop — treat an active external repair
+  // whose description mentions the item/label as "being fixed (external)".
+  const activeExternal = (externalRepairs || []).filter(er => !['completed', 'returned', 'done', 'cancelled', 'canceled'].includes(String(er.status || '').toLowerCase()))
+  const atExternalFor = (parentItem: string, label: string) => {
+    const p = parentItem.trim().toLowerCase(), l = label.trim().toLowerCase()
+    return activeExternal.some(er => {
+      const d = String(er.repairDescription || '').toLowerCase()
+      return (!!p && d.includes(p)) || (!!l && d.includes(l))
+    })
+  }
   const issues = extractIssueFixTasks(checklist as any).map(f => {
     const lbl = fixLabel(f.item)
     const resolved = doneFixLabels.has(lbl)
+    // "Being fixed" ONLY if an open Fix task actually exists for it; otherwise
+    // it was flagged but never routed into a fix — that's "Not addressed".
+    const inProgress = !resolved && openFixLabels.has(lbl)
     return {
       parentItem: f.parentItem,
       label: String(f.item).replace(/^Fix:\s*/i, ''),
       note: f.note,
       source: f.source,
       resolved,
-      // "Being fixed" ONLY if an open Fix task actually exists for it; otherwise
-      // it was flagged but never routed into a fix — that's "Not addressed".
-      inProgress: !resolved && openFixLabels.has(lbl),
+      inProgress,
+      atExternal: !resolved && !inProgress && atExternalFor(f.parentItem, lbl),
     }
   })
   const resolvedCount = issues.filter(i => i.resolved).length
@@ -4393,7 +4407,9 @@ function VehicleInspectionCard({
                       ? { text: '✓ Fixed', fg: '#16a34a', bg: '#f0fdf4', bd: '#bbf7d0' }
                       : iss.inProgress
                         ? { text: '🔧 Being fixed', fg: '#c2410c', bg: '#fff7ed', bd: '#fed7aa' }
-                        : { text: '⚠ Not addressed', fg: '#b91c1c', bg: '#fef2f2', bd: '#fecaca' }
+                        : iss.atExternal
+                          ? { text: '🔧 At external repair', fg: '#7c3aed', bg: '#f5f3ff', bd: '#ddd6fe' }
+                          : { text: '⚠ Not addressed', fg: '#b91c1c', bg: '#fef2f2', bd: '#fecaca' }
                     return (
                       <div key={j} style={{
                         display: 'flex', gap: 8, alignItems: 'flex-start', justifyContent: 'space-between',
