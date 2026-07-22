@@ -25,8 +25,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div>
       <Nav role={role} userName={name} />
       {/* Soft mesh-gradient backdrop — single source for the glass pages.
-          On desktop it's offset 220px from the left so the radial hot spots sit
-          inside the visible content area instead of behind the fixed nav. */}
+          Full-bleed: the sidebar is opaque, so the strip behind it is invisible
+          anyway, and keeping the element static means the 80px blur is never
+          re-rasterized when the rail collapses (animating its `left` made the
+          collapse visibly laggy). */}
       <div aria-hidden className="app-mesh-bg" />
       <style>{`
         .app-mesh-bg {
@@ -46,8 +48,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             margin-left: 220px !important;
             margin-right: 16px !important;
             padding: 24px 18px !important;
+            transition: margin-left 0.22s ease;
           }
-          .app-mesh-bg { left: 220px; }
+          /* Collapsed icon rail — Nav toggles this class on <html>. */
+          html.nav-collapsed .main-content { margin-left: 104px !important; }
         }
       `}</style>
       <main className="main-content" style={{ padding: '16px 16px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 88px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 32px)' }}>

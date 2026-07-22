@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import NotificationBell from './NotificationBell'
 
-type NavItem = { href: string; label: string; icon: string }
+// railLabel: optional shorter label for the collapsed icon rail, where the
+// full label would wrap to two lines.
+type NavItem = { href: string; label: string; icon: string; railLabel?: string }
 type NavGroup = { label: string; icon: string; children: NavItem[] }
 type NavEntry = NavItem | NavGroup
 
@@ -57,10 +59,16 @@ const ICON_MAP: Record<string, string> = {
   '/mechanic-schedule': 'calendar',
 }
 
-function NavIcon({ name, size = 20 }: { name: string; size?: number }) {
+function NavIcon({ name, size = 20, strokeWidth = 1.5 }: { name: string; size?: number; strokeWidth?: number }) {
   const d = ICONS[name] || ICONS.dashboard
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+    // Size is enforced via inline style (not just attributes) so no
+    // stylesheet — ours or injected by a browser extension — can shrink it.
+    <svg
+      width={size} height={size} viewBox="0 0 24 24"
+      style={{ width: size, height: size, minWidth: size, minHeight: size, flexShrink: 0 }}
+      fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"
+    >
       <path d={d} />
     </svg>
   )
@@ -86,7 +94,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
       ],
     },
     { href: '/content-schedule', label: 'Content Board', icon: 'tasks' },
-    { href: '/mechanic-schedule', label: 'Mechanic Board', icon: 'calendar' },
+    { href: '/mechanic-schedule', label: 'Mechanic Board', icon: 'calendar', railLabel: 'Mechanic' },
     { href: '/inventory', label: 'Inventory', icon: 'board' },
     { href: '/customers', label: 'Customers', icon: 'customers' },
     { href: '/porter', label: 'Porter', icon: 'tasks' },
@@ -141,10 +149,36 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
   ],
 }
 
-function NavLink({ item, active, onClick, indent = false }: { item: NavItem; active: boolean; onClick?: () => void; indent?: boolean }) {
+function NavLink({ item, active, onClick, indent = false, collapsed = false }: { item: NavItem; active: boolean; onClick?: () => void; indent?: boolean; collapsed?: boolean }) {
+  if (collapsed) {
+    // Rail mode — icon with a tiny label underneath, centered.
+    return (
+      <Link href={item.href} onClick={onClick} title={item.label} style={{
+        // flexShrink 0: the nav column must scroll, not compress the tiles —
+        // otherwise the pill squishes and the label spills out of it.
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+        flexShrink: 0,
+        padding: '9px 2px', borderRadius: 10,
+        fontSize: 10, fontWeight: active ? 600 : 500, lineHeight: 1.1,
+        letterSpacing: '0.01em', textAlign: 'center',
+        color: active ? '#dffd6e' : '#808080',
+        background: active ? 'rgba(223, 253, 110, 0.1)' : 'transparent',
+        textDecoration: 'none', transition: 'all 0.15s ease',
+      }}
+        onMouseEnter={(e) => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#b0b0b0' } }}
+        onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#808080' } }}
+      >
+        {/* Big, bold glyph — the icon is the tile; the label is a caption. */}
+        <NavIcon name={ICON_MAP[item.href] || item.icon} size={22} strokeWidth={1.9} />
+        {/* Natural wrap — labels are short, so no clamping/clipping needed;
+            "Mechanic Board" just breaks onto a second centered line. */}
+        <span style={{ maxWidth: '100%', lineHeight: 1.25, whiteSpace: 'normal', wordBreak: 'break-word' }}>{item.railLabel ?? item.label}</span>
+      </Link>
+    )
+  }
   return (
     <Link href={item.href} onClick={onClick} style={{
-      display: 'flex', alignItems: 'center', gap: indent ? 10 : 14,
+      display: 'flex', alignItems: 'center', gap: indent ? 10 : 14, flexShrink: 0,
       padding: indent ? '8px 14px 8px 48px' : '10px 14px', borderRadius: 10,
       fontSize: indent ? 13 : 14, fontWeight: active ? 600 : 500,
       color: active ? '#dffd6e' : '#808080',
@@ -171,7 +205,7 @@ function NavGroupSection({ group, pathname, onClick }: { group: NavGroup; pathna
   return (
     <div>
       <button onClick={() => setOpen(!open)} style={{
-        display: 'flex', alignItems: 'center', gap: 14,
+        display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0,
         padding: '10px 14px', borderRadius: 10, width: '100%',
         fontSize: 14, fontWeight: hasActive ? 600 : 500, border: 'none', cursor: 'pointer',
         color: hasActive ? '#dffd6e' : '#808080',
@@ -206,68 +240,231 @@ function NavGroupSection({ group, pathname, onClick }: { group: NavGroup; pathna
   )
 }
 
+// Collapsed-rail variant of a nav group — the icon+label tile opens a
+// flyout beside the rail with the group's children.  position: fixed so it
+// escapes the rail's overflow-y scroll clipping.
+function CollapsedGroupSection({ group, pathname }: { group: NavGroup; pathname: string }) {
+  const childPaths = group.children.map(c => c.href)
+  const hasActive = childPaths.some(h => pathname === h || pathname.startsWith(h + '/'))
+  const [flyout, setFlyout] = useState<{ top: number } | null>(null)
+  const btnRef = useRef<HTMLButtonElement | null>(null)
+  const flyRef = useRef<HTMLDivElement | null>(null)
+
+  // Close on navigation…
+  useEffect(() => { setFlyout(null) }, [pathname])
+
+  // …and on outside click.
+  useEffect(() => {
+    if (!flyout) return
+    function onDown(e: MouseEvent) {
+      const t = e.target as Node
+      if (btnRef.current?.contains(t) || flyRef.current?.contains(t)) return
+      setFlyout(null)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [flyout])
+
+  function toggle() {
+    if (flyout) { setFlyout(null); return }
+    const r = btnRef.current?.getBoundingClientRect()
+    if (!r) return
+    // Clamp so a group near the bottom of the rail doesn't spill offscreen.
+    const estHeight = 40 + group.children.length * 36
+    setFlyout({ top: Math.max(12, Math.min(r.top, window.innerHeight - estHeight - 12)) })
+  }
+
+  const lit = hasActive || !!flyout
+  return (
+    <>
+      <button ref={btnRef} onClick={toggle} title={group.label} style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+        flexShrink: 0,
+        padding: '9px 2px', borderRadius: 10, width: '100%',
+        fontSize: 10, fontWeight: hasActive ? 600 : 500, lineHeight: 1.1,
+        letterSpacing: '0.01em', border: 'none', cursor: 'pointer',
+        color: lit ? '#dffd6e' : '#808080',
+        background: lit ? 'rgba(223, 253, 110, 0.1)' : 'transparent',
+        transition: 'all 0.15s ease',
+      }}
+        onMouseEnter={(e) => { if (!lit) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#b0b0b0' } }}
+        onMouseLeave={(e) => { if (!lit) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#808080' } }}
+      >
+        <NavIcon name={group.icon} size={22} strokeWidth={1.9} />
+        <span style={{ maxWidth: '100%', lineHeight: 1.25, whiteSpace: 'normal', wordBreak: 'break-word' }}>{group.label}</span>
+      </button>
+
+      {flyout && (
+        <div ref={flyRef} style={{
+          position: 'fixed', left: 112, top: flyout.top, zIndex: 80,
+          minWidth: 184,
+          background: '#1d1d1d', borderRadius: 12, padding: 6,
+          border: '1px solid rgba(255,255,255,0.08)',
+          boxShadow: '0 16px 40px rgba(0,0,0,0.5)',
+        }}>
+          <div style={{
+            padding: '6px 10px', fontSize: 10, fontWeight: 700, color: '#666',
+            textTransform: 'uppercase', letterSpacing: '0.06em',
+          }}>{group.label}</div>
+          {group.children.map(child => {
+            const active = pathname === child.href || pathname.startsWith(child.href + '/')
+            return (
+              <Link key={child.href} href={child.href} style={{
+                display: 'block', padding: '8px 10px', borderRadius: 8,
+                fontSize: 13, fontWeight: active ? 600 : 500,
+                color: active ? '#dffd6e' : '#b0b0b0',
+                background: active ? 'rgba(223, 253, 110, 0.1)' : 'transparent',
+                textDecoration: 'none', transition: 'all 0.15s ease',
+              }}
+                onMouseEnter={(e) => { if (!active) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#e0e0e0' } }}
+                onMouseLeave={(e) => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#b0b0b0' } }}
+              >{child.label}</Link>
+            )
+          })}
+        </div>
+      )}
+    </>
+  )
+}
+
+// Sidebar collapse/expand toggle — a "panel" glyph (rectangle with a sidebar
+// pane) like Notion/Linear use, sitting in the header next to the bell.
+function CollapseToggle({ collapsed = false, onClick }: { collapsed?: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      style={{
+        width: 30, height: 30, minHeight: 0, borderRadius: 8,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        background: 'transparent', color: '#666',
+        border: 'none', cursor: 'pointer', padding: 0,
+        transition: 'color 0.15s ease, background 0.15s ease',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.color = '#dffd6e'; e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.color = '#666'; e.currentTarget.style.background = 'transparent' }}
+    >
+      <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="16" rx="2.5" />
+        <path d="M9.5 4v16" />
+        {/* Arrow hints the direction the panel will move */}
+        {collapsed
+          ? <path d="M13.5 9.5 16 12l-2.5 2.5" />
+          : <path d="M17 9.5 14.5 12l2.5 2.5" />}
+      </svg>
+    </button>
+  )
+}
+
 export default function Nav({ role, userName }: { role: string; userName: string }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  // Desktop rail collapse — icon+mini-label rail at 76px. Persisted so the
+  // choice survives navigation and reloads. The html class lets layout.tsx
+  // CSS shift the main content margin without prop-drilling.
+  const [collapsed, setCollapsed] = useState(false)
   const items = NAV_ITEMS[role] || NAV_ITEMS.sales
   const isActive = (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
 
   // Close menu on navigation
   useEffect(() => { setMobileOpen(false) }, [pathname])
 
-  function renderNavEntries(entries: NavEntry[], onItemClick?: () => void) {
+  // Restore the saved rail state after mount (localStorage isn't available
+  // during SSR; the brief expanded flash on hard reloads is acceptable).
+  useEffect(() => {
+    if (localStorage.getItem('mm_nav_collapsed') === '1') setCollapsed(true)
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('nav-collapsed', collapsed)
+    return () => document.documentElement.classList.remove('nav-collapsed')
+  }, [collapsed])
+
+  function toggleCollapsed() {
+    const next = !collapsed
+    setCollapsed(next)
+    localStorage.setItem('mm_nav_collapsed', next ? '1' : '0')
+  }
+
+  function renderNavEntries(entries: NavEntry[], onItemClick?: () => void, rail = false) {
     return entries.map((entry, i) => {
       if (isGroup(entry)) {
-        return <NavGroupSection key={entry.label} group={entry} pathname={pathname} onClick={onItemClick} />
+        return rail
+          ? <CollapsedGroupSection key={entry.label} group={entry} pathname={pathname} />
+          : <NavGroupSection key={entry.label} group={entry} pathname={pathname} onClick={onItemClick} />
       }
-      return <NavLink key={entry.href} item={entry} active={isActive(entry.href)} onClick={onItemClick} />
+      return <NavLink key={entry.href} item={entry} active={isActive(entry.href)} onClick={onItemClick} collapsed={rail} />
     })
   }
 
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — full 220px, or a 76px icon rail when collapsed */}
       <aside className="desktop-sidebar" style={{
-        position: 'fixed', left: 0, top: 0, bottom: 0, width: 220,
+        position: 'fixed', left: 0, top: 0, bottom: 0, width: collapsed ? 104 : 220,
         background: '#141414', flexDirection: 'column', zIndex: 40,
         display: 'none',
+        transition: 'width 0.22s ease',
       }}>
-        <div style={{ padding: '24px 18px 16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: 10, background: '#dffd6e', color: '#1a1a1a',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800,
-              }}>M</div>
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 700, color: '#fff', letterSpacing: '0.04em', lineHeight: 1.2 }}>MIKALYZED</p>
-                <p style={{ fontSize: 11, color: '#555', fontWeight: 500, letterSpacing: '0.02em' }}>Auto Boutique</p>
-              </div>
-            </div>
+        {collapsed ? (
+          <div style={{ padding: '24px 0 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10, background: '#dffd6e', color: '#1a1a1a',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800,
+            }}>M</div>
             <NotificationBell />
+            <CollapseToggle collapsed onClick={toggleCollapsed} />
           </div>
-        </div>
-        <nav style={{ flex: 1, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
-          {renderNavEntries(items)}
-        </nav>
-        <div style={{ padding: '16px 16px 20px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: '50%', background: '#dffd6e', color: '#1a1a1a',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700,
-              }}>{userName.charAt(0).toUpperCase()}</div>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 600, color: '#e0e0e0' }}>{userName}</p>
-                <p style={{ fontSize: 11, color: '#555', textTransform: 'capitalize' }}>{role}</p>
+        ) : (
+          <div style={{ padding: '24px 14px 16px 18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10, background: '#dffd6e', color: '#1a1a1a',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800,
+                }}>M</div>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: '#fff', letterSpacing: '0.04em', lineHeight: 1.2 }}>MIKALYZED</p>
+                  <p style={{ fontSize: 11, color: '#555', fontWeight: 500, letterSpacing: '0.02em' }}>Auto Boutique</p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <NotificationBell />
+                <CollapseToggle onClick={toggleCollapsed} />
               </div>
             </div>
-            <a href="/api/auth/logout" style={{ fontSize: 12, color: '#555', textDecoration: 'none', minHeight: 'auto' }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#999' }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = '#555' }}
-            >Sign Out</a>
           </div>
-        </div>
+        )}
+        <nav style={{ flex: 1, padding: collapsed ? '8px 8px' : '8px 12px', display: 'flex', flexDirection: 'column', gap: collapsed ? 8 : 2, overflowY: 'auto' }}>
+          {renderNavEntries(items, undefined, collapsed)}
+        </nav>
+        {collapsed ? (
+          <div style={{ padding: '14px 0 20px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'center' }}>
+            <div title={`${userName} · ${role}`} style={{
+              width: 32, height: 32, borderRadius: '50%', background: '#dffd6e', color: '#1a1a1a',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700,
+            }}>{userName.charAt(0).toUpperCase()}</div>
+          </div>
+        ) : (
+          <div style={{ padding: '16px 16px 20px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: '50%', background: '#dffd6e', color: '#1a1a1a',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700,
+                }}>{userName.charAt(0).toUpperCase()}</div>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: '#e0e0e0' }}>{userName}</p>
+                  <p style={{ fontSize: 11, color: '#555', textTransform: 'capitalize' }}>{role}</p>
+                </div>
+              </div>
+              <a href="/api/auth/logout" style={{ fontSize: 12, color: '#555', textDecoration: 'none', minHeight: 'auto' }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#999' }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#555' }}
+              >Sign Out</a>
+            </div>
+          </div>
+        )}
       </aside>
 
       {/* Mobile: top bar with hamburger */}
