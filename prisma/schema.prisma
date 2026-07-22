@@ -649,6 +649,10 @@ model Contact {
   // Stored as a soft FK to another Contact; no schema-level constraint so
   // detaching a co-buyer doesn't cascade.  GET endpoint joins this in.
   coBuyerContactId  String? @map("co_buyer_contact_id")
+  // Relationship of the co-buyer to THIS buyer (Spouse / Parent / …).
+  // A property of the pairing, so it lives on the buyer's record — the
+  // co-buyer's own contact stays untouched.
+  coBuyerRelationship String? @map("co_buyer_relationship")
 
   createdBy        User?             @relation("ContactCreatedBy", fields: [createdById], references: [id])
   opportunities    Opportunity[]

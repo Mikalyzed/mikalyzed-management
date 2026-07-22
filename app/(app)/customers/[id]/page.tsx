@@ -89,6 +89,7 @@ type Customer = {
   referrerAddress: string | null
   referrerContactId: string | null
   coBuyerContactId: string | null
+  coBuyerRelationship: string | null
   tags: string[]
   notes: string | null
   createdAt: string
@@ -102,7 +103,12 @@ type CoBuyer = {
   firstName: string
   lastName: string
   phone: string | null
+  homePhone: string | null
+  workPhone: string | null
   email: string | null
+  leadType: string | null
+  leadSource: string | null
+  inquiryType: string | null
 } | null
 
 type ProfilePayload = {
@@ -202,6 +208,19 @@ export default function CustomerProfilePage() {
   // Right now that's just Andrej (sales_manager); list grows automatically
   // as reps are added to the team.
   const [salesRepOptions, setSalesRepOptions] = useState<SelectOption[]>([])
+  // Desktop gets the DealerCenter-style left buyer column; below 1024px the
+  // page keeps its original stacked layout untouched. Defaults false — the
+  // layout only renders after the data fetch resolves, well past hydration,
+  // so there's no server/client mismatch to worry about.
+  const [isDesktop, setIsDesktop] = useState(false)
+
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const onChange = () => setIsDesktop(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   // One-shot fetch on mount.  Cheap (a few rows), so no caching layer needed
   // — invalidating the cache when a user is added would be the only reason.
@@ -255,12 +274,14 @@ export default function CustomerProfilePage() {
         body: JSON.stringify({ [field]: value }),
       })
       if (res.ok) {
-        await load()
+        // Silent refresh — no full-page "Loading…" flash on every save
+        // (detaching a co-buyer, blurring a field, etc.).
+        await refresh()
       }
     } finally {
       setSaving(false)
     }
-  }, [id, load])
+  }, [id, refresh])
 
   // Multi-field variant — used when editing Buyer Name, which has to
   // split into firstName + lastName under the hood as a single PATCH so
@@ -274,12 +295,12 @@ export default function CustomerProfilePage() {
         body: JSON.stringify(patch),
       })
       if (res.ok) {
-        await load()
+        await refresh()
       }
     } finally {
       setSaving(false)
     }
-  }, [id, load])
+  }, [id, refresh])
 
   // Buyer Name handler — splits "First Last" into the underlying name
   // fields.  Everything past the first whitespace becomes the last name
@@ -305,6 +326,100 @@ export default function CustomerProfilePage() {
   const daysOld = Math.floor((Date.now() - new Date(contact.createdAt).getTime()) / 86400000)
   const activeOppCount = contact.opportunities.filter(o => !o.wonAt && !o.lostAt).length
 
+  // ─── Shared building blocks — rendered once, placed differently by the
+  //     desktop (DealerCenter-style left column) vs. stacked layouts. ───
+
+  const buyerPanel = (
+    <div style={{
+      ...sectionCardStyle,
+      ...(isDesktop
+        // Sticky so buyer info stays pinned while the activity feed scrolls.
+        // Desktop (≥768px) uses the fixed left sidebar — no top bar — so a
+        // small offset matching the main-content padding is all it needs.
+        ? { position: 'sticky' as const, top: 16, alignSelf: 'start' as const }
+        : {}),
+    }}>
+      <BuyerTabStrip active={buyerTab} onChange={setBuyerTab} />
+      {buyerTab === 'buyer' && (
+        <BuyerForm
+          contact={contact}
+          salesRepName={salesRep?.name || null}
+          salesRepOptions={salesRepOptions}
+          onSave={commitField}
+          onSaveName={saveBuyerName}
+        />
+      )}
+      {buyerTab === 'cobuyer' && (
+        <CoBuyerPicker
+          coBuyer={coBuyer}
+          relationship={contact.coBuyerRelationship}
+          onAttach={(id) => commitField('coBuyerContactId', id)}
+          onDetach={() => commitField('coBuyerContactId', null)}
+          onRelationship={(v) => commitField('coBuyerRelationship', v)}
+        />
+      )}
+      {buyerTab === 'referrer' && (
+        <ReferrerForm
+          contact={contact}
+          onSave={commitField}
+        />
+      )}
+    </div>
+  )
+
+  // Vehicles rail — on desktop it sits to the right of the Lead workspace;
+  // stacked layout keeps it beside the buyer card as before. The "+ Add"
+  // tile flex-grows so the column never reads as an empty void.
+  const vehiclesRail = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ ...sectionCardStyle, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div style={sectionTitleStyle}>Interested Vehicles ({contact.vehicleInterests.length})</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
+          {contact.vehicleInterests.map(vi => (
+            <InterestCard key={vi.id} interest={vi} onRemove={() => removeInterest(vi.id)} />
+          ))}
+          <AddInterestTile
+            empty={contact.vehicleInterests.length === 0}
+            onClick={() => setPickerOpen(true)}
+          />
+        </div>
+      </div>
+
+      {purchasedVehicles.length > 0 && (
+        <div style={sectionCardStyle}>
+          <div style={sectionTitleStyle}>Purchased ({purchasedVehicles.length})</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {purchasedVehicles.map(pv => (
+              <Link key={pv.id} href={`/vehicles/${pv.id}`} style={{
+                display: 'block', padding: '10px 12px', borderRadius: 8,
+                background: '#f0fdf4', border: '1px solid #bbf7d0',
+                textDecoration: 'none',
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0a0a0a' }}>
+                  {pv.year} {pv.make} {pv.model}
+                </div>
+                <div style={{ fontSize: 10, color: '#15803d', marginTop: 2 }}>
+                  Stock #{pv.stockNumber}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const chevron = <ChevronPipeline current={pipelineStage} />
+  const compliance = <ComplianceRow />
+  const statusGrid = (
+    <StatusInfoGrid
+      daysOld={daysOld}
+      activeOpps={activeOppCount}
+      interestedCount={contact.vehicleInterests.length}
+      purchasedCount={purchasedVehicles.length}
+    />
+  )
+
   return (
     <div style={{ maxWidth: 1480, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* ─── 1. Header: back + name + actions ─── */}
@@ -318,94 +433,35 @@ export default function CustomerProfilePage() {
         onBack={() => router.push('/customers')}
       />
 
-      {/* ─── 2. Chevron pipeline ─── */}
-      <ChevronPipeline current={pipelineStage} />
-
-      {/* ─── 3. Compliance circles row (placeholders — fields not tracked yet) ─── */}
-      <ComplianceRow />
-
-      {/* ─── 4. Status info grid ─── */}
-      <StatusInfoGrid
-        daysOld={daysOld}
-        activeOpps={activeOppCount}
-        interestedCount={contact.vehicleInterests.length}
-        purchasedCount={purchasedVehicles.length}
-      />
-
-      {/* ─── 5. Top row: Buyer/Co-Buyer/Referrer (left) pairs with the
-              Interested + Purchased vehicles (right) so the sidebar sits
-              beside content of similar height instead of leaving a void. ─── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(300px, 360px)', gap: 14, alignItems: 'stretch' }}>
-        {/* Buyer / Co-Buyer / Referrer */}
-        <div style={sectionCardStyle}>
-          <BuyerTabStrip active={buyerTab} onChange={setBuyerTab} />
-          {buyerTab === 'buyer' && (
-            <BuyerForm
-              contact={contact}
-              salesRepName={salesRep?.name || null}
-              salesRepOptions={salesRepOptions}
-              onSave={commitField}
-              onSaveName={saveBuyerName}
-            />
-          )}
-          {buyerTab === 'cobuyer' && (
-            <CoBuyerPicker
-              coBuyer={coBuyer}
-              onAttach={(id) => commitField('coBuyerContactId', id)}
-              onDetach={() => commitField('coBuyerContactId', null)}
-            />
-          )}
-          {buyerTab === 'referrer' && (
-            <ReferrerForm
-              contact={contact}
-              onSave={commitField}
-            />
-          )}
-        </div>
-
-        {/* Vehicles sidebar — stretches to the Buyer card's height; the
-            "+ Add" tile flex-grows to absorb any leftover space so the
-            column never reads as an empty void. */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ ...sectionCardStyle, flex: 1, display: 'flex', flexDirection: 'column' }}>
-            <div style={sectionTitleStyle}>Interested Vehicles ({contact.vehicleInterests.length})</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flex: 1 }}>
-              {contact.vehicleInterests.map(vi => (
-                <InterestCard key={vi.id} interest={vi} onRemove={() => removeInterest(vi.id)} />
-              ))}
-              <AddInterestTile
-                empty={contact.vehicleInterests.length === 0}
-                onClick={() => setPickerOpen(true)}
-              />
+      {isDesktop ? (
+        /* ─── Desktop: DealerCenter-style split — persistent buyer column on
+               the left, everything else (pipeline, compliance, status, lead
+               workspace + vehicles rail) flows in the main column. ─── */
+        <div style={{ display: 'grid', gridTemplateColumns: '300px minmax(0, 1fr)', gap: 14, alignItems: 'start' }}>
+          {buyerPanel}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+            {chevron}
+            {compliance}
+            {statusGrid}
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 300px', gap: 14, alignItems: 'start' }}>
+              <LeadWorkspace contactId={contact.id} />
+              {vehiclesRail}
             </div>
           </div>
-
-          {purchasedVehicles.length > 0 && (
-            <div style={sectionCardStyle}>
-              <div style={sectionTitleStyle}>Purchased ({purchasedVehicles.length})</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {purchasedVehicles.map(pv => (
-                  <Link key={pv.id} href={`/vehicles/${pv.id}`} style={{
-                    display: 'block', padding: '10px 12px', borderRadius: 8,
-                    background: '#f0fdf4', border: '1px solid #bbf7d0',
-                    textDecoration: 'none',
-                  }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#0a0a0a' }}>
-                      {pv.year} {pv.make} {pv.model}
-                    </div>
-                    <div style={{ fontSize: 10, color: '#15803d', marginTop: 2 }}>
-                      Stock #{pv.stockNumber}
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
-      </div>
-
-      {/* ─── 6. Lead workspace (top tabs + action bar + activity feed) ─── */}
-      <LeadWorkspace contactId={contact.id} />
+      ) : (
+        /* ─── Stacked (narrow / mobile): original layout, untouched. ─── */
+        <>
+          {chevron}
+          {compliance}
+          {statusGrid}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr minmax(300px, 360px)', gap: 14, alignItems: 'stretch' }}>
+            {buyerPanel}
+            {vehiclesRail}
+          </div>
+          <LeadWorkspace contactId={contact.id} />
+        </>
+      )}
 
       {pickerOpen && (
         <VehiclePicker
@@ -514,7 +570,7 @@ function ChevronPipeline({ current }: { current: PipelineStage | null }) {
     <div style={{
       background: '#ffffff',
       borderRadius: 14,
-      padding: 10,
+      padding: 8,
       display: 'flex', alignItems: 'stretch', gap: 0,
       ...premiumElevation,
     }}>
@@ -597,11 +653,11 @@ function ChevronStage({
 
   return (
     <div style={{
-      flex: 1, minWidth: 80,
-      height: 44,
+      flex: 1, minWidth: 72,
+      height: 36,
       background: bg, color: fg,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: 11, fontWeight, textAlign: 'center',
+      fontSize: 10.5, fontWeight, textAlign: 'center',
       letterSpacing: isCurrent ? '0.01em' : '0.005em',
       padding: isFirst ? `0 ${NOTCH + 4}px 0 12px` : `0 ${NOTCH + 4}px 0 ${NOTCH + 8}px`,
       clipPath,
@@ -626,22 +682,25 @@ const COMPLIANCE_CHECKS = [
 
 function ComplianceRow() {
   return (
+    // Slim strip — every check is still a placeholder (N/A), so it gets one
+    // quiet line instead of a full-height row of dead space. Grows back into
+    // real status circles when compliance features land.
     <div style={{
       background: '#ffffff',
       borderRadius: 14,
-      padding: '14px 20px',
-      display: 'flex', justifyContent: 'space-around', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+      padding: '9px 18px',
+      display: 'flex', justifyContent: 'space-around', alignItems: 'center', gap: 10, flexWrap: 'wrap',
       ...premiumElevation,
     }}>
       {COMPLIANCE_CHECKS.map(check => (
-        <div key={check} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div key={check} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{
-            width: 22, height: 22, borderRadius: '50%',
+            width: 18, height: 18, borderRadius: '50%',
             background: '#f1f5f9', color: '#94a3b8',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 8.5, fontWeight: 700, letterSpacing: '0.05em',
+            fontSize: 7.5, fontWeight: 700, letterSpacing: '0.04em',
           }}>N/A</span>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>{check}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: '#64748b' }}>{check}</span>
         </div>
       ))}
     </div>
@@ -659,27 +718,31 @@ function StatusInfoGrid({
   purchasedCount: number
 }) {
   return (
+    // 12 cells arranged to land as a clean 6×2 in the desktop main column
+    // (minmax tuned so auto-fit resolves to 6 there): appointments / tasks /
+    // deposit / age on the top row, deal counts + activity trail on the
+    // bottom — no ragged orphan row.
     <div style={{
       background: '#ffffff',
       borderRadius: 14,
-      padding: '18px 24px',
+      padding: '14px 20px',
       display: 'grid',
-      gridTemplateColumns: 'repeat(4, 1fr)',
-      gap: '16px 24px',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))',
+      gap: '14px 18px',
       ...premiumElevation,
     }}>
       <StatusInfoRow label="Next Appt." value="Not Scheduled" />
+      <StatusInfoRow label="Last Appt." value="None" />
       <StatusInfoRow label="Overdue Tasks" value="None" />
+      <StatusInfoRow label="Pending Tasks" value="None" />
       <StatusInfoRow label="Deposit" value="" action={{ label: '+ Take Deposit', onClick: () => {} }} />
       <StatusInfoRow label="Days Old" value={String(daysOld)} strong />
-      <StatusInfoRow label="Last Appt." value="None" />
-      <StatusInfoRow label="Pending Tasks" value="None" />
       <StatusInfoRow label="Active Deals" value={String(activeOpps)} strong />
-      <StatusInfoRow label="Last Contacted" value="—" muted />
       <StatusInfoRow label="Interested" value={String(interestedCount)} strong />
       <StatusInfoRow label="Purchased" value={String(purchasedCount)} strong />
-      <StatusInfoRow label="Days Since Activity" value="—" muted />
+      <StatusInfoRow label="Last Contacted" value="—" muted />
       <StatusInfoRow label="Last Contact Attempt" value="—" muted />
+      <StatusInfoRow label="Days Since Activity" value="—" muted />
     </div>
   )
 }
@@ -707,9 +770,12 @@ function StatusInfoRow({
         <button
           onClick={action.onClick}
           style={{
-            alignSelf: 'flex-start', padding: 0, border: 'none',
+            // minHeight 0 beats the global `button { min-height }` tap-target
+            // rule, which otherwise inflates this button and knocks it out of
+            // line with the neighboring metric values.
+            alignSelf: 'flex-start', padding: 0, border: 'none', minHeight: 0,
             background: 'none', cursor: 'pointer',
-            fontSize: 15, lineHeight: 1.1, fontWeight: 700, color: '#15803d',
+            fontSize: 13.5, lineHeight: 1.1, fontWeight: 700, color: '#15803d',
             letterSpacing: '-0.01em', whiteSpace: 'nowrap',
             transition: 'opacity 120ms ease',
           }}
@@ -720,7 +786,7 @@ function StatusInfoRow({
         </button>
       ) : (
         <span style={{
-          fontSize: 15,
+          fontSize: 13.5,
           lineHeight: 1.1,
           color: muted ? '#cbd5e1' : strong ? '#0a0a0a' : '#1e293b',
           fontWeight: muted ? 500 : 700,
@@ -742,13 +808,15 @@ function BuyerTabStrip({
 }) {
   const tabs: { key: 'buyer' | 'cobuyer' | 'referrer'; label: string }[] = [
     { key: 'buyer', label: 'Buyer' },
-    { key: 'cobuyer', label: 'Add Co-Buyer' },
+    { key: 'cobuyer', label: 'Co-Buyer' },
     { key: 'referrer', label: 'Referrer' },
   ]
   return (
+    // Single row — three equal-width segments spanning the panel, so the
+    // strip stays one line even in the narrow desktop buyer column.
     <div style={{
       display: 'flex', gap: 4, padding: 4, background: '#f3f4f6',
-      borderRadius: 10, alignSelf: 'flex-start', marginBottom: 18,
+      borderRadius: 10, marginBottom: 18,
     }}>
       {tabs.map(t => {
         const isActive = active === t.key
@@ -757,10 +825,11 @@ function BuyerTabStrip({
             key={t.key}
             onClick={() => onChange(t.key)}
             style={{
-              padding: '7px 16px', borderRadius: 7, border: 'none',
+              flex: 1, minWidth: 0,
+              padding: '7px 6px', borderRadius: 7, border: 'none',
               background: isActive ? '#fff' : 'transparent',
               color: isActive ? '#0a0a0a' : '#64748b',
-              fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
               boxShadow: isActive ? '0 1px 2px rgba(15,23,42,0.06)' : 'none',
               transition: 'background 120ms ease',
             }}
@@ -866,12 +935,12 @@ function BuyerForm({
 
 function ReferrerForm({ contact, onSave }: { contact: Customer; onSave: (f: string, v: string | null) => void }) {
   return (
-    // Fixed 2-column grid — user wants a tight 2×2 layout for the four
-    // referrer fields, not the auto-fit Grid3 rhythm.
+    // Single column — one field per row, matching the narrow buyer-panel
+    // rhythm (was a 2×2 grid when this form lived in a wide card).
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'repeat(2, 1fr)',
-      gap: '10px 12px',
+      gridTemplateColumns: '1fr',
+      gap: 10,
       alignItems: 'start',
     }}>
       <EditableRow label="Referrer Name" value={contact.referrerName} onSave={(v) => onSave('referrerName', v)} />
@@ -993,7 +1062,9 @@ function EditableRow({ label, value, onSave, format, readOnly, comm }: {
             onChange={(e) => setDraft(e.target.value)}
             onFocus={() => setFocused(true)}
             onBlur={commit}
-            placeholder="—"
+            // Placeholder doubles as the click-to-edit hint — reads far
+            // better than a wall of "—" dashes on a sparse record.
+            placeholder={`Add ${label.toLowerCase()}…`}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.currentTarget.blur() }
               if (e.key === 'Escape') { setDraft(value || ''); e.currentTarget.blur() }
@@ -1153,7 +1224,7 @@ function SelectRow({
               fontSize: 13, fontWeight: 600,
               color: isEmpty ? '#cbd5e1' : '#0a0a0a',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{selectedLabel || '—'}</span>
+            }}>{selectedLabel || 'Select…'}</span>
             <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#94a3b8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
               <path d="M3 5l3 3 3-3" />
             </svg>
@@ -1646,7 +1717,10 @@ function LeadWorkspace({ contactId: _contactId }: { contactId: string }) {
               one consistent design system.  Spans the full width with
               each tab taking an equal share. ─── */}
       <div style={{
-        display: 'flex', gap: 2, padding: 4,
+        // Wraps into two rows in the narrower desktop main column (the
+        // vehicles rail now sits beside this card) — tabs keep their full
+        // labels instead of ellipsizing, mirroring DealerCenter.
+        display: 'flex', flexWrap: 'wrap', gap: 2, padding: 4,
         background: '#f3f4f6', borderRadius: 12,
         marginBottom: 18,
       }}>
@@ -1657,7 +1731,7 @@ function LeadWorkspace({ contactId: _contactId }: { contactId: string }) {
               key={t}
               onClick={() => setTab(t)}
               style={{
-                flex: 1, minWidth: 0,
+                flex: '1 0 auto',
                 padding: '7px 14px', borderRadius: 8, border: 'none',
                 background: active ? '#ffffff' : 'transparent',
                 color: active ? '#0a0a0a' : '#64748b',
@@ -1678,9 +1752,12 @@ function LeadWorkspace({ contactId: _contactId }: { contactId: string }) {
           {/* Action toolbar — icon + label, equal-width row. */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: `repeat(${LEAD_ACTIONS.length}, 1fr)`,
-            gap: 10,
-            marginBottom: 22,
+            // auto-fit instead of one fixed row — the workspace card is
+            // narrower now (vehicles rail beside it), so the pills pack
+            // 3-up / 6-up depending on available width without squishing.
+            gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+            gap: 8,
+            marginBottom: 20,
           }}>
             {LEAD_ACTIONS.map(a => (
               <ActionButton key={a.label} label={a.label} icon={a.icon} />
@@ -1802,8 +1879,9 @@ function LeadWorkspace({ contactId: _contactId }: { contactId: string }) {
   )
 }
 
-// Soft secondary action button — icon-over-label tile, white surface,
-// slate border, hover lift.  Equal-width when laid out in a grid.
+// Soft secondary action button — compact icon+label pill, white surface,
+// slate border, hover lift.  Equal-width when laid out in a grid; a single
+// glance-high row instead of the old tall icon-over-label tiles.
 function ActionButton({ label, icon }: { label: string; icon?: React.ReactNode }) {
   const [hover, setHover] = useState(false)
   return (
@@ -1811,11 +1889,11 @@ function ActionButton({ label, icon }: { label: string; icon?: React.ReactNode }
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        display: 'flex', flexDirection: 'column',
+        display: 'flex',
         alignItems: 'center', justifyContent: 'center',
-        gap: 6,
-        padding: '14px 8px',
-        borderRadius: 12,
+        gap: 7,
+        padding: '9px 10px',
+        borderRadius: 10,
         border: '1px solid rgba(15, 23, 42, 0.08)',
         background: hover ? '#f8fafc' : '#ffffff',
         color: hover ? '#0a0a0a' : '#475569',
@@ -1831,54 +1909,136 @@ function ActionButton({ label, icon }: { label: string; icon?: React.ReactNode }
       {icon && (
         <span style={{
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 30, height: 30, borderRadius: 8,
+          width: 24, height: 24, borderRadius: 7, flexShrink: 0,
           background: hover ? '#1a1a1a' : '#f1f5f9',
           color: hover ? '#dffd6e' : '#64748b',
           transition: 'background 160ms ease, color 160ms ease',
         }}>{icon}</span>
       )}
-      <span style={{ letterSpacing: '-0.005em' }}>{label}</span>
+      <span style={{ letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
     </button>
   )
 }
 
+// Relationship of co-buyer → buyer. Stored on the BUYER's record — it
+// describes this pairing, not the co-buyer as a person.
+const RELATIONSHIP_OPTIONS = [
+  'Spouse', 'Partner', 'Parent', 'Child', 'Sibling', 'Relative', 'Friend', 'Business Partner',
+].map(asPick)
+
 function CoBuyerPicker({
-  coBuyer, onAttach, onDetach,
+  coBuyer, relationship, onAttach, onDetach, onRelationship,
 }: {
   coBuyer: CoBuyer
+  relationship: string | null
   onAttach: (contactId: string) => void
   onDetach: () => void
+  /** Saves to the BUYER's record (coBuyerRelationship). */
+  onRelationship: (v: string | null) => void
 }) {
   if (coBuyer) {
+    // Attached co-buyer. Only Relationship is editable here — it belongs to
+    // the buyer's record. The co-buyer's own details are shown read-only;
+    // they're edited on the co-buyer's profile (header links through).
+    const initials = `${coBuyer.firstName.charAt(0)}${coBuyer.lastName.charAt(0)}`.toUpperCase()
     return (
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-        padding: '14px 16px',
-        background: '#f8fafc',
-        border: '1px solid rgba(15,23,42,0.08)',
-        borderRadius: 12,
-      }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <Link
-            href={`/customers/${coBuyer.id}`}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Identity header — links to the co-buyer's own profile. */}
+        <div style={{
+          position: 'relative',
+          padding: '12px 14px',
+          background: 'linear-gradient(180deg, #ffffff 0%, #fafbfc 100%)',
+          border: '1px solid rgba(15,23,42,0.08)',
+          borderRadius: 12,
+          boxShadow: '0 1px 3px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.9)',
+        }}>
+          <button
+            title="Detach co-buyer"
+            onClick={onDetach}
             style={{
-              fontSize: 14, fontWeight: 700, color: '#0a0a0a', letterSpacing: '-0.005em',
-              textDecoration: 'none', display: 'inline-block',
+              position: 'absolute', top: 8, right: 8,
+              width: 24, height: 24, minHeight: 0, borderRadius: 7,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              border: 'none', background: 'transparent', cursor: 'pointer', padding: 0,
+              color: '#b6bfcc', transition: 'background 120ms ease, color 120ms ease',
             }}
-          >{coBuyer.firstName} {coBuyer.lastName}</Link>
-          <div style={{ display: 'flex', gap: 14, marginTop: 4, fontSize: 12, color: '#64748b' }}>
-            {coBuyer.phone && <span>{formatPhone(coBuyer.phone)}</span>}
-            {coBuyer.email && <span style={{ color: '#2563eb' }}>{coBuyer.email.toLowerCase()}</span>}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(220,38,38,0.10)'; e.currentTarget.style.color = '#dc2626' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#b6bfcc' }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, paddingRight: 24 }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+              background: '#1a1a1a', color: '#dffd6e',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 700, letterSpacing: '0.02em',
+            }}>{initials}</div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              {/* minHeight: 0 overrides the global `a { min-height: 44px }`
+                  tap-target rule, which otherwise inflates this link and
+                  blows the card layout apart. */}
+              <Link
+                href={`/customers/${coBuyer.id}`}
+                title="Open co-buyer profile"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, maxWidth: '100%',
+                  minHeight: 0,
+                  fontSize: 13.5, fontWeight: 700, color: '#0a0a0a', letterSpacing: '-0.005em',
+                  textDecoration: 'none',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = '#2563eb' }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = '#0a0a0a' }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {coBuyer.firstName} {coBuyer.lastName}
+                </span>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.45 }}>
+                  <path d="M7 17 17 7M9 7h8v8" />
+                </svg>
+              </Link>
+              <div style={{
+                fontSize: 9.5, fontWeight: 700, color: '#94a3b8',
+                textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 1,
+              }}>Co-Buyer{relationship ? ` · ${relationship}` : ''}</div>
+            </div>
           </div>
         </div>
-        <button
-          onClick={onDetach}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10, alignItems: 'start' }}>
+          {/* The one editable field — a property of THIS buyer's pairing. */}
+          <SelectRow
+            label="Relationship"
+            value={relationship}
+            options={RELATIONSHIP_OPTIONS}
+            allowOther
+            onSave={onRelationship}
+          />
+
+          {/* Read-only mirror of the co-buyer's own record. */}
+          <EditableRow label="Cell Phone" value={coBuyer.phone} onSave={() => {}} format="phone" comm="phone" readOnly />
+          <EditableRow label="Home Phone" value={coBuyer.homePhone} onSave={() => {}} format="phone" readOnly />
+          <EditableRow label="Work Phone" value={coBuyer.workPhone} onSave={() => {}} format="phone" readOnly />
+          <EditableRow label="Email" value={coBuyer.email} onSave={() => {}} comm="email" readOnly />
+          <EditableRow label="Lead Type" value={coBuyer.leadType} onSave={() => {}} readOnly />
+          <EditableRow label="Lead Source" value={coBuyer.leadSource} onSave={() => {}} readOnly />
+          <EditableRow label="Inquiry Type" value={coBuyer.inquiryType} onSave={() => {}} readOnly />
+        </div>
+
+        <Link
+          href={`/customers/${coBuyer.id}`}
           style={{
-            padding: '6px 12px', borderRadius: 8,
-            border: '1px solid rgba(15,23,42,0.10)', background: '#ffffff',
-            fontSize: 12, fontWeight: 600, color: '#64748b', cursor: 'pointer',
+            minHeight: 0, alignSelf: 'center',
+            fontSize: 11.5, fontWeight: 600, color: '#94a3b8', textDecoration: 'none',
           }}
-        >Detach</button>
+          onMouseEnter={(e) => { e.currentTarget.style.color = '#2563eb' }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = '#94a3b8' }}
+        >
+          Edit these details on their profile →
+        </Link>
       </div>
     )
   }

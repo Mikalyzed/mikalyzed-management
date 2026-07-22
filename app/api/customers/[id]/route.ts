@@ -55,7 +55,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const coBuyer = contact.coBuyerContactId
     ? await prisma.contact.findUnique({
         where: { id: contact.coBuyerContactId },
-        select: { id: true, firstName: true, lastName: true, phone: true, email: true },
+        select: {
+          id: true, firstName: true, lastName: true,
+          phone: true, homePhone: true, workPhone: true, email: true,
+          leadType: true, leadSource: true, inquiryType: true,
+        },
       })
     : null
 
@@ -103,6 +107,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     'referrerName', 'referrerPhone', 'referrerEmail', 'referrerAddress', 'referrerContactId',
     // Co-buyer
     'coBuyerContactId',
+    'coBuyerRelationship',
   ]
   const dateFields = new Set(['dateOfBirth', 'idIssuedDate', 'idExpirationDate'])
   const data: Record<string, unknown> = {}
