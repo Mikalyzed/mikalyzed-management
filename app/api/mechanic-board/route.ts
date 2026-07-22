@@ -56,6 +56,9 @@ type TimerEntry = {
   pausedAt?: string | null
   // This mechanic has finished their part of a shared car (clock stopped).
   done?: boolean
+  // When they finished their part — lets the board bucket the card into their
+  // own "Done Today" / "Completed This Week" without touching the car's status.
+  doneAt?: string | null
 }
 
 type StageTimerFields = {
@@ -237,6 +240,7 @@ export async function GET() {
         running: !!t.timerStartedAt,
         timerStartedAt: t.timerStartedAt ?? null,
         done: !!t.done,
+        doneAt: t.doneAt ?? null,
         autoPaused: !!t.autoPaused,
         pauseReason: t.pauseReason ?? null,
         pauseDetail: t.pauseDetail ?? null,
@@ -567,7 +571,7 @@ export async function POST(req: NextRequest) {
       const actorStarted = cur.timerStartedAt
       let add = 0
       if (cur.timerStartedAt) add = Math.floor((nowMs - new Date(cur.timerStartedAt).getTime()) / 1000)
-      timers[uid] = { ...cur, activeSeconds: (cur.activeSeconds || 0) + Math.max(0, add), timerStartedAt: null, autoPaused: false, pauseReason: null, pauseDetail: null, pausedAt: null, done: true }
+      timers[uid] = { ...cur, activeSeconds: (cur.activeSeconds || 0) + Math.max(0, add), timerStartedAt: null, autoPaused: false, pauseReason: null, pauseDetail: null, pausedAt: null, done: true, doneAt: now.toISOString() }
 
       // Owner of a task: explicit assignee → them; mechanic-added-unassigned → nobody; else the car owner.
       const ownerOf = (it: ChecklistItem): string | null => {
@@ -607,7 +611,7 @@ export async function POST(req: NextRequest) {
           sessions.push({ userId: k, started: t.timerStartedAt, secs: Math.max(0, banked) })
           timers[k] = { ...t, activeSeconds: (t.activeSeconds || 0) + Math.max(0, banked), timerStartedAt: null, autoPaused: false }
         }
-        timers[k] = { ...timers[k], done: true }
+        timers[k] = { ...timers[k], done: true, doneAt: timers[k].doneAt || now.toISOString() }
       }
       for (const sess of sessions) await logSession(stageId, stage.vehicleId, sess.userId, sess.started, now, sess.secs)
       // Whole car is finishing → mark every non-declined task done so the checklist

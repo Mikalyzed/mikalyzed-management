@@ -70,7 +70,7 @@ type JobCard = {
   // Everyone with tasks on this car (default owner + per-task hand-offs).
   assignees?: { id: string; name: string }[]
   // Per-mechanic timers on a shared car.
-  timers?: { userId: string | null; name: string | null; elapsedSeconds: number; running: boolean; timerStartedAt: string | null; done: boolean; autoPaused: boolean; pauseReason: string | null; pauseDetail: string | null; pausedAt: string | null }[]
+  timers?: { userId: string | null; name: string | null; elapsedSeconds: number; running: boolean; timerStartedAt: string | null; done: boolean; doneAt?: string | null; autoPaused: boolean; pauseReason: string | null; pauseDetail: string | null; pausedAt: string | null }[]
   myElapsedSeconds?: number
   myTimerRunning?: boolean
   status: string
@@ -649,7 +649,21 @@ export default function MechanicBoard() {
     .map((item, i) => ({ item, i, mine: isMineTask(item) }))
     .filter(({ item }) => item.approved !== 'declined')
     .filter(({ mine }) => !hideOthers || mine)
-  if (!isAdmin) visibleChecklist.sort((a, b) => (a.mine === b.mine ? 0 : a.mine ? -1 : 1))
+  // Ordering priority (lower sorts first):
+  //  1. Inspection tasks above mechanic-added follow-ups — the section headers
+  //     ("Inspection Tasks" / "Tasks") rely on those two groups staying contiguous.
+  //  2. Incomplete above completed, so finished work sinks to the bottom of its group.
+  //  3. For mechanics, their own tasks surface ahead of co-workers'.
+  const taskRank = (x: { item: ChecklistItem; mine: boolean }) => [
+    x.item.addedByMechanic ? 1 : 0,
+    x.item.done ? 1 : 0,
+    !isAdmin && !x.mine ? 1 : 0,
+  ]
+  visibleChecklist.sort((a, b) => {
+    const ra = taskRank(a), rb = taskRank(b)
+    for (let k = 0; k < ra.length; k++) if (ra[k] !== rb[k]) return ra[k] - rb[k]
+    return 0
+  })
   // Board-level aliases — inside the checklist map `data` is shadowed by the
   // item's own `data` field, so grab what the per-task assign control needs here.
   const boardMechanics = data.mechanics || []
@@ -691,15 +705,69 @@ export default function MechanicBoard() {
     activeFilter === 'all' || jobAssignees(job).some(a => a.id === activeFilter)
   const visible = (jobs: JobCard[]) => jobs.filter(jobMatchesFilter)
 
+  // A shared car stays open (in_progress) until the LAST mechanic finishes, but
+  // once MY part is done it's complete *for me* — the co-worker still has tasks.
+  // From the current viewer's angle such a card should leave their working lanes
+  // (Active/Queue/Paused/Parts) and land in their own Completed buckets. This is
+  // purely viewer-scoped: it keys off the logged-in user's timer entry, so it
+  // never changes what the other mechanic sees.
+  const myDoneEntry = (job: JobCard) => {
+    if (!data.currentUserId) return null
+    if (job.status === 'done') return null // whole car done → server already buckets it
+    if (!(job.assignees || []).some(a => a.id === data.currentUserId)) return null
+    const e = (job.timers || []).find(t => t.userId === data.currentUserId)
+    return e && e.done ? e : null
+  }
+  const isMyDone = (job: JobCard) => !!myDoneEntry(job)
+  const sameLocalDay = (iso: string | null | undefined, ref: Date) => {
+    if (!iso) return false
+    const d = new Date(iso)
+    return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth() && d.getDate() === ref.getDate()
+  }
+  const now = new Date()
+  const weekStart = (() => {
+    const d = new Date(now)
+    const diff = d.getDay() === 0 ? 6 : d.getDay() - 1 // Monday-based
+    d.setDate(d.getDate() - diff)
+    d.setHours(0, 0, 0, 0)
+    return d
+  })()
+
   // Filter each section once per render (not repeatedly inline) and drive the
   // stat boxes + empty state off the SAME filtered lists so counts, sections,
-  // and the "all clear" message all agree with the active lane filter.
-  const vActive = visible(data.active)
-  const vQueued = visible(data.queued)
-  const vPaused = visible(data.paused)
-  const vAwaiting = visible(data.awaitingParts)
-  const vCompletedToday = visible(data.completedToday)
-  const vCompletedThisWeek = visible(data.completedThisWeek || [])
+  // and the "all clear" message all agree with the active lane filter. Cars where
+  // MY part is done drop out of the working lanes (see myDoneEntry above).
+  const vActive = visible(data.active).filter(j => !isMyDone(j))
+  const vQueued = visible(data.queued).filter(j => !isMyDone(j))
+  const vPaused = visible(data.paused).filter(j => !isMyDone(j))
+  const vAwaiting = visible(data.awaitingParts).filter(j => !isMyDone(j))
+
+  // Shared cars I've finished my part on — pulled from every working lane, deduped,
+  // and folded into my Completed buckets by when I finished (today / this week).
+  const myFinishedShared = (() => {
+    const seen = new Set<string>()
+    const out: JobCard[] = []
+    for (const j of [...data.active, ...data.paused, ...data.queued, ...data.awaitingParts]) {
+      if (seen.has(j.id) || !jobMatchesFilter(j) || !isMyDone(j)) continue
+      seen.add(j.id)
+      out.push(j)
+    }
+    return out
+  })()
+  const mergeCompleted = (base: JobCard[], extra: JobCard[]) => {
+    const seen = new Set(base.map(j => j.id))
+    return [...base, ...extra.filter(j => !seen.has(j.id))]
+  }
+  const vCompletedToday = mergeCompleted(
+    visible(data.completedToday),
+    // No doneAt (a part finished before this shipped) → keep it visible as "today"
+    // rather than letting it vanish from every lane.
+    myFinishedShared.filter(j => { const at = myDoneEntry(j)?.doneAt; return !at || sameLocalDay(at, now) }),
+  )
+  const vCompletedThisWeek = mergeCompleted(
+    visible(data.completedThisWeek || []),
+    myFinishedShared.filter(j => { const at = myDoneEntry(j)?.doneAt; return !at || new Date(at) >= weekStart }),
+  )
 
   const renderCard = (job: JobCard, showActions = true) => {
     const colorKey = getJobColorKey(job)
@@ -1224,10 +1292,17 @@ export default function MechanicBoard() {
           <CardGrid>
             {vCompletedToday.map(j => {
               const v = j.vehicle
+              // A shared car finished only for the current viewer (co-worker still
+              // has tasks) — show MY finish time + MY hours, not the car aggregate.
+              const mine = myDoneEntry(j)
+              const finishedAt = mine?.doneAt || j.completedAt
+              const mySeconds = mine
+                ? ((j.timers || []).find(t => t.userId === data.currentUserId)?.elapsedSeconds ?? j.elapsedSeconds)
+                : j.elapsedSeconds
               return (
-                <div key={j.id} style={{
+                <div key={j.id} onClick={() => openJob(j)} style={{
                   background: '#f0fdf4', border: '1px solid #bbf7d0', borderLeft: '4px solid #22c55e',
-                  borderRadius: 14, padding: '16px 18px',
+                  borderRadius: 14, padding: '16px 18px', cursor: 'pointer',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
@@ -1236,11 +1311,11 @@ export default function MechanicBoard() {
                         {`${v.year ?? ''} ${v.make} ${v.model}`.trim()}{v.color ? ` · ${v.color}` : ''}
                       </p>
                     </div>
-                    <Badge text="Done" color="#22c55e" />
+                    <Badge text={mine ? 'Your part' : 'Done'} color="#22c55e" />
                   </div>
                   <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 12, color: '#166534' }}>
-                    {j.completedAt && <span>Completed {new Date(j.completedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>}
-                    <span style={{ fontWeight: 700 }}>Total: {formatHours(j.elapsedSeconds)}</span>
+                    {finishedAt && <span>{mine ? 'Finished' : 'Completed'} {new Date(finishedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>}
+                    <span style={{ fontWeight: 700 }}>{mine ? 'Your time' : 'Total'}: {formatHours(mySeconds)}</span>
                   </div>
                 </div>
               )
