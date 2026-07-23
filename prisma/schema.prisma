@@ -127,6 +127,7 @@ model Vehicle {
   @@index([inventoryStatus])
   @@index([priorVehicleId])
   @@index([legacyInventoryVehicleId])
+  @@index([purchasedFromContactId])
   @@map("vehicles")
 }
 
@@ -222,6 +223,7 @@ model Partner {
 
   @@index([companyName])
   @@index([archivedAt])
+  @@index([categories], type: Gin)
   @@map("partners")
 }
 
@@ -663,6 +665,10 @@ model Contact {
 
   @@index([email])
   @@index([phone])
+  @@index([customerStatus])
+  @@index([leadType])
+  @@index([referrerContactId])
+  @@index([salesRepId])
   @@map("contacts")
 }
 
