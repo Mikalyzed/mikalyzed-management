@@ -1,17 +1,19 @@
 'use client'
 
-// ─── Deal Finalize — the deal's command center (DC "Deal Contract") ───
-// Reached via "Proceed with Deal" on the jacket. Read-only structure
-// recap + lienholder + notes, a real gross/profit panel computed from the
-// vehicle's true cost (vehicleCost + CostAdds — data DC makes you type),
-// and the terminal actions: Mark Funded / Cancel Deal.
-// Money-gated end to end: the APIs this page calls enforce
-// admin + sales_manager server-side on every request.
+// ─── Deal Contract page (DC parity) — the deal's home after Proceed ───
+// Header chips → tab rail → [action rail | Structure + LienHolder + Notes
+// | Deal Summary]. Structure is editable here (price, cash received,
+// financing terms) like DealerCenter; itemized categories still edit on
+// the worksheet. The summary computes financing (amortized) and the full
+// profit waterfall from real cost data. Money-gated server-side.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { computeDealTotals, formatDealNumber, LINE_ITEM_CATEGORIES, type DealTotals } from '@/lib/deals'
+import {
+  computeDealTotals, computeFinancing, computeDealProfit, formatDealNumber,
+  LINE_ITEM_CATEGORIES, type DealTotals,
+} from '@/lib/deals'
 
 type FinalizeDeal = {
   id: string
@@ -24,7 +26,12 @@ type FinalizeDeal = {
   countySurtaxRate: number
   surtaxCap: number
   depositCredit: number
+  termMonths: number | null
+  apr: number | null
+  firstPaymentDays: number
+  commissions: number
   notes: string | null
+  proceededAt: string | null
   fundedAt: string | null
   createdAt: string
   vehicle: {
@@ -41,12 +48,14 @@ type FinalizeDeal = {
     address: string | null; city: string | null; state: string | null; county: string | null
   } | null
   businessBuyer: { id: string; businessName: string; enterpriseType: string | null; street: string | null; city: string | null; state: string | null; zip: string | null; phone: string | null } | null
+  coBuyer: { id: string; firstName: string; lastName: string } | null
   salesRep: { id: string; name: string } | null
   lienholderPartner: { id: string; companyName: string } | null
   lineItems: Array<{ category: string; label: string; amount: number; taxable: boolean; cost: number | null }>
   trades: Array<{ allowance: number; acv: number; payoff: number; year: number | null; make: string | null; model: string | null }>
 }
 
+// ── Recon design tokens ──
 const card: React.CSSProperties = {
   background: 'var(--bg-card)',
   borderRadius: 16,
@@ -62,7 +71,18 @@ const money = (n: number) =>
 const money0 = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
 
-export default function DealFinalizePage() {
+const TABS = [
+  { key: 'contract', label: 'Deal Contract' },
+  { key: 'worksheet', label: 'Worksheet' },
+  { key: 'notes', label: 'Notes' },
+  { key: 'lender', label: 'Lender Offers', disabled: true },
+  { key: 'compare', label: 'Compare Offers', disabled: true },
+  { key: 'journal', label: 'Journal Entries', disabled: true },
+  { key: 'files', label: 'Files', disabled: true },
+  { key: 'events', label: 'Events', disabled: true },
+] as const
+
+export default function DealContractPage() {
   const params = useParams()
   const router = useRouter()
   const id = Array.isArray(params.id) ? params.id[0] : (params.id as string)
@@ -72,6 +92,7 @@ export default function DealFinalizePage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<null | { title: string; body: string; confirmLabel: string; danger?: boolean; onConfirm: () => void }>(null)
+  const notesRef = useRef<HTMLDivElement | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -97,6 +118,10 @@ export default function DealFinalizePage() {
       setDeal(d.deal)
     } catch {
       setError('Connection problem — your last change may not have saved.')
+      try {
+        const fresh = await fetch(`/api/deals/${id}`).then(r => r.json())
+        if (fresh.deal) setDeal(fresh.deal)
+      } catch { /* offline — banner stands */ }
     } finally {
       setSaving(false)
     }
@@ -122,10 +147,7 @@ export default function DealFinalizePage() {
     try {
       const res = await fetch(`/api/deals/${id}`, { method: 'DELETE' })
       if (res.ok) await load()
-      else {
-        const d = await res.json().catch(() => ({}))
-        setError(d.error || 'Could not cancel')
-      }
+      else setError((await res.json().catch(() => ({}))).error || 'Could not cancel')
     } finally {
       setSaving(false)
     }
@@ -138,21 +160,18 @@ export default function DealFinalizePage() {
   const isWholesale = deal.dealType === 'wholesale'
   const editable = deal.status === 'draft'
   const totals: DealTotals = computeDealTotals(deal)
+  const financing = computeFinancing({ amountFinanced: totals.balanceDue, apr: deal.apr, termMonths: deal.termMonths })
 
-  // ── Gross / profit (money-gated data) ──
-  // True cost = vehicle purchase cost + every recon CostAdd (cents).
+  // ── Profit waterfall from real cost data ──
   const costAddsTotal = deal.vehicle.costAdds.reduce((s, c) => s + c.amountCents, 0) / 100
   const trueCost = deal.vehicle.vehicleCost != null ? deal.vehicle.vehicleCost + costAddsTotal : null
-  // Over-allowance on trades (paying above ACV) eats front gross.
   const overAllowance = deal.trades.reduce((s, t) => s + Math.max(0, (t.allowance || 0) - (t.acv || t.allowance || 0)), 0)
-  const frontGross = trueCost != null ? deal.salePrice - trueCost - overAllowance : null
-  // Back gross = margin on non-fee add-ons (price − dealer cost per line).
-  const backGross = deal.lineItems
-    .filter(li => li.category !== 'fee')
-    .reduce((s, li) => s + (li.amount || 0) - (li.cost || 0), 0)
-  const totalGross = frontGross != null ? frontGross + backGross : null
+  const profit = computeDealProfit({
+    salePrice: deal.salePrice, trueCost, overAllowance,
+    lineItems: deal.lineItems, commissions: deal.commissions,
+  })
 
-  // ── Readiness (mirrors the jacket snapshot's required set, compactly) ──
+  // ── Readiness (mirrors the jacket snapshot) ──
   const b = deal.buyer
   const blockers: string[] = []
   if (!(deal.salePrice > 0)) blockers.push('sale price')
@@ -163,9 +182,8 @@ export default function DealFinalizePage() {
       const miss = [bz.businessName, bz.enterpriseType, bz.street, bz.city, bz.state, bz.zip].filter(x => !x).length
       if (miss) blockers.push(`${miss} business field${miss > 1 ? 's' : ''}`)
     }
-  } else if (!b) {
-    blockers.push('a buyer')
-  } else {
+  } else if (!b) blockers.push('a buyer')
+  else {
     const miss = [b.firstName, b.lastName, b.dateOfBirth, b.idType, b.idState, b.idNo, b.address, b.city, b.state, b.county, b.phone].filter(x => !x).length
     if (miss) blockers.push(`${miss} applicant field${miss > 1 ? 's' : ''}`)
   }
@@ -181,91 +199,110 @@ export default function DealFinalizePage() {
   const catTotal = (key: string) =>
     deal.lineItems.filter(i => i.category === key).reduce((s, i) => s + (i.amount || 0), 0)
 
-  const RecapLine = ({ label, amount, sign, strong }: { label: string; amount: number; sign: '+' | '−' | '='; strong?: boolean }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6.5px 0' }}>
-      <span style={{ width: 14, textAlign: 'center', fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)', flexShrink: 0 }}>{sign}</span>
-      <span style={{ flex: 1, fontSize: 13, fontWeight: strong ? 640 : 500, color: strong ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{label}</span>
-      <span style={{ fontSize: 13.5, fontWeight: strong ? 700 : 600, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{money(amount)}</span>
-    </div>
-  )
-
-  const railBtn = (label: string, opts: { onClick?: () => void; disabled?: boolean; hint?: string; danger?: boolean } = {}) => (
-    <button
-      key={label}
-      onClick={opts.onClick}
-      disabled={opts.disabled}
-      title={opts.hint}
-      style={{
-        width: '100%', textAlign: 'left', padding: '10px 13px', minHeight: 0,
-        borderRadius: 10, border: 'none',
-        background: 'transparent',
-        color: opts.disabled ? 'var(--text-muted)' : opts.danger ? '#e11d48' : 'var(--text-primary)',
-        fontSize: 13, fontWeight: 600,
-        cursor: opts.disabled ? 'not-allowed' : 'pointer',
-        opacity: opts.disabled ? 0.55 : 1,
-        transition: 'background 0.12s ease',
-      }}
-      onMouseEnter={(e) => { if (!opts.disabled) e.currentTarget.style.background = opts.danger ? 'rgba(225,29,72,0.07)' : 'var(--bg-primary)' }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-    >
-      {label}
-      {opts.hint && <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, color: 'var(--text-muted)', marginTop: 1 }}>{opts.hint}</span>}
-    </button>
-  )
+  const firstPaymentDate = new Date(Date.now() + deal.firstPaymentDays * 86400000)
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto' }}>
-      {/* ── Header: deal identity chips ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <button onClick={() => router.push(`/deals/${deal.id}`)} style={{
-            padding: '8px 13px', borderRadius: 10, minHeight: 0,
-            border: '1px solid var(--border)', background: '#fff', cursor: 'pointer',
-            fontSize: 13, color: 'var(--text-primary)', fontWeight: 600,
-            display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: 'var(--shadow-sm)',
-          }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
-            Worksheet
-          </button>
-          {/* Vehicle chip */}
-          <Link href={`/vehicles/${deal.vehicle.id}`} style={{
-            display: 'inline-flex', flexDirection: 'column', minHeight: 0,
-            padding: '6px 13px', borderRadius: 10, textDecoration: 'none',
-            border: '1px solid var(--border)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-sm)',
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 640, letterSpacing: '-0.01em', color: 'var(--text-primary)' }}>
+    <div style={{ maxWidth: 1340, margin: '0 auto' }}>
+      {/* ══ Header band: identity chips ══ */}
+      <div style={{
+        ...card, padding: '12px 16px', marginBottom: 12,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', minWidth: 0 }}>
+          {/* Vehicle */}
+          <Link href={`/vehicles/${deal.vehicle.id}`} style={{ textDecoration: 'none', minHeight: 0, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 640, letterSpacing: '-0.01em', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
               {[deal.vehicle.year, deal.vehicle.make, deal.vehicle.model].filter(Boolean).join(' ')}
-            </span>
-            <span style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
-              #{deal.vehicle.stockNumber}
-            </span>
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
+              Stock #{deal.vehicle.stockNumber}{deal.vehicle.vin ? ` · ${deal.vehicle.vin.slice(-8)}` : ''}
+            </div>
           </Link>
-          {/* Buyer chip */}
-          <Link
-            href={deal.buyer ? `/customers/${deal.buyer.id}` : '#'}
-            style={{
-              display: 'inline-flex', flexDirection: 'column', minHeight: 0,
-              padding: '6px 13px', borderRadius: 10, textDecoration: 'none',
-              border: '1px solid var(--border)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <span style={{ fontSize: 13, fontWeight: 640, letterSpacing: '-0.01em', color: 'var(--text-primary)' }}>{buyerName}</span>
-            <span style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
-              {isWholesale ? 'Business buyer' : deal.buyer?.phone || 'Buyer'}
-            </span>
-          </Link>
+
+          <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border-light)' }} />
+
+          {/* Buyer + compliance badges (Phase 6 lights these up) */}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <Link
+                href={deal.buyer ? `/customers/${deal.buyer.id}` : `/deals/${deal.id}`}
+                style={{ fontSize: 13.5, fontWeight: 640, letterSpacing: '-0.01em', color: 'var(--text-primary)', textDecoration: 'none', minHeight: 0, whiteSpace: 'nowrap' }}
+              >{buyerName}</Link>
+              {!isWholesale && ['Pre-Qual', 'Credit', 'Turbo'].map(bdg => (
+                <span key={bdg} title={`${bdg} — credit integration (Phase 6)`} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  fontSize: 10.5, fontWeight: 600, color: 'var(--text-muted)',
+                }}>
+                  <span style={{
+                    width: 15, height: 15, borderRadius: '50%', display: 'inline-flex',
+                    alignItems: 'center', justifyContent: 'center',
+                    background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                    fontSize: 6.5, fontWeight: 700, color: 'var(--text-muted)',
+                  }}>N/A</span>
+                  {bdg}
+                </span>
+              ))}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 1 }}>
+              {isWholesale
+                ? `Business buyer${deal.businessBuyer?.phone ? ` · ${deal.businessBuyer.phone}` : ''}`
+                : deal.buyer?.phone || 'Buyer'}
+              {!isWholesale && (
+                deal.coBuyer
+                  ? <> · Co-buyer: {deal.coBuyer.firstName} {deal.coBuyer.lastName}</>
+                  : <> · <Link href={`/deals/${deal.id}`} style={{ color: 'var(--text-muted)', minHeight: 0 }}>Add Co-Buyer</Link></>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {saving && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Saving…</span>}
           <span style={{
-            fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 100,
+            fontSize: 11.5, fontWeight: 600, padding: '4px 12px', borderRadius: 100,
             background: deal.status === 'funded' ? '#edfaf0' : deal.status === 'cancelled' ? '#fdecef' : '#fdf3e7',
             color: deal.status === 'funded' ? '#16a34a' : deal.status === 'cancelled' ? '#e11d48' : '#d97706',
-          }}>{deal.status === 'funded' ? 'Funded' : deal.status === 'cancelled' ? 'Cancelled' : 'Draft'}</span>
+          }}>{deal.status === 'funded' ? 'Funded' : deal.status === 'cancelled' ? 'Cancelled' : 'Pending — Working Deal'}</span>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              Deal Type: {isWholesale ? 'Wholesale' : 'Retail · Cash'}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
+              {formatDealNumber(deal.dealNumber)} · {new Date(deal.createdAt).toLocaleDateString()}
+            </div>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {saving && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Saving…</span>}
-          <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-            {formatDealNumber(deal.dealNumber)} · {isWholesale ? 'Wholesale' : 'Retail'} · {new Date(deal.createdAt).toLocaleDateString()}
-          </span>
-        </div>
+      </div>
+
+      {/* ══ Tab rail ══ */}
+      <div style={{
+        display: 'flex', gap: 2, padding: 4, marginBottom: 16,
+        background: 'var(--bg-primary)', borderRadius: 12, overflowX: 'auto',
+      }}>
+        {TABS.map(t => {
+          const active = t.key === 'contract'
+          const disabled = 'disabled' in t && t.disabled
+          return (
+            <button
+              key={t.key}
+              disabled={disabled}
+              title={disabled ? 'Coming in a later phase' : undefined}
+              onClick={() => {
+                if (t.key === 'worksheet') router.push(`/deals/${deal.id}`)
+                if (t.key === 'notes') notesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }}
+              style={{
+                flex: '1 0 auto', padding: '7px 14px', borderRadius: 9, border: 'none', minHeight: 0,
+                background: active ? 'var(--bg-card)' : 'transparent',
+                color: active ? 'var(--text-primary)' : disabled ? 'var(--text-muted)' : 'var(--text-secondary)',
+                fontSize: 12.5, fontWeight: active ? 700 : 600, whiteSpace: 'nowrap',
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.55 : 1,
+                boxShadow: active ? '0 1px 3px rgba(24,24,27,0.10)' : 'none',
+              }}
+            >{t.label}</button>
+          )
+        })}
       </div>
 
       {error && (
@@ -280,59 +317,128 @@ export default function DealFinalizePage() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '190px minmax(0, 1fr) 330px', gap: 16, alignItems: 'start' }}>
-        {/* ══ Action rail (deal-scoped, DC-style) ══ */}
+      <div style={{ display: 'grid', gridTemplateColumns: '185px minmax(0, 1fr) 340px', gap: 16, alignItems: 'start' }}>
+        {/* ══ Action rail ══ */}
         <div style={{ ...card, padding: 8, position: 'sticky', top: 16 }}>
-          {railBtn('Edit Worksheet', { onClick: () => router.push(`/deals/${deal.id}`) })}
-          {!isWholesale && deal.buyer && railBtn('Customer View', { onClick: () => router.push(`/customers/${deal.buyer!.id}`) })}
-          {railBtn('Print', { disabled: true, hint: 'Documents — Phase 5' })}
-          {railBtn('Payments', { disabled: true, hint: 'Coming soon' })}
-          {railBtn('Stipulations', { disabled: true, hint: 'Coming soon' })}
+          <RailBtn label="Edit Worksheet" onClick={() => router.push(`/deals/${deal.id}`)} />
+          {!isWholesale && deal.buyer && <RailBtn label="Customer View" onClick={() => router.push(`/customers/${deal.buyer!.id}`)} />}
+          <RailBtn label="Print" disabled hint="Documents — Phase 5" />
+          <RailBtn label="Payments" disabled hint="Coming soon" />
+          <RailBtn label="Stipulations" disabled hint="Coming soon" />
+          <RailBtn label="Lender Fees" disabled hint="Outside financing" />
           {editable && (
             <>
               <div style={{ height: 1, background: 'var(--border-light)', margin: '6px 4px' }} />
-              {railBtn('Cancel Deal', {
-                danger: true,
-                onClick: () => setConfirm({
+              <RailBtn
+                label="Cancel Deal"
+                danger
+                onClick={() => setConfirm({
                   title: 'Cancel this deal?',
                   body: 'The worksheet is kept for reference, but the deal closes and can no longer be edited or funded.',
                   confirmLabel: 'Cancel Deal',
                   danger: true,
                   onConfirm: cancelDeal,
-                }),
-              })}
+                })}
+              />
             </>
           )}
         </div>
 
-        {/* ══ Main column ══ */}
+        {/* ══ Main: Structure + LienHolder + Notes ══ */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
-          {/* Structure recap */}
+          {/* Structure */}
           <div style={{ ...card, padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <span style={eyebrow}>Structure</span>
-              {editable && (
-                <Link href={`/deals/${deal.id}`} style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 0 }}>
-                  Edit on worksheet →
-                </Link>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.015em', color: 'var(--text-primary)' }}>Structure</span>
+              <button disabled title="Solve price from a target payment — coming with outside financing" style={{
+                padding: '5px 12px', borderRadius: 8, minHeight: 0,
+                border: '1px dashed var(--border)', background: 'transparent',
+                fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)', cursor: 'not-allowed',
+              }}>Roll Back</button>
             </div>
-            <RecapLine sign="+" label="Price" amount={deal.salePrice} strong />
-            {LINE_ITEM_CATEGORIES.map(c => {
-              const amt = catTotal(c.key)
-              return amt ? <RecapLine key={c.key} sign="+" label={c.label} amount={amt} /> : null
-            })}
-            <RecapLine sign="+" label={isWholesale ? 'Total Tax (wholesale)' : deal.collectTax ? `Total Tax (${((deal.stateTaxRate + deal.countySurtaxRate) * 100).toFixed(1)}% FL)` : 'Total Tax (out-of-state)'} amount={totals.taxAmount} />
-            {deal.depositCredit > 0 && <RecapLine sign="−" label="Deposit / Cash Received" amount={deal.depositCredit} />}
-            {totals.netTradeEquity !== 0 && <RecapLine sign="−" label="Trade-In Equity" amount={totals.netTradeEquity} />}
-            <div style={{ borderTop: '1px solid var(--border-light)', marginTop: 8, paddingTop: 8 }}>
-              <RecapLine sign="=" label="Amount Financed" amount={totals.balanceDue} strong />
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '0 28px' }}>
+              {/* Left: money structure */}
+              <div>
+                <SLine sign="+" label="Price" strong
+                  right={<FMoney value={deal.salePrice} editable={editable} onSave={(n) => patch({ salePrice: n })} />} />
+                {LINE_ITEM_CATEGORIES.map(c => (
+                  <SLine key={c.key} sign="+" label={c.label}
+                    right={
+                      <button
+                        onClick={() => router.push(`/deals/${deal.id}`)}
+                        title="Itemize on the worksheet"
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+                          width: 140, height: 34, boxSizing: 'border-box', padding: '0 8px 0 11px',
+                          borderRadius: 9, border: '1px solid var(--border-light)', background: 'var(--bg-primary)',
+                          cursor: 'pointer', minHeight: 0,
+                        }}
+                      >
+                        <span style={{ fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
+                          {money(catTotal(c.key))}
+                        </span>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+                          <circle cx="12" cy="5" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="19" r="1.7" />
+                        </svg>
+                      </button>
+                    } />
+                ))}
+                <SLine sign="+" label={isWholesale ? 'Total Tax (wholesale)' : deal.collectTax ? `Total Tax (${((deal.stateTaxRate + deal.countySurtaxRate) * 100).toFixed(1)}% FL)` : 'Total Tax (out-of-state)'}
+                  right={<LockedBox amount={totals.taxAmount} />} />
+                <SLine sign="−" label="Cash Received"
+                  right={<FMoney value={deal.depositCredit} editable={editable} onSave={(n) => patch({ depositCredit: n })} />} />
+                <SLine sign="−" label="Trade In"
+                  right={<LockedBox amount={totals.netTradeEquity} />} />
+                <div style={{ borderTop: '1px solid var(--border-light)', marginTop: 8, paddingTop: 8 }}>
+                  <SLine sign="=" label="Amount Financed" strong
+                    right={<LockedBox amount={totals.balanceDue} strong />} />
+                </div>
+              </div>
+
+              {/* Right: financing terms */}
+              <div>
+                <SLine sign=" " label="Term"
+                  right={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <FInt value={deal.termMonths} editable={editable} width={64} onSave={(n) => patch({ termMonths: n })} />
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>months</span>
+                    </div>
+                  } />
+                <SLine sign=" " label="Interest Rate"
+                  right={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <FMoney value={deal.apr ?? 0} editable={editable} width={80} noDollar onSave={(n) => patch({ apr: n })} />
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>% APR</span>
+                    </div>
+                  } />
+                <SLine sign=" " label="Monthly Payment"
+                  right={<LockedBox amount={financing.monthlyPayment} />} />
+                <SLine sign=" " label="First Payment"
+                  right={
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <FInt value={deal.firstPaymentDays} editable={editable} width={54} onSave={(n) => patch({ firstPaymentDays: n ?? 30 })} />
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>days · {firstPaymentDate.toLocaleDateString()}</span>
+                    </div>
+                  } />
+                <div style={{
+                  marginTop: 12, padding: '9px 12px', borderRadius: 9,
+                  background: 'var(--bg-primary)', border: '1px solid var(--border-light)',
+                  fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5,
+                }}>
+                  {totals.balanceDue <= 0
+                    ? 'Cash deal — nothing left to finance.'
+                    : deal.termMonths
+                      ? `${money(financing.monthlyPayment)}/mo × ${deal.termMonths} = ${money(financing.monthlyPayment * deal.termMonths)} (${money(financing.financeCharge)} finance charge)`
+                      : 'Set a term to compute payments (outside financing).'}
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Lienholder */}
+          {/* LienHolder */}
           <div style={{ ...card, padding: '18px 20px' }}>
-            <div style={{ ...eyebrow, marginBottom: 12 }}>Lienholder</div>
+            <div style={{ ...eyebrow, marginBottom: 12 }}>LienHolder</div>
             <LienholderPicker
               current={deal.lienholderPartner}
               editable={editable}
@@ -342,74 +448,105 @@ export default function DealFinalizePage() {
           </div>
 
           {/* Notes */}
-          <div style={{ ...card, padding: '18px 20px' }}>
+          <div ref={notesRef} style={{ ...card, padding: '18px 20px' }}>
             <div style={{ ...eyebrow, marginBottom: 12 }}>Deal Notes</div>
-            <NotesBox value={deal.notes} editable={editable} onSave={(v) => patch({ notes: v })} />
+            <NotesBox value={deal.notes} editable={editable} onSave={(nv) => patch({ notes: nv })} />
           </div>
         </div>
 
         {/* ══ Deal Summary rail ══ */}
-        <div style={{ ...card, padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 0 }}>
-          <div style={{ ...eyebrow, marginBottom: 12 }}>Deal Summary</div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingBottom: 12, borderBottom: '1px solid var(--border-light)' }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Amount Financed</span>
-            <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
-              {money(totals.balanceDue)}
-            </span>
+        <div style={{ ...card, padding: '18px 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.015em', color: 'var(--text-primary)' }}>Deal Summary</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {(['print', 'mail', 'sms'] as const).map(k => (
+                <span key={k} title="Send deal summary — Phase 5" style={{
+                  width: 26, height: 26, borderRadius: 7, display: 'inline-flex',
+                  alignItems: 'center', justifyContent: 'center',
+                  background: 'var(--bg-primary)', color: 'var(--text-muted)', opacity: 0.6,
+                }}>
+                  {k === 'print' && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v8H6z" /></svg>}
+                  {k === 'mail' && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" /><path d="m22 7-10 6L2 7" /></svg>}
+                  {k === 'sms' && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>}
+                </span>
+              ))}
+            </div>
           </div>
 
-          {/* Gross — real numbers from vehicle cost + cost adds */}
+          {/* Down / term headline */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <div>
+              <span style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
+                {money(deal.depositCredit)}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 5 }}>Down</span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: 20, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
+                {deal.termMonths ?? 0}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 5 }}>term</span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 2, paddingBottom: 12, borderBottom: '1px solid var(--border-light)' }}>
+            <div>
+              <span style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
+                {(deal.apr ?? 0).toFixed(2)}%
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 5 }}>APR</span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
+                {money0(financing.monthlyPayment)}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 5 }}>/months</span>
+            </div>
+          </div>
+
+          {/* Money rows */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 7, padding: '12px 0', borderBottom: '1px solid var(--border-light)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>
-                True cost{trueCost != null ? ` (${money0(deal.vehicle.vehicleCost!)} + ${money0(costAddsTotal)} recon)` : ''}
-              </span>
-              <span style={{ fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
-                {trueCost != null ? money0(trueCost) : '—'}
-              </span>
-            </div>
-            {overAllowance > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>Trade over-allowance</span>
-                <span style={{ fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: '#e11d48' }}>−{money0(overAllowance)}</span>
-              </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Front Gross</span>
-              <span style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: frontGross != null && frontGross < 0 ? '#e11d48' : '#16a34a' }}>
-                {frontGross != null ? money0(frontGross) : '—'}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>Back Gross</span>
-              <span style={{ fontSize: 13.5, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: backGross < 0 ? '#e11d48' : '#16a34a' }}>
-                {money0(backGross)}
-              </span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 4 }}>
+            <SumRow label="Amount Financed" value={money(totals.balanceDue)} />
+            <SumRow label="Finance Charge" value={money(financing.financeCharge)} />
+            <SumRow label={`Deal Costs${trueCost != null ? ` (${money0(deal.vehicle.vehicleCost!)} + ${money0(costAddsTotal)} recon)` : ''}`} value={trueCost != null ? money0(trueCost) : '—'} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, padding: '12px 0', borderBottom: '1px solid var(--border-light)' }}>
+            <SumRow label="Back Gross" value={money(profit.backGross)} tone={profit.backGross < 0 ? 'bad' : 'ok'} />
+            <SumRow label="Front Gross" value={profit.frontGross != null ? money(profit.frontGross) : '—'} tone={profit.frontGross != null && profit.frontGross < 0 ? 'bad' : 'ok'} />
+            {overAllowance > 0 && <SumRow label="· incl. trade over-allowance" value={`−${money0(overAllowance)}`} tone="bad" small />}
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 2 }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Total Gross</span>
-              <span style={{ fontSize: 16, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: totalGross != null && totalGross < 0 ? '#e11d48' : 'var(--text-primary)' }}>
-                {totalGross != null ? money0(totalGross) : '—'}
+              <span style={{ fontSize: 14.5, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: profit.totalGross != null && profit.totalGross < 0 ? '#e11d48' : 'var(--text-primary)' }}>
+                {profit.totalGross != null ? money(profit.totalGross) : '—'}
+              </span>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7, padding: '12px 0', borderBottom: '1px solid var(--border-light)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>Commissions</span>
+              <FMoney value={deal.commissions} editable={editable} width={110} small onSave={(n) => patch({ commissions: n })} />
+            </div>
+            <SumRow label="Doc / Dealer Fees" value={money(profit.feeProfit)} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 4 }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)' }}>Net Profit</span>
+              <span style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', color: profit.netProfit != null && profit.netProfit < 0 ? '#e11d48' : '#16a34a' }}>
+                {profit.netProfit != null ? money(profit.netProfit) : '—'}
               </span>
             </div>
             <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>
               {trueCost == null
-                ? 'Add the vehicle cost on its detail page to see gross.'
-                : 'Estimate — commissions/pack not yet deducted.'}
+                ? 'Add the vehicle cost on its detail page to see gross & profit.'
+                : 'Front + back gross + dealer fees − commissions. Estimate.'}
             </div>
           </div>
 
-          {/* Fund / status */}
+          {/* Actions */}
           <div style={{ paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {deal.status === 'funded' ? (
               <div style={{
                 padding: '12px 14px', borderRadius: 10, textAlign: 'center',
                 background: '#edfaf0', border: '1px solid #bbf7d0',
                 fontSize: 13, fontWeight: 700, color: '#16a34a',
-              }}>
-                ✓ Funded {deal.fundedAt ? new Date(deal.fundedAt).toLocaleDateString() : ''}
-              </div>
+              }}>✓ Funded {deal.fundedAt ? new Date(deal.fundedAt).toLocaleDateString() : ''}</div>
             ) : deal.status === 'cancelled' ? (
               <div style={{
                 padding: '12px 14px', borderRadius: 10, textAlign: 'center',
@@ -423,9 +560,7 @@ export default function DealFinalizePage() {
                     padding: '8px 12px', borderRadius: 9,
                     background: '#fdf3e7', border: '1px solid #fde68a',
                     fontSize: 11.5, fontWeight: 600, color: '#b45309',
-                  }}>
-                    Needs {blockers.join(' · ')}
-                  </div>
+                  }}>Needs {blockers.join(' · ')}</div>
                 )}
                 <button
                   disabled={!ready}
@@ -450,17 +585,10 @@ export default function DealFinalizePage() {
               </>
             )}
             <div style={{ display: 'flex', gap: 8 }}>
-              <button disabled title="Documents & e-sign — Phase 5" style={{
-                flex: 1, padding: '9px 10px', borderRadius: 10, minHeight: 0,
-                border: '1px dashed var(--border)', background: 'transparent',
-                fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', cursor: 'not-allowed',
-              }}>Contract (Paper)</button>
-              <button disabled title="Documents & e-sign — Phase 5" style={{
-                flex: 1, padding: '9px 10px', borderRadius: 10, minHeight: 0,
-                border: '1px dashed var(--border)', background: 'transparent',
-                fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', cursor: 'not-allowed',
-              }}>eContract</button>
+              <DisabledPill label="Contract (Paper)" hint="Documents — Phase 5" />
+              <DisabledPill label="eContract" hint="E-sign — Phase 5" />
             </div>
+            <DisabledPill label="Request Stips from Customer" hint="Coming soon" full />
             <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>
               Rep: {deal.salesRep?.name || '—'}
             </div>
@@ -500,6 +628,191 @@ export default function DealFinalizePage() {
   )
 }
 
+// ─── Building blocks ─────────────────────────────────────────────────
+
+function RailBtn({ label, onClick, disabled, hint, danger }: {
+  label: string; onClick?: () => void; disabled?: boolean; hint?: string; danger?: boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={hint}
+      style={{
+        width: '100%', textAlign: 'left', padding: '10px 13px', minHeight: 0,
+        borderRadius: 10, border: 'none', background: 'transparent',
+        color: disabled ? 'var(--text-muted)' : danger ? '#e11d48' : 'var(--text-primary)',
+        fontSize: 13, fontWeight: 600,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.55 : 1,
+        transition: 'background 0.12s ease',
+      }}
+      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = danger ? 'rgba(225,29,72,0.07)' : 'var(--bg-primary)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+    >
+      {label}
+      {hint && <span style={{ display: 'block', fontSize: 10.5, fontWeight: 500, color: 'var(--text-muted)', marginTop: 1 }}>{hint}</span>}
+    </button>
+  )
+}
+
+function SLine({ sign, label, right, strong }: { sign: string; label: string; right: React.ReactNode; strong?: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0' }}>
+      <span style={{ width: 12, textAlign: 'center', fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)', flexShrink: 0 }}>{sign}</span>
+      <span style={{
+        flex: 1, minWidth: 0, fontSize: 13, fontWeight: strong ? 640 : 500,
+        color: strong ? 'var(--text-primary)' : 'var(--text-secondary)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{label}</span>
+      {right}
+    </div>
+  )
+}
+
+function SumRow({ label, value, tone, small }: { label: string; value: string; tone?: 'ok' | 'bad'; small?: boolean }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+      <span style={{ fontSize: small ? 11 : 12.5, color: 'var(--text-secondary)' }}>{label}</span>
+      <span style={{
+        fontSize: small ? 11 : 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+        color: tone === 'bad' ? '#e11d48' : tone === 'ok' ? '#16a34a' : 'var(--text-primary)',
+      }}>{value}</span>
+    </div>
+  )
+}
+
+function DisabledPill({ label, hint, full }: { label: string; hint: string; full?: boolean }) {
+  return (
+    <button disabled title={hint} style={{
+      flex: full ? undefined : 1, width: full ? '100%' : undefined,
+      padding: '9px 10px', borderRadius: 10, minHeight: 0,
+      border: '1px dashed var(--border)', background: 'transparent',
+      fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', cursor: 'not-allowed',
+    }}>{label}</button>
+  )
+}
+
+function LockedBox({ amount, strong }: { amount: number; strong?: boolean }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+      width: 140, height: 34, boxSizing: 'border-box', padding: '0 9px 0 11px',
+      borderRadius: 9, border: '1px solid var(--border-light)', background: 'var(--bg-primary)',
+    }}>
+      <span style={{ fontSize: 13, fontWeight: strong ? 700 : 600, fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>
+        {money(amount)}
+      </span>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+        <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+    </div>
+  )
+}
+
+function FMoney({ value, editable, onSave, width = 140, small, noDollar }: {
+  value: number; editable: boolean; onSave: (n: number) => void
+  width?: number; small?: boolean; noDollar?: boolean
+}) {
+  const [draft, setDraft] = useState(value ? String(value) : '')
+  const [focused, setFocused] = useState(false)
+  const lastValue = useRef(value)
+  useEffect(() => {
+    if (lastValue.current !== value) {
+      lastValue.current = value
+      if (!focused) setDraft(value ? String(value) : '')
+    }
+  }, [value, focused])
+
+  function commit() {
+    setFocused(false)
+    const n = parseFloat(draft.replace(/[^0-9.]/g, ''))
+    const nv = Number.isNaN(n) ? 0 : n
+    if (nv !== value) onSave(nv)
+  }
+
+  if (!editable) return <LockedBox amount={value} />
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 4,
+      width, height: small ? 30 : 34, boxSizing: 'border-box', padding: '0 10px',
+      borderRadius: 9,
+      border: focused ? '1px solid #c4e050' : '1px solid var(--border)',
+      background: focused ? '#fff' : 'var(--bg-primary)',
+      boxShadow: focused ? '0 0 0 3px rgba(223,253,110,0.2)' : 'none',
+      transition: 'border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease',
+    }}>
+      {!noDollar && <span style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600 }}>$</span>}
+      <input
+        value={focused
+          ? draft
+          : (() => { const n = parseFloat(draft.replace(/[^0-9.]/g, '')); return Number.isNaN(n) || !n ? '' : n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0 }) })()}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+        placeholder="0"
+        inputMode="decimal"
+        style={{
+          flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent',
+          fontSize: small ? 12.5 : 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+          color: 'var(--text-primary)', textAlign: 'right', padding: 0,
+        }}
+      />
+    </div>
+  )
+}
+
+function FInt({ value, editable, onSave, width = 64 }: {
+  value: number | null; editable: boolean; onSave: (n: number | null) => void; width?: number
+}) {
+  const [draft, setDraft] = useState(value != null ? String(value) : '')
+  const [focused, setFocused] = useState(false)
+  const lastValue = useRef(value)
+  useEffect(() => {
+    if (lastValue.current !== value) {
+      lastValue.current = value
+      if (!focused) setDraft(value != null ? String(value) : '')
+    }
+  }, [value, focused])
+
+  function commit() {
+    setFocused(false)
+    const n = parseInt(draft.replace(/\D/g, ''), 10)
+    const nv = Number.isNaN(n) ? null : n
+    if (nv !== value) onSave(nv)
+  }
+
+  return (
+    <div style={{
+      width, height: 34, boxSizing: 'border-box', padding: '0 10px',
+      display: 'flex', alignItems: 'center',
+      borderRadius: 9,
+      border: focused ? '1px solid #c4e050' : '1px solid var(--border)',
+      background: editable ? (focused ? '#fff' : 'var(--bg-primary)') : 'var(--lane-bg)',
+      boxShadow: focused ? '0 0 0 3px rgba(223,253,110,0.2)' : 'none',
+      transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+    }}>
+      <input
+        disabled={!editable}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+        placeholder="0"
+        inputMode="numeric"
+        style={{
+          flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent',
+          fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+          color: 'var(--text-primary)', textAlign: 'right', padding: 0,
+        }}
+      />
+    </div>
+  )
+}
+
 // ─── Lienholder picker (Partner list) ────────────────────────────────
 
 function LienholderPicker({ current, editable, onPick, onClear }: {
@@ -530,7 +843,7 @@ function LienholderPicker({ current, editable, onPick, onClear }: {
     return (
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-        padding: '10px 14px', borderRadius: 10,
+        padding: '10px 14px', borderRadius: 10, maxWidth: 420,
         background: 'var(--bg-primary)', border: '1px solid var(--border)',
       }}>
         <span style={{ fontSize: 13.5, fontWeight: 640, color: 'var(--text-primary)' }}>{current.companyName}</span>
@@ -559,7 +872,7 @@ function LienholderPicker({ current, editable, onPick, onClear }: {
         onChange={(e) => setQ(e.target.value)}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 180)}
-        placeholder="Search partners (lenders) to attach — optional for cash…"
+        placeholder="Search partners (lenders) — optional on cash deals…"
         style={{
           width: '100%', boxSizing: 'border-box', height: 36, padding: '0 12px',
           borderRadius: 10, border: '1px solid var(--border)', background: '#fff',
@@ -616,7 +929,7 @@ function NotesBox({ value, editable, onSave }: {
       value={draft}
       disabled={!editable}
       onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => { const v = draft.trim() || null; if (v !== (value ?? null)) onSave(v) }}
+      onBlur={() => { const nv = draft.trim() || null; if (nv !== (value ?? null)) onSave(nv) }}
       placeholder="Anything worth remembering about this deal…"
       rows={4}
       style={{

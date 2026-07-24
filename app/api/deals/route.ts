@@ -12,7 +12,7 @@ function dealAccess(role: string) {
 const DEAL_LIST_SELECT = {
   id: true, dealNumber: true, status: true, dealType: true,
   salePrice: true, otdTotal: true, depositCredit: true,
-  fundedAt: true, createdAt: true,
+  proceededAt: true, fundedAt: true, createdAt: true,
   vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
   buyer: { select: { id: true, firstName: true, lastName: true } },
   businessBuyer: { select: { id: true, businessName: true } },

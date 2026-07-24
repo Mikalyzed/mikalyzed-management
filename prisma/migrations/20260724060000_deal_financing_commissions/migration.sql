@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "deals" ADD COLUMN     "apr" DOUBLE PRECISION,
+ADD COLUMN     "commissions" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "first_payment_days" INTEGER NOT NULL DEFAULT 30,
+ADD COLUMN     "term_months" INTEGER;
+

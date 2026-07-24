@@ -87,6 +87,54 @@ export function computeDealTotals(d: DealWorksheetInput): DealTotals {
   }
 }
 
+// ── Financing (outside financing; zero/blank on cash deals) ──────────
+// Standard amortized payment: P·r / (1 − (1+r)^−n), r = APR/12/100.
+export function computeFinancing(input: { amountFinanced: number; apr: number | null; termMonths: number | null }) {
+  const P = Math.max(0, input.amountFinanced || 0)
+  const n = input.termMonths || 0
+  const aprPct = input.apr || 0
+  if (P <= 0 || n <= 0) return { monthlyPayment: 0, financeCharge: 0 }
+  if (aprPct <= 0) {
+    const monthlyPayment = Math.round((P / n) * 100) / 100
+    return { monthlyPayment, financeCharge: 0 }
+  }
+  const r = aprPct / 100 / 12
+  const raw = (P * r) / (1 - Math.pow(1 + r, -n))
+  const monthlyPayment = Math.round(raw * 100) / 100
+  const financeCharge = Math.round((monthlyPayment * n - P) * 100) / 100
+  return { monthlyPayment, financeCharge }
+}
+
+// ── Profit waterfall (money-gated surfaces only) ─────────────────────
+// Front gross  = sale price − true cost (vehicleCost + recon CostAdds)
+//                − trade over-allowance (allowance paid above ACV)
+// Back gross   = margin on non-fee add-ons (price − dealer cost per line)
+// Fee profit   = dealer-revenue fee lines (taxable fees = dealer fees;
+//                government fees like title/reg are pass-through, not profit)
+// Net profit   = front + back + fee profit − commissions
+export function computeDealProfit(input: {
+  salePrice: number
+  trueCost: number | null
+  overAllowance: number
+  lineItems: Array<{ category: string; amount: number; taxable: boolean; cost?: number | null }>
+  commissions: number
+}) {
+  const frontGross = input.trueCost != null
+    ? Math.round((input.salePrice - input.trueCost - input.overAllowance) * 100) / 100
+    : null
+  const backGross = Math.round(input.lineItems
+    .filter(li => li.category !== 'fee')
+    .reduce((s, li) => s + (li.amount || 0) - (li.cost || 0), 0) * 100) / 100
+  const feeProfit = Math.round(input.lineItems
+    .filter(li => li.category === 'fee' && li.taxable)
+    .reduce((s, li) => s + (li.amount || 0), 0) * 100) / 100
+  const totalGross = frontGross != null ? Math.round((frontGross + backGross) * 100) / 100 : null
+  const netProfit = totalGross != null
+    ? Math.round((totalGross + feeProfit - (input.commissions || 0)) * 100) / 100
+    : null
+  return { frontGross, backGross, feeProfit, totalGross, netProfit }
+}
+
 export function formatDealNumber(n: number): string {
   return `D-${String(n).padStart(4, '0')}`
 }

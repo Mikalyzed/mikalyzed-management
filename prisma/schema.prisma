@@ -534,7 +534,18 @@ model Deal {
   depositCredit Float @default(0) @map("deposit_credit") // future: fed by QBO deposit link
   otdTotal      Float @default(0) @map("otd_total") // computed server-side on save
 
+  // ── Financing terms (outside financing; all-zero on cash deals) ──
+  termMonths       Int?   @map("term_months")
+  apr              Float? // percent, e.g. 4.99 — NOT a decimal
+  firstPaymentDays Int    @default(30) @map("first_payment_days")
+
+  // ── Profit-side ──
+  commissions Float @default(0) // manual for now; per-rep plans later
+
   notes       String?
+  // Set when the rep presses "Proceed with Deal" — the deal graduates from
+  // the worksheet to the contract page, which becomes its home in lists.
+  proceededAt DateTime? @map("proceeded_at")
   fundedAt    DateTime? @map("funded_at")
   cancelledAt DateTime? @map("cancelled_at")
   createdById String?   @map("created_by_id")

@@ -50,7 +50,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 // Scalar worksheet fields the client may PATCH. Totals are NEVER accepted
 // from the client — recomputed server-side on every save.
-const MONEY_FIELDS = ['salePrice', 'stateTaxRate', 'countySurtaxRate', 'surtaxCap', 'depositCredit'] as const
+const MONEY_FIELDS = ['salePrice', 'stateTaxRate', 'countySurtaxRate', 'surtaxCap', 'depositCredit', 'commissions'] as const
 const OTHER_FIELDS = ['collectTax', 'notes', 'salesRepId', 'coBuyerContactId', 'dealType', 'buyerContactId', 'businessBuyerId', 'lienholderPartnerId'] as const
 const DEAL_TYPES = new Set(['retail_cash', 'wholesale'])
 
@@ -111,6 +111,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   for (const k of OTHER_FIELDS) {
     if (k in body) data[k] = body[k]
+  }
+
+  // Financing terms — validated ranges; blank/zero = cash deal.
+  if ('termMonths' in body) {
+    const n = intOrNull(body.termMonths)
+    if (n != null && (n < 0 || n > 120)) return NextResponse.json({ error: 'termMonths must be 0–120' }, { status: 400 })
+    data.termMonths = n
+  }
+  if ('apr' in body) {
+    const n = body.apr == null || body.apr === '' ? null : Number(body.apr)
+    if (n != null && (Number.isNaN(n) || n < 0 || n > 50)) {
+      return NextResponse.json({ error: 'apr must be a percent between 0 and 50' }, { status: 400 })
+    }
+    data.apr = n
+  }
+  if ('firstPaymentDays' in body) {
+    const n = intOrNull(body.firstPaymentDays)
+    if (n == null || n < 0 || n > 90) return NextResponse.json({ error: 'firstPaymentDays must be 0–90' }, { status: 400 })
+    data.firstPaymentDays = n
+  }
+
+  // "Proceed with Deal" — one-way stage marker; the contract page becomes
+  // the deal's home in lists once set.
+  if (body.markProceeded === true && !deal.proceededAt) {
+    data.proceededAt = new Date()
   }
   if (typeof data.collectTax !== 'undefined') data.collectTax = Boolean(data.collectTax)
   if (typeof data.dealType !== 'undefined' && !DEAL_TYPES.has(String(data.dealType))) {

@@ -722,7 +722,12 @@ export default function DealWorksheetPage() {
           <DealSnapshot
             deal={deal}
             totals={totals}
-            onProceed={editable ? () => router.push(`/deals/${deal.id}/finalize`) : undefined}
+            onProceed={editable ? async () => {
+              // Graduate the deal to the contract stage — from now on the
+              // deals list opens the contract page for this deal.
+              await patch({ markProceeded: true })
+              router.push(`/deals/${deal.id}/finalize`)
+            } : undefined}
           />
           </div>
         </div>

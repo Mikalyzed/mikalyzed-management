@@ -18,6 +18,7 @@ type DealRow = {
   dealType: string
   salePrice: number
   otdTotal: number
+  proceededAt: string | null
   fundedAt: string | null
   createdAt: string
   vehicle: { id: string; stockNumber: string; year: number | null; make: string | null; model: string | null }
@@ -122,7 +123,13 @@ export default function DealsPage() {
                   return (
                     <tr
                       key={d.id}
-                      onClick={() => router.push(`/deals/${d.id}`)}
+                      // Proceeded / closed deals live on the contract page;
+                      // fresh drafts open the worksheet.
+                      onClick={() => router.push(
+                        d.proceededAt || d.status !== 'draft'
+                          ? `/deals/${d.id}/finalize`
+                          : `/deals/${d.id}`
+                      )}
                       style={{ borderBottom: '1px solid rgba(15,23,42,0.05)', cursor: 'pointer', transition: 'background 120ms ease' }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = '#f8fafc' }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
