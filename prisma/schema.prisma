@@ -55,6 +55,8 @@ model User {
   calls                 Call[]
   costAddsAdded         CostAdd[]
   mediaUploaded         MediaAsset[]
+  dealsAsRep            Deal[]                      @relation("DealSalesRep")
+  dealsCreated          Deal[]                      @relation("DealCreatedBy")
 
   @@map("users")
 }
@@ -68,6 +70,12 @@ model Vehicle {
   model             String
   color             String?
   trim              String?
+  // Deal-jacket vehicle specifics (DealerCenter Vehicle Info parity)
+  engine            String?
+  transmission      String?
+  driveTrain        String?   @map("drive_train")
+  titleBrand        String?   @map("title_brand") // Clean / Salvage / Rebuilt / ...
+  newUsed           String?   @map("new_used") // New / Used
   status            String    @default("mechanic")
   currentStageId    String?   @map("current_stage_id")
   currentAssigneeId String?   @map("current_assignee_id")
@@ -120,6 +128,7 @@ model Vehicle {
   parts             Part[]
   costAdds          CostAdd[]
   mediaAssets       MediaAsset[]
+  deals             Deal[]
 
   @@index([status])
   @@index([currentAssigneeId])
@@ -219,7 +228,8 @@ model Partner {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  costAdds CostAdd[]
+  costAdds      CostAdd[]
+  dealLineItems DealLineItem[]
 
   @@index([companyName])
   @@index([archivedAt])
@@ -411,6 +421,194 @@ model Notification {
 
   @@index([userId, isRead])
   @@map("notifications")
+}
+
+// Business buyer for wholesale deals (DealerCenter "Business Deal" parity).
+// A reusable list — the same dealer/LLC can buy many cars. All fields
+// optional except the name; underwriting boxes included but not required.
+model Business {
+  id           String @id @default(uuid())
+  businessName String @map("business_name")
+  tradeName    String? @map("trade_name")
+  enterpriseType String? @map("enterprise_type") // LLC / Corporation / ...
+  taxId        String? @map("tax_id")
+  yearsInBusiness  Int? @map("years_in_business")
+  monthsInBusiness Int? @map("months_in_business")
+  grossMonthlyIncome Float? @map("gross_monthly_income")
+
+  street String?
+  city   String?
+  state  String?
+  zip    String?
+  county String?
+  lengthAtAddressYears  Int? @map("length_at_address_years")
+  lengthAtAddressMonths Int? @map("length_at_address_months")
+  mortgageType String? @map("mortgage_type")
+  phone  String?
+  email  String?
+  typeOfBusiness String? @map("type_of_business")
+
+  // Fleet + underwriting history (optional; kept for DC parity)
+  vehiclesFinanced Int?   @map("vehicles_financed")
+  vehiclesOwned    Int?   @map("vehicles_owned")
+  aggregateMonthlyPmt Float? @map("aggregate_monthly_pmt")
+  loanLease        String? @map("loan_lease")
+  operatingLease   String? @map("operating_lease")
+  priorBankruptcy  String? @map("prior_bankruptcy")
+  priorRepossession String? @map("prior_repossession")
+  lawsuitParty     String? @map("lawsuit_party") // party to a lawsuit?
+  delinquentTaxes  String? @map("delinquent_taxes")
+
+  // Operator (runs the business day-to-day)
+  operatorFirstName String? @map("operator_first_name")
+  operatorLastName  String? @map("operator_last_name")
+  operatorStreet    String? @map("operator_street")
+  operatorCity      String? @map("operator_city")
+  operatorState     String? @map("operator_state")
+  operatorZip       String? @map("operator_zip")
+  operatorCounty    String? @map("operator_county")
+
+  // Principal (owner)
+  principalFirstName String? @map("principal_first_name")
+  principalLastName  String? @map("principal_last_name")
+  principalJobTitle  String? @map("principal_job_title")
+  principalPhone     String? @map("principal_phone")
+  principalDob       DateTime? @map("principal_dob")
+  principalOwnershipPct Float? @map("principal_ownership_pct")
+  principalStreet    String? @map("principal_street")
+  principalCity      String? @map("principal_city")
+  principalState     String? @map("principal_state")
+  principalZip       String? @map("principal_zip")
+  principalCounty    String? @map("principal_county")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  deals Deal[]
+
+  @@index([businessName])
+  @@map("businesses")
+}
+
+// ─── Deal Desk (Phase 4, Slice 1: retail cash) ────────────────────────
+// One Deal = one attempt to sell one vehicle to one buyer. Created as a
+// draft (from a won opportunity or directly), carries the out-the-door
+// worksheet, and "funding" it is the single event that promotes the
+// contact to customer + marks the vehicle sold.
+//
+// Money is Float dollars (matches Vehicle cost fields — NOT Opportunity.value
+// which is legacy Int cents). Tax rates are stored per-deal so old deals
+// keep the rate they were sold under; defaults are FL retail (6% state +
+// 1% county surtax on the first $5,000) and must be VERIFIED WITH THE
+// ACCOUNTANT before real use — nothing is hardcoded at the app layer.
+model Deal {
+  id         String  @id @default(uuid())
+  dealNumber Int     @unique @default(autoincrement()) @map("deal_number") // display as D-1001
+  status     String  @default("draft") // draft | funded | cancelled
+  dealType   String  @default("retail_cash") @map("deal_type") // retail_cash now; retail_finance / wholesale / consignment in later slices
+
+  vehicleId        String  @map("vehicle_id")
+  // Retail: buyerContactId set. Wholesale: businessBuyerId set instead
+  // (switching deal type swaps one for the other).
+  buyerContactId   String? @map("buyer_contact_id")
+  businessBuyerId  String? @map("business_buyer_id")
+  coBuyerContactId String? @map("co_buyer_contact_id")
+  opportunityId    String? @unique @map("opportunity_id") // won opp this deal was created from
+  salesRepId       String? @map("sales_rep_id")
+
+  // ── Out-the-door worksheet ──
+  // Fees / accessories / products are itemized in DealLineItem (DealerCenter-
+  // style dynamic lines); only the price + tax scalars live here.
+  salePrice Float @default(0) @map("sale_price")
+
+  // ── Tax ──
+  // collectTax=false → out-of-state buyer pays tax at their registration.
+  collectTax       Boolean @default(true) @map("collect_tax")
+  stateTaxRate     Float   @default(0.06) @map("state_tax_rate")
+  countySurtaxRate Float   @default(0.01) @map("county_surtax_rate")
+  surtaxCap        Float   @default(5000) @map("surtax_cap") // surtax applies to first $5,000 only
+  taxAmount        Float   @default(0) @map("tax_amount") // computed server-side on save
+
+  depositCredit Float @default(0) @map("deposit_credit") // future: fed by QBO deposit link
+  otdTotal      Float @default(0) @map("otd_total") // computed server-side on save
+
+  notes       String?
+  fundedAt    DateTime? @map("funded_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  createdById String?   @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  vehicle     Vehicle      @relation(fields: [vehicleId], references: [id])
+  buyer       Contact?     @relation("DealBuyer", fields: [buyerContactId], references: [id])
+  businessBuyer Business?  @relation(fields: [businessBuyerId], references: [id])
+  coBuyer     Contact?     @relation("DealCoBuyer", fields: [coBuyerContactId], references: [id])
+  opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
+  salesRep    User?        @relation("DealSalesRep", fields: [salesRepId], references: [id])
+  createdBy   User?        @relation("DealCreatedBy", fields: [createdById], references: [id])
+  lineItems   DealLineItem[]
+  trades      DealTrade[]
+
+  @@index([vehicleId])
+  @@index([buyerContactId])
+  @@index([status])
+  @@map("deals")
+}
+
+// Itemized worksheet line (DealerCenter's "⋮" dynamic boxes). Category
+// groups the lines into the calculator rows; `taxable` feeds the FL math —
+// dealer fees (doc) are taxable, government fees (title/reg) are not.
+model DealLineItem {
+  id       String  @id @default(uuid())
+  dealId   String  @map("deal_id")
+  category String // fee | accessory | product | insurance
+  label    String
+  amount   Float   @default(0) // price charged to the customer
+  taxable  Boolean @default(false)
+  sortOrder Int    @default(0) @map("sort_order")
+
+  // Accessory extras (DealerCenter parity): dealer cost feeds gross profit
+  // later; vendor links to the Partner list; deductFrom classifies which
+  // gross the cost hits.
+  cost            Float?
+  itemNumber      String? @map("item_number")
+  vendorPartnerId String? @map("vendor_partner_id")
+  deductFrom      String? @map("deduct_from") // front_gross | back_gross
+
+  deal          Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  vendorPartner Partner? @relation(fields: [vendorPartnerId], references: [id])
+
+  @@index([dealId])
+  @@map("deal_line_items")
+}
+
+// Trade-in on a deal — up to 4 (enforced app-side; it has happened).
+// Trade vehicles are NOT inventory Vehicles yet; they're captured inline.
+// FL: trade allowance reduces the taxable base (verify with accountant).
+// Net trade equity = allowance − payoff; payoffs the dealer assumes are
+// owed to the lienholder.
+model DealTrade {
+  id         String  @id @default(uuid())
+  dealId     String  @map("deal_id")
+  vin        String?
+  year       Int?
+  make       String?
+  model      String?
+  trim       String?
+  mileage    Int?
+  color      String?
+  allowance  Float   @default(0) // what we credit the customer
+  acv        Float   @default(0) // actual cash value (what it's really worth)
+  payoff     Float   @default(0) // lien balance we assume
+  lienholder String?
+  notes      String?
+  sortOrder  Int     @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("deal_trades")
 }
 
 model ActivityLog {
@@ -614,6 +812,10 @@ model Contact {
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
   // --- Identity (matches DealerCenter Buyer Info section)
+  salutation         String? // Mr. / Mrs. / Ms. / Dr.
+  middleName         String? @map("middle_name")
+  nameSuffix         String? @map("name_suffix") // Jr. / Sr. / II / III / IV
+  nickname           String?
   gender             String? // Male / Female / Other / Prefer not to say
   ssn                String? // plain v1; encryption deferred to security review
   idType             String? @map("id_type") // Driver License / State ID / Passport / etc.
@@ -624,6 +826,24 @@ model Contact {
   homePhone          String? @map("home_phone")
   workPhone          String? @map("work_phone")
 
+  // --- Residence (DealerCenter applicant parity; FL title wants county)
+  county                String?
+  residenceType         String? @map("residence_type") // Own / Rent / Family / Other
+  rentMortgage          Float?  @map("rent_mortgage") // monthly payment
+  lengthAtAddressYears  Int?    @map("length_at_address_years")
+  lengthAtAddressMonths Int?    @map("length_at_address_months")
+
+  // --- Previous address (credit apps want it when current < 2 years)
+  prevStreet         String? @map("prev_street")
+  prevCity           String? @map("prev_city")
+  prevState          String? @map("prev_state")
+  prevZip            String? @map("prev_zip")
+  prevCounty         String? @map("prev_county")
+  prevResidenceType  String? @map("prev_residence_type")
+  prevRentMortgage   Float?  @map("prev_rent_mortgage")
+  prevLengthYears    Int?    @map("prev_length_years")
+  prevLengthMonths   Int?    @map("prev_length_months")
+
   // --- Sales pipeline / lead funnel
   leadType        String?  @map("lead_type") // Walk-in / Internet / Phone / Referral / Trade-In / Repeat / Other
   leadSource      String?  @map("lead_source") // marketing channel (Website / Facebook / Instagram / Google / etc.)
@@ -633,12 +853,24 @@ model Contact {
   salesRepId      String?  @map("sales_rep_id") // User.id of assigned rep (no FK constraint yet)
   isInShowroom    Boolean  @default(false) @map("is_in_showroom")
 
-  // --- Employment
+  // --- Employment (primary)
+  employmentType        String? @map("employment_type") // Employed / Self-Employed / Retired / ...
   employerName          String? @map("employer_name")
   employerPhone         String? @map("employer_phone")
   employerAddress       String? @map("employer_address")
   employerYears         Int?    @map("employer_years")
+  employerMonths        Int?    @map("employer_months")
+  incomeType            String? @map("income_type") // Salary / Hourly / Commission / ...
   employerMonthlyIncome Float?  @map("employer_monthly_income")
+
+  // --- Employment (secondary — DealerCenter has two blocks)
+  employment2Type         String? @map("employment2_type")
+  employer2Name           String? @map("employer2_name")
+  employer2Phone          String? @map("employer2_phone")
+  employer2Years          Int?    @map("employer2_years")
+  employer2Months         Int?    @map("employer2_months")
+  income2Type             String? @map("income2_type")
+  employer2MonthlyIncome  Float?  @map("employer2_monthly_income")
 
   // --- Referrer (who referred this contact)
   referrerName      String? @map("referrer_name") // free-text fallback when no internal contact match
@@ -662,6 +894,8 @@ model Contact {
   messages         Message[]
   uploadLinks      UploadLink[]
   calls            Call[]
+  dealsAsBuyer     Deal[]            @relation("DealBuyer")
+  dealsAsCoBuyer   Deal[]            @relation("DealCoBuyer")
 
   @@index([email])
   @@index([phone])
@@ -767,6 +1001,7 @@ model Opportunity {
   notes           OpportunityNote[]
   activities      ActivityEvent[]
   dispositionLogs DispositionLog[]
+  deal            Deal?
 
   @@index([contactId])
   @@index([pipelineId, stageId])
