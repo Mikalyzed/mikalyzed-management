@@ -1215,11 +1215,11 @@ function StipModal({ dealId, buyer, hasCoBuyer, onClose, onSent }: {
 
   return (
     <div className="mm-backdrop" onClick={onClose}>
-      <div className="mm-panel" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 720, display: 'flex', flexDirection: 'column' }}>
+      <div className="mm-panel" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 860, display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
-        <div style={{ padding: '18px 24px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-light)' }}>
+        <div style={{ padding: '20px 28px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-light)' }}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.015em', color: 'var(--text-primary)' }}>Request Stipulations</div>
+            <div style={{ fontSize: 17.5, fontWeight: 700, letterSpacing: '-0.015em', color: 'var(--text-primary)' }}>Request Stipulations</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
               {buyer.firstName} gets a secure upload link — files land on their record automatically.
             </div>
@@ -1234,25 +1234,25 @@ function StipModal({ dealId, buyer, hasCoBuyer, onClose, onSent }: {
         )}
 
         {/* Stip table */}
-        <div style={{ padding: '12px 24px', overflowY: 'auto', flex: 1, maxHeight: '48vh' }}>
+        <div style={{ padding: '14px 28px', overflowY: 'auto', flex: 1, maxHeight: '58vh' }}>
           <div style={{ display: 'flex', gap: 12, padding: '4px 0 8px', borderBottom: '1px solid var(--border-light)' }}>
-            <span style={{ flex: '0 0 170px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stip Type</span>
-            <span style={{ flex: '0 0 44px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Buyer</span>
-            <span style={{ flex: '0 0 62px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Co-Buyer</span>
+            <span style={{ flex: '0 0 165px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stip Type</span>
+            <span style={{ flex: '0 0 52px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', textAlign: 'center' }}>Buyer</span>
+            <span style={{ flex: '0 0 84px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap', textAlign: 'center' }}>Co-Buyer</span>
             <span style={{ flex: 1, fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Instruction</span>
           </div>
           {rows.map((r, i) => (
-            <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border-light)' }}>
-              <span style={{ flex: '0 0 170px', fontSize: 13, fontWeight: 640, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 0', borderBottom: '1px solid var(--border-light)' }}>
+              <span style={{ flex: '0 0 165px', fontSize: 13.5, fontWeight: 640, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {r.name}
               </span>
-              <span style={{ flex: '0 0 44px' }}>
+              <span style={{ flex: '0 0 52px', display: 'flex', justifyContent: 'center' }}>
                 {check(r.buyer, false, () => setRows(rs => rs.map((x, j) => j === i ? { ...x, buyer: !x.buyer } : x)))}
               </span>
-              <span style={{ flex: '0 0 62px' }}>
+              <span style={{ flex: '0 0 84px', display: 'flex', justifyContent: 'center' }}>
                 {check(r.coBuyer, !hasCoBuyer, () => setRows(rs => rs.map((x, j) => j === i ? { ...x, coBuyer: !x.coBuyer } : x)))}
               </span>
-              <span title={r.instruction} style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span title={r.instruction} style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {r.instruction || '—'}
               </span>
             </div>
@@ -1265,7 +1265,7 @@ function StipModal({ dealId, buyer, hasCoBuyer, onClose, onSent }: {
               onChange={(e) => setCustomName(e.target.value)}
               placeholder="Stip name"
               style={{
-                flex: '0 0 170px', height: 36, boxSizing: 'border-box', padding: '0 12px',
+                flex: '0 0 165px', height: 38, boxSizing: 'border-box', padding: '0 12px',
                 borderRadius: 10, border: '1px solid var(--border)', background: '#fff',
                 fontSize: 12.5, fontWeight: 500, color: 'var(--text-primary)', outline: 'none',
               }}
@@ -1275,7 +1275,7 @@ function StipModal({ dealId, buyer, hasCoBuyer, onClose, onSent }: {
               onChange={(e) => setCustomInstruction(e.target.value)}
               placeholder="Optional instructions (e.g., Please provide a copy of…)"
               style={{
-                flex: '1 1 200px', height: 36, boxSizing: 'border-box', padding: '0 12px',
+                flex: '1 1 220px', height: 38, boxSizing: 'border-box', padding: '0 12px',
                 borderRadius: 10, border: '1px solid var(--border)', background: '#fff',
                 fontSize: 12.5, fontWeight: 500, color: 'var(--text-primary)', outline: 'none',
               }}
@@ -1298,7 +1298,7 @@ function StipModal({ dealId, buyer, hasCoBuyer, onClose, onSent }: {
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '14px 24px 18px', borderTop: '1px solid var(--border-light)' }}>
+        <div style={{ padding: '16px 28px 20px', borderTop: '1px solid var(--border-light)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, opacity: 0.55 }} title="Automatic reminders need the background job system (Phase 1b)">
             {check(false, true, () => {})}
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Send daily reminders (coming with the job system)</span>

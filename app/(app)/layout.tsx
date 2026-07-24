@@ -21,6 +21,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // Resize pause: while the window is being resized, every backdrop-filter
+  // element recomposites per frame. Flag <html> so globals.css can drop the
+  // glass filters (same pattern as the data-scrolling scroll pause), restore
+  // ~150ms after the last resize event.
+  useEffect(() => {
+    let t: ReturnType<typeof setTimeout> | null = null
+    const onResize = () => {
+      document.documentElement.setAttribute('data-resizing', '1')
+      if (t) clearTimeout(t)
+      t = setTimeout(() => document.documentElement.removeAttribute('data-resizing'), 150)
+    }
+    window.addEventListener('resize', onResize)
+    return () => {
+      window.removeEventListener('resize', onResize)
+      if (t) clearTimeout(t)
+      document.documentElement.removeAttribute('data-resizing')
+    }
+  }, [])
+
   useEffect(() => {
     // Read from cookies
     const cookies = document.cookie.split(';').reduce((acc, c) => {
@@ -46,20 +65,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <Nav role={role} userName={name} />
       {/* Soft mesh-gradient backdrop — single source for the glass pages.
           Full-bleed: the sidebar is opaque, so the strip behind it is invisible
-          anyway, and keeping the element static means the 80px blur is never
-          re-rasterized when the rail collapses (animating its `left` made the
-          collapse visibly laggy). */}
+          anyway. No filter here on purpose: the old blur(80px) forced the GPU
+          to re-rasterize the whole viewport on every resize/collapse frame.
+          The wide radial falloffs below reproduce the same soft wash. */}
       <div aria-hidden className="app-mesh-bg" />
       <style>{`
         .app-mesh-bg {
           position: fixed;
           top: 0; right: 0; bottom: 0; left: 0;
           background:
-            radial-gradient(at 24% 18%, hsla(220, 90%, 72%, 0.18) 0px, transparent 55%),
-            radial-gradient(at 88% 6%, hsla(280, 80%, 68%, 0.16) 0px, transparent 55%),
-            radial-gradient(at 74% 82%, hsla(190, 70%, 78%, 0.12) 0px, transparent 50%),
-            radial-gradient(at 22% 92%, hsla(340, 75%, 72%, 0.14) 0px, transparent 55%);
-          filter: blur(80px) saturate(110%);
+            radial-gradient(at 24% 18%, hsla(220, 92%, 72%, 0.17) 0px, transparent 64%),
+            radial-gradient(at 88% 6%, hsla(280, 82%, 68%, 0.15) 0px, transparent 64%),
+            radial-gradient(at 74% 82%, hsla(190, 72%, 78%, 0.11) 0px, transparent 58%),
+            radial-gradient(at 22% 92%, hsla(340, 77%, 72%, 0.13) 0px, transparent 64%);
           z-index: -1;
           pointer-events: none;
         }

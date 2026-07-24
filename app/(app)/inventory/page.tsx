@@ -350,7 +350,12 @@ function FilterPills({
       const idx = filters.findIndex(f => f.key === active)
       const btn = buttonRefs.current[idx >= 0 ? idx : 0]
       if (!btn) return
-      setIndicator({ left: btn.offsetLeft, width: btn.offsetWidth })
+      // Skip the no-op update: resize fires per frame and the pill rarely moves.
+      setIndicator(prev =>
+        prev && prev.left === btn.offsetLeft && prev.width === btn.offsetWidth
+          ? prev
+          : { left: btn.offsetLeft, width: btn.offsetWidth }
+      )
     }
     measure()
     window.addEventListener('resize', measure)
