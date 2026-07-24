@@ -706,17 +706,6 @@ export default function DealWorksheetPage() {
               lockedHint="Edited in the Trade-In section above"
             />
 
-            {/* Bottom line — DC-style: everything nets out to Amount Financed. */}
-            <div style={{ marginTop: 10, paddingTop: 6, borderTop: '1px solid var(--border-light)' }}>
-              <CalcRow
-                sign="="
-                label="Amount Financed"
-                amount={totals.balanceDue}
-                locked
-                strong
-                lockedHint="Price + fees + tax − deposit − trade equity"
-              />
-            </div>
           </div>
 
           <DealSnapshot

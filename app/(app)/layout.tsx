@@ -52,6 +52,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           }
           /* Collapsed icon rail — Nav toggles this class on <html>. */
           html.nav-collapsed .main-content { margin-left: 104px !important; }
+          /* Deal focus mode — the contract page hides the global sidebar and
+             mounts its own 220px deal rail (declared after nav-collapsed so
+             it wins when both classes are present). */
+          html.deal-focus .global-sidebar { display: none !important; }
+          html.deal-focus .main-content { margin-left: 220px !important; }
         }
       `}</style>
       <main className="main-content" style={{ padding: '16px 16px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 88px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 32px)' }}>

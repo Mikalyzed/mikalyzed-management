@@ -402,8 +402,10 @@ export default function Nav({ role, userName }: { role: string; userName: string
 
   return (
     <>
-      {/* Desktop sidebar — full 220px, or a 76px icon rail when collapsed */}
-      <aside className="desktop-sidebar" style={{
+      {/* Desktop sidebar — full 220px, or a 76px icon rail when collapsed.
+          `global-sidebar` lets focus-mode pages (deal contract) hide it and
+          mount their own context rail in its place. */}
+      <aside className="desktop-sidebar global-sidebar" style={{
         position: 'fixed', left: 0, top: 0, bottom: 0, width: collapsed ? 104 : 220,
         background: '#141414', flexDirection: 'column', zIndex: 40,
         display: 'none',
