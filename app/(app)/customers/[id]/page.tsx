@@ -204,6 +204,10 @@ export default function CustomerProfilePage() {
   const [buyerTab, setBuyerTab] = useState<'buyer' | 'cobuyer' | 'referrer'>('buyer')
   const [saving, setSaving] = useState(false)
   const [pickerOpen, setPickerOpen] = useState(false)
+  // "Start Deal" → pick a vehicle → deal is created with THIS customer
+  // auto-filled as the buyer, then we jump to the deal jacket.
+  const [dealPickerOpen, setDealPickerOpen] = useState(false)
+  const [dealCreating, setDealCreating] = useState(false)
   // Sales-rep picker options — anyone with role in ('sales', 'sales_manager').
   // Right now that's just Andrej (sales_manager); list grows automatically
   // as reps are added to the team.
@@ -431,6 +435,7 @@ export default function CustomerProfilePage() {
         createdByName={contact.createdBy?.name}
         saving={saving}
         onBack={() => router.push('/customers')}
+        onStartDeal={() => setDealPickerOpen(true)}
       />
 
       {isDesktop ? (
@@ -470,6 +475,32 @@ export default function CustomerProfilePage() {
           onPick={async (vehicleId) => { await addInterest(vehicleId); setPickerOpen(false) }}
         />
       )}
+
+      {dealPickerOpen && (
+        <VehiclePicker
+          existingVehicleIds={[]}
+          onClose={() => { if (!dealCreating) setDealPickerOpen(false) }}
+          onPick={async (vehicleId) => {
+            if (dealCreating) return
+            setDealCreating(true)
+            try {
+              const res = await fetch('/api/deals', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ buyerContactId: contact.id, vehicleId }),
+              })
+              const d = await res.json()
+              if (!res.ok) {
+                window.alert(d.error || 'Could not start the deal')
+                return
+              }
+              router.push(`/deals/${d.deal.id}`)
+            } finally {
+              setDealCreating(false)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -477,7 +508,7 @@ export default function CustomerProfilePage() {
 // ─── Header ───────────────────────────────────────────────────────────
 
 function ProfileHeader({
-  fullName, badge, stage, daysOld, createdByName, saving, onBack,
+  fullName, badge, stage, daysOld, createdByName, saving, onBack, onStartDeal,
 }: {
   fullName: string
   badge: { label: string; bg: string; fg: string }
@@ -486,6 +517,7 @@ function ProfileHeader({
   createdByName?: string | null
   saving: boolean
   onBack: () => void
+  onStartDeal?: () => void
 }) {
   const statusPill = stage ? stagePillColors(stage) : null
 
@@ -532,15 +564,15 @@ function ProfileHeader({
         {saving && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Saving…</span>}
         <HeaderAction label="Check-In" />
         <HeaderAction label="Start Desk" />
-        <HeaderAction label="Start Deal" primary />
+        <HeaderAction label="Start Deal" primary onClick={onStartDeal} />
       </div>
     </div>
   )
 }
 
-function HeaderAction({ label, primary }: { label: string; primary?: boolean }) {
+function HeaderAction({ label, primary, onClick }: { label: string; primary?: boolean; onClick?: () => void }) {
   return (
-    <button style={{
+    <button onClick={onClick} style={{
       padding: '8px 14px', borderRadius: 8,
       border: primary ? 'none' : '1px solid rgba(15,23,42,0.10)',
       background: primary ? '#1a1a1a' : '#fff',

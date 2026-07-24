@@ -48,6 +48,7 @@ const ICON_MAP: Record<string, string> = {
   '/leads': 'leads',
   '/contacts': 'contacts',
   '/customers': 'customers',
+  '/deals': 'sales',
   '/pipelines': 'pipelines',
   '/calendar': 'calendar',
   '/events': 'events',
@@ -77,6 +78,7 @@ function NavIcon({ name, size = 20, strokeWidth = 1.5 }: { name: string; size?: 
 const NAV_ITEMS: Record<string, NavEntry[]> = {
   admin: [
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { href: '/inventory', label: 'Inventory', icon: 'board' },
     {
       label: 'Recon', icon: 'board', children: [
         { href: '/vehicles', label: 'Recon Board', icon: 'board' },
@@ -84,7 +86,8 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
         { href: '/external', label: 'External Repairs', icon: 'external' },
       ],
     },
-    { href: '/transport', label: 'Transport', icon: 'transport' },
+    { href: '/customers', label: 'Customers', icon: 'customers' },
+    { href: '/deals', label: 'Deals', icon: 'sales' },
     {
       label: 'Sales', icon: 'sales', children: [
         { href: '/leads', label: 'Opportunities', icon: 'leads' },
@@ -93,10 +96,9 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
         { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
       ],
     },
+    { href: '/transport', label: 'Transport', icon: 'transport' },
     { href: '/content-schedule', label: 'Content Board', icon: 'tasks' },
     { href: '/mechanic-schedule', label: 'Mechanic Board', icon: 'calendar', railLabel: 'Mechanic' },
-    { href: '/inventory', label: 'Inventory', icon: 'board' },
-    { href: '/customers', label: 'Customers', icon: 'customers' },
     { href: '/porter', label: 'Porter', icon: 'tasks' },
     { href: '/calendar', label: 'Calendar', icon: 'calendar' },
     { href: '/events', label: 'Events', icon: 'events' },
@@ -135,6 +137,7 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
     { href: '/conversations', label: 'Conversations', icon: 'board' },
     { href: '/contacts', label: 'Contacts', icon: 'contacts' },
     { href: '/customers', label: 'Customers', icon: 'customers' },
+    { href: '/deals', label: 'Deals', icon: 'sales' },
     { href: '/pipelines', label: 'Pipelines', icon: 'pipelines' },
     { href: '/reports', label: 'Reports', icon: 'reports' },
     { href: '/transport/new', label: 'New Request', icon: 'newrequest' },
