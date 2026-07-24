@@ -21,6 +21,7 @@ const DEAL_DETAIL_INCLUDE = {
     },
   },
   lienholderPartner: { select: { id: true, companyName: true } },
+  stipulations: { orderBy: { requestedAt: 'asc' as const } },
   // Full contact — the deal jacket edits the applicant record inline
   // (DealerCenter-style), so it needs every buyer field.
   buyer: true,

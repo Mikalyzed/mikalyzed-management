@@ -1377,7 +1377,7 @@ function CalcRow({ sign, label, amount, editable, onSave, itemized, itemCount, o
           disabled={!editable && !itemCount}
           title={editable ? 'Itemize' : 'View items'}
           style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7,
             width: 168, height: 36, boxSizing: 'border-box', padding: '0 8px 0 12px',
             borderRadius: 10, border: '1px solid var(--border)', background: '#fff',
             cursor: 'pointer', boxShadow: 'var(--shadow-sm)',
@@ -1395,7 +1395,7 @@ function CalcRow({ sign, label, amount, editable, onSave, itemized, itemCount, o
         </button>
       ) : locked ? (
         <div title={lockedHint} style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7,
           width: 168, height: 36, boxSizing: 'border-box', padding: '0 10px 0 12px',
           borderRadius: 10, border: '1px solid var(--border-light)', background: 'var(--bg-primary)',
         }}>
@@ -1455,11 +1455,10 @@ function MoneyBox({ value, editable, onSave }: { value: number; editable: boolea
       boxShadow: focused ? '0 0 0 3px rgba(223,253,110,0.2)' : 'var(--shadow-sm)',
       transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
     }}>
-      <span style={{ fontSize: 12.5, color: 'var(--text-muted)', fontWeight: 600 }}>$</span>
       <input
         value={focused
           ? draft
-          : (() => { const n = parseFloat(draft.replace(/[^0-9.]/g, '')); return Number.isNaN(n) || !n ? '' : n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0 }) })()}
+          : (() => { const n = parseFloat(draft.replace(/[^0-9.]/g, '')); return Number.isNaN(n) || !n ? '' : `$${n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0 })}` })()}
         onChange={(e) => setDraft(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={commit}
@@ -1467,7 +1466,7 @@ function MoneyBox({ value, editable, onSave }: { value: number; editable: boolea
           if (e.key === 'Enter') e.currentTarget.blur()
           if (e.key === 'Escape') { setDraft(String(value || '')); e.currentTarget.blur() }
         }}
-        placeholder="0"
+        placeholder="$0"
         inputMode="decimal"
         style={{
           flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent',

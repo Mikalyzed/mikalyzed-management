@@ -13,7 +13,7 @@ import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import {
   computeDealTotals, computeFinancing, computeDealProfit, formatDealNumber,
-  LINE_ITEM_CATEGORIES, type DealTotals,
+  DEFAULT_STIPS, LINE_ITEM_CATEGORIES, type DealTotals,
 } from '@/lib/deals'
 
 type FinalizeDeal = {
@@ -44,7 +44,7 @@ type FinalizeDeal = {
     trim: string | null
   }
   buyer: {
-    id: string; firstName: string; lastName: string; phone: string | null
+    id: string; firstName: string; lastName: string; phone: string | null; email: string | null
     dateOfBirth: string | null; idType: string | null; idState: string | null; idNo: string | null
     address: string | null; city: string | null; state: string | null; county: string | null
   } | null
@@ -54,6 +54,11 @@ type FinalizeDeal = {
   lienholderPartner: { id: string; companyName: string } | null
   lineItems: Array<{ category: string; label: string; amount: number; taxable: boolean; cost: number | null }>
   trades: Array<{ allowance: number; acv: number; payoff: number; year: number | null; make: string | null; model: string | null }>
+  stipulations: Array<{
+    id: string; name: string; instruction: string | null
+    forBuyer: boolean; forCoBuyer: boolean
+    status: string; sentVia: string | null; requestedAt: string; receivedAt: string | null
+  }>
 }
 
 // ── Recon design tokens ──
@@ -93,6 +98,12 @@ export default function DealContractPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<null | { title: string; body: string; confirmLabel: string; danger?: boolean; onConfirm: () => void }>(null)
+  // Financing hides behind a pill on cash deals; auto-opens when terms exist.
+  const [finOpen, setFinOpen] = useState(false)
+  const [stipsOpen, setStipsOpen] = useState(false)
+  // In-deal peek: opens customer/vehicle pages in an overlay so you never
+  // leave the deal.
+  const [peek, setPeek] = useState<null | { title: string; url: string }>(null)
 
   // Deal focus mode: swap the global sidebar for this page's deal rail.
   useEffect(() => {
@@ -109,6 +120,9 @@ export default function DealContractPage() {
     }
   }, [id])
   useEffect(() => { load() }, [load])
+
+  const hasFinancing = Boolean(deal?.termMonths || deal?.apr)
+  useEffect(() => { if (hasFinancing) setFinOpen(true) }, [hasFinancing])
 
   const patch = useCallback(async (fields: Record<string, unknown>) => {
     setSaving(true)
@@ -211,19 +225,21 @@ export default function DealContractPage() {
       {/* ══ Deal rail — replaces the global sidebar while in the deal ══ */}
       <aside className="desktop-sidebar" style={{
         position: 'fixed', left: 0, top: 0, bottom: 0, width: 220,
-        background: '#141414', flexDirection: 'column', zIndex: 40,
+        background: '#232630', borderRight: '1px solid rgba(255,255,255,0.06)',
+        flexDirection: 'column', zIndex: 40,
         display: 'none',
       }}>
         <div style={{ padding: '20px 14px 14px' }}>
           <button onClick={() => router.push('/deals')} style={{
             display: 'inline-flex', alignItems: 'center', gap: 7,
-            padding: '7px 11px', minHeight: 0, borderRadius: 9, border: 'none',
-            background: 'rgba(255,255,255,0.06)', color: '#b0b0b0',
+            padding: '7px 11px', minHeight: 0, borderRadius: 9,
+            border: '1px solid rgba(255,255,255,0.10)',
+            background: 'rgba(255,255,255,0.06)', color: '#aeb4c0',
             fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
             transition: 'background 0.15s ease, color 0.15s ease',
           }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.10)'; e.currentTarget.style.color = '#fff' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#b0b0b0' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.11)'; e.currentTarget.style.color = '#ffffff' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = '#aeb4c0' }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6" /></svg>
             Exit Deal
@@ -232,15 +248,15 @@ export default function DealContractPage() {
             <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>
               {formatDealNumber(deal.dealNumber)}
             </div>
-            <div style={{ fontSize: 11.5, color: '#808080', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 11.5, color: '#8b91a0', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {buyerName}
             </div>
             <span style={{
               display: 'inline-block', marginTop: 7,
               fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 100,
               textTransform: 'uppercase', letterSpacing: '0.05em',
-              background: deal.status === 'funded' ? 'rgba(34,197,94,0.15)' : deal.status === 'cancelled' ? 'rgba(239,68,68,0.15)' : 'rgba(223,253,110,0.12)',
-              color: deal.status === 'funded' ? '#4ade80' : deal.status === 'cancelled' ? '#f87171' : '#dffd6e',
+              background: deal.status === 'funded' ? 'rgba(74,222,128,0.14)' : deal.status === 'cancelled' ? 'rgba(248,113,113,0.14)' : 'rgba(251,191,36,0.14)',
+              color: deal.status === 'funded' ? '#4ade80' : deal.status === 'cancelled' ? '#f87171' : '#fbbf24',
             }}>{deal.status === 'funded' ? 'Funded' : deal.status === 'cancelled' ? 'Cancelled' : 'Working Deal'}</span>
           </div>
         </div>
@@ -248,11 +264,17 @@ export default function DealContractPage() {
         <nav style={{ flex: 1, padding: '4px 10px', display: 'flex', flexDirection: 'column', gap: 1, overflowY: 'auto' }}>
           <DealRailItem icon={ICON_SHEET} label="Worksheet" onClick={() => router.push(`/deals/${deal.id}`)} />
           {!isWholesale && deal.buyer && (
-            <DealRailItem icon={ICON_EYE} label="Customer View" onClick={() => router.push(`/customers/${deal.buyer!.id}`)} />
+            <DealRailItem icon={ICON_EYE} label="Customer View" onClick={() => setPeek({ title: buyerName, url: `/customers/${deal.buyer!.id}` })} />
           )}
           <DealRailItem icon={ICON_PRINT} label="Print" disabled hint="Documents — Phase 5" />
           <DealRailItem icon={ICON_DOLLAR} label="Payments" disabled hint="Coming soon" />
-          <DealRailItem icon={ICON_STIPS} label="Stipulations" disabled hint="Coming soon" />
+          <DealRailItem
+            icon={ICON_STIPS}
+            label="Stipulations"
+            disabled={isWholesale || !deal.buyer}
+            hint={isWholesale || !deal.buyer ? 'Retail deals with a buyer' : undefined}
+            onClick={() => setStipsOpen(true)}
+          />
           <DealRailItem icon={ICON_BANK} label="Lender Fees" disabled hint="Outside financing" />
           <DealRailItem icon={ICON_TURBO} label="TurboPass" disabled hint="Credit — Phase 6" />
           {editable && (
@@ -274,9 +296,9 @@ export default function DealContractPage() {
           )}
         </nav>
 
-        <div style={{ padding: '14px 18px 18px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ fontSize: 11, color: '#555' }}>Rep</div>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#b0b0b0', marginTop: 1 }}>{deal.salesRep?.name || '—'}</div>
+        <div style={{ padding: '14px 18px 18px', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+          <div style={{ fontSize: 11, color: '#6b7180' }}>Rep</div>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#aeb4c0', marginTop: 1 }}>{deal.salesRep?.name || '—'}</div>
         </div>
       </aside>
 
@@ -288,21 +310,30 @@ export default function DealContractPage() {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', minWidth: 0 }}>
-            <Link href={`/vehicles/${deal.vehicle.id}`} style={{ textDecoration: 'none', minHeight: 0, minWidth: 0 }}>
+            <button
+              onClick={() => setPeek({
+                title: [deal.vehicle.year, deal.vehicle.make, deal.vehicle.model].filter(Boolean).join(' '),
+                url: `/vehicles/${deal.vehicle.id}`,
+              })}
+              style={{ textAlign: 'left', minHeight: 0, minWidth: 0, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer' }}
+            >
               <div style={{ fontSize: 13.5, fontWeight: 640, letterSpacing: '-0.01em', color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
                 {[deal.vehicle.year, deal.vehicle.make, deal.vehicle.model].filter(Boolean).join(' ')}
               </div>
               <div style={{ fontSize: 10.5, color: 'var(--text-muted)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>
                 Stock #{deal.vehicle.stockNumber}{deal.vehicle.vin ? ` · ${deal.vehicle.vin.slice(-8)}` : ''}
               </div>
-            </Link>
+            </button>
             <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border-light)' }} />
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <Link
-                  href={deal.buyer ? `/customers/${deal.buyer.id}` : `/deals/${deal.id}`}
-                  style={{ fontSize: 13.5, fontWeight: 640, letterSpacing: '-0.01em', color: 'var(--text-primary)', textDecoration: 'none', minHeight: 0, whiteSpace: 'nowrap' }}
-                >{buyerName}</Link>
+                <button
+                  onClick={() => {
+                    if (deal.buyer) setPeek({ title: buyerName, url: `/customers/${deal.buyer.id}` })
+                    else router.push(`/deals/${deal.id}`)
+                  }}
+                  style={{ fontSize: 13.5, fontWeight: 640, letterSpacing: '-0.01em', color: 'var(--text-primary)', border: 'none', background: 'transparent', padding: 0, minHeight: 0, whiteSpace: 'nowrap', cursor: 'pointer' }}
+                >{buyerName}</button>
                 {!isWholesale && ['Pre-Qual', 'Credit', 'Turbo'].map(bdg => (
                   <span key={bdg} title={`${bdg} — credit integration (Phase 6)`} style={{
                     display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -408,7 +439,7 @@ export default function DealContractPage() {
                       onClick={() => router.push(`/deals/${deal.id}`)}
                       title="Itemize on the worksheet"
                       style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+                        display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7,
                         width: 150, height: 36, boxSizing: 'border-box', padding: '0 9px 0 12px',
                         borderRadius: 9, border: '1px solid var(--border-light)', background: 'var(--bg-primary)',
                         cursor: 'pointer', minHeight: 0,
@@ -430,9 +461,41 @@ export default function DealContractPage() {
               <SLine sign="−" label="Trade In"
                 right={<LockedBox amount={totals.netTradeEquity} />} />
 
-              {/* Financing — under the structure, not beside it */}
+              {/* Financing — add-on-demand: most deals are cash, so it hides
+                  behind a pill unless terms are already on the deal. */}
+              {!finOpen ? (
+                <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={eyebrow}>Financing</span>
+                  {editable ? (
+                    <button onClick={() => setFinOpen(true)} style={{
+                      padding: '7px 14px', minHeight: 0, borderRadius: 100,
+                      border: '1.5px dashed var(--border)', background: 'transparent',
+                      fontSize: 12.5, fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer',
+                      transition: 'border-color 0.12s ease, color 0.12s ease',
+                    }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#c4e050'; e.currentTarget.style.color = 'var(--text-primary)' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)' }}
+                    >+ Add financing terms</button>
+                  ) : (
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Cash deal</span>
+                  )}
+                </div>
+              ) : (
               <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border-light)' }}>
-                <div style={{ ...eyebrow, marginBottom: 12 }}>Financing</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <span style={eyebrow}>Financing</span>
+                  <button
+                    onClick={() => setFinOpen(false)}
+                    title="Hide financing"
+                    style={{
+                      width: 26, height: 26, minHeight: 0, borderRadius: 8, border: 'none', padding: 0,
+                      background: 'var(--bg-primary)', color: 'var(--text-muted)', cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6" /></svg>
+                  </button>
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px 24px' }}>
                   <FinRow label="Term">
                     <FInt value={deal.termMonths} editable={editable} width={70} onSave={(n) => patch({ termMonths: n })} />
@@ -462,6 +525,7 @@ export default function DealContractPage() {
                       : 'Set a term to compute payments (outside financing).'}
                 </div>
               </div>
+              )}
             </div>
 
             {/* LienHolder */}
@@ -474,6 +538,86 @@ export default function DealContractPage() {
                 onClear={() => patch({ lienholderPartnerId: null })}
               />
             </div>
+
+            {/* Stipulations tracker — appears once any have been requested */}
+            {deal.stipulations.length > 0 && (
+              <div style={{ ...card, padding: '20px 22px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <span style={eyebrow}>
+                    Stipulations · {deal.stipulations.filter(s => s.status === 'received').length}/{deal.stipulations.length} received
+                  </span>
+                  {editable && !isWholesale && deal.buyer && (
+                    <button onClick={() => setStipsOpen(true)} style={{
+                      padding: '6px 13px', minHeight: 0, borderRadius: 100,
+                      border: '1.5px dashed var(--border)', background: 'transparent',
+                      fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', cursor: 'pointer',
+                    }}>+ Request more</button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {deal.stipulations.map(s => (
+                    <div key={s.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '10px 13px', borderRadius: 10,
+                      background: 'var(--bg-primary)', border: '1px solid var(--border-light)',
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 640, color: 'var(--text-primary)' }}>
+                          {s.name}
+                          {s.forCoBuyer && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', marginLeft: 7, letterSpacing: '0.04em' }}>+ CO-BUYER</span>}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                          Sent via {s.sentVia === 'sms' ? 'SMS' : 'email'} · {new Date(s.requestedAt).toLocaleDateString()}
+                          {s.receivedAt && ` · received ${new Date(s.receivedAt).toLocaleDateString()}`}
+                        </div>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          const res = await fetch(`/api/deals/${deal.id}/stips`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ stipId: s.id, status: s.status === 'received' ? 'pending' : 'received' }),
+                          })
+                          const d = await res.json()
+                          if (res.ok) setDeal({ ...deal, stipulations: d.stipulations })
+                        }}
+                        title={s.status === 'received' ? 'Mark as pending' : 'Mark as received'}
+                        style={{
+                          padding: '5px 12px', minHeight: 0, borderRadius: 100, border: 'none',
+                          fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                          textTransform: 'uppercase', letterSpacing: '0.04em',
+                          background: s.status === 'received' ? '#edfaf0' : '#fdf3e7',
+                          color: s.status === 'received' ? '#16a34a' : '#d97706',
+                        }}
+                      >{s.status === 'received' ? '✓ Received' : 'Pending'}</button>
+                      {editable && (
+                        <button
+                          onClick={async () => {
+                            const res = await fetch(`/api/deals/${deal.id}/stips`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ stipId: s.id, remove: true }),
+                            })
+                            const d = await res.json()
+                            if (res.ok) setDeal({ ...deal, stipulations: d.stipulations })
+                          }}
+                          title="Remove stipulation"
+                          style={{
+                            width: 22, height: 22, minHeight: 0, borderRadius: 6, border: 'none', padding: 0, flexShrink: 0,
+                            background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer',
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.color = '#ef4444' }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)' }}
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
           </div>
 
@@ -594,6 +738,23 @@ export default function DealContractPage() {
         </div>
       </div>
 
+      {/* ── In-deal peek (customer / vehicle page in an overlay) ── */}
+      {peek && <PeekModal title={peek.title} url={peek.url} onClose={() => setPeek(null)} />}
+
+      {/* ── Request Stipulations ── */}
+      {stipsOpen && deal.buyer && (
+        <StipModal
+          dealId={deal.id}
+          buyer={deal.buyer}
+          hasCoBuyer={Boolean(deal.coBuyer)}
+          onClose={() => setStipsOpen(false)}
+          onSent={(stipulations) => {
+            setDeal({ ...deal, stipulations })
+            setStipsOpen(false)
+          }}
+        />
+      )}
+
       {/* ── Confirm dialog ── */}
       {confirm && (
         <div className="mm-backdrop" onClick={() => setConfirm(null)}>
@@ -641,19 +802,19 @@ function DealRailItem({ icon, label, onClick, disabled, hint, danger }: {
         display: 'flex', alignItems: 'center', gap: 13,
         width: '100%', textAlign: 'left', padding: '10px 14px', minHeight: 42,
         borderRadius: 10, border: 'none', background: 'transparent',
-        color: disabled ? '#555' : danger ? '#f87171' : '#808080',
+        color: disabled ? '#5c6270' : danger ? '#f87171' : '#9aa1ad',
         fontSize: 14, fontWeight: 500,
         cursor: disabled ? 'not-allowed' : 'pointer',
         transition: 'background 0.15s ease, color 0.15s ease',
       }}
       onMouseEnter={(e) => {
         if (disabled) return
-        e.currentTarget.style.background = danger ? 'rgba(239,68,68,0.10)' : 'rgba(255,255,255,0.06)'
-        e.currentTarget.style.color = danger ? '#fca5a5' : '#b0b0b0'
+        e.currentTarget.style.background = danger ? 'rgba(248,113,113,0.10)' : 'rgba(255,255,255,0.07)'
+        e.currentTarget.style.color = danger ? '#fca5a5' : '#e6e9ee'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = 'transparent'
-        e.currentTarget.style.color = disabled ? '#555' : danger ? '#f87171' : '#808080'
+        e.currentTarget.style.color = disabled ? '#5c6270' : danger ? '#f87171' : '#9aa1ad'
       }}
     >
       <span style={{ display: 'inline-flex', flexShrink: 0 }}>{icon}</span>
@@ -739,7 +900,7 @@ function DisabledPill({ label, hint, full }: { label: string; hint: string; full
 function LockedBox({ amount, strong, width = 150 }: { amount: number; strong?: boolean; width?: number }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+      display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 7,
       width, height: 36, boxSizing: 'border-box', padding: '0 10px 0 12px',
       borderRadius: 9, border: '1px solid var(--border-light)', background: 'var(--bg-primary)',
     }}>
@@ -786,16 +947,15 @@ function FMoney({ value, editable, onSave, width = 150, small, noDollar }: {
       boxShadow: focused ? '0 0 0 3px rgba(223,253,110,0.2)' : 'none',
       transition: 'border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease',
     }}>
-      {!noDollar && <span style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600 }}>$</span>}
       <input
         value={focused
           ? draft
-          : (() => { const n = parseFloat(draft.replace(/[^0-9.]/g, '')); return Number.isNaN(n) || !n ? '' : n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0 }) })()}
+          : (() => { const n = parseFloat(draft.replace(/[^0-9.]/g, '')); return Number.isNaN(n) || !n ? '' : `${noDollar ? '' : '$'}${n.toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0 })}` })()}
         onChange={(e) => setDraft(e.target.value)}
         onFocus={() => setFocused(true)}
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-        placeholder="0"
+        placeholder={noDollar ? '0' : '$0'}
         inputMode="decimal"
         style={{
           flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent',
@@ -945,6 +1105,292 @@ function LienholderPicker({ current, editable, onPick, onClear }: {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Request Stipulations modal (DC parity) ──────────────────────────
+
+type StipRow = {
+  name: string
+  instruction: string
+  buyer: boolean
+  coBuyer: boolean
+  custom?: boolean
+  save?: boolean
+}
+
+function StipModal({ dealId, buyer, hasCoBuyer, onClose, onSent }: {
+  dealId: string
+  buyer: { firstName: string; lastName: string; phone: string | null; email: string | null }
+  hasCoBuyer: boolean
+  onClose: () => void
+  onSent: (stipulations: FinalizeDeal['stipulations']) => void
+}) {
+  const [rows, setRows] = useState<StipRow[]>(
+    DEFAULT_STIPS.map(d => ({ name: d.name, instruction: d.instruction, buyer: false, coBuyer: false }))
+  )
+  const [customName, setCustomName] = useState('')
+  const [customInstruction, setCustomInstruction] = useState('')
+  const [customSave, setCustomSave] = useState(false)
+  const [sending, setSending] = useState<null | 'email' | 'sms'>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  // Merge in the dealership's saved custom stips.
+  useEffect(() => {
+    fetch('/api/stip-templates')
+      .then(r => r.json())
+      .then(d => {
+        const templates: Array<{ name: string; instruction: string | null }> = d.templates || []
+        setRows(prev => [
+          ...prev,
+          ...templates
+            .filter(t => !prev.some(r => r.name === t.name))
+            .map(t => ({ name: t.name, instruction: t.instruction ?? '', buyer: false, coBuyer: false, custom: true })),
+        ])
+      })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const selected = rows.filter(r => r.buyer || r.coBuyer)
+
+  function addCustom() {
+    const name = customName.trim()
+    if (!name || rows.some(r => r.name.toLowerCase() === name.toLowerCase())) return
+    setRows(rs => [...rs, {
+      name, instruction: customInstruction.trim(),
+      buyer: true, coBuyer: false, custom: true, save: customSave,
+    }])
+    setCustomName(''); setCustomInstruction(''); setCustomSave(false)
+  }
+
+  async function send(channel: 'email' | 'sms') {
+    if (selected.length === 0) { setErr('Pick at least one stipulation'); return }
+    setSending(channel)
+    setErr(null)
+    try {
+      const res = await fetch(`/api/deals/${dealId}/stips`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel,
+          stips: selected.map(r => ({ name: r.name, instruction: r.instruction || null, forBuyer: r.buyer, forCoBuyer: r.coBuyer })),
+          saveTemplates: selected.filter(r => r.custom && r.save).map(r => ({ name: r.name, instruction: r.instruction || null })),
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setErr(d.error || 'Could not send'); return }
+      onSent(d.stipulations)
+    } catch {
+      setErr('Connection problem — the request may not have sent.')
+    } finally {
+      setSending(null)
+    }
+  }
+
+  const check = (checked: boolean, disabled: boolean, onChange: () => void) => (
+    <button
+      disabled={disabled}
+      onClick={onChange}
+      style={{
+        width: 20, height: 20, minHeight: 0, borderRadius: 6, padding: 0, flexShrink: 0,
+        border: checked ? 'none' : '1.5px solid var(--border)',
+        background: checked ? '#1a1a1a' : disabled ? 'var(--lane-bg)' : '#fff',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'background 0.12s ease',
+      }}
+    >
+      {checked && (
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+      )}
+    </button>
+  )
+
+  return (
+    <div className="mm-backdrop" onClick={onClose}>
+      <div className="mm-panel" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 720, display: 'flex', flexDirection: 'column' }}>
+        {/* Header */}
+        <div style={{ padding: '18px 24px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-light)' }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.015em', color: 'var(--text-primary)' }}>Request Stipulations</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              {buyer.firstName} gets a secure upload link — files land on their record automatically.
+            </div>
+          </div>
+          <button className="mm-close" onClick={onClose} style={{ border: 'none', cursor: 'pointer' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        {err && (
+          <div style={{ padding: '9px 24px', background: '#fef2f2', color: '#991b1b', fontSize: 12.5, fontWeight: 600 }}>{err}</div>
+        )}
+
+        {/* Stip table */}
+        <div style={{ padding: '12px 24px', overflowY: 'auto', flex: 1, maxHeight: '48vh' }}>
+          <div style={{ display: 'flex', gap: 12, padding: '4px 0 8px', borderBottom: '1px solid var(--border-light)' }}>
+            <span style={{ flex: '0 0 170px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Stip Type</span>
+            <span style={{ flex: '0 0 44px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Buyer</span>
+            <span style={{ flex: '0 0 62px', fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Co-Buyer</span>
+            <span style={{ flex: 1, fontSize: 10.5, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Instruction</span>
+          </div>
+          {rows.map((r, i) => (
+            <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border-light)' }}>
+              <span style={{ flex: '0 0 170px', fontSize: 13, fontWeight: 640, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {r.name}
+              </span>
+              <span style={{ flex: '0 0 44px' }}>
+                {check(r.buyer, false, () => setRows(rs => rs.map((x, j) => j === i ? { ...x, buyer: !x.buyer } : x)))}
+              </span>
+              <span style={{ flex: '0 0 62px' }}>
+                {check(r.coBuyer, !hasCoBuyer, () => setRows(rs => rs.map((x, j) => j === i ? { ...x, coBuyer: !x.coBuyer } : x)))}
+              </span>
+              <span title={r.instruction} style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {r.instruction || '—'}
+              </span>
+            </div>
+          ))}
+
+          {/* Custom stip */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '14px 0 4px', flexWrap: 'wrap' }}>
+            <input
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              placeholder="Stip name"
+              style={{
+                flex: '0 0 170px', height: 36, boxSizing: 'border-box', padding: '0 12px',
+                borderRadius: 10, border: '1px solid var(--border)', background: '#fff',
+                fontSize: 12.5, fontWeight: 500, color: 'var(--text-primary)', outline: 'none',
+              }}
+            />
+            <input
+              value={customInstruction}
+              onChange={(e) => setCustomInstruction(e.target.value)}
+              placeholder="Optional instructions (e.g., Please provide a copy of…)"
+              style={{
+                flex: '1 1 200px', height: 36, boxSizing: 'border-box', padding: '0 12px',
+                borderRadius: 10, border: '1px solid var(--border)', background: '#fff',
+                fontSize: 12.5, fontWeight: 500, color: 'var(--text-primary)', outline: 'none',
+              }}
+            />
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 36, cursor: 'pointer' }}>
+              {check(customSave, false, () => setCustomSave(v => !v))}
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>Save for future</span>
+            </label>
+            <button
+              onClick={addCustom}
+              disabled={!customName.trim()}
+              style={{
+                height: 36, padding: '0 18px', minHeight: 0, borderRadius: 10, border: 'none',
+                background: customName.trim() ? '#1a1a1a' : 'var(--lane-bg)',
+                color: customName.trim() ? '#fff' : 'var(--text-muted)',
+                fontSize: 12.5, fontWeight: 600, cursor: customName.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >Add</button>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '14px 24px 18px', borderTop: '1px solid var(--border-light)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, opacity: 0.55 }} title="Automatic reminders need the background job system (Phase 1b)">
+            {check(false, true, () => {})}
+            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Send daily reminders (coming with the job system)</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+              Sent only to the Buyer{buyer.phone ? ` · ${buyer.phone}` : ''}{buyer.email ? ` · ${buyer.email}` : ''}
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={onClose} style={{
+                padding: '9px 15px', borderRadius: 12, minHeight: 0,
+                border: '1px solid var(--border)', background: '#fff',
+                fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer',
+              }}>Close</button>
+              <button
+                onClick={() => send('email')}
+                disabled={!!sending || !buyer.email || selected.length === 0}
+                title={!buyer.email ? 'Buyer has no email on file' : undefined}
+                style={{
+                  padding: '9px 16px', borderRadius: 12, minHeight: 0, border: 'none',
+                  background: !buyer.email || selected.length === 0 ? 'var(--lane-bg)' : '#1a1a1a',
+                  color: !buyer.email || selected.length === 0 ? 'var(--text-muted)' : '#fff',
+                  fontSize: 13, fontWeight: 600,
+                  cursor: !buyer.email || selected.length === 0 ? 'not-allowed' : 'pointer',
+                }}
+              >{sending === 'email' ? 'Sending…' : 'Save & Send Email'}</button>
+              <button
+                onClick={() => send('sms')}
+                disabled={!!sending || !buyer.phone || selected.length === 0}
+                title={!buyer.phone ? 'Buyer has no phone on file' : undefined}
+                style={{
+                  padding: '9px 16px', borderRadius: 12, minHeight: 0, border: 'none',
+                  background: !buyer.phone || selected.length === 0 ? 'var(--lane-bg)' : '#1a1a1a',
+                  color: !buyer.phone || selected.length === 0 ? 'var(--text-muted)' : '#fff',
+                  fontSize: 13, fontWeight: 600,
+                  cursor: !buyer.phone || selected.length === 0 ? 'not-allowed' : 'pointer',
+                }}
+              >{sending === 'sms' ? 'Sending…' : 'Save & Send SMS'}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── In-deal peek modal — loads another app page in an overlay ───────
+// The (app) layout detects it is inside a frame and hides nav/margins,
+// so the page renders content-only. You never leave the deal.
+
+function PeekModal({ title, url, onClose }: { title: string; url: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="mm-backdrop" onClick={onClose}>
+      <div
+        className="mm-panel"
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: '94vw', maxWidth: 1320, height: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+      >
+        <div style={{
+          padding: '12px 18px', borderBottom: '1px solid var(--border-light)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {title}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Link href={url} target="_blank" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, minHeight: 0,
+              padding: '6px 12px', borderRadius: 9,
+              border: '1px solid var(--border)', background: '#fff',
+              fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none',
+            }}>
+              Open full page
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17 17 7M9 7h8v8" /></svg>
+            </Link>
+            <button className="mm-close" onClick={onClose} style={{ border: 'none', cursor: 'pointer' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+        <iframe
+          src={url}
+          title={title}
+          style={{ flex: 1, width: '100%', border: 'none', background: 'var(--bg-primary)' }}
+        />
+      </div>
     </div>
   )
 }

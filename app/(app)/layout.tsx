@@ -8,6 +8,18 @@ import AskAI from '@/components/AskAI'
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState('admin')
   const [name, setName] = useState('User')
+  // Embedded mode: when a page is loaded inside an in-app peek modal
+  // (iframe on the deal page), drop the nav/margins/global widgets and
+  // render content only.
+  const [embedded, setEmbedded] = useState(false)
+
+  useEffect(() => {
+    try {
+      if (window.self !== window.top) setEmbedded(true)
+    } catch {
+      setEmbedded(true)
+    }
+  }, [])
 
   useEffect(() => {
     // Read from cookies
@@ -20,6 +32,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (cookies.mm_user_role) setRole(cookies.mm_user_role)
     if (cookies.mm_user_name) setName(decodeURIComponent(cookies.mm_user_name))
   }, [])
+
+  if (embedded) {
+    return (
+      <div style={{ background: 'var(--bg-primary, #f8f8f6)', minHeight: '100vh' }}>
+        <main style={{ padding: 18 }}>{children}</main>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -53,10 +73,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           /* Collapsed icon rail — Nav toggles this class on <html>. */
           html.nav-collapsed .main-content { margin-left: 104px !important; }
           /* Deal focus mode — the contract page hides the global sidebar and
-             mounts its own 220px deal rail (declared after nav-collapsed so
-             it wins when both classes are present). */
+             mounts its own 220px deal rail. The doubled selector outranks
+             html.nav-collapsed even when both classes are on <html>. */
           html.deal-focus .global-sidebar { display: none !important; }
-          html.deal-focus .main-content { margin-left: 220px !important; }
+          html.deal-focus .main-content,
+          html.deal-focus.nav-collapsed .main-content { margin-left: 220px !important; }
         }
       `}</style>
       <main className="main-content" style={{ padding: '16px 16px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 88px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 32px)' }}>

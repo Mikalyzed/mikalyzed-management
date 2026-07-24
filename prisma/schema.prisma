@@ -491,6 +491,39 @@ model Business {
   @@map("businesses")
 }
 
+// Stipulation requested from a deal's buyer (docs needed to close):
+// driver's license, proof of insurance/income/residence, or custom.
+// Sent via SMS/email with a tokenized upload link; received is toggled
+// manually until uploads auto-match.
+model DealStipulation {
+  id          String    @id @default(uuid())
+  dealId      String    @map("deal_id")
+  name        String
+  instruction String?
+  forBuyer    Boolean   @default(true) @map("for_buyer")
+  forCoBuyer  Boolean   @default(false) @map("for_co_buyer")
+  status      String    @default("pending") // pending | received
+  sentVia     String?   @map("sent_via") // email | sms
+  requestedAt DateTime  @default(now()) @map("requested_at")
+  receivedAt  DateTime? @map("received_at")
+
+  deal Deal @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId])
+  @@map("deal_stipulations")
+}
+
+// Dealership-wide custom stip quick-picks ("Save for Future" in the
+// request modal). The four standard stips live in code, not here.
+model StipTemplate {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  instruction String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("stip_templates")
+}
+
 // ─── Deal Desk (Phase 4, Slice 1: retail cash) ────────────────────────
 // One Deal = one attempt to sell one vehicle to one buyer. Created as a
 // draft (from a won opportunity or directly), carries the out-the-door
@@ -560,8 +593,9 @@ model Deal {
   salesRep    User?        @relation("DealSalesRep", fields: [salesRepId], references: [id])
   createdBy   User?        @relation("DealCreatedBy", fields: [createdById], references: [id])
   lienholderPartner Partner? @relation("DealLienholder", fields: [lienholderPartnerId], references: [id])
-  lineItems   DealLineItem[]
-  trades      DealTrade[]
+  lineItems    DealLineItem[]
+  trades       DealTrade[]
+  stipulations DealStipulation[]
 
   @@index([vehicleId])
   @@index([buyerContactId])

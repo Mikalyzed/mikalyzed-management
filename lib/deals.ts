@@ -281,5 +281,14 @@ export const CATEGORY_TAXABLE_DEFAULT: Record<string, boolean> = {
   insurance: false,
 }
 
+// Standard stipulations (DealerCenter parity) — customs live in
+// StipTemplate rows and merge with these in the request modal.
+export const DEFAULT_STIPS: Array<{ name: string; instruction: string }> = [
+  { name: "Driver's License", instruction: "Please provide a clear image of your unexpired US Driver's License." },
+  { name: 'Proof of Insurance', instruction: 'Please provide a clear image of your unexpired Auto Insurance ID card.' },
+  { name: 'Proof of Income', instruction: 'Please provide a copy of your recent paystub, W-2 form, tax return, or another document showing your income.' },
+  { name: 'Proof of Residence', instruction: 'Please provide a recent utility bill or bank statement showing your full legal name and current address.' },
+]
+
 export const DEAL_STATUSES = ['draft', 'funded', 'cancelled'] as const
 export type DealStatus = (typeof DEAL_STATUSES)[number]
