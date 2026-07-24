@@ -199,7 +199,6 @@ export default function DealWorksheetPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [confirmFund, setConfirmFund] = useState(false)
   // Itemizer popover — anchored beside the clicked category box.
   const [itemizer, setItemizer] = useState<{ category: string; rect: { top: number; left: number; right: number } } | null>(null)
   const [vehiclePicker, setVehiclePicker] = useState(false)
@@ -372,25 +371,6 @@ export default function DealWorksheetPage() {
       body: JSON.stringify({ coBuyerContactId: contactId }),
     }).catch(() => {})
   }, [deal, patch])
-
-  async function fund() {
-    setConfirmFund(false)
-    setSaving(true)
-    setError(null)
-    try {
-      const res = await fetch(`/api/deals/${id}/fund`, { method: 'POST' })
-      const d = await res.json()
-      if (!res.ok) { setError(d.error || 'Funding failed'); return }
-      await load()
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function cancelDeal() {
-    const res = await fetch(`/api/deals/${id}`, { method: 'DELETE' })
-    if (res.ok) await load()
-  }
 
   if (loading || !deal) {
     return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
@@ -811,37 +791,6 @@ export default function DealWorksheetPage() {
         />
       )}
 
-      {confirmFund && (
-        <div className="mm-backdrop" onClick={() => setConfirmFund(false)}>
-          <div className="mm-panel" onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 440, padding: 24 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: '-0.015em', color: 'var(--text-primary)', marginBottom: 8 }}>
-              Fund {formatDealNumber(deal.dealNumber)}?
-            </div>
-            <div style={{ fontSize: 13.5, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 6 }}>
-              Closes the deal at <strong style={{ color: 'var(--text-primary)' }}>{money(totals.otdTotal)}</strong> out-the-door and:
-            </div>
-            <ul style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8, margin: '0 0 16px 18px', padding: 0 }}>
-              <li>marks the <strong>{[deal.vehicle.year, deal.vehicle.make, deal.vehicle.model].filter(Boolean).join(' ')}</strong> sold</li>
-              {deal.buyer
-                ? <li>promotes <strong>{deal.buyer.firstName} {deal.buyer.lastName}</strong> to customer</li>
-                : deal.businessBuyer && <li>records <strong>{deal.businessBuyer.businessName}</strong> as the wholesale buyer</li>}
-              {deal.trades.length > 0 && <li>records {deal.trades.length} trade-in{deal.trades.length > 1 ? 's' : ''} ({money0(totals.netTradeEquity)} net equity)</li>}
-              <li>locks this worksheet from further edits</li>
-            </ul>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => setConfirmFund(false)} style={{
-                padding: '9px 16px', borderRadius: 12, minHeight: 0,
-                border: '1px solid var(--border)', background: '#fff',
-                fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer',
-              }}>Not yet</button>
-              <button onClick={fund} style={{
-                padding: '9px 20px', borderRadius: 12, minHeight: 0, border: 'none',
-                background: '#1a1a1a', color: 'var(--accent)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-              }}>Fund Deal</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

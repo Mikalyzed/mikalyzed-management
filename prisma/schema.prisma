@@ -228,8 +228,9 @@ model Partner {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  costAdds      CostAdd[]
-  dealLineItems DealLineItem[]
+  costAdds        CostAdd[]
+  dealLineItems   DealLineItem[]
+  lienholderDeals Deal[]         @relation("DealLienholder")
 
   @@index([companyName])
   @@index([archivedAt])
@@ -515,6 +516,7 @@ model Deal {
   coBuyerContactId String? @map("co_buyer_contact_id")
   opportunityId    String? @unique @map("opportunity_id") // won opp this deal was created from
   salesRepId       String? @map("sales_rep_id")
+  lienholderPartnerId String? @map("lienholder_partner_id") // Partner (lender) on the title, set at finalize
 
   // ── Out-the-door worksheet ──
   // Fees / accessories / products are itemized in DealLineItem (DealerCenter-
@@ -546,6 +548,7 @@ model Deal {
   opportunity Opportunity? @relation(fields: [opportunityId], references: [id])
   salesRep    User?        @relation("DealSalesRep", fields: [salesRepId], references: [id])
   createdBy   User?        @relation("DealCreatedBy", fields: [createdById], references: [id])
+  lienholderPartner Partner? @relation("DealLienholder", fields: [lienholderPartnerId], references: [id])
   lineItems   DealLineItem[]
   trades      DealTrade[]
 

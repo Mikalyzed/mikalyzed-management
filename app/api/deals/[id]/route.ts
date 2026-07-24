@@ -14,8 +14,13 @@ const DEAL_DETAIL_INCLUDE = {
       color: true, mileage: true, askingPrice: true, inventoryStatus: true,
       trim: true, engine: true, transmission: true, driveTrain: true,
       titleBrand: true, newUsed: true,
+      // Cost basis for the finalize page's gross/profit panel — this route
+      // is money-gated (admin + sales_manager), same as the numbers it feeds.
+      vehicleCost: true,
+      costAdds: { select: { amountCents: true } },
     },
   },
+  lienholderPartner: { select: { id: true, companyName: true } },
   // Full contact — the deal jacket edits the applicant record inline
   // (DealerCenter-style), so it needs every buyer field.
   buyer: true,
@@ -46,7 +51,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 // Scalar worksheet fields the client may PATCH. Totals are NEVER accepted
 // from the client — recomputed server-side on every save.
 const MONEY_FIELDS = ['salePrice', 'stateTaxRate', 'countySurtaxRate', 'surtaxCap', 'depositCredit'] as const
-const OTHER_FIELDS = ['collectTax', 'notes', 'salesRepId', 'coBuyerContactId', 'dealType', 'buyerContactId', 'businessBuyerId'] as const
+const OTHER_FIELDS = ['collectTax', 'notes', 'salesRepId', 'coBuyerContactId', 'dealType', 'buyerContactId', 'businessBuyerId', 'lienholderPartnerId'] as const
 const DEAL_TYPES = new Set(['retail_cash', 'wholesale'])
 
 type LineItemBody = {
@@ -123,6 +128,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (typeof data.businessBuyerId === 'string') {
     const bz = await prisma.business.findUnique({ where: { id: data.businessBuyerId }, select: { id: true } })
     if (!bz) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
+  }
+  if (typeof data.lienholderPartnerId === 'string') {
+    const p = await prisma.partner.findUnique({ where: { id: data.lienholderPartnerId }, select: { id: true } })
+    if (!p) return NextResponse.json({ error: 'Lienholder not found' }, { status: 404 })
   }
 
   // Vehicle spec edits (DC Vehicle Info parity) — these write to the
