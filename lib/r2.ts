@@ -1,5 +1,5 @@
 import {
-  S3Client, GetObjectCommand, PutObjectCommand,
+  S3Client, GetObjectCommand, PutObjectCommand, ListObjectsV2Command,
   CreateMultipartUploadCommand, UploadPartCommand,
   CompleteMultipartUploadCommand, AbortMultipartUploadCommand,
 } from '@aws-sdk/client-s3'
@@ -26,6 +26,21 @@ function getClient(): S3Client {
 
 export function isR2Configured(): boolean {
   return !!(accountId && accessKeyId && secretAccessKey && bucket)
+}
+
+/** Server-side direct upload (small objects like archived report PDFs). */
+export async function putObject(key: string, body: Uint8Array | Buffer, contentType: string): Promise<void> {
+  await getClient().send(new PutObjectCommand({
+    Bucket: bucket, Key: key, Body: body, ContentType: contentType,
+  }))
+}
+
+/** List objects under a prefix — key, size, lastModified. */
+export async function listObjects(prefix: string): Promise<Array<{ key: string; size: number; lastModified: Date | null }>> {
+  const res = await getClient().send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix }))
+  return (res.Contents ?? [])
+    .filter(o => o.Key)
+    .map(o => ({ key: o.Key!, size: o.Size ?? 0, lastModified: o.LastModified ?? null }))
 }
 
 export function r2Bucket(): string {

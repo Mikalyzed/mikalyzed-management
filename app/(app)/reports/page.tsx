@@ -13,14 +13,24 @@ type ReportsData = {
   transportDelivered: number
 }
 
+type ArchivedMeeting = { date: string; savedAt: string | null; url: string }
+
 export default function ReportsPage() {
   const [data, setData] = useState<ReportsData | null>(null)
+  const [meetings, setMeetings] = useState<ArchivedMeeting[] | null>(null)
+  const [myRole, setMyRole] = useState<string>('')
 
   useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(d => setMyRole(d.user?.role ?? '')).catch(() => {})
     fetch('/api/reports')
       .then((r) => r.json())
       .then(setData)
       .catch(console.error)
+    // Meeting archive — 403 for roles without access; section simply hides.
+    fetch('/api/reports/vehicle-status/archive')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setMeetings(d?.meetings ?? null))
+      .catch(() => setMeetings(null))
   }, [])
 
   if (!data) {
@@ -33,11 +43,33 @@ export default function ReportsPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-          Performance metrics and bottleneck analysis
-        </p>
+      <div className="mb-8 flex items-start justify-between" style={{ gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Reports</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+            Performance metrics and bottleneck analysis
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {myRole === 'admin' && <a
+            href="/reports/meeting"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              background: '#1a1a1a', color: '#dffd6e', textDecoration: 'none',
+              padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+            }}
+          >☀ Morning Meeting</a>}
+          {(myRole === 'admin' || myRole === 'sales_manager') && <a
+            href="/api/reports/vehicle-status?format=pdf"
+            download
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              background: '#fff', color: 'var(--text-primary)', textDecoration: 'none',
+              border: '1px solid var(--border)',
+              padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+            }}
+          >⬇ Status Report (PDF)</a>}
+        </div>
       </div>
 
       {/* Overview stats */}
@@ -62,6 +94,35 @@ export default function ReportsPage() {
           <p className="stat-sub">{data.transportDelivered} delivered</p>
         </div>
       </div>
+
+      {/* Meeting archive — saved Morning Meeting snapshots */}
+      {meetings && meetings.length > 0 && (
+        <div className="card" style={{ marginBottom: 24 }}>
+          <h2 className="text-lg font-bold mb-1">Meeting Archive</h2>
+          <p className="text-sm" style={{ color: 'var(--text-muted)', marginBottom: 12 }}>
+            Saved Morning Meeting snapshots — open any date to see that day's full status report.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {meetings.map(m => (
+              <a
+                key={m.date}
+                href={m.url}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  border: '1px solid var(--border)', borderRadius: 10,
+                  padding: '8px 14px', fontSize: 13, fontWeight: 600,
+                  color: 'var(--text-primary)', textDecoration: 'none',
+                  background: 'var(--bg-card)',
+                }}
+              >
+                🗂 {new Date(`${m.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2" style={{ gap: '24px' }}>
         {/* Avg time per stage */}

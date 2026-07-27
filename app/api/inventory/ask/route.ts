@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
 import { getInventoryList } from '@/lib/dms/vehicle/canonical-reader'
+import { buildVehicleStatusReport } from '@/lib/reports/vehicle-status'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -218,6 +219,13 @@ const STAGE_HISTORY_TOOL: Anthropic.Tool = {
   cache_control: { type: 'ephemeral' },
 }
 
+const REPORT_TOOL: Anthropic.Tool = {
+  name: 'generate_status_report',
+  description:
+    'Generate the downloadable Inventory Status Report PDF: every active vehicle and where it is (in stock / in recon with current stage + assignee / at external repair with shop and expected return), plus all open parts (received-and-here vs coming in). Use this whenever the user asks for a report, a PDF, a printout, or an overall "where is everything" summary. Returns the summary counts and the download link — include the counts in your answer; the UI shows the download button automatically.',
+  input_schema: { type: 'object', properties: {} },
+}
+
 type StageHistoryFilter = {
   stages?: string[]
   assignee_names?: string[]
@@ -383,8 +391,9 @@ RULES:
 1. For questions about vehicles in inventory (counts, lists, filters), call query_inventory or inventory_summary.
 2. For questions about employees' work output (e.g. "how many cars did Karla complete in the last 2 weeks", "average detailing time", "who has the longest mechanic time"), call query_stage_history with the appropriate filters (use statuses: ["done"] for completed work). Duration stats are based on ACTIVE WORK TIME (start/pause/resume tracked) — not wall-clock elapsed. State this clearly in the answer if asked about timing.
 3. For relative date phrases, convert to ISO dates relative to today: "last 2 weeks" = completed_after ${new Date(Date.now() - 14*86400000).toISOString().split('T')[0]}; "this month" = completed_after ${todayIso.slice(0,8)}01; etc.
-4. You may call multiple tools in sequence.
-5. Be concise. Lead with the number, then optionally list specifics. Don't pad with explanations.`
+4. When the user asks for a report, a PDF, a printout, or an overall status of everything (inventory + recon + external + parts), call generate_status_report. Summarize the returned counts in your answer (the download button appears automatically — no need to write out a link).
+5. You may call multiple tools in sequence.
+6. Be concise. Lead with the number, then optionally list specifics. Don't pad with explanations.`
 
   // Cap history at last 8 turns (16 messages) to keep context lean
   const trimmedHistory = (history || []).slice(-16)
@@ -393,13 +402,15 @@ RULES:
     { role: 'user', content: question },
   ]
 
+  let reportUrl: string | null = null
+
   try {
     for (let i = 0; i < 5; i++) {
       const response = await anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1500,
         system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-        tools: [QUERY_TOOL, SUMMARY_TOOL, STAGE_HISTORY_TOOL],
+        tools: [QUERY_TOOL, SUMMARY_TOOL, STAGE_HISTORY_TOOL, REPORT_TOOL],
         messages,
       })
 
@@ -414,6 +425,13 @@ RULES:
             result = summarize(vehicles)
           } else if (tu.name === 'query_stage_history') {
             result = await queryStageHistory(tu.input as StageHistoryFilter)
+          } else if (tu.name === 'generate_status_report') {
+            // Counts come straight from the DB; the PDF itself is rendered by
+            // /api/reports/vehicle-status at download time — always fresh,
+            // nothing model-generated ends up in the document.
+            const report = await buildVehicleStatusReport()
+            reportUrl = '/api/reports/vehicle-status?format=pdf'
+            result = { counts: report.counts, download: 'ready' }
           } else {
             result = { error: `Unknown tool: ${tu.name}` }
           }
@@ -430,7 +448,7 @@ RULES:
       const text = response.content
         .filter((b): b is Anthropic.TextBlock => b.type === 'text')
         .map(b => b.text).join('\n').trim()
-      return NextResponse.json({ answer: text, count: vehicles.length })
+      return NextResponse.json({ answer: text, count: vehicles.length, reportUrl })
     }
     return NextResponse.json({ error: 'Too many tool-use iterations' }, { status: 500 })
   } catch (e: any) {

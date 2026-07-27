@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
-type AskTurn = { q: string; a: string | null }
+type AskTurn = { q: string; a: string | null; reportUrl?: string | null }
 
 export default function AskAI() {
   const [askOpen, setAskOpen] = useState(false)
@@ -37,7 +37,7 @@ export default function AskAI() {
       })
       const data = await res.json()
       const answer = data.answer || data.error || 'No response.'
-      setAskTurns(t => t.map((turn, i) => i === t.length - 1 ? { ...turn, a: answer } : turn))
+      setAskTurns(t => t.map((turn, i) => i === t.length - 1 ? { ...turn, a: answer, reportUrl: data.reportUrl || null } : turn))
     } catch (e: any) {
       setAskTurns(t => t.map((turn, i) => i === t.length - 1 ? { ...turn, a: `Error: ${e.message}` } : turn))
     } finally {
@@ -101,9 +101,9 @@ export default function AskAI() {
                 Try:
                 <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {[
+                    'Give me a status report of all inventory as a PDF.',
                     'How many flooring vehicles are in external repair or recon?',
                     'List all consignment vehicles in stock.',
-                    'What is the average mileage of in-stock vehicles?',
                     'Which vehicles have been in stock the longest?',
                   ].map(s => (
                     <button
@@ -133,6 +133,17 @@ export default function AskAI() {
                   padding: '8px 12px', borderRadius: 12, borderBottomLeftRadius: 4,
                   fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap',
                 }}>{turn.a === null ? <span style={{ color: 'var(--text-muted)' }}>Thinking…</span> : turn.a}</div>
+                {turn.reportUrl && (
+                  <a
+                    href={turn.reportUrl}
+                    download
+                    style={{
+                      alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6,
+                      background: '#1a1a1a', color: '#dffd6e', textDecoration: 'none',
+                      padding: '7px 14px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+                    }}
+                  >⬇ Download PDF report</a>
+                )}
               </div>
             ))}
           </div>
