@@ -153,6 +153,10 @@ export default function MechanicBoard() {
   const [expandedTaskIdx, setExpandedTaskIdx] = useState<number | null>(null)
   const [showOthers, setShowOthers] = useState(false)
   const [showCompleted, setShowCompleted] = useState(false)
+  // Collapsible task sections — a New Vehicle Inspection can be 20+ items;
+  // folding it keeps the card scannable on mobile.
+  const [collapseInspection, setCollapseInspection] = useState(false)
+  const [collapseAdded, setCollapseAdded] = useState(false)
   const [modalTab, setModalTab] = useState<'tasks' | 'parts'>('tasks')
   const [followupDrafts, setFollowupDrafts] = useState<Record<number, string>>({})
   const [followupHourDrafts, setFollowupHourDrafts] = useState<Record<number, string>>({})
@@ -571,6 +575,9 @@ export default function MechanicBoard() {
     setSelectedJob(job)
     setModalTab('tasks')
     setShowCompleted(false)
+    const inspItems = (job.checklist || []).filter(c => !c.addedByMechanic)
+    setCollapseInspection(inspItems.length > 0 && inspItems.every(c => c.done))
+    setCollapseAdded(false)
     setModalChecklist(JSON.parse(JSON.stringify(job.checklist || [])))
     setShowPauseModal(false)
     setPauseType(null)
@@ -673,6 +680,17 @@ export default function MechanicBoard() {
   // Finished work stays out of the way until asked for.
   const completedCount = visibleChecklist.filter(x => x.item.done).length
   const shownChecklist = showCompleted ? visibleChecklist : visibleChecklist.filter(x => !x.item.done)
+  // Two sections: the (inspection) checklist vs mechanic/admin-added tasks.
+  const inspectionAll = visibleChecklist.filter(x => !x.item.addedByMechanic)
+  const addedAll = visibleChecklist.filter(x => x.item.addedByMechanic)
+  const inspectionShown = shownChecklist.filter(x => !x.item.addedByMechanic)
+  const addedShown = shownChecklist.filter(x => x.item.addedByMechanic)
+  type TaskEntry = { header: true } | { pair: { item: ChecklistItem; i: number; mine: boolean } }
+  const taskEntries: TaskEntry[] = [
+    ...(collapseInspection ? [] : inspectionShown).map(p => ({ pair: p })),
+    ...(addedAll.length > 0 ? ([{ header: true }] as TaskEntry[]) : []),
+    ...(collapseAdded ? [] : addedShown).map(p => ({ pair: p })),
+  ]
   // Board-level aliases — inside the checklist map `data` is shadowed by the
   // item's own `data` field, so grab what the per-task assign control needs here.
   const boardMechanics = data.mechanics || []
@@ -840,17 +858,17 @@ export default function MechanicBoard() {
             {(job.assignees && job.assignees.length > 0) && (
               <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
                 {job.assignees.map(a => (
-                  <span key={a.id} style={{
+                  <span key={a.id} className="msch-assignee-chip" title={a.name} style={{
                     display: 'flex', alignItems: 'center', gap: 5, padding: '2px 9px 2px 2px',
                     borderRadius: 100, background: '#f1f3f5',
                   }}>
-                    <span style={{
+                    <span className="msch-assignee-avatar" style={{
                       width: 18, height: 18, borderRadius: '50%', flexShrink: 0,
                       background: chipColor(a.id), color: '#fff',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       fontSize: 8, fontWeight: 800,
                     }}>{initialsOf(a.name)}</span>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>{a.name.split(' ')[0]}</span>
+                    <span className="msch-assignee-name" style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>{a.name.split(' ')[0]}</span>
                   </span>
                 ))}
               </div>
@@ -1503,19 +1521,27 @@ export default function MechanicBoard() {
                   {(() => {
                     const isInspection = modalChecklist.some(it => !!it.type)
                     const inspectionItems = modalChecklist.filter(it => !it.addedByMechanic)
-                    const followupItems = modalChecklist.filter(it => !!it.addedByMechanic)
                     const inspectionDone = inspectionItems.filter(it => it.done).length
-                    const followupDone = followupItems.filter(it => it.done).length
+                    if (inspectionItems.length === 0) return null
                     return (
-                      <p style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: 'var(--text-secondary)' }}>
+                      <button
+                        type="button"
+                        onClick={() => setCollapseInspection(s => !s)}
+                        aria-expanded={!collapseInspection}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                          background: 'none', border: 'none', cursor: 'pointer', minHeight: 0,
+                          padding: '2px 0', marginBottom: 8,
+                          fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)',
+                        }}
+                      >
+                        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{collapseInspection ? '▸' : '▾'}</span>
                         {isInspection ? 'Inspection Tasks' : 'Tasks'} ({inspectionDone}/{inspectionItems.length})
-                        {isInspection && followupItems.length === 0 && (
-                          <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)', marginLeft: 8 }}>
-                            ({doneCount}/{modalChecklist.length} total)
-                          </span>
+                        {inspectionDone === inspectionItems.length && inspectionItems.length > 0 && (
+                          <span style={{ fontSize: 11, fontWeight: 650, color: '#16a34a' }}>✓ complete</span>
                         )}
-                        {saving && <span style={{ fontWeight: 400, fontSize: 11, marginLeft: 8, color: 'var(--text-muted)' }}>Saving...</span>}
-                      </p>
+                        {saving && <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--text-muted)' }}>Saving...</span>}
+                      </button>
                     )
                   })()}
                   {modalChecklist.length === 0 ? (
@@ -1537,24 +1563,39 @@ export default function MechanicBoard() {
                           {showOthers ? "Hide other mechanics' tasks" : `Show ${othersCount} other mechanic task${othersCount === 1 ? '' : 's'}`}
                         </button>
                       )}
-                      {shownChecklist.map(({ item, i }, vi) => {
+                      {taskEntries.map((entry) => {
+                        if ('header' in entry) {
+                          const addedDone = addedAll.filter(x => x.item.done).length
+                          return (
+                            <button
+                              key="added-tasks-header"
+                              type="button"
+                              onClick={() => setCollapseAdded(s => !s)}
+                              aria-expanded={!collapseAdded}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                                background: 'none', border: 'none', cursor: 'pointer', minHeight: 0,
+                                padding: '2px 0', marginTop: 10, marginBottom: 2,
+                                fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)',
+                              }}
+                            >
+                              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{collapseAdded ? '▸' : '▾'}</span>
+                              Tasks ({addedDone}/{addedAll.length})
+                              {addedDone === addedAll.length && addedAll.length > 0 && (
+                                <span style={{ fontSize: 11, fontWeight: 650, color: '#16a34a' }}>✓ complete</span>
+                              )}
+                            </button>
+                          )
+                        }
+                        const { item, i } = entry.pair
+                        // The "Complete inspection" CTA anchors to the last inspection row.
+                        const isLastInspectionItem = !item.addedByMechanic && inspectionShown.length > 0 && inspectionShown[inspectionShown.length - 1].i === i
+                        const isNewInventory = selectedJob.scopeName === 'New Inventory'
                         const isExpanded = expandedTaskIdx === i
                         const hasStructured = item.type === 'tirePsi' || item.type === 'brakePads' || item.type === 'fluids' || item.type === 'engineCheck' || item.type === 'electrical' || item.type === 'steeringCheck' || item.type === 'suspensionCheck'
                         const data = (item.data || {}) as any
-                        const visiblePrev = shownChecklist[vi - 1]?.item
-                        const isFirstFollowup = item.addedByMechanic && (!visiblePrev || !visiblePrev.addedByMechanic)
-                        const followupTotal = visibleChecklist.filter(x => x.item.addedByMechanic).length
-                        const followupDone = visibleChecklist.filter(x => x.item.addedByMechanic && x.item.done).length
-                        const visibleNext = shownChecklist[vi + 1]?.item
-                        const isLastInspectionItem = !item.addedByMechanic && (!visibleNext || visibleNext.addedByMechanic)
-                        const isNewInventory = selectedJob.scopeName === 'New Inventory'
                         return (
                           <Fragment key={i}>
-                            {isFirstFollowup && (
-                              <p style={{ fontSize: 13, fontWeight: 700, marginTop: 12, marginBottom: 4, color: 'var(--text-secondary)' }}>
-                                Tasks ({followupDone}/{followupTotal})
-                              </p>
-                            )}
                           <div style={{
                             background: item.done ? '#f0fdf4' : '#f9fafb', borderRadius: 10,
                             border: '1px solid', borderColor: item.done ? '#bbf7d0' : '#e2e5ea',
