@@ -525,8 +525,9 @@ export default function MechanicBoard() {
       return
     }
     // A mechanic can only check off tasks that belong to THEM (their explicit
-    // assignment, or an original task on a car they own). Admins can check any.
-    if (!isAdmin && !target.done) {
+    // assignment, or an original task on a car they own). Admins and the shop
+    // coordinator can check any — e.g. a mechanic finished but forgot to tick.
+    if (!isAdmin && !canBrowseLanes && !target.done) {
       const owner = taskOwner(target, selectedJob.assignee)
       if (!owner || owner.id !== data?.currentUserId) {
         setExpandedTaskIdx(index)
