@@ -170,6 +170,9 @@ export default function VehiclesPage() {
   const [modalData, setModalData] = useState<ModalData | null>(null)
   const [modalChecklist, setModalChecklist] = useState<ChecklistItem[]>([])
   const [showDoneTasks, setShowDoneTasks] = useState(false)
+  // Collapsible sections in the vehicle modal — big inspections fold away
+  const [collapseInspTasks, setCollapseInspTasks] = useState(false)
+  const [collapseAddedTasks, setCollapseAddedTasks] = useState(false)
   const [modalSaving, setModalSaving] = useState(false)
   const [modalLoading, setModalLoading] = useState(false)
   const [modalParts, setModalParts] = useState<any[]>([])
@@ -548,6 +551,9 @@ export default function VehiclesPage() {
       )
       setModalChecklist(currentStage?.checklist ? JSON.parse(JSON.stringify(currentStage.checklist)) : [])
       setShowDoneTasks(false)
+      const inspOnly = ((currentStage?.checklist || []) as Array<Record<string, unknown>>).filter(c => !c.addedByMechanic)
+      setCollapseInspTasks(inspOnly.length > 0 && inspOnly.every(c => c.done === true))
+      setCollapseAddedTasks(false)
     } catch { /* ignore */ }
     setModalLoading(false)
   }, [])
@@ -2014,13 +2020,55 @@ export default function VehiclesPage() {
                           const pairs = modalChecklist.map((item, i) => ({ item, i }))
                           const openPairs = pairs.filter(p => !p.item.done)
                           const donePairs = pairs.filter(p => p.item.done)
-                          const shownPairs = showDoneTasks ? [...openPairs, ...donePairs] : openPairs
+                          const anyType = modalChecklist.some(it => !!(it as Record<string, unknown>).type)
+                          const inspPairs = pairs.filter(p => !(p.item as Record<string, unknown>).addedByMechanic)
+                          const addedPairs = pairs.filter(p => !!(p.item as Record<string, unknown>).addedByMechanic)
+                          const showOf = (list: typeof pairs) => (showDoneTasks ? list : list.filter(p => !p.item.done))
+                          const inspDone = inspPairs.filter(p => p.item.done).length
+                          const addedDone = addedPairs.filter(p => p.item.done).length
+                          // Section headers only earn their place when there's a split to show
+                          const withHeaders = inspPairs.length > 0 && (anyType || addedPairs.length > 0)
+                          type Entry = { header: 'insp' | 'added' } | { pair: { item: (typeof modalChecklist)[number]; i: number } }
+                          const entries: Entry[] = [
+                            ...(withHeaders ? ([{ header: 'insp' }] as Entry[]) : []),
+                            ...(withHeaders && collapseInspTasks ? [] : showOf(inspPairs)).map(p => ({ pair: p })),
+                            ...(addedPairs.length > 0 ? ([{ header: 'added' }] as Entry[]) : []),
+                            ...(collapseAddedTasks ? [] : showOf(addedPairs)).map(p => ({ pair: p })),
+                          ]
                           return (
                             <>
                               {openPairs.length === 0 && !showDoneTasks && (
                                 <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>All tasks complete ✓</p>
                               )}
-                              {shownPairs.map(({ item, i }) => (
+                              {entries.map((entry) => {
+                                if ('header' in entry) {
+                                  const isInsp = entry.header === 'insp'
+                                  const collapsed = isInsp ? collapseInspTasks : collapseAddedTasks
+                                  const done = isInsp ? inspDone : addedDone
+                                  const total = isInsp ? inspPairs.length : addedPairs.length
+                                  return (
+                                    <button
+                                      key={`hdr-${entry.header}`}
+                                      type="button"
+                                      aria-expanded={!collapsed}
+                                      onClick={() => (isInsp ? setCollapseInspTasks(s => !s) : setCollapseAddedTasks(s => !s))}
+                                      style={{
+                                        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                                        background: 'none', border: 'none', cursor: 'pointer', minHeight: 0,
+                                        padding: '4px 2px', marginTop: isInsp ? 0 : 8,
+                                        fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)',
+                                      }}
+                                    >
+                                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{collapsed ? '▸' : '▾'}</span>
+                                      {isInsp ? (anyType ? 'Inspection Tasks' : 'Tasks') : 'Tasks'} ({done}/{total})
+                                      {done === total && total > 0 && (
+                                        <span style={{ fontSize: 11, fontWeight: 650, color: '#16a34a' }}>✓ complete</span>
+                                      )}
+                                    </button>
+                                  )
+                                }
+                                const { item, i } = entry.pair
+                                return (
                           <div
                             key={i}
                             onClick={() => toggleChecklistItem(i)}
@@ -2126,7 +2174,8 @@ export default function VehiclesPage() {
                               </button>
                             )}
                           </div>
-                              ))}
+                                )
+                              })}
                               {donePairs.length > 0 && (
                                 <button
                                   type="button"
