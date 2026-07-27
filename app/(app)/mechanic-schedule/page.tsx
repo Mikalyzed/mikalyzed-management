@@ -199,6 +199,7 @@ export default function MechanicBoard() {
   const [expectedDate, setExpectedDate] = useState('')
   const [trackingNumber, setTrackingNumber] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [canBrowseLanes, setCanBrowseLanes] = useState(false)
   const [showAllQueued, setShowAllQueued] = useState(false)
   const [showRemainingWeek, setShowRemainingWeek] = useState(false)
   const [viewMode, setViewMode] = useState<'board' | 'schedule' | 'plan'>('board')
@@ -252,6 +253,8 @@ export default function MechanicBoard() {
     fetchData()
     fetch('/api/auth/me').then(r => r.json()).then(d => {
       if (d.user?.role === 'admin') setIsAdmin(true)
+      // Shop coordinator browses every lane like an admin (view-only powers)
+      if (d.user?.role === 'admin' || d.user?.role === 'shop_coordinator') setCanBrowseLanes(true)
     }).catch(() => {})
   }, [fetchData])
 
@@ -643,7 +646,7 @@ export default function MechanicBoard() {
     const owner = taskOwner(it, selectedJob?.assignee ?? null)
     return (!!owner && owner.id === meId) || (!!it.addedByMechanic && it.approved !== 'approved')
   }
-  const hideOthers = !isAdmin && !showOthers
+  const hideOthers = !isAdmin && !canBrowseLanes && !showOthers
   const othersCount = modalChecklist.filter(it => it.approved !== 'declined' && !isMineTask(it)).length
   const visibleChecklist = modalChecklist
     .map((item, i) => ({ item, i, mine: isMineTask(item) }))
@@ -679,7 +682,7 @@ export default function MechanicBoard() {
   const mechList = data.mechanics || []
   // Non-admins are HARD-LOCKED to their own lane regardless of the (hidden) chip
   // state — they only ever see their own to-do list.
-  const activeFilter = isAdmin ? mechFilter : (data.currentUserId || mechFilter)
+  const activeFilter = canBrowseLanes ? mechFilter : (data.currentUserId || mechFilter)
   const workedTodayFiltered = activeFilter === 'all'
     ? Math.round(mechList.reduce((s, m) => s + m.workedTodayHours, 0) * 10) / 10
     : (mechList.find(m => m.id === activeFilter)?.workedTodayHours ?? 0)
@@ -1014,7 +1017,7 @@ export default function MechanicBoard() {
       {/* Header */}
       <div className={`msch-header ${data.isWorkHours ? 'no-owh' : ''}`}>
         <h1 className="msch-title">
-          {isAdmin ? 'Mechanic Schedule' : 'My Schedule'}
+          {canBrowseLanes ? 'Mechanic Schedule' : 'My Schedule'}
         </h1>
         {!data.isWorkHours && (
           <span className="msch-owh">
@@ -1065,7 +1068,7 @@ export default function MechanicBoard() {
 
       {/* Mechanic lane filter — ADMIN ONLY. A mechanic is locked to their own
           lane (mechFilter defaults to their id) and never sees All/other lanes. */}
-      {isAdmin && viewMode !== 'plan' && (data.mechanics?.length || 0) >= 2 && (
+      {canBrowseLanes && viewMode !== 'plan' && (data.mechanics?.length || 0) >= 2 && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
           {[{ id: 'all', name: 'All' }, ...(data.mechanics || [])].map(m => {
             const active = mechFilter === m.id
