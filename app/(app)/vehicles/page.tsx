@@ -168,6 +168,7 @@ export default function VehiclesPage() {
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null)
   const [modalData, setModalData] = useState<ModalData | null>(null)
   const [modalChecklist, setModalChecklist] = useState<ChecklistItem[]>([])
+  const [showDoneTasks, setShowDoneTasks] = useState(false)
   const [modalSaving, setModalSaving] = useState(false)
   const [modalLoading, setModalLoading] = useState(false)
   const [modalParts, setModalParts] = useState<any[]>([])
@@ -544,6 +545,7 @@ export default function VehiclesPage() {
         (s: { id: string }) => s.id === data.vehicle.currentStageId
       )
       setModalChecklist(currentStage?.checklist ? JSON.parse(JSON.stringify(currentStage.checklist)) : [])
+      setShowDoneTasks(false)
     } catch { /* ignore */ }
     setModalLoading(false)
   }, [])
@@ -2003,7 +2005,32 @@ export default function VehiclesPage() {
                       <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>No checklist items</p>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {modalChecklist.map((item, i) => (
+                        {(() => {
+                          const pairs = modalChecklist.map((item, i) => ({ item, i }))
+                          const openPairs = pairs.filter(p => !p.item.done)
+                          const donePairs = pairs.filter(p => p.item.done)
+                          const shownPairs = showDoneTasks ? [...openPairs, ...donePairs] : openPairs
+                          return (
+                            <>
+                              {donePairs.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowDoneTasks(s => !s)}
+                                  style={{
+                                    alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6,
+                                    padding: '6px 12px', marginBottom: 2, borderRadius: 100,
+                                    border: '1px solid var(--border)', background: 'var(--bg-card)',
+                                    color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 0,
+                                  }}
+                                >
+                                  <span style={{ fontSize: 11 }}>{showDoneTasks ? '▾' : '▸'}</span>
+                                  {showDoneTasks ? 'Hide completed' : `Show ${donePairs.length} completed`}
+                                </button>
+                              )}
+                              {openPairs.length === 0 && !showDoneTasks && (
+                                <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>All tasks complete ✓</p>
+                              )}
+                              {shownPairs.map(({ item, i }) => (
                           <div
                             key={i}
                             onClick={() => toggleChecklistItem(i)}
@@ -2109,7 +2136,10 @@ export default function VehiclesPage() {
                               </button>
                             )}
                           </div>
-                        ))}
+                              ))}
+                            </>
+                          )
+                        })()}
                       </div>
                     )}
 
