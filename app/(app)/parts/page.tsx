@@ -54,6 +54,7 @@ export default function PartsOverviewPage() {
   const [orderModalPart, setOrderModalPart] = useState<{ id: string; name: string } | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [myRole, setMyRole] = useState<string>('')
+  const [showAddPart, setShowAddPart] = useState(false)
   const [editingPart, setEditingPart] = useState<Part | null>(null)
   const [editTracking, setEditTracking] = useState('')
   const [editDelivery, setEditDelivery] = useState('')
@@ -91,7 +92,7 @@ export default function PartsOverviewPage() {
   function load() {
     fetch('/api/parts')
       .then(r => r.json())
-      .then(data => { setParts(data.parts || []); setIsAdmin(data.userRole === 'admin') })
+      .then(data => { setParts(data.parts || []); setIsAdmin(data.userRole === 'admin'); setMyRole(data.userRole || '') })
       .catch(console.error)
       .finally(() => setLoading(false))
   }
@@ -148,7 +149,18 @@ export default function PartsOverviewPage() {
 
   return (
     <div>
-      <h1 className="page-h1-mobile-pad" style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: '24px' }}>Parts Management</h1>
+      <div className="page-h1-mobile-pad" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: '24px', flexWrap: 'wrap' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }}>Parts Management</h1>
+        {(isAdmin || myRole === 'shop_coordinator') && (
+          <button
+            onClick={() => setShowAddPart(true)}
+            style={{
+              padding: '10px 18px', borderRadius: 10, border: 'none',
+              background: '#1a1a1a', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}
+          >+ Add Part</button>
+        )}
+      </div>
 
       {/* Filter tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '2px' }}>
@@ -357,6 +369,9 @@ export default function PartsOverviewPage() {
       {orderModalPart && (
         <OrderPartModal partId={orderModalPart.id} partName={orderModalPart.name} onClose={() => setOrderModalPart(null)} onComplete={load} />
       )}
+      {showAddPart && (
+        <AddPartModal onClose={() => setShowAddPart(false)} onAdded={() => { setShowAddPart(false); load() }} />
+      )}
       {editingPart && (
         <div onClick={() => setEditingPart(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }}>
           <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, padding: '24px', boxShadow: '0 -4px 30px rgba(0,0,0,0.15)' }}>
@@ -555,6 +570,156 @@ export default function PartsOverviewPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+
+/**
+ * Add a part from the Parts page: pick the car, name the part, optionally
+ * paste the sourcing link (link -> lands as "sourced" in admin's approve
+ * queue). Used by admin and the shop coordinator.
+ */
+function AddPartModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const [vehicles, setVehicles] = useState<Array<{ id: string; stockNumber: string; year: number | null; make: string; model: string }>>([])
+  const [search, setSearch] = useState('')
+  const [vehicleId, setVehicleId] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [url, setUrl] = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/vehicles')
+      .then(r => r.json())
+      .then(d => {
+        const list = Array.isArray(d) ? d : (d.vehicles || [])
+        setVehicles(list.map((v: any) => ({ id: v.id, stockNumber: v.stockNumber, year: v.year, make: v.make, model: v.model })))
+      })
+      .catch(() => {})
+  }, [])
+
+  const selected = vehicles.find(v => v.id === vehicleId) || null
+  const q = search.trim().toLowerCase()
+  const matches = q
+    ? vehicles.filter(v => `${v.stockNumber} ${v.year ?? ''} ${v.make} ${v.model}`.toLowerCase().includes(q)).slice(0, 8)
+    : []
+
+  return (
+    <div onClick={() => !saving && onClose()} className="modal-below-topbar" style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#fff', borderRadius: 16, width: '100%', maxWidth: 440,
+        padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', maxHeight: '86vh', overflowY: 'auto',
+      }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Add Part</h2>
+
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Vehicle</p>
+        {selected ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+            border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', marginBottom: 16,
+          }}>
+            <span style={{ fontSize: 14, fontWeight: 600 }}>
+              #{selected.stockNumber} · {selected.year ?? ''} {selected.make} {selected.model}
+            </span>
+            <button onClick={() => { setVehicleId(null); setSearch('') }} style={{
+              background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)',
+            }}>Change</button>
+          </div>
+        ) : (
+          <div style={{ marginBottom: 16 }}>
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search stock #, make, model..."
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14 }}
+            />
+            {matches.length > 0 && (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 10, marginTop: 6, overflow: 'hidden' }}>
+                {matches.map(v => (
+                  <button
+                    key={v.id}
+                    onClick={() => setVehicleId(v.id)}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px',
+                      background: '#fff', border: 'none', borderBottom: '1px solid var(--border)',
+                      fontSize: 13, cursor: 'pointer',
+                    }}
+                  >
+                    <b>#{v.stockNumber}</b> {v.year ?? ''} {v.make} {v.model}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Part name</p>
+        <input
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder='e.g. "Rear bumper"'
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, marginBottom: 16 }}
+        />
+
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Link (optional — sends it for approval to order)</p>
+        <input
+          type="url"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          placeholder="Paste the part link..."
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, marginBottom: 16 }}
+        />
+
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Notes (optional)</p>
+        <input
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          placeholder="Side, color, spec..."
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, marginBottom: 20 }}
+        />
+
+        {error && <p style={{ fontSize: 13, color: '#dc2626', margin: '0 0 12px' }}>{error}</p>}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={onClose} disabled={saving} style={{
+            flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
+            background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+          }}>Cancel</button>
+          <button
+            disabled={saving || !vehicleId || !name.trim()}
+            onClick={async () => {
+              setSaving(true)
+              setError(null)
+              try {
+                const res = await fetch('/api/parts', {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ vehicleId, name: name.trim(), url: url.trim() || null, notes: notes.trim() || null }),
+                })
+                if (!res.ok) {
+                  const d = await res.json().catch(() => ({}))
+                  setError(d.error || 'Could not add the part.')
+                  return
+                }
+                onAdded()
+              } finally {
+                setSaving(false)
+              }
+            }}
+            style={{
+              flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
+              background: saving || !vehicleId || !name.trim() ? '#e5e5e5' : '#1a1a1a',
+              color: '#fff', fontSize: 14, fontWeight: 700,
+              cursor: saving || !vehicleId || !name.trim() ? 'not-allowed' : 'pointer',
+            }}
+          >{saving ? 'Adding...' : 'Add Part'}</button>
+        </div>
+      </div>
     </div>
   )
 }
