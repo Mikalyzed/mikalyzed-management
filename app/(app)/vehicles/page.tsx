@@ -2113,8 +2113,8 @@ export default function VehiclesPage() {
                       </div>
                     )}
 
-                    {/* Admin: + Add Task — inline form right under the checklist. */}
-                    {isAdmin && (
+                    {/* Admin / shop coordinator: + Add Task — inline form right under the checklist. */}
+                    {canAssignInstalls && (
                       <form
                         onSubmit={(e) => {
                           e.preventDefault()
