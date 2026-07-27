@@ -1078,7 +1078,7 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
 @media (max-width: 767px) {
   /* External card header: badges squeeze the vehicle name into a one-word-
      per-line column — stack them on top and let the name run full width */
-  .ext-card-head { flex-direction: column-reverse; align-items: stretch !important; gap: 8px !important; margin-bottom: 12px !important; }
+  .ext-card-head { flex-direction: column-reverse !important; align-items: stretch !important; gap: 8px !important; margin-bottom: 12px !important; }
   .ext-card-head .ext-card-badges { justify-content: flex-start !important; }
 
   /* Mechanic board assignee chips: initials only — the name is noise at card width */
