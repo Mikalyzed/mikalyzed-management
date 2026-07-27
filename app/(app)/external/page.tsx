@@ -569,16 +569,12 @@ export default function ExternalRepairsPage() {
                 }}>
                 {/* Header - Clickable for admin */}
                 <div className="ext-card-padding" style={{ cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && (setEditRepairModal(r), setEditStatus(r.status), setEditReason(''))}>
-                  <div className="ext-card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', gap: '12px' }}>
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
-                        STOCK #{r.stockNumber}
-                      </p>
-                      <p style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '-0.01em' }}>
-                        {r.year} {r.make} {r.model}
-                      </p>
-                      {r.color && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>{r.color}</p>}
-                    </div>
+                  {/* Bottleneck-card layout: stock chip top-left aligned with the
+                      status pills top-right; vehicle name full-width underneath. */}
+                  <div className="ext-card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                    <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
+                      STOCK #{r.stockNumber}
+                    </p>
                     <div className="ext-card-badges" style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {overdue && <span className="badge badge-blocked">Overdue</span>}
                       {r.atDealership && (
@@ -591,6 +587,12 @@ export default function ExternalRepairsPage() {
                         {STATUS_LABELS[r.status]}
                       </span>
                     </div>
+                  </div>
+                  <div style={{ marginBottom: '16px' }}>
+                    <p style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.3 }}>
+                      {r.year} {r.make} {r.model}
+                    </p>
+                    {r.color && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>{r.color}</p>}
                   </div>
 
                   {/* Info grid - Clickable for admin */}
