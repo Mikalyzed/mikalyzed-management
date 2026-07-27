@@ -588,8 +588,11 @@ export default function ExternalRepairsPage() {
                       </span>
                     </div>
                   </div>
-                  <div style={{ marginBottom: '16px' }}>
-                    <p style={{ fontSize: '17px', fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.3 }}>
+                  <div style={{ marginBottom: '16px', minWidth: 0 }}>
+                    <p title={`${r.year ?? ''} ${r.make} ${r.model}`.trim()} style={{
+                      fontSize: '17px', fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.3,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
                       {r.year} {r.make} {r.model}
                     </p>
                     {r.color && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>{r.color}</p>}
