@@ -150,6 +150,15 @@ const NAV_ITEMS: Record<string, NavEntry[]> = {
   porter: [
     { href: '/porter', label: 'My Tasks', icon: 'tasks' },
   ],
+  shop_coordinator: [
+    { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
+    { href: '/vehicles', label: 'Recon Board', icon: 'board' },
+    { href: '/parts', label: 'Parts', icon: 'external' },
+    { href: '/external', label: 'External Repairs', icon: 'external' },
+    { href: '/mechanic-schedule', label: 'Mechanic Board', icon: 'calendar', railLabel: 'Mechanic' },
+    { href: '/transport', label: 'Transport', icon: 'transport' },
+    { href: '/reports', label: 'Reports', icon: 'reports' },
+  ],
 }
 
 function NavLink({ item, active, onClick, indent = false, collapsed = false }: { item: NavItem; active: boolean; onClick?: () => void; indent?: boolean; collapsed?: boolean }) {
@@ -359,6 +368,12 @@ function CollapseToggle({ collapsed = false, onClick }: { collapsed?: boolean; o
   )
 }
 
+const ROLE_DISPLAY: Record<string, string> = {
+  admin: 'Admin', mechanic: 'Mechanic', detailer: 'Detailer', content: 'Content',
+  sales: 'Sales', sales_manager: 'Sales Manager', coordinator: 'Coordinator',
+  porter: 'Porter', shop_coordinator: 'Shop Coordinator',
+}
+
 export default function Nav({ role, userName }: { role: string; userName: string }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -460,7 +475,7 @@ export default function Nav({ role, userName }: { role: string; userName: string
                 }}>{userName.charAt(0).toUpperCase()}</div>
                 <div>
                   <p style={{ fontSize: 13, fontWeight: 600, color: '#e0e0e0' }}>{userName}</p>
-                  <p style={{ fontSize: 11, color: '#555', textTransform: 'capitalize' }}>{role}</p>
+                  <p style={{ fontSize: 11, color: '#555' }}>{ROLE_DISPLAY[role] ?? role}</p>
                 </div>
               </div>
               <a href="/api/auth/logout" style={{ fontSize: 12, color: '#555', textDecoration: 'none', minHeight: 'auto' }}
@@ -547,7 +562,7 @@ export default function Nav({ role, userName }: { role: string; userName: string
               }}>{userName.charAt(0).toUpperCase()}</div>
               <div>
                 <p style={{ fontSize: 13, fontWeight: 600, color: '#e0e0e0' }}>{userName}</p>
-                <p style={{ fontSize: 11, color: '#555', textTransform: 'capitalize' }}>{role}</p>
+                <p style={{ fontSize: 11, color: '#555' }}>{ROLE_DISPLAY[role] ?? role}</p>
               </div>
             </div>
             <a href="/api/auth/logout" style={{ fontSize: 12, color: '#555', textDecoration: 'none' }}>Sign Out</a>

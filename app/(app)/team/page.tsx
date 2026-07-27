@@ -22,6 +22,7 @@ const ROLES = [
   { value: 'sales_manager', label: 'Sales Manager', desc: 'Full sales access + reports' },
   { value: 'coordinator', label: 'Coordinator', desc: 'Manages transport queue' },
   { value: 'porter', label: 'Porter', desc: 'Car wipe downs and misc tasks' },
+  { value: 'shop_coordinator', label: 'Shop Coordinator', desc: 'Parts & recon — sources parts, assigns installs' },
 ]
 
 export default function TeamPage() {

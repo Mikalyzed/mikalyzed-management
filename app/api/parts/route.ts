@@ -24,8 +24,9 @@ export async function GET(req: NextRequest) {
     where.status = status
   }
 
-  // Access control: admins see all, mechanics see parts assigned to them or on their vehicles
-  if (user.role !== 'admin') {
+  // Access control: admins + shop coordinator see all, mechanics see parts
+  // assigned to them or on their vehicles
+  if (user.role !== 'admin' && user.role !== 'shop_coordinator') {
     where.OR = [
       { assignedToId: user.id },
       { vehicle: { currentAssigneeId: user.id } }

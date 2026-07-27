@@ -25,7 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!part) return NextResponse.json({ error: 'Part not found' }, { status: 404 })
 
   // Access control
-  if (user.role !== 'admin' && part.assignedToId !== user.id) {
+  if (user.role !== 'admin' && user.role !== 'shop_coordinator' && part.assignedToId !== user.id) {
     const vehicle = await prisma.vehicle.findUnique({
       where: { id: part.vehicleId },
       select: { currentAssigneeId: true }
@@ -38,6 +38,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const data: any = {}
   let shouldSendEmail = false
   let statusChangeLogged = false
+
+  // Shop coordinator sources parts and requests orders; actually ordering and
+  // receiving stay with admin.
+  if (user.role === 'shop_coordinator' && 'status' in updates && ['ordered', 'received'].includes(updates.status)) {
+    return NextResponse.json({ error: 'Ordering and receiving are admin steps — set it ready to order instead.' }, { status: 403 })
+  }
 
   if ('url' in updates) {
     data.url = updates.url

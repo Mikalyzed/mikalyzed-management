@@ -53,6 +53,7 @@ export default function PartsOverviewPage() {
   const [urlInput, setUrlInput] = useState('')
   const [orderModalPart, setOrderModalPart] = useState<{ id: string; name: string } | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [myRole, setMyRole] = useState<string>('')
   const [editingPart, setEditingPart] = useState<Part | null>(null)
   const [editTracking, setEditTracking] = useState('')
   const [editDelivery, setEditDelivery] = useState('')
@@ -333,7 +334,7 @@ export default function PartsOverviewPage() {
                   {isAdmin && part.status === 'ready_to_order' && (
                     <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mark Ordered</button>
                   )}
-                  {part.status === 'ordered' && (
+                  {part.status === 'ordered' && myRole !== 'shop_coordinator' && (
                     <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mark Received</button>
                   )}
                 </div>

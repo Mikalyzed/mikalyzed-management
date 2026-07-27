@@ -155,6 +155,8 @@ export default function VehiclesPage() {
   const [vehicles, setVehicles] = useState<VehicleWithStage[]>([])
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
+  // Shop coordinator can assign arrived-parts installs (not route/drag)
+  const [canAssignInstalls, setCanAssignInstalls] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [dragInfo, setDragInfo] = useState<{ vehicleId: string; column: string } | null>(null)
   const [liveOrder, setLiveOrder] = useState<Record<string, string[]>>({})
@@ -235,6 +237,7 @@ export default function VehiclesPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.user?.role === 'admin') setIsAdmin(true)
+        if (data.user?.role === 'admin' || data.user?.role === 'shop_coordinator') setCanAssignInstalls(true)
         if (data.user?.id) setUserId(data.user.id)
       })
       .catch(() => {})
@@ -857,7 +860,7 @@ export default function VehiclesPage() {
       {/* Parts Arrived — Assign Install: an install task was auto-created when a
           part was received while the car is in mechanic, but no mechanic is on it
           yet. Sits ABOVE Pending Routing so an arrived part can't go unnoticed. */}
-      {isAdmin && vehicles.some(v => (v.unassignedInstalls?.length ?? 0) > 0) && (
+      {canAssignInstalls && vehicles.some(v => (v.unassignedInstalls?.length ?? 0) > 0) && (
         <div style={{
           position: 'relative', overflow: 'hidden',
           background: 'linear-gradient(180deg, #fff5f5, var(--bg-card) 70%)',

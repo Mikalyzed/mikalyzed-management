@@ -11,7 +11,7 @@ import { getSessionUser, requireRole } from '@/lib/auth'
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!requireRole(user.role, ['admin'])) return NextResponse.json({ error: 'Admin only' }, { status: 403 })
+  if (!requireRole(user.role, ['shop_coordinator'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
   const body = await req.json().catch(() => ({}))

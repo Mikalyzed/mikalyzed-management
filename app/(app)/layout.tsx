@@ -41,7 +41,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    // Read from cookies
+    // Cookies give an instant first paint…
     const cookies = document.cookie.split(';').reduce((acc, c) => {
       const [k, v] = c.trim().split('=')
       acc[k] = v
@@ -50,6 +50,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
     if (cookies.mm_user_role) setRole(cookies.mm_user_role)
     if (cookies.mm_user_name) setName(decodeURIComponent(cookies.mm_user_name))
+
+    // …but the cookie is stamped at login and goes stale when an admin
+    // changes someone's role. The server is the truth — refresh from it so
+    // the nav always matches the CURRENT role without needing a re-login.
+    fetch('/api/auth/me')
+      .then(r => r.json())
+      .then(d => {
+        if (d.user?.role) setRole(d.user.role)
+        if (d.user?.name) setName(d.user.name)
+      })
+      .catch(() => {})
   }, [])
 
   if (embedded) {
