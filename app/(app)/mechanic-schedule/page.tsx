@@ -152,6 +152,7 @@ export default function MechanicBoard() {
   const [modalChecklist, setModalChecklist] = useState<ChecklistItem[]>([])
   const [expandedTaskIdx, setExpandedTaskIdx] = useState<number | null>(null)
   const [showOthers, setShowOthers] = useState(false)
+  const [showCompleted, setShowCompleted] = useState(false)
   const [modalTab, setModalTab] = useState<'tasks' | 'parts'>('tasks')
   const [followupDrafts, setFollowupDrafts] = useState<Record<number, string>>({})
   const [followupHourDrafts, setFollowupHourDrafts] = useState<Record<number, string>>({})
@@ -569,6 +570,7 @@ export default function MechanicBoard() {
   const openJob = (job: JobCard) => {
     setSelectedJob(job)
     setModalTab('tasks')
+    setShowCompleted(false)
     setModalChecklist(JSON.parse(JSON.stringify(job.checklist || [])))
     setShowPauseModal(false)
     setPauseType(null)
@@ -668,6 +670,9 @@ export default function MechanicBoard() {
     for (let k = 0; k < ra.length; k++) if (ra[k] !== rb[k]) return ra[k] - rb[k]
     return 0
   })
+  // Finished work stays out of the way until asked for.
+  const completedCount = visibleChecklist.filter(x => x.item.done).length
+  const shownChecklist = showCompleted ? visibleChecklist : visibleChecklist.filter(x => !x.item.done)
   // Board-level aliases — inside the checklist map `data` is shadowed by the
   // item's own `data` field, so grab what the per-task assign control needs here.
   const boardMechanics = data.mechanics || []
@@ -1532,15 +1537,30 @@ export default function MechanicBoard() {
                           {showOthers ? "Hide other mechanics' tasks" : `Show ${othersCount} other mechanic task${othersCount === 1 ? '' : 's'}`}
                         </button>
                       )}
-                      {visibleChecklist.map(({ item, i }, vi) => {
+                      {completedCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCompleted(s => !s)}
+                          style={{
+                            alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6,
+                            padding: '6px 12px', marginBottom: 2, borderRadius: 100,
+                            border: '1px solid var(--border)', background: '#fff',
+                            color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          <span style={{ fontSize: 11 }}>{showCompleted ? '▾' : '▸'}</span>
+                          {showCompleted ? 'Hide completed' : `Show ${completedCount} completed`}
+                        </button>
+                      )}
+                      {shownChecklist.map(({ item, i }, vi) => {
                         const isExpanded = expandedTaskIdx === i
                         const hasStructured = item.type === 'tirePsi' || item.type === 'brakePads' || item.type === 'fluids' || item.type === 'engineCheck' || item.type === 'electrical' || item.type === 'steeringCheck' || item.type === 'suspensionCheck'
                         const data = (item.data || {}) as any
-                        const visiblePrev = visibleChecklist[vi - 1]?.item
+                        const visiblePrev = shownChecklist[vi - 1]?.item
                         const isFirstFollowup = item.addedByMechanic && (!visiblePrev || !visiblePrev.addedByMechanic)
                         const followupTotal = visibleChecklist.filter(x => x.item.addedByMechanic).length
                         const followupDone = visibleChecklist.filter(x => x.item.addedByMechanic && x.item.done).length
-                        const visibleNext = visibleChecklist[vi + 1]?.item
+                        const visibleNext = shownChecklist[vi + 1]?.item
                         const isLastInspectionItem = !item.addedByMechanic && (!visibleNext || visibleNext.addedByMechanic)
                         const isNewInventory = selectedJob.scopeName === 'New Inventory'
                         return (
@@ -2411,9 +2431,9 @@ export default function MechanicBoard() {
                 </div>
                 )}
 
-                {/* Admin: inline + Add Task — appends to the current stage's
-                    checklist directly (no admin-approval round-trip). */}
-                {modalTab === 'tasks' && isAdmin && (
+                {/* Admin / shop coordinator: inline + Add Task — appends to the
+                    current stage's checklist directly (no approval round-trip). */}
+                {modalTab === 'tasks' && (isAdmin || canBrowseLanes) && (
                   <div style={{ padding: '0 24px 14px' }}>
                     <form
                       onSubmit={async (e) => {
