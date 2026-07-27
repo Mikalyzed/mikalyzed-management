@@ -36,7 +36,7 @@ type DashboardData = {
     pauseDetail: string | null
     startedAt: string | null
     estimatedHours: number | null
-    vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string }
+    vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string; color?: string | null }
   }>
   myEventTasks: Array<{
     id: string; title: string; status: string; priority: string; dueDate: string | null
@@ -52,14 +52,14 @@ type DashboardData = {
   }>
   myParts: Array<{
     id: string; name: string; status: string; url: string | null
-    vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string }
+    vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string; color?: string | null }
   }>
   pendingApprovals: Array<{
     id: string; taskName: string; additionalHours: number | null; status: string; createdAt: string
     tasks: Array<{ name: string; hours: number; note: string | null }> | null
     vehicleStage: {
       id: string; stage: string
-      vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string }
+      vehicle: { id: string; stockNumber: string; year: number | null; make: string; model: string; color?: string | null }
     }
     requestedBy: { id: string; name: string }
   }>
@@ -178,9 +178,18 @@ function MyAssignments({ data, refresh }: { data: DashboardData; refresh: () => 
                     style={{ flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit' }}
                   >
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{part.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                    <div
+                      title={`${part.vehicle.year ?? ''} ${part.vehicle.make} ${part.vehicle.model}`.trim()}
+                      style={{
+                        fontSize: 12, color: 'var(--text-muted)', marginTop: 2,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}
+                    >
                       {part.vehicle.year} {part.vehicle.make} {part.vehicle.model}
-                      <span style={{ marginLeft: 8 }}>#{part.vehicle.stockNumber}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                      #{part.vehicle.stockNumber}
+                      {part.vehicle.color && <span style={{ marginLeft: 8 }}>{part.vehicle.color}</span>}
                     </div>
                   </Link>
                   {linkingPartId !== part.id && (

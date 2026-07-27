@@ -72,7 +72,7 @@ export async function GET(request: Request) {
       pauseDetail: true,
       startedAt: true,
       estimatedHours: true,
-      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
     },
     orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
     take: 20,
@@ -127,7 +127,7 @@ export async function GET(request: Request) {
       status: 'requested',
     },
     include: {
-      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+      vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
     },
     orderBy: { createdAt: 'desc' },
     take: 10,
@@ -139,7 +139,7 @@ export async function GET(request: Request) {
     include: {
       vehicleStage: {
         include: {
-          vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+          vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
         },
       },
       requestedBy: { select: { id: true, name: true } },
@@ -162,7 +162,7 @@ export async function GET(request: Request) {
     const pendingStages = await prisma.vehicleStage.findMany({
       where: { status: { notIn: ['done', 'skipped'] } },
       include: {
-        vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+        vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } },
       },
     })
     for (const s of pendingStages) {
