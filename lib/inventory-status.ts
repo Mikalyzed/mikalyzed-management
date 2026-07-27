@@ -41,7 +41,8 @@ export async function recomputeInventoryStatus(stockNumber: string) {
       select: { id: true },
     }),
     prisma.externalRepair.findFirst({
-      where: { stockNumber, status: { not: 'returned' } },
+      // partOnly: a component went out, the car itself is still here
+      where: { stockNumber, status: { not: 'returned' }, partOnly: false },
       select: { id: true },
     }),
   ])

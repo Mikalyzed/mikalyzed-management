@@ -105,14 +105,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   // Snapshot the prior status BEFORE the update so we can detect transitions.
-  const prior = await prisma.externalRepair.findUnique({ where: { id }, select: { status: true } })
+  const prior = await prisma.externalRepair.findUnique({ where: { id }, select: { status: true, partOnly: true } })
   const priorStatus = prior?.status
+  const partOnly = prior?.partOnly === true
 
   const updated = await prisma.externalRepair.update({ where: { id }, data })
   await recomputeInventoryStatus(updated.stockNumber).catch(() => {})
 
   // Vehicle status side-effects driven by external repair status transitions:
-  if (typeof data.status === 'string' && data.status !== priorStatus) {
+  if (typeof data.status === 'string' && data.status !== priorStatus && !partOnly) {
     if (data.status === 'sent' || data.status === 'in_progress') {
       // Car just left the shop (or got upgraded from pending tracking → sent) — pull
       // it off the recon board and skip any active stages so they don't orphan.

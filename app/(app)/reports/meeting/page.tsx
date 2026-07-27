@@ -28,7 +28,7 @@ type ReconRow = {
 type ExternalRow = {
   externalId: string
   stock: string; vehicle: string; vehicleId: string | null
-  shop: string; work: string; status: string; atDealership: boolean
+  shop: string; work: string; status: string; atDealership: boolean; partOnly: boolean
   sent: string | null; expectedBack: string | null; overdueDays: number
   createdAgoDays: number; notes: string | null
   followUps: Array<{ date: string | null; note: string }>
@@ -106,6 +106,8 @@ type PlanStep = {
   detail?: string
   dueInDays?: number
   assignToName?: string
+  partAssignToName?: string
+  partOnly?: boolean
   partName?: string
   notes?: string
   shopName?: string
@@ -473,21 +475,22 @@ export default function MorningMeetingPage() {
     return true
   }
 
-  async function addPart(carRef: CarRef, name: string, notes?: string) {
+  async function addPart(carRef: CarRef, name: string, notes?: string, assignedToId?: string | null) {
     if (!carRef.vehicleId) { notify('No vehicle record linked to this car.', true); return false }
     const res = await fetch('/api/parts', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vehicleId: carRef.vehicleId, name, notes: notes || null }),
+      body: JSON.stringify({ vehicleId: carRef.vehicleId, name, notes: notes || null, assignedToId: assignedToId ?? null }),
     })
     if (!res.ok) { notify('Could not create the part request.', true); return false }
-    notify(`Part requested for ${carRef.stock}: ${name}`)
+    const who = assignedToId ? users.find(u => u.id === assignedToId)?.name : null
+    notify(`Part requested for ${carRef.stock}: ${name}${who ? ` — assigned to ${who}` : ''}`)
     loadReport()
     return true
   }
 
   async function sendExternal(
     carRef: CarRef, shopName: string, work: string,
-    opts?: { expectedInDays?: number; notes?: string },
+    opts?: { expectedInDays?: number; notes?: string; partOnly?: boolean },
   ) {
     if (!carRef.make || !carRef.model) { notify('Missing vehicle make/model.', true); return false }
     const res = await fetch('/api/external', {
@@ -495,6 +498,7 @@ export default function MorningMeetingPage() {
       body: JSON.stringify({
         stockNumber: carRef.stock, year: carRef.year, make: carRef.make, model: carRef.model,
         shopName, repairDescription: work, status: 'pending',
+        partOnly: opts?.partOnly === true,
         expectedReturn: opts?.expectedInDays != null
           ? new Date(Date.now() + opts.expectedInDays * 86400000).toISOString()
           : undefined,
@@ -759,10 +763,16 @@ export default function MorningMeetingPage() {
         ok = await addFollowup(carRef, s.title!, s.detail, s.dueInDays, undefined, match ? match.id : undefined)
         if (ok && named && !match) notify(`Couldn't find "${s.assignToName}" on the team — assigned to you instead.`, true)
       }
-      if (s.type === 'part_request') ok = await addPart(carRef, s.partName!, s.notes)
+      if (s.type === 'part_request') {
+        const named = s.partAssignToName?.trim().toLowerCase()
+        const match = named ? users.find(u => u.name.toLowerCase().includes(named)) : undefined
+        ok = await addPart(carRef, s.partName!, s.notes, match?.id ?? null)
+        if (ok && named && !match) notify(`Couldn't find "${s.partAssignToName}" on the team — part left unassigned.`, true)
+      }
       if (s.type === 'external') {
         ok = await sendExternal(carRef, s.shopName || 'TBD — pick shop', s.work!, {
           expectedInDays: s.expectedInDays,
+          partOnly: s.partOnly === true,
           notes: prepTask ? `Waiting on mechanic first: "${prepTask.item}"` : undefined,
         })
       }
@@ -953,6 +963,7 @@ export default function MorningMeetingPage() {
             <ActionBar
               carRef={{ stock: v.stock, vehicle: v.vehicle, vehicleId: v.vehicleId, stageId: v.stageId, year: v.year, make: v.make, model: v.model }}
               actions={{ addReconTask, addFollowup, addPart, sendExternal, runPlan }}
+              users={users}
               allowReconTask allowExternal
             />
           </CarRow>
@@ -977,6 +988,7 @@ export default function MorningMeetingPage() {
                 <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
                   <span style={{ fontWeight: 640, fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.shop}</span>
                   {e.atDealership && <DotPill label="at dealership" fg="#15803d" bg="#edfaf0" dot="#16a34a" />}
+                  {e.partOnly && <DotPill label="part only" fg="#a16207" bg="#fef3c7" dot="#d97706" />}
                 </span>
                 <span style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                   {e.status === 'pending'
@@ -1004,6 +1016,7 @@ export default function MorningMeetingPage() {
             <ActionBar
               carRef={{ stock: e.stock, vehicle: e.vehicle, vehicleId: e.vehicleId, stageId: null, year: null, make: null, model: null }}
               actions={{ addReconTask, addFollowup, addPart, sendExternal, runPlan }}
+              users={users}
             />
           </CarRow>
         ))}
@@ -1044,6 +1057,7 @@ export default function MorningMeetingPage() {
             <ActionBar
               carRef={{ stock: v.stock, vehicle: v.vehicle, vehicleId: v.vehicleId, stageId: null, year: v.year, make: v.make, model: v.model }}
               actions={{ addReconTask, addFollowup, addPart, sendExternal, runPlan }}
+              users={users}
               allowExternal
             />
           </CarRow>
@@ -1882,46 +1896,62 @@ function FollowupStrip({ followups, onDone, onNew, onEdit }: {
 type Actions = {
   addReconTask: (c: CarRef, item: string) => Promise<boolean>
   addFollowup: (c: CarRef | null, title: string, detail?: string, dueInDays?: number) => Promise<boolean>
-  addPart: (c: CarRef, name: string, notes?: string) => Promise<boolean>
+  addPart: (c: CarRef, name: string, notes?: string, assignedToId?: string | null) => Promise<boolean>
   sendExternal: (c: CarRef, shop: string, work: string, opts?: { expectedInDays?: number; notes?: string }) => Promise<boolean>
   runPlan: (c: CarRef, steps: PlanStep[]) => Promise<boolean>
 }
 
 function describeStep(s: PlanStep): string {
   switch (s.type) {
-    case 'part_request': return `Part request: "${s.partName}"${s.notes ? ` (${s.notes})` : ''}`
+    case 'part_request': return `Part request${s.partAssignToName ? ` for ${s.partAssignToName}` : ''}: "${s.partName}"${s.notes ? ` (${s.notes})` : ''}`
     case 'followup': return `Follow-up${s.assignToName ? ` for ${s.assignToName}` : ''}: "${s.title}"${s.dueInDays != null ? ` · due in ${s.dueInDays}d` : ''}`
     case 'recon_task': return `Recon task for the mechanic: "${s.item}"`
-    case 'external': return `Send to external: ${s.shopName?.trim() || '(which shop?)'}${s.work?.trim() ? ` — "${s.work}"` : ''}${s.expectedInDays != null ? ` · expected in ${s.expectedInDays}d` : ''}`
+    case 'external': return `Send to external: ${s.shopName?.trim() || '(which shop?)'}${s.work?.trim() ? ` — "${s.work}"` : ''}${s.partOnly ? ' · part only, car stays' : ''}${s.expectedInDays != null ? ` · expected in ${s.expectedInDays}d` : ''}`
   }
 }
 
-function ActionBar({ carRef, actions, allowReconTask, allowExternal }: {
-  carRef: CarRef; actions: Actions; allowReconTask?: boolean; allowExternal?: boolean
+function ActionBar({ carRef, actions, users, allowReconTask, allowExternal }: {
+  carRef: CarRef; actions: Actions; users: TeamUser[]; allowReconTask?: boolean; allowExternal?: boolean
 }) {
   const [mode, setMode] = useState<'none' | 'task' | 'followup' | 'part' | 'external'>('none')
   const [f1, setF1] = useState('') // primary field
   const [f2, setF2] = useState('') // secondary field
+  const [partAssignee, setPartAssignee] = useState<TeamUser | null>(null)
+  const [assignOpen, setAssignOpen] = useState(false)
   const [smart, setSmart] = useState('')
   const [plan, setPlan] = useState<PlanStep[] | null>(null)
+  const [planText, setPlanText] = useState('')
+  const [planQuestion, setPlanQuestion] = useState<{ prompt: string; options: string[]; base: string } | null>(null)
   const [planError, setPlanError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const reset = () => { setMode('none'); setF1(''); setF2(''); setSmart(''); setPlan(null); setPlanError(null) }
+  const reset = () => {
+    setMode('none'); setF1(''); setF2(''); setPartAssignee(null); setAssignOpen(false)
+    setSmart(''); setPlan(null); setPlanText(''); setPlanQuestion(null); setPlanError(null)
+  }
 
-  async function interpret() {
-    if (!smart.trim() || busy) return
+  async function interpret(textOverride?: string) {
+    const text = (textOverride ?? smart).trim()
+    if (!text || busy) return
     setBusy(true)
     setPlan(null)
+    setPlanQuestion(null)
     setPlanError(null)
     try {
       const res = await fetch('/api/reports/meeting/interpret', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: smart.trim(), vehicle: `${carRef.stock} ${carRef.vehicle}`, hasStage: !!carRef.stageId }),
+        body: JSON.stringify({ text, vehicle: `${carRef.stock} ${carRef.vehicle}`, hasStage: !!carRef.stageId }),
       })
       const data = await res.json()
-      if (res.ok && Array.isArray(data.steps) && data.steps.length) setPlan(data.steps as PlanStep[])
-      else setPlanError(data.error || 'Could not understand that — try rewording.')
+      if (res.ok && Array.isArray(data.steps) && data.steps.length) {
+        setPlan(data.steps as PlanStep[])
+        setPlanText(text)
+      } else if (res.ok && data.question?.prompt) {
+        // The AI is unsure — it asks, you tap, it re-reads with your answer.
+        setPlanQuestion({ prompt: data.question.prompt, options: data.question.options ?? [], base: text })
+      } else {
+        setPlanError(data.error || 'Could not understand that — try rewording.')
+      }
     } finally {
       setBusy(false)
     }
@@ -1934,7 +1964,7 @@ function ActionBar({ carRef, actions, allowReconTask, allowExternal }: {
       let ok = false
       if (mode === 'task') ok = await actions.addReconTask(carRef, f1.trim())
       if (mode === 'followup') ok = await actions.addFollowup(carRef, f1.trim(), undefined, f2 ? Number(f2) : undefined)
-      if (mode === 'part') ok = await actions.addPart(carRef, f1.trim(), f2.trim() || undefined)
+      if (mode === 'part') ok = await actions.addPart(carRef, f1.trim(), f2.trim() || undefined, partAssignee?.id ?? null)
       if (mode === 'external') ok = await actions.sendExternal(carRef, f1.trim(), f2.trim() || 'See notes')
       if (ok) reset()
     } finally {
@@ -1955,10 +1985,29 @@ function ActionBar({ carRef, actions, allowReconTask, allowExternal }: {
           placeholder={`Type anything… "order rear bumper" · "remove hood, send to Frank's" · "have Paul check the AC"`}
           className="mtg-input" style={{ flex: 1, minWidth: 180 }}
         />
-        <button className="mtg-btn mtg-btn-dark" disabled={busy || !smart.trim()} onClick={interpret}>{busy ? '…' : 'Go'}</button>
+        <button className="mtg-btn mtg-btn-dark" disabled={busy || !smart.trim()} onClick={() => interpret()}>{busy ? '…' : 'Go'}</button>
       </div>
       {planError && (
         <div style={{ marginTop: 8, fontSize: 12.5, color: '#b45309' }}>{planError}</div>
+      )}
+      {planQuestion && (
+        <div style={{
+          marginTop: 8, background: 'var(--info-bg)', border: '1px solid var(--info-border)',
+          borderRadius: 10, padding: '10px 12px', fontSize: 12.5,
+        }}>
+          <div style={{ fontWeight: 650, marginBottom: 8 }}>{planQuestion.prompt}</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {planQuestion.options.map(opt => (
+              <button
+                key={opt}
+                className="mtg-btn"
+                disabled={busy}
+                onClick={() => interpret(`${planQuestion.base} — answer: ${opt}`)}
+              >{opt}</button>
+            ))}
+            <button className="mtg-btn" disabled={busy} style={{ marginLeft: 'auto' }} onClick={() => setPlanQuestion(null)}>Cancel</button>
+          </div>
+        </div>
       )}
       {plan && (
         <div style={{
@@ -2005,7 +2054,18 @@ function ActionBar({ carRef, actions, allowReconTask, allowExternal }: {
               disabled={busy || plan.some(s => s.type === 'external' && (!s.work?.trim() || !s.shopName?.trim()))}
               onClick={async () => {
                 setBusy(true)
-                try { if (await actions.runPlan(carRef, plan)) reset() } finally { setBusy(false) }
+                try {
+                  if (await actions.runPlan(carRef, plan)) {
+                    // Learn-as-you-use: confirmed plans become reference examples
+                    if (planText) {
+                      fetch('/api/reports/meeting/examples', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: planText, steps: plan }),
+                      }).catch(() => {})
+                    }
+                    reset()
+                  }
+                } finally { setBusy(false) }
               }}
             >{busy ? '…' : plan.length === 1 ? 'Confirm' : 'Confirm all'}</button>
             <button className="mtg-btn" onClick={() => setPlan(null)}>Cancel</button>
@@ -2042,7 +2102,37 @@ function ActionBar({ carRef, actions, allowReconTask, allowExternal }: {
             <DuePicker value={f2} onChange={setF2} />
           )}
           {mode === 'part' && (
-            <input value={f2} onChange={e => setF2(e.target.value)} placeholder="Notes (optional)" className="mtg-input" style={{ flex: '0 1 220px' }} />
+            <>
+              <input value={f2} onChange={e => setF2(e.target.value)} placeholder="Notes (optional)" className="mtg-input" style={{ flex: '0 1 180px' }} />
+              <span style={{ position: 'relative' }}>
+                <button
+                  className="mtg-btn"
+                  aria-haspopup="listbox"
+                  aria-expanded={assignOpen}
+                  onClick={() => setAssignOpen(o => !o)}
+                >{partAssignee ? `→ ${partAssignee.name.split(' ')[0]}` : 'Assign…'}</button>
+                {assignOpen && (
+                  <span role="listbox" style={{
+                    position: 'absolute', bottom: 'calc(100% + 4px)', right: 0, zIndex: 30, minWidth: 180,
+                    background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10,
+                    boxShadow: '0 8px 24px rgba(24,24,27,0.16)', overflow: 'hidden', display: 'block',
+                    maxHeight: 200, overflowY: 'auto',
+                  }}>
+                    <button
+                      onClick={() => { setPartAssignee(null); setAssignOpen(false) }}
+                      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 12, background: 'var(--bg-card)', border: 'none', borderBottom: '1px solid var(--border-light)', cursor: 'pointer', minHeight: 0, color: 'var(--text-muted)' }}
+                    >Unassigned</button>
+                    {users.map(u => (
+                      <button
+                        key={u.id}
+                        onClick={() => { setPartAssignee(u); setAssignOpen(false) }}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 12, background: partAssignee?.id === u.id ? 'var(--bg-primary)' : 'var(--bg-card)', border: 'none', borderBottom: '1px solid var(--border-light)', cursor: 'pointer', minHeight: 0, color: 'var(--text-primary)' }}
+                      >{u.name}</button>
+                    ))}
+                  </span>
+                )}
+              </span>
+            </>
           )}
           {mode === 'external' && (
             <input value={f2} onChange={e => setF2(e.target.value)} placeholder="Work to be done" className="mtg-input" style={{ flex: 1, minWidth: 180 }}

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { getSessionUser } from '@/lib/auth'
+import { prisma } from '@/lib/db'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -45,12 +46,23 @@ const PLAN_TOOL: Anthropic.Tool = {
             assignToName: { type: 'string', description: 'followup only: the person the admin named to do it ("task Lenny with…" → "Lenny"). Omit if nobody was named.' },
             partName: { type: 'string', description: 'part_request only: short part name.' },
             notes: { type: 'string', description: 'part_request only: extra detail (side, spec, color). Omit if none.' },
+            partAssignToName: { type: 'string', description: 'part_request only: the person named to source/handle the part. Omit if nobody was named.' },
             shopName: { type: 'string', description: 'external only: shop/vendor name if the admin said one. Omit if not mentioned.' },
             work: { type: 'string', description: 'external only: the work the outside shop will do.' },
             expectedInDays: { type: 'number', description: 'external only: only if the admin gave a timeframe for it ("next week"=7).' },
+            partOnly: { type: 'boolean', description: 'external only: true when a COMPONENT (hood, seats, bumper) goes to the shop while the car itself stays at the dealership.' },
           },
           required: ['type'],
         },
+      },
+      question: {
+        type: 'object',
+        description: 'ONLY when the note is genuinely ambiguous between two readings: ask ONE short this-or-that question instead of guessing. When set, return an empty steps array.',
+        properties: {
+          prompt: { type: 'string', description: 'The one-line question, e.g. "Is the whole car going to Rev Auto, or just the hood?"' },
+          options: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 3, description: 'Short answer choices the admin taps.' },
+        },
+        required: ['prompt', 'options'],
       },
     },
     required: ['steps'],
@@ -64,6 +76,8 @@ export type PlanStep = {
   detail?: string
   dueInDays?: number
   assignToName?: string
+  partAssignToName?: string
+  partOnly?: boolean
   partName?: string
   notes?: string
   shopName?: string
@@ -76,7 +90,7 @@ export type PlanStep = {
 const PLACEHOLDER = /^[<\[]?\s*(unknown|unclear|n\/?a|tbd|none|not specified|unspecified|placeholder)\s*[>\]]?$/i
 function scrub(s: PlanStep): PlanStep {
   const out: PlanStep = { ...s }
-  for (const k of ['item', 'title', 'detail', 'partName', 'notes', 'shopName', 'work', 'assignToName'] as const) {
+  for (const k of ['item', 'title', 'detail', 'partName', 'notes', 'shopName', 'work', 'assignToName', 'partAssignToName'] as const) {
     const v = out[k]
     if (typeof v === 'string' && (PLACEHOLDER.test(v.trim()) || !v.trim())) delete out[k]
   }
@@ -106,6 +120,15 @@ export async function POST(req: Request) {
   const hasStage = body.hasStage === true
   if (!text) return NextResponse.json({ error: 'Text required' }, { status: 400 })
 
+  // Learn-as-you-use: confirmed plans replay as few-shot examples.
+  const examples = await prisma.meetingPlanExample.findMany({
+    orderBy: { createdAt: 'desc' }, take: 8, select: { text: true, steps: true },
+  }).catch(() => [] as Array<{ text: string; steps: unknown }>)
+  const exampleBlock = examples.length
+    ? '\n\nConfirmed examples from this dealership (match their style):\n' +
+      examples.map(e => `"${e.text}" -> ${JSON.stringify(e.steps)}`).join('\n')
+    : ''
+
   try {
     const response = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -118,15 +141,25 @@ export async function POST(req: Request) {
         `${hasStage ? '' : 'This car has NO open recon stage, so recon_task is not available — use followup for work instructions. '}` +
         `Most notes are ONE step. Use multiple steps only when the note genuinely contains multiple actions. ` +
         `Classic compound: "remove hood, send to Frank's next week" = step 1 recon_task "Remove hood" (the mechanic does prep work in-house), ` +
-        `step 2 external to Frank's with expectedInDays 7. ` +
+        `step 2 external to Frank's with expectedInDays 7 and partOnly true (the hood travels, the car stays). ` +
+        `When a component goes out AND a person is named to bring it ("task Lenny with taking the hood to Rev Auto"), make BOTH: the partOnly external AND a followup for that person to transport it. ` +
+        `If the note is truly ambiguous between two readings (e.g. whole car vs just a part going out), set question with 2-3 short options and return NO steps — never guess. ` +
         `Prep work on the car (remove/pull/take off something) before an external send = recon_task, not followup. ` +
-        `Office work (calls, titles, quotes, scheduling, paperwork, or "task <person> with …") = followup — when the admin names WHO, set assignToName. Parts to buy = part_request.`,
+        `Office work (calls, titles, quotes, scheduling, paperwork, or "task <person> with …") = followup — when the admin names WHO, set assignToName. Parts to buy = part_request.` +
+        exampleBlock,
       messages: [{ role: 'user', content: text }],
     })
 
     const tu = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-    const raw = (tu?.input as { steps?: PlanStep[] } | undefined)?.steps ?? []
+    const input = tu?.input as { steps?: PlanStep[]; question?: { prompt?: string; options?: string[] } } | undefined
+    const raw = input?.steps ?? []
     const steps = raw.map(scrub).filter(s => validStep(s, hasStage)).slice(0, 3)
+
+    // Genuinely ambiguous → hand the admin a this-or-that instead of guessing
+    const q = input?.question
+    if (steps.length === 0 && q?.prompt?.trim() && Array.isArray(q.options) && q.options.length >= 2) {
+      return NextResponse.json({ question: { prompt: q.prompt.trim(), options: q.options.slice(0, 3).map(o => String(o)) } })
+    }
     if (steps.length === 0) {
       return NextResponse.json({ error: 'Could not understand that — try rewording or use the quick buttons.' }, { status: 422 })
     }

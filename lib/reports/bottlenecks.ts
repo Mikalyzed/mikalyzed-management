@@ -48,7 +48,8 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
     whereabouts.set(v.stock, `in stock${v.location ? ` — ${v.location}` : ''}`)
   }
   for (const e of r.externalRepairs) {
-    if (e.status === 'sent' || e.status === 'in_progress' || e.status === 'ready') {
+    // partOnly: the component is at the shop, the car is not
+    if (!e.partOnly && (e.status === 'sent' || e.status === 'in_progress' || e.status === 'ready')) {
       whereabouts.set(e.stock, `at ${e.shop}${e.status === 'ready' ? ' (ready for pickup)' : ''}`)
     }
   }

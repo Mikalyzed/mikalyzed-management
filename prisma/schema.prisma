@@ -687,6 +687,10 @@ model ExternalRepair {
   shopName          String    @map("shop_name")
   shopPhone         String?   @map("shop_phone")
   atDealership      Boolean   @default(false) @map("at_dealership")
+  // Part-only repair: a component (hood, seats, wheel) goes to the vendor
+  // while the CAR stays in-house — sending it must not pull the vehicle off
+  // the recon board or flip its status.
+  partOnly          Boolean   @default(false) @map("part_only")
   repairDescription String    @map("repair_description")
   estimatedDays     Int?      @map("estimated_days")
   sentDate          DateTime? @map("sent_date")
@@ -700,6 +704,17 @@ model ExternalRepair {
 
   @@index([status])
   @@map("external_repairs")
+}
+
+// Confirmed Morning Meeting smart-input plans — replayed to the interpreter
+// as few-shot examples so it learns the dealership's phrasing over time.
+model MeetingPlanExample {
+  id        String   @id @default(uuid())
+  text      String
+  steps     Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("meeting_plan_examples")
 }
 
 model Vendor {

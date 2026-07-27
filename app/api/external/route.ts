@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { stockNumber, year, make, model, color, vendorId, shopName, shopPhone, atDealership, repairDescription, estimatedDays, sentDate, notes, status } = body
+  const { stockNumber, year, make, model, color, vendorId, shopName, shopPhone, atDealership, partOnly, repairDescription, estimatedDays, sentDate, notes, status } = body
 
   if (!stockNumber || !make || !model || !shopName || !repairDescription) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -48,6 +48,7 @@ export async function POST(request: Request) {
       shopName,
       shopPhone: shopPhone || null,
       atDealership: !!atDealership,
+      partOnly: !!partOnly,
       repairDescription,
       estimatedDays: estimatedDays || null,
       sentDate: sent,
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
   // If the repair is created as 'sent' (car already on its way out, not just being
   // pre-tracked), pull the vehicle off the recon board and skip orphan stages.
   // 'pending' repairs are tracking-only and leave the vehicle wherever it is.
-  if (repair.status === 'sent') {
+  if (repair.status === 'sent' && !repair.partOnly) {
     await markVehicleAsAtExternal({
       stockNumber,
       actorId: user.id,

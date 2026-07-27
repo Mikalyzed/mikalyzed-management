@@ -22,6 +22,7 @@ type ExternalRepair = {
   shopName: string
   shopPhone: string | null
   atDealership: boolean
+  partOnly: boolean
   repairDescription: string
   estimatedDays: number | null
   sentDate: string | null
@@ -72,6 +73,7 @@ export default function ExternalRepairsPage() {
   const [addAsPending, setAddAsPending] = useState(false)
   const [addVendor, setAddVendor] = useState<VendorResult | null>(null)
   const [addAtDealership, setAddAtDealership] = useState(false)
+  const [addPartOnly, setAddPartOnly] = useState(false)
   const [addPartFor, setAddPartFor] = useState<{ stockNumber: string; vehicleDesc: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [scheduleModal, setScheduleModal] = useState<ExternalRepair | null>(null)
@@ -212,6 +214,7 @@ export default function ExternalRepairsPage() {
       shopName: addVendor.name,
       shopPhone: addVendor.phone,
       atDealership: addAtDealership,
+      partOnly: addPartOnly,
       repairDescription: form.get('repairDescription'),
       estimatedDays: addAsPending ? null : (form.get('estimatedDays') ? Number(form.get('estimatedDays')) : null),
       sentDate: addAsPending ? null : form.get('sentDate'),
@@ -486,6 +489,26 @@ export default function ExternalRepairsPage() {
                 </div>
               </div>
             </label>
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 14px', borderRadius: 10,
+              background: addPartOnly ? '#fef3c7' : '#f9fafb',
+              border: `1px solid ${addPartOnly ? '#fcd34d' : 'var(--border)'}`,
+              cursor: 'pointer', fontSize: 14,
+            }}>
+              <input
+                type="checkbox"
+                checked={addPartOnly}
+                onChange={e => setAddPartOnly(e.target.checked)}
+                style={{ width: 18, height: 18, cursor: 'pointer' }}
+              />
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Part only — the car stays</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  A component (hood, seats, bumper) goes to the shop. The vehicle keeps working through recon.
+                </div>
+              </div>
+            </label>
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>What&apos;s Being Done *</label>
               <textarea name="repairDescription" required className="input" rows={2} style={{ resize: 'vertical', minHeight: '60px' }} placeholder="Paint front bumper, fix dent on driver door..." />
@@ -582,6 +605,12 @@ export default function ExternalRepairsPage() {
                           fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
                           background: '#dbeafe', color: '#1d4ed8', whiteSpace: 'nowrap',
                         }}>In-House</span>
+                      )}
+                      {r.partOnly && (
+                        <span style={{
+                          fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
+                          background: '#fef3c7', color: '#a16207', whiteSpace: 'nowrap',
+                        }}>Part Only</span>
                       )}
                       <span className={`badge ${r.status === 'returned' ? 'badge-done' : r.status === 'ready' ? 'badge-content' : r.status === 'in_progress' ? 'badge-in-progress' : 'badge-pending'}`}>
                         {STATUS_LABELS[r.status]}
