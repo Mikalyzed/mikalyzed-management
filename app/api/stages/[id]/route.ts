@@ -109,6 +109,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     data.notes = body.notes
   }
 
+  // Clear the awaiting-parts flag (Morning Meeting bottleneck fix: all parts
+  // arrived but the stage is still marked waiting — mechanic can resume).
+  if (body.awaitingParts === false) {
+    data.awaitingParts = false
+    data.awaitingPartsName = null
+    data.awaitingPartsDate = null
+    data.awaitingPartsTracking = null
+    data.awaitingPartsSince = null
+  }
+
+  // Reschedule (admin only — mechanics shouldn't move their own dates)
+  if (body.scheduledDate !== undefined && user.role === 'admin') {
+    data.scheduledDate = body.scheduledDate ? new Date(body.scheduledDate) : null
+  }
+
   // Update due date
   if (body.dueDate !== undefined) {
     data.dueDate = body.dueDate ? new Date(body.dueDate) : null

@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { getSessionUser } from '@/lib/auth'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
 import { markVehicleAsAtExternal, markVehicleReturnedFromExternal } from '@/lib/external-repair-flow'
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await getSessionUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { id } = await params
   const body = await request.json()
 
@@ -37,6 +41,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     } else if (!sent) {
       data.expectedReturn = null
     }
+  }
+  // Direct expected-return update (Morning Meeting bottleneck fix: "we called
+  // the shop, it'll be back Friday") — only when not derived from sent+estimate.
+  if (body.expectedReturn !== undefined && body.sentDate === undefined && body.estimatedDays === undefined) {
+    data.expectedReturn = body.expectedReturn ? new Date(body.expectedReturn) : null
   }
   if (body.estimatedDays !== undefined && body.sentDate === undefined) {
     data.estimatedDays = body.estimatedDays || null
@@ -124,11 +133,47 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   return NextResponse.json({ repair: updated })
 }
 
+/**
+ * DELETE — hard-removes the repair record, so it demands a reason and writes
+ * the audit entry FIRST (ActivityLog, entityType 'external_repair'): who
+ * deleted it, why, and a full snapshot of what was deleted. If the audit
+ * write fails, the delete does not happen.
+ */
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+  const user = await getSessionUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const existing = await prisma.externalRepair.findUnique({ where: { id }, select: { stockNumber: true } })
+  const { id } = await params
+  const body = await request.json().catch(() => ({}))
+  const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+  if (!reason) {
+    return NextResponse.json({ error: 'A reason is required to delete an external repair.' }, { status: 400 })
+  }
+
+  const existing = await prisma.externalRepair.findUnique({ where: { id } })
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  await prisma.activityLog.create({
+    data: {
+      entityType: 'external_repair',
+      entityId: id,
+      action: 'deleted',
+      actorId: user.id,
+      details: {
+        reason,
+        stockNumber: existing.stockNumber,
+        vehicle: `${existing.year ?? ''} ${existing.make} ${existing.model}`.trim(),
+        shopName: existing.shopName,
+        repairDescription: existing.repairDescription,
+        status: existing.status,
+        sentDate: existing.sentDate?.toISOString() ?? null,
+        expectedReturn: existing.expectedReturn?.toISOString() ?? null,
+        notes: existing.notes,
+      },
+    },
+  })
+
   await prisma.externalRepair.delete({ where: { id } })
-  if (existing) await recomputeInventoryStatus(existing.stockNumber).catch(() => {})
+  await recomputeInventoryStatus(existing.stockNumber).catch(() => {})
   return NextResponse.json({ success: true })
 }

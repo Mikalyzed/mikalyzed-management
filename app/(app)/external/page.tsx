@@ -126,6 +126,7 @@ export default function ExternalRepairsPage() {
   const [editReason, setEditReason] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; stock: string; vehicle: string } | null>(null)
   const [deleteDeleting, setDeleteDeleting] = useState(false)
+  const [deleteReason, setDeleteReason] = useState('')
 
   function load() {
     fetch('/api/external')
@@ -1708,26 +1709,46 @@ export default function ExternalRepairsPage() {
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20 }}>
               #{deleteConfirm.stock} - {deleteConfirm.vehicle}
             </p>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>
-              This cannot be undone.
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 14 }}>
+              This cannot be undone. The reason is recorded in the audit log.
             </p>
+            <textarea
+              autoFocus
+              value={deleteReason}
+              onChange={e => setDeleteReason(e.target.value)}
+              placeholder="Why is this repair being deleted? (required)"
+              rows={2}
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 10,
+                border: '1px solid var(--border)', fontSize: 13, resize: 'vertical',
+                marginBottom: 18, fontFamily: 'inherit',
+              }}
+            />
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setDeleteConfirm(null)} disabled={deleteDeleting} style={{
+              <button onClick={() => { setDeleteConfirm(null); setDeleteReason('') }} disabled={deleteDeleting} style={{
                 flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
                 background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
               }}>Cancel</button>
               <button onClick={async () => {
+                if (!deleteReason.trim()) return
                 setDeleteDeleting(true)
                 try {
-                  await fetch(`/api/external/${deleteConfirm.id}`, { method: 'DELETE' })
+                  await fetch(`/api/external/${deleteConfirm.id}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: deleteReason.trim() }),
+                  })
                   setDeleteConfirm(null)
+                  setDeleteReason('')
                   load()
                 } catch {}
                 setDeleteDeleting(false)
-              }} disabled={deleteDeleting} style={{
+              }} disabled={deleteDeleting || !deleteReason.trim()} style={{
                 flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
-                background: deleteDeleting ? '#e5e5e5' : '#dc2626', color: '#fff',
-                fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                background: deleteDeleting || !deleteReason.trim() ? '#e5e5e5' : '#dc2626',
+                color: '#fff',
+                fontSize: 14, fontWeight: 700,
+                cursor: deleteDeleting || !deleteReason.trim() ? 'not-allowed' : 'pointer',
               }}>{deleteDeleting ? 'Deleting...' : 'Delete'}</button>
             </div>
           </div>

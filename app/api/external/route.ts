@@ -28,9 +28,14 @@ export async function POST(request: Request) {
   }
 
   const sent = sentDate ? new Date(sentDate) : null
+  // Expected return: derived from sent + estimate, or taken directly from the
+  // body — a pending (not-yet-sent) repair can still carry a target date
+  // (e.g. Morning Meeting "send to Frank's next week").
   const expectedReturn = sent && estimatedDays
     ? new Date(sent.getTime() + estimatedDays * 86400000)
-    : null
+    : body.expectedReturn
+      ? new Date(body.expectedReturn)
+      : null
 
   const repair = await prisma.externalRepair.create({
     data: {
