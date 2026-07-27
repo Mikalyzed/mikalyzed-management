@@ -105,6 +105,7 @@ type PlanStep = {
   title?: string
   detail?: string
   dueInDays?: number
+  assignToName?: string
   partName?: string
   notes?: string
   shopName?: string
@@ -453,6 +454,7 @@ export default function MorningMeetingPage() {
 
   async function addFollowup(
     carRef: CarRef | null, title: string, detail?: string, dueInDays?: number, priority?: number,
+    assigneeId?: string | null,
   ) {
     const dueDate = dueInDays != null
       ? new Date(Date.now() + dueInDays * 86400000).toISOString()
@@ -461,7 +463,7 @@ export default function MorningMeetingPage() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title, description: detail || null, category: 'admin',
-        assigneeId: meId, dueDate, priority: priority ?? 0,
+        assigneeId: assigneeId !== undefined ? assigneeId : meId, dueDate, priority: priority ?? 0,
         stockNumbers: carRef ? [carRef.stock] : [],
       }),
     })
@@ -750,7 +752,13 @@ export default function MorningMeetingPage() {
     for (const s of steps) {
       let ok = false
       if (s.type === 'recon_task') ok = await addReconTask(carRef, s.item!)
-      if (s.type === 'followup') ok = await addFollowup(carRef, s.title!, s.detail, s.dueInDays)
+      if (s.type === 'followup') {
+        // "task Lenny with…" → find Lenny on the team; unmatched names fall back to me
+        const named = s.assignToName?.trim().toLowerCase()
+        const match = named ? users.find(u => u.name.toLowerCase().includes(named)) : undefined
+        ok = await addFollowup(carRef, s.title!, s.detail, s.dueInDays, undefined, match ? match.id : undefined)
+        if (ok && named && !match) notify(`Couldn't find "${s.assignToName}" on the team — assigned to you instead.`, true)
+      }
       if (s.type === 'part_request') ok = await addPart(carRef, s.partName!, s.notes)
       if (s.type === 'external') {
         ok = await sendExternal(carRef, s.shopName || 'TBD — pick shop', s.work!, {
@@ -1882,9 +1890,9 @@ type Actions = {
 function describeStep(s: PlanStep): string {
   switch (s.type) {
     case 'part_request': return `Part request: "${s.partName}"${s.notes ? ` (${s.notes})` : ''}`
-    case 'followup': return `Admin follow-up: "${s.title}"${s.dueInDays != null ? ` · due in ${s.dueInDays}d` : ''}`
+    case 'followup': return `Follow-up${s.assignToName ? ` for ${s.assignToName}` : ''}: "${s.title}"${s.dueInDays != null ? ` · due in ${s.dueInDays}d` : ''}`
     case 'recon_task': return `Recon task for the mechanic: "${s.item}"`
-    case 'external': return `Send to external: ${s.shopName ?? 'shop TBD'} — "${s.work}"${s.expectedInDays != null ? ` · expected in ${s.expectedInDays}d` : ''}`
+    case 'external': return `Send to external: ${s.shopName?.trim() || '(which shop?)'}${s.work?.trim() ? ` — "${s.work}"` : ''}${s.expectedInDays != null ? ` · expected in ${s.expectedInDays}d` : ''}`
   }
 }
 
@@ -1961,7 +1969,30 @@ function ActionBar({ carRef, actions, allowReconTask, allowExternal }: {
             {plan.length === 1 ? 'Proposed action' : `Proposed plan · ${plan.length} steps`}
           </div>
           <ol style={{ margin: '0 0 8px', paddingLeft: plan.length === 1 ? 0 : 18, listStyle: plan.length === 1 ? 'none' : 'decimal' }}>
-            {plan.map((s, i) => <li key={i} style={{ margin: '2px 0' }}>{describeStep(s)}</li>)}
+            {plan.map((s, i) => (
+              <li key={i} style={{ margin: '2px 0' }}>
+                {describeStep(s)}
+                {/* The AI never fills gaps with guesses — you do, right here. */}
+                {s.type === 'external' && !s.shopName?.trim() && (
+                  <input
+                    className="mtg-input"
+                    value={s.shopName ?? ''}
+                    onChange={e => setPlan(p => p ? p.map((x, xi) => xi === i ? { ...x, shopName: e.target.value } : x) : p)}
+                    placeholder="Which shop? (required)"
+                    style={{ display: 'block', width: '100%', marginTop: 4, fontSize: 12 }}
+                  />
+                )}
+                {s.type === 'external' && !s.work?.trim() && (
+                  <input
+                    className="mtg-input"
+                    value={s.work ?? ''}
+                    onChange={e => setPlan(p => p ? p.map((x, xi) => xi === i ? { ...x, work: e.target.value } : x) : p)}
+                    placeholder="What will the shop do? (required)"
+                    style={{ display: 'block', width: '100%', marginTop: 4, fontSize: 12 }}
+                  />
+                )}
+              </li>
+            ))}
           </ol>
           {plan.length > 1 && plan.some(s => s.type === 'recon_task') && plan.some(s => s.type === 'external') && (
             <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 8 }}>
@@ -1970,7 +2001,8 @@ function ActionBar({ carRef, actions, allowReconTask, allowExternal }: {
           )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button
-              className="mtg-btn mtg-btn-dark" disabled={busy}
+              className="mtg-btn mtg-btn-dark"
+              disabled={busy || plan.some(s => s.type === 'external' && (!s.work?.trim() || !s.shopName?.trim()))}
               onClick={async () => {
                 setBusy(true)
                 try { if (await actions.runPlan(carRef, plan)) reset() } finally { setBusy(false) }
