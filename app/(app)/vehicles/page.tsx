@@ -2149,7 +2149,7 @@ export default function VehiclesPage() {
 
                   {/* Parts Section — Full Interactive */}
                   <div style={{ display: modalTab === 'parts' ? 'block' : 'none' }}>
-                  <ModalPartsSection vehicleId={v.id} parts={modalParts} isAdmin={isAdmin} onPartsChange={() => {
+                  <ModalPartsSection vehicleId={v.id} parts={modalParts} isAdmin={isAdmin} canAddParts={canAssignInstalls} onPartsChange={() => {
                     fetch(`/api/parts?vehicleId=${v.id}`).then(r => r.json()).then(d => setModalParts(d.parts || [])).catch(() => {})
                     // Refresh vehicles list too for card labels
                     fetch('/api/vehicles').then(r => r.json()).then(d => setVehicles(d.vehicles || [])).catch(() => {})
@@ -2860,8 +2860,8 @@ export default function VehiclesPage() {
 }
 
 // Inline parts management for modals (recon board + mechanic schedule)
-function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
-  vehicleId: string; parts: any[]; isAdmin: boolean; onPartsChange: () => void
+function ModalPartsSection({ vehicleId, parts, isAdmin, canAddParts, onPartsChange }: {
+  vehicleId: string; parts: any[]; isAdmin: boolean; canAddParts: boolean; onPartsChange: () => void
 }) {
   const [addingUrlId, setAddingUrlId] = useState<string | null>(null)
   const [urlInput, setUrlInput] = useState('')
@@ -3037,9 +3037,9 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, onPartsChange }: {
         )
       })}
 
-      {/* Admin-only inline add (replaces the old "+ Add Part" / expanded form).
-          Type a name, press Add, optional link + assignee appear, Save commits. */}
-      {isAdmin && (
+      {/* Inline add — admin and shop coordinator. Type a name, press Add,
+          optional link + assignee appear, Save commits. */}
+      {(isAdmin || canAddParts) && (
         <div style={{ marginTop: 10 }}>
           <AddPartInline vehicleId={vehicleId} onAdded={onPartsChange} />
         </div>
