@@ -1537,21 +1537,6 @@ export default function MechanicBoard() {
                           {showOthers ? "Hide other mechanics' tasks" : `Show ${othersCount} other mechanic task${othersCount === 1 ? '' : 's'}`}
                         </button>
                       )}
-                      {completedCount > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setShowCompleted(s => !s)}
-                          style={{
-                            alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6,
-                            padding: '6px 12px', marginBottom: 2, borderRadius: 100,
-                            border: '1px solid var(--border)', background: '#fff',
-                            color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                          }}
-                        >
-                          <span style={{ fontSize: 11 }}>{showCompleted ? '▾' : '▸'}</span>
-                          {showCompleted ? 'Hide completed' : `Show ${completedCount} completed`}
-                        </button>
-                      )}
                       {shownChecklist.map(({ item, i }, vi) => {
                         const isExpanded = expandedTaskIdx === i
                         const hasStructured = item.type === 'tirePsi' || item.type === 'brakePads' || item.type === 'fluids' || item.type === 'engineCheck' || item.type === 'electrical' || item.type === 'steeringCheck' || item.type === 'suspensionCheck'
@@ -1683,6 +1668,21 @@ export default function MechanicBoard() {
                                         </button>
                                       )
                                     })}
+                      {completedCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCompleted(s => !s)}
+                          style={{
+                            alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6,
+                            padding: '6px 12px', marginTop: 4, borderRadius: 100,
+                            border: '1px solid var(--border)', background: '#fff',
+                            color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          }}
+                        >
+                          <span style={{ fontSize: 11 }}>{showCompleted ? '▾' : '▸'}</span>
+                          {showCompleted ? 'Hide completed' : `Show ${completedCount} completed`}
+                        </button>
+                      )}
                                     {item.assigneeId && (
                                       <button
                                         onClick={() => updateChecklistItem(i, { assigneeId: null, assigneeName: null })}

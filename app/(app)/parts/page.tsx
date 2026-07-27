@@ -252,10 +252,38 @@ export default function PartsOverviewPage() {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {filtered.map((part) => {
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+          {(() => {
+            // Group parts under their vehicle — the car name reads once, not
+            // once per part.
+            const groups: Array<{ v: (typeof filtered)[number]['vehicle']; items: typeof filtered }> = []
+            const at = new Map<string, number>()
+            for (const p of filtered) {
+              const k = p.vehicle.id
+              if (!at.has(k)) { at.set(k, groups.length); groups.push({ v: p.vehicle, items: [] }) }
+              groups[at.get(k)!].items.push(p)
+            }
+            return groups.map(g => {
+              const vehicleDesc = `${g.v.year || ''} ${g.v.make} ${g.v.model}`.trim()
+              return (
+                <div key={g.v.id}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                    <Link href={`/vehicles/${g.v.id}`} style={{ fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', color: 'var(--text-primary)', textDecoration: 'none', minHeight: 0 }}>
+                      {vehicleDesc}
+                    </Link>
+                    <span style={{
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                      fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)',
+                      background: 'var(--bg-card)', border: '1px solid var(--border)',
+                      padding: '2px 7px', borderRadius: 6,
+                    }}>#{g.v.stockNumber}</span>
+                    {g.items.length > 1 && (
+                      <span style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600 }}>{g.items.length} parts</span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {g.items.map((part) => {
             const ss = STATUS_COLORS[part.status] || STATUS_COLORS.requested
-            const vehicleDesc = `${part.vehicle.year || ''} ${part.vehicle.make} ${part.vehicle.model}`.trim()
 
             return (
               <div key={part.id} id={`part-${part.id}`} className="parts-row" onClick={() => {
@@ -267,20 +295,17 @@ export default function PartsOverviewPage() {
                 padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px',
                 cursor: isAdmin ? 'pointer' : 'default',
               }}>
-                {/* Vehicle */}
-                <div className="parts-vehicle" style={{ width: '220px', flex: '0 0 220px' }}>
-                  <Link href={`/vehicles/${part.vehicle.id}`} style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', textDecoration: 'none' }}>
-                    {vehicleDesc}
-                  </Link>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0' }}>#{part.vehicle.stockNumber}</p>
-                </div>
-
                 {/* Part info */}
                 <div style={{ flex: 1 }}>
                   <p style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>{part.name}</p>
                   {part.url && (
-                    <a href={part.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563eb', textDecoration: 'none', wordBreak: 'break-all' }}>
-                      {part.url.length > 50 ? part.url.slice(0, 50) + '...' : part.url}
+                    <a href={part.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '12px', fontWeight: 600,
+                      color: '#2563eb', textDecoration: 'none', background: 'var(--info-bg)',
+                      border: '1px solid var(--info-border)', borderRadius: 999, padding: '2px 10px',
+                      minHeight: 0, marginTop: 2,
+                    }}>
+                      View part ↗
                     </a>
                   )}
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -364,6 +389,11 @@ export default function PartsOverviewPage() {
               </div>
             )
           })}
+                  </div>
+                </div>
+              )
+            })
+          })()}
         </div>
       )}
       {orderModalPart && (

@@ -2012,21 +2012,6 @@ export default function VehiclesPage() {
                           const shownPairs = showDoneTasks ? [...openPairs, ...donePairs] : openPairs
                           return (
                             <>
-                              {donePairs.length > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => setShowDoneTasks(s => !s)}
-                                  style={{
-                                    alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6,
-                                    padding: '6px 12px', marginBottom: 2, borderRadius: 100,
-                                    border: '1px solid var(--border)', background: 'var(--bg-card)',
-                                    color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 0,
-                                  }}
-                                >
-                                  <span style={{ fontSize: 11 }}>{showDoneTasks ? '▾' : '▸'}</span>
-                                  {showDoneTasks ? 'Hide completed' : `Show ${donePairs.length} completed`}
-                                </button>
-                              )}
                               {openPairs.length === 0 && !showDoneTasks && (
                                 <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>All tasks complete ✓</p>
                               )}
@@ -2137,6 +2122,21 @@ export default function VehiclesPage() {
                             )}
                           </div>
                               ))}
+                              {donePairs.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowDoneTasks(s => !s)}
+                                  style={{
+                                    alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6,
+                                    padding: '6px 12px', marginTop: 4, borderRadius: 100,
+                                    border: '1px solid var(--border)', background: 'var(--bg-card)',
+                                    color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 0,
+                                  }}
+                                >
+                                  <span style={{ fontSize: 11 }}>{showDoneTasks ? '▾' : '▸'}</span>
+                                  {showDoneTasks ? 'Hide completed' : `Show ${donePairs.length} completed`}
+                                </button>
+                              )}
                             </>
                           )
                         })()}
@@ -2897,6 +2897,7 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, canAddParts, onPartsChan
   const [urlInput, setUrlInput] = useState('')
   const [saving, setSaving] = useState(false)
   const [orderModalPart, setOrderModalPart] = useState<{ id: string; name: string } | null>(null)
+  const [showReceived, setShowReceived] = useState(false)
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
 
   // Used by the per-part "assign to find" dropdown on rows that are still
@@ -2948,7 +2949,13 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, canAddParts, onPartsChan
         <p style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>No parts requested</p>
       )}
 
-      {parts.map(part => {
+      {(() => {
+        const openParts = parts.filter(p => p.status !== 'received')
+        const receivedParts = parts.filter(p => p.status === 'received')
+        const shownParts = showReceived ? [...openParts, ...receivedParts] : openParts
+        return (
+          <>
+      {shownParts.map(part => {
         const ss = statusColors[part.status] || statusColors.requested
         const hasActions =
           (part.status === 'requested' && !part.url) ||
@@ -3066,6 +3073,24 @@ function ModalPartsSection({ vehicleId, parts, isAdmin, canAddParts, onPartsChan
           </div>
         )
       })}
+      {receivedParts.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowReceived(s => !s)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '6px 12px', marginTop: 2, borderRadius: 100,
+            border: '1px solid var(--border)', background: 'var(--bg-card)',
+            color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 0,
+          }}
+        >
+          <span style={{ fontSize: 11 }}>{showReceived ? '▾' : '▸'}</span>
+          {showReceived ? 'Hide received' : `Show ${receivedParts.length} received`}
+        </button>
+      )}
+          </>
+        )
+      })()}
 
       {/* Inline add — admin and shop coordinator. Type a name, press Add,
           optional link + assignee appear, Save commits. */}

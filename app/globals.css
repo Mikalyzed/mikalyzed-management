@@ -1057,7 +1057,9 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
 }
 @media (max-width: 767px) {
   .ask-ai-fab {
-    bottom: calc(env(safe-area-inset-bottom, 0px) - 16px);
+    /* Tucked low on notched phones (inset ~34px → 18px), but never negative —
+       home-button iPhones (SE) have no inset and were cutting the button off. */
+    bottom: max(calc(env(safe-area-inset-bottom, 0px) - 16px), 10px);
     right: 24px;
     width: 38px;
     height: 38px;
@@ -1285,6 +1287,25 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
     width: auto !important;
     flex: initial !important;
     padding-right: 90px; /* leaves space for the absolute status badge */
+    /* Compact one-liner: "1993 FORD MUSTANG… · #N139190" in muted small type —
+       the PART name below is the headline on mobile, not the car. */
+    display: flex !important;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+  .parts-row .parts-vehicle a {
+    font-size: 12.5px !important;
+    font-weight: 600 !important;
+    color: var(--text-secondary) !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .parts-row .parts-vehicle p {
+    margin: 0 !important;
+    flex-shrink: 0;
   }
 
   /* Status badge → top-right corner */
