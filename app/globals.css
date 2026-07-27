@@ -1076,6 +1076,11 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
 
 /* ═══ Mobile Polish ═══ */
 @media (max-width: 767px) {
+  /* External card header: badges squeeze the vehicle name into a one-word-
+     per-line column — stack them on top and let the name run full width */
+  .ext-card-head { flex-direction: column-reverse; align-items: stretch !important; gap: 8px !important; margin-bottom: 12px !important; }
+  .ext-card-head .ext-card-badges { justify-content: flex-start !important; }
+
   /* Mechanic board assignee chips: initials only — the name is noise at card width */
   .msch-assignee-name { display: none; }
   .msch-assignee-chip { padding: 2px !important; gap: 0 !important; }
@@ -1312,6 +1317,10 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
     margin: 0 !important;
     flex-shrink: 0;
   }
+
+  /* The part name is now the first row content — keep it clear of the
+     absolutely-positioned status badge */
+  .parts-row .parts-info { padding-right: 92px; }
 
   /* Status badge → top-right corner */
   .parts-status-badge {

@@ -2482,7 +2482,11 @@ export default function MechanicBoard() {
                         const input = e.currentTarget.elements.namedItem('newTask') as HTMLInputElement
                         const trimmed = input.value.trim()
                         if (!trimmed) return
-                        const updated = [...modalChecklist, { item: trimmed, done: false, note: '' }]
+                        const updated = [...modalChecklist, {
+                          item: trimmed, done: false, note: '',
+                          addedByMechanic: true, approved: 'approved' as const,
+                          assigneeId: selectedJob?.assignee?.id ?? null, assigneeName: selectedJob?.assignee?.name ?? null,
+                        }]
                         setModalChecklist(updated)
                         input.value = ''
                         try {

@@ -439,7 +439,11 @@ export default function MorningMeetingPage() {
     const checklist = Array.isArray(stage.checklist) ? stage.checklist : []
     const patch = await fetch(`/api/stages/${carRef.stageId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ checklist: [...checklist, { item, done: false, note: '' }] }),
+      body: JSON.stringify({ checklist: [...checklist, {
+        item, done: false, note: '',
+        addedByMechanic: true, approved: 'approved',
+        assigneeId: stage.assigneeId ?? null, assigneeName: stage.assignee?.name ?? null,
+      }] }),
     })
     if (!patch.ok) { notify('Could not add the task.', true); return false }
     notify(`Task added to ${carRef.stock}: ${item}`)

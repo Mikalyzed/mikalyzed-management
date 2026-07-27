@@ -296,7 +296,7 @@ export default function PartsOverviewPage() {
                 cursor: isAdmin ? 'pointer' : 'default',
               }}>
                 {/* Part info */}
-                <div style={{ flex: 1 }}>
+                <div className="parts-info" style={{ flex: 1 }}>
                   <p style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>{part.name}</p>
                   {part.url && (
                     <a href={part.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{

@@ -613,7 +613,13 @@ export default function VehiclesPage() {
     if (!trimmed) return
     const stage = getCurrentStage()
     if (!stage) return
-    const updated = [...modalChecklist, { item: trimmed, done: false, note: '' }]
+    // Tagged as an added task (approved, owned by the stage assignee) so the
+    // card's Inspection/Tasks split counts it in the right section.
+    const updated = [...modalChecklist, {
+      item: trimmed, done: false, note: '',
+      addedByMechanic: true, approved: 'approved',
+      assigneeId: stage.assignee?.id ?? null, assigneeName: stage.assignee?.name ?? null,
+    }]
     setModalChecklist(updated)
     setModalSaving(true)
     try {
