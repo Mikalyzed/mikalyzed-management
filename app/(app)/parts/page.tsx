@@ -331,115 +331,124 @@ export default function PartsOverviewPage() {
                       <span style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600 }}>{g.items.length} parts</span>
                     )}
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: 10 }}>
           {g.items.map((part) => {
             const ss = STATUS_COLORS[part.status] || STATUS_COLORS.requested
+            const needsInfo = part.status === 'ordered' && !part.tracking && !part.orderImage
+            const hasFooter =
+              ['requested', 'sourced', 'ready_to_order'].includes(part.status) ||
+              (part.status === 'ordered' && (myRole !== 'shop_coordinator' || needsInfo))
 
             return (
-              <div key={part.id} id={`part-${part.id}`} onClick={() => {
-                if (isAdmin) {
-                  setEditingPart(part); setEditTracking(part.tracking || ''); setEditDelivery(part.expectedDelivery ? part.expectedDelivery.slice(0, 10) : ''); setEditImage(part.orderImage || null)
-                }
-              }} className="parts-row routing-card" style={{
-                background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px',
-                padding: '13px 15px', display: 'flex', alignItems: 'center', gap: '16px',
-                boxShadow: '0 1px 2px rgba(24,24,27,.04)',
-                cursor: isAdmin ? 'pointer' : 'default',
-              }}>
-                {/* Part info */}
-                <div className="parts-info" style={{ flex: 1 }}>
-                  <p style={{ fontSize: '14px', fontWeight: 600, margin: 0 }}>{part.name}</p>
-                  {part.url && (
-                    <a href={part.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '12px', fontWeight: 600,
-                      color: '#2563eb', textDecoration: 'none', background: 'var(--info-bg)',
-                      border: '1px solid var(--info-border)', borderRadius: 999, padding: '2px 10px',
-                      minHeight: 0, marginTop: 2,
+              <div
+                key={part.id}
+                id={`part-${part.id}`}
+                className="routing-card"
+                onClick={() => {
+                  if (isAdmin) {
+                    setEditingPart(part); setEditTracking(part.tracking || ''); setEditDelivery(part.expectedDelivery ? part.expectedDelivery.slice(0, 10) : ''); setEditImage(part.orderImage || null)
+                  }
+                }}
+                style={{
+                  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12,
+                  boxShadow: '0 1px 2px rgba(24,24,27,.04)', overflow: 'hidden',
+                  display: 'flex', flexDirection: 'column',
+                  cursor: isAdmin ? 'pointer' : 'default',
+                }}
+              >
+                <div style={{ padding: '12px 14px', flex: 1 }}>
+                  {/* Part name + status pill */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                    <p style={{ fontSize: 13.5, fontWeight: 640, letterSpacing: '-0.015em', lineHeight: 1.35, margin: 0, minWidth: 0 }}>
+                      {part.name}
+                    </p>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+                      background: ss.bg, color: ss.color, padding: '3px 10px', borderRadius: 100,
+                      fontSize: 10.5, fontWeight: 650, whiteSpace: 'nowrap',
                     }}>
-                      View part ↗
-                    </a>
-                  )}
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <span>by {part.requestedBy.name}</span>
-                    {part.status === 'requested' ? (
-                      <>
-                        <span>•</span>
-                        <select
-                          value={part.assignedTo?.id || ''}
-                          onChange={e => updatePart(part.id, { assignedToId: e.target.value || null })}
-                          onClick={e => e.stopPropagation()}
-                          style={{
-                            padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border)',
-                            fontSize: 12, background: '#fff', color: 'var(--text-secondary)',
-                          }}
-                        >
-                          <option value="">Unassigned (admin)</option>
-                          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                        </select>
-                      </>
-                    ) : (
-                      <span>{part.assignedTo ? `• Assigned to ${part.assignedTo.name}` : '• Unassigned'}</span>
-                    )}
-                    {part.price && <span>• {part.price}</span>}
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />
+                      {STATUS_LABELS[part.status]}
+                    </span>
                   </div>
+
+                  {/* Meta line — link is plain text, not a pill */}
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    {part.url && (
+                      <a href={part.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                        style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 600, minHeight: 0 }}>View link ↗</a>
+                    )}
+                    <span>by {part.requestedBy.name}</span>
+                    {part.status === 'requested' && isAdmin ? (
+                      <select
+                        value={part.assignedTo?.id || ''}
+                        onChange={e => updatePart(part.id, { assignedToId: e.target.value || null })}
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                          padding: '2px 6px', borderRadius: 6, border: '1px solid var(--border)',
+                          fontSize: 12, background: 'var(--bg-card)', color: 'var(--text-secondary)',
+                        }}
+                      >
+                        <option value="">Unassigned</option>
+                        {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    ) : (
+                      part.assignedTo && <span>→ {part.assignedTo.name}</span>
+                    )}
+                    {part.price && <span>{part.price}</span>}
+                  </div>
+
                   {part.status === 'ordered' && part.expectedDelivery && (
-                    <p style={{ fontSize: '12px', color: '#2563eb', margin: '2px 0 0', fontWeight: 500 }}>
-                      Expected: {new Date(part.expectedDelivery).toLocaleDateString()}
+                    <p style={{ fontSize: 12, color: '#2563eb', margin: '5px 0 0', fontWeight: 600 }}>
+                      Expected {new Date(part.expectedDelivery).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </p>
                   )}
                   {part.status === 'received' && (
-                    <p style={{ fontSize: '12px', color: '#16a34a', margin: '2px 0 0', fontWeight: 500 }}>
-                      Received: {new Date(part.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {new Date(part.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                    <p style={{ fontSize: 12, color: '#16a34a', margin: '5px 0 0', fontWeight: 600 }}>
+                      Received {new Date(part.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </p>
                   )}
+
+                  {/* Inline URL input */}
+                  {addingUrlId === part.id && (
+                    <div onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                      <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="Paste part link here..." autoFocus
+                        onKeyDown={async e => { if (e.key === 'Enter' && urlInput.trim()) { e.preventDefault(); await updatePart(part.id, { url: urlInput }); setAddingUrlId(null); setUrlInput('') } }}
+                        style={{ flex: 1, minWidth: 0, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13 }} />
+                      <button onClick={() => { setAddingUrlId(null); setUrlInput('') }} className="prt-btn">Cancel</button>
+                      <button onClick={async () => { if (!urlInput.trim()) return; await updatePart(part.id, { url: urlInput }); setAddingUrlId(null); setUrlInput('') }}
+                        disabled={!urlInput.trim()} className="prt-btn" style={{ color: '#16a34a' }}>Save</button>
+                    </div>
+                  )}
                 </div>
 
-                {/* Status badge */}
-                <div className="parts-status-badge" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                  <div style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6,
-                    background: ss.bg, color: ss.color,
-                    padding: '3px 10px', borderRadius: 100, fontSize: '10.5px', fontWeight: 650,
-                    whiteSpace: 'nowrap', letterSpacing: '-0.005em',
+                {/* Action footer — quiet buttons, green for the forward step */}
+                {hasFooter && (
+                  <div onClick={e => e.stopPropagation()} style={{
+                    display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap',
+                    padding: '8px 10px', borderTop: '1px solid var(--border-light)', background: 'var(--bg-primary)',
                   }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />
-                    {STATUS_LABELS[part.status]}
-                  </div>
-                  {part.status === 'ordered' && !part.tracking && !part.orderImage && (
-                    <span style={{ fontSize: '11px', color: '#ef4444', fontWeight: 600, whiteSpace: 'nowrap' }}>Needs info</span>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <div className="parts-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
-                  {part.status === 'requested' && !part.url && (
-                    <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} className="prt-btn">Add Link</button>
-                  )}
-                  {['requested', 'sourced', 'ready_to_order'].includes(part.status) && (
-                    <button onClick={() => setBoughtPart({ id: part.id, name: part.name })} className="prt-btn">In Store</button>
-                  )}
-                  {isAdmin && part.status === 'sourced' && (
-                    <>
-                      <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving === part.id} className="prt-btn prt-btn-dark">✓ Approve</button>
-                      <button onClick={() => updatePart(part.id, { status: 'requested', url: null })} disabled={saving === part.id} className="prt-btn prt-btn-danger">✗ Decline</button>
-                    </>
-                  )}
-                  {isAdmin && part.status === 'ready_to_order' && (
-                    <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} disabled={saving === part.id} className="prt-btn prt-btn-dark">Mark Ordered</button>
-                  )}
-                  {part.status === 'ordered' && myRole !== 'shop_coordinator' && (
-                    <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving === part.id} className="prt-btn prt-btn-dark">Mark Received</button>
-                  )}
-                </div>
-                {/* Inline URL input */}
-                {addingUrlId === part.id && (
-                  <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px' }}>
-                    <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="Paste part link here..." autoFocus
-                      onKeyDown={async e => { if (e.key === 'Enter' && urlInput.trim()) { e.preventDefault(); await updatePart(part.id, { url: urlInput }); setAddingUrlId(null); setUrlInput('') } }}
-                      style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px' }} />
-                    <button onClick={() => { setAddingUrlId(null); setUrlInput('') }} className="prt-btn">Cancel</button>
-                    <button onClick={async () => { if (!urlInput.trim()) return; await updatePart(part.id, { url: urlInput }); setAddingUrlId(null); setUrlInput('') }}
-                      disabled={!urlInput.trim()} className="prt-btn prt-btn-dark">Submit</button>
+                    {part.status === 'requested' && !part.url && (
+                      <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} className="prt-btn" style={{ fontSize: 12 }}>Add Link</button>
+                    )}
+                    {['requested', 'sourced', 'ready_to_order'].includes(part.status) && (
+                      <button onClick={() => setBoughtPart({ id: part.id, name: part.name })} className="prt-btn" style={{ fontSize: 12 }}>In Store</button>
+                    )}
+                    {isAdmin && part.status === 'sourced' && (
+                      <>
+                        <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving === part.id} className="prt-btn" style={{ fontSize: 12, color: '#16a34a' }}>✓ Approve</button>
+                        <button onClick={() => updatePart(part.id, { status: 'requested', url: null })} disabled={saving === part.id} className="prt-btn prt-btn-danger" style={{ fontSize: 12 }}>✗ Decline</button>
+                      </>
+                    )}
+                    {isAdmin && part.status === 'ready_to_order' && (
+                      <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} disabled={saving === part.id} className="prt-btn" style={{ fontSize: 12 }}>Mark Ordered</button>
+                    )}
+                    {part.status === 'ordered' && myRole !== 'shop_coordinator' && (
+                      <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving === part.id} className="prt-btn" style={{ fontSize: 12, color: '#16a34a' }}>✓ Received</button>
+                    )}
+                    {needsInfo && (
+                      <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600, marginLeft: 'auto', whiteSpace: 'nowrap' }}>Needs info</span>
+                    )}
                   </div>
                 )}
               </div>
