@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import RouteVehicleModal from '@/components/RouteVehicleModal'
 import { CALENDAR_TYPE_LABELS, CALENDAR_TYPE_COLORS } from '@/lib/calendar'
 import ReconTaskCard from '@/components/ReconTaskCard'
 
@@ -203,25 +204,7 @@ function AttentionCard({ a, isAdmin, onAction }: {
   const [open, setOpen] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [assignFor, setAssignFor] = useState<string | null>(null) // stageId|item key
-  const [peekUrl, setPeekUrl] = useState<string | null>(null)
-  const [peekReady, setPeekReady] = useState(false)
-
-  // The recon board (in the peek iframe) announces a completed routing —
-  // close the overlay and refresh the counts.
-  useEffect(() => {
-    function onMsg(e: MessageEvent) {
-      if (e.origin !== window.location.origin) return
-      if (e.data?.type === 'mm:ready') setPeekReady(true)
-      if (e.data?.type === 'mm:routed' || e.data?.type === 'mm:close') {
-        setPeekUrl(null)
-        setPeekReady(false)
-        if (e.data?.type === 'mm:routed') onAction()
-      }
-    }
-    window.addEventListener('message', onMsg)
-    return () => window.removeEventListener('message', onMsg)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const [routeVehicleId, setRouteVehicleId] = useState<string | null>(null)
 
   const act = async (fn: () => Promise<Response>) => {
     setBusy(true)
@@ -307,7 +290,7 @@ function AttentionCard({ a, isAdmin, onAction }: {
               <button
                 style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }}
                 disabled={busy}
-                onClick={() => { setPeekReady(false); setPeekUrl(`/vehicles?route=${v.id}`) }}
+                onClick={() => setRouteVehicleId(v.id)}
               >Route →</button>
             </div>
           ))}
@@ -412,42 +395,16 @@ function AttentionCard({ a, isAdmin, onAction }: {
         </div>
       ))}
 
-      {/* Peek overlay — the real recon-board routing modal, over the dashboard */}
-      {peekUrl && (
-        <div
-          onClick={() => { setPeekUrl(null); onAction() }}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(18,18,20,0.55)', zIndex: 1200,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14,
+      {/* The real routing modal, natively — instant, no iframe */}
+      {routeVehicleId && (
+        <RouteVehicleModal
+          vehicleId={routeVehicleId}
+          onClose={() => setRouteVehicleId(null)}
+          onRouted={async () => {
+            setRouteVehicleId(null)
+            await onAction()
           }}
-        >
-          <div onClick={e => e.stopPropagation()} style={{
-            width: 'min(780px, 96vw)', height: 'min(760px, 92vh)', background: 'var(--bg-card, #fff)',
-            borderRadius: 18, overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
-            display: 'flex', flexDirection: 'column', position: 'relative',
-          }}>
-            <button
-              onClick={() => { setPeekUrl(null); onAction() }}
-              style={{
-                position: 'absolute', top: 10, right: 10, zIndex: 5,
-                width: 30, height: 30, borderRadius: 9, border: 'none', cursor: 'pointer',
-                background: 'var(--bg-primary, #f4f4f2)', color: 'var(--text-secondary)',
-                fontSize: 17, lineHeight: 1, minHeight: 0,
-              }}
-              aria-label="Close"
-            >×</button>
-            <iframe src={peekUrl} style={{ flex: 1, width: '100%', border: 'none' }} title="Route vehicle" />
-            {!peekReady && (
-              <div style={{
-                position: 'absolute', inset: 0, background: 'var(--bg-card, #fff)',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12,
-              }}>
-                <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--border)', borderTopColor: 'transparent' }} />
-                <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>Opening routing…</span>
-              </div>
-            )}
-          </div>
-        </div>
+        />
       )}
     </div>
   )
