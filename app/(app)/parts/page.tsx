@@ -398,11 +398,6 @@ export default function PartsOverviewPage() {
                     {part.price && <span>{part.price}</span>}
                   </div>
 
-                  {part.status === 'ordered' && part.expectedDelivery && (
-                    <p style={{ fontSize: 12, color: '#2563eb', margin: '5px 0 0', fontWeight: 600 }}>
-                      Expected {new Date(part.expectedDelivery).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </p>
-                  )}
                   {part.status === 'received' && (
                     <p style={{ fontSize: 12, color: '#16a34a', margin: '5px 0 0', fontWeight: 600 }}>
                       Received {new Date(part.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -446,9 +441,16 @@ export default function PartsOverviewPage() {
                     {part.status === 'ordered' && myRole !== 'shop_coordinator' && (
                       <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving === part.id} className="prt-btn" style={{ fontSize: 12, color: '#16a34a' }}>✓ Received</button>
                     )}
-                    {needsInfo && (
-                      <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600, marginLeft: 'auto', whiteSpace: 'nowrap' }}>Needs info</span>
-                    )}
+                    <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      {needsInfo && (
+                        <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600, whiteSpace: 'nowrap' }}>Needs info</span>
+                      )}
+                      {part.status === 'ordered' && part.expectedDelivery && (
+                        <span style={{ fontSize: 12, color: '#2563eb', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          Expected {new Date(part.expectedDelivery).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      )}
+                    </span>
                   </div>
                 )}
               </div>
