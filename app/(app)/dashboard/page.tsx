@@ -104,39 +104,39 @@ function OverviewGrid({ o }: { o: NonNullable<DashboardData['overview']> }) {
   const cards: Array<{ title: string; href: string; hero: number; unit: string; rows: Row[] }> = [
     {
       title: 'Inventory', href: '/inventory',
-      hero: o.inventory.active, unit: o.inventory.active === 1 ? 'vehicle' : 'vehicles',
+      hero: o.inventory.active, unit: o.inventory.active === 1 ? 'Vehicle' : 'Vehicles',
       rows: [
-        { n: o.inventory.inStock, label: 'in stock', href: '/inventory', dot: '#16a34a' },
-        { n: o.inventory.inRecon, label: 'in recon', href: '/vehicles', dot: '#f59e0b' },
-        { n: o.inventory.external, label: 'at external repair', href: '/external', dot: '#3b82f6' },
+        { n: o.inventory.inStock, label: 'In Stock', href: '/inventory', dot: '#16a34a' },
+        { n: o.inventory.inRecon, label: 'In Recon', href: '/vehicles', dot: '#f59e0b' },
+        { n: o.inventory.external, label: 'At External Repair', href: '/external', dot: '#3b82f6' },
       ],
     },
     ...(o.deals ? [{
       title: 'Deals', href: '/deals',
-      hero: o.deals.draft + o.deals.inContract, unit: o.deals.draft + o.deals.inContract === 1 ? 'active deal' : 'active deals',
+      hero: o.deals.draft + o.deals.inContract, unit: o.deals.draft + o.deals.inContract === 1 ? 'Active Deal' : 'Active Deals',
       rows: [
-        { n: o.deals.draft, label: 'in worksheet', href: '/deals', dot: '#9a9a96' },
-        { n: o.deals.inContract, label: 'in contract', href: '/deals', dot: '#3b82f6' },
-        { n: o.deals.funded30, label: 'funded, last 30 days', href: '/deals', dot: '#16a34a' },
+        { n: o.deals.draft, label: 'In Worksheet', href: '/deals', dot: '#9a9a96' },
+        { n: o.deals.inContract, label: 'In Contract', href: '/deals', dot: '#3b82f6' },
+        { n: o.deals.funded30, label: 'Funded (Last 30)', href: '/deals', dot: '#16a34a' },
       ],
     }] : []),
     {
       title: 'Parts', href: '/parts',
       hero: o.parts.requested + o.parts.approval + o.parts.readyToOrder + o.parts.ordered,
-      unit: 'in the pipeline',
+      unit: 'In the Pipeline',
       rows: [
-        { n: o.parts.requested, label: 'requested', href: '/parts', dot: '#f59e0b' },
-        { n: o.parts.approval, label: 'pending approval', href: '/parts', dot: '#9333ea' },
-        { n: o.parts.readyToOrder, label: 'ready to order', href: '/parts', dot: '#2563eb' },
-        { n: o.parts.ordered, label: 'ordered', href: '/parts', dot: '#16a34a' },
+        { n: o.parts.requested, label: 'Requested', href: '/parts', dot: '#f59e0b' },
+        { n: o.parts.approval, label: 'Pending Approval', href: '/parts', dot: '#9333ea' },
+        { n: o.parts.readyToOrder, label: 'Ready to Order', href: '/parts', dot: '#2563eb' },
+        { n: o.parts.ordered, label: 'Ordered', href: '/parts', dot: '#16a34a' },
       ],
     },
     {
       title: 'External Repairs', href: '/external',
-      hero: o.external.open, unit: o.external.open === 1 ? 'car at a shop' : 'cars at shops',
+      hero: o.external.open, unit: o.external.open === 1 ? 'Car at a Shop' : 'Cars at Shops',
       rows: [
-        { n: o.external.overdue, label: 'past return date', href: '/external', dot: '#dc2626', hot: true },
-        { n: o.external.notSent, label: 'created, not sent', href: '/external', dot: '#9a9a96' },
+        { n: o.external.overdue, label: 'Past Return Date', href: '/external', dot: '#dc2626', hot: true },
+        { n: o.external.notSent, label: 'Created, Not Sent', href: '/external', dot: '#9a9a96' },
       ],
     },
   ]
@@ -172,11 +172,12 @@ function OverviewGrid({ o }: { o: NonNullable<DashboardData['overview']> }) {
               <span style={{ fontSize: 13, fontWeight: 550, color: 'var(--text-secondary)', letterSpacing: '-0.01em' }}>{c.unit}</span>
             </div>
           </Link>
-          <div style={{ height: 1, background: 'var(--border-light, #f0f0ec)', margin: '12px 0 6px' }} />
-          {c.rows.map(r => (
+          <div style={{ height: 1, background: 'var(--border-light, #f0f0ec)', margin: '12px 0 2px' }} />
+          {c.rows.map((r, ri) => (
             <Link key={r.label} href={r.href} className="dash-ov-row" style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '5.5px 6px',
+              display: 'flex', alignItems: 'center', gap: 9, padding: '8px 6px',
               fontSize: 12.5, textDecoration: 'none', color: 'var(--text-primary)', minHeight: 0,
+              borderTop: ri > 0 ? '1px solid var(--border-light, #f0f0ec)' : 'none',
             }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: r.dot, flexShrink: 0, opacity: r.n > 0 ? 1 : 0.35 }} />
               <span style={{ flex: 1, fontWeight: 500, color: r.n > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>{r.label}</span>
@@ -218,17 +219,18 @@ function AttentionCard({ a, isAdmin, onAction }: {
   }
 
   const rows: Array<{ key: string; n: number; label: string; crit?: boolean }> = [
-    { key: 'routing', n: a.routing.length, label: 'cars waiting to be routed' },
-    { key: 'installs', n: a.installsTotal, label: 'arrived-part installs need a mechanic' },
-    { key: 'delivered', n: a.delivered.length, label: 'carrier says delivered — confirm received', crit: true },
-    { key: 'approvals', n: a.approvals.length, label: 'sourced parts waiting for approval' },
-    { key: 'overdue', n: a.overdue.length, label: 'external repairs past their return date', crit: true },
-    { key: 'stuck', n: a.stuck.length, label: 'parts stuck in requested 7+ days' },
+    { key: 'routing', n: a.routing.length, label: 'Cars Waiting to Be Routed' },
+    { key: 'installs', n: a.installsTotal, label: 'Arrived Parts — Assign the Install' },
+    { key: 'delivered', n: a.delivered.length, label: 'Carrier Says Delivered — Confirm Received', crit: true },
+    { key: 'approvals', n: a.approvals.length, label: 'Sourced Parts Awaiting Approval' },
+    { key: 'overdue', n: a.overdue.length, label: 'External Repairs Past Return Date', crit: true },
+    { key: 'stuck', n: a.stuck.length, label: 'Parts Stuck in Requested 7+ Days' },
   ].filter(r => r.n > 0)
 
   const itemRow: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 10, padding: '7px 4px 7px 38px',
+    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px 8px 40px',
     fontSize: 12.5, borderTop: '1px solid var(--border-light, #f0f0ec)',
+    background: 'var(--bg-card, #fff)',
   }
   const miniBtn: React.CSSProperties = {
     border: '1px solid var(--border)', background: 'var(--bg-card, #fff)', borderRadius: 8,
@@ -260,14 +262,18 @@ function AttentionCard({ a, isAdmin, onAction }: {
       {rows.length === 0 && (
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '6px 0 0' }}>Nothing pending — routing, parts, and externals are all handled. ✓</p>
       )}
-      {rows.map((r, i) => (
-        <div key={r.key}>
+      {rows.map((r) => (
+        <div key={r.key} style={{
+          background: 'var(--bg-primary, #f8f8f6)',
+          border: '1px solid var(--border-light, #f0f0ec)',
+          borderRadius: 12, marginBottom: 8, overflow: 'hidden',
+        }}>
           <button
             onClick={() => setOpen(open === r.key ? null : r.key)}
             aria-expanded={open === r.key}
             style={{
-              display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', width: '100%',
-              borderTop: i ? '1px solid var(--border-light, #f0f0ec)' : 'none', textAlign: 'left',
+              display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', width: '100%',
+              textAlign: 'left',
               background: 'none', border: 'none', cursor: 'pointer',
               color: 'var(--text-primary)', fontSize: 13.5, minHeight: 0,
             }}
@@ -279,7 +285,7 @@ function AttentionCard({ a, isAdmin, onAction }: {
               background: r.crit ? 'rgba(185,28,28,0.10)' : 'rgba(180,83,9,0.10)',
               color: r.crit ? '#b91c1c' : '#b45309',
             }}>{r.n}</span>
-            <span style={{ flex: 1, fontWeight: 500 }}>{r.label}</span>
+            <span style={{ flex: 1, fontWeight: 600, letterSpacing: '-0.005em' }}>{r.label}</span>
             <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 11, transform: open === r.key ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>▸</span>
           </button>
 
