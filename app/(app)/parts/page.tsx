@@ -56,6 +56,7 @@ export default function PartsOverviewPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [myRole, setMyRole] = useState<string>('')
   const [showAddPart, setShowAddPart] = useState(false)
+  const [boughtPart, setBoughtPart] = useState<{ id: string; name: string } | null>(null)
   const [editingPart, setEditingPart] = useState<Part | null>(null)
   const [editTracking, setEditTracking] = useState('')
   const [editDelivery, setEditDelivery] = useState('')
@@ -384,6 +385,9 @@ export default function PartsOverviewPage() {
                   {part.status === 'requested' && !part.url && (
                     <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Add Link</button>
                   )}
+                  {['requested', 'sourced', 'ready_to_order'].includes(part.status) && (
+                    <button onClick={() => setBoughtPart({ id: part.id, name: part.name })} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #a16207', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>🛒 Bought it</button>
+                  )}
                   {isAdmin && part.status === 'sourced' && (
                     <>
                       <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>✓ Approve</button>
@@ -423,6 +427,9 @@ export default function PartsOverviewPage() {
       )}
       {showAddPart && (
         <AddPartModal onClose={() => setShowAddPart(false)} onAdded={() => { setShowAddPart(false); load() }} />
+      )}
+      {boughtPart && (
+        <BoughtModal part={boughtPart} onClose={() => setBoughtPart(null)} onDone={() => { setBoughtPart(null); load() }} />
       )}
       {editingPart && (
         <div onClick={() => setEditingPart(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }}>
@@ -636,11 +643,11 @@ function AddPartModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
   const [vehicles, setVehicles] = useState<Array<{ id: string; stockNumber: string; year: number | null; make: string; model: string }>>([])
   const [search, setSearch] = useState('')
   const [vehicleId, setVehicleId] = useState<string | null>(null)
-  const [name, setName] = useState('')
-  const [url, setUrl] = useState('')
-  const [notes, setNotes] = useState('')
+  const [rows, setRows] = useState<Array<{ name: string; url: string; notes: string }>>([{ name: '', url: '', notes: '' }])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const setRow = (i: number, patch: Partial<{ name: string; url: string; notes: string }>) =>
+    setRows(r => r.map((row, ri) => ri === i ? { ...row, ...patch } : row))
 
   useEffect(() => {
     fetch('/api/vehicles')
@@ -711,30 +718,50 @@ function AddPartModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
           </div>
         )}
 
-        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Part name</p>
-        <input
-          value={name}
-          onChange={e => setName(e.target.value)}
-          placeholder='e.g. "Rear bumper"'
-          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, marginBottom: 16 }}
-        />
-
-        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Link (optional — sends it for approval to order)</p>
-        <input
-          type="url"
-          value={url}
-          onChange={e => setUrl(e.target.value)}
-          placeholder="Paste the part link..."
-          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, marginBottom: 16 }}
-        />
-
-        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Notes (optional)</p>
-        <input
-          value={notes}
-          onChange={e => setNotes(e.target.value)}
-          placeholder="Side, color, spec..."
-          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, marginBottom: 20 }}
-        />
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Parts</p>
+        {rows.map((row, i) => (
+          <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                autoFocus={i === rows.length - 1 && i > 0}
+                value={row.name}
+                onChange={e => setRow(i, { name: e.target.value })}
+                placeholder={`Part ${i + 1} — e.g. "Rear bumper"`}
+                style={{ flex: 1, padding: '9px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14, minWidth: 0 }}
+              />
+              {rows.length > 1 && (
+                <button
+                  onClick={() => setRows(r => r.filter((_, ri) => ri !== i))}
+                  title="Remove this part"
+                  style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 16, padding: '0 4px', minHeight: 0, flexShrink: 0 }}
+                >×</button>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <input
+                type="url"
+                value={row.url}
+                onChange={e => setRow(i, { url: e.target.value })}
+                placeholder="Link (optional)"
+                style={{ flex: 1.4, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, minWidth: 0 }}
+              />
+              <input
+                value={row.notes}
+                onChange={e => setRow(i, { notes: e.target.value })}
+                placeholder="Notes"
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, minWidth: 0 }}
+              />
+            </div>
+          </div>
+        ))}
+        <button
+          onClick={() => setRows(r => [...r, { name: '', url: '', notes: '' }])}
+          style={{
+            width: '100%', padding: '10px 0', borderRadius: 10, border: '1.5px dashed var(--border)',
+            background: 'none', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)',
+            cursor: 'pointer', marginBottom: 20,
+          }}
+        >+ Add another part</button>
 
         {error && <p style={{ fontSize: 13, color: '#dc2626', margin: '0 0 12px' }}>{error}</p>}
 
@@ -744,33 +771,163 @@ function AddPartModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
             background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
           }}>Cancel</button>
           <button
-            disabled={saving || !vehicleId || !name.trim()}
+            disabled={saving || !vehicleId || !rows.some(r => r.name.trim())}
             onClick={async () => {
+              const valid = rows.filter(r => r.name.trim())
+              if (!vehicleId || valid.length === 0) return
               setSaving(true)
               setError(null)
               try {
-                const res = await fetch('/api/parts', {
-                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ vehicleId, name: name.trim(), url: url.trim() || null, notes: notes.trim() || null }),
-                })
-                if (!res.ok) {
-                  const d = await res.json().catch(() => ({}))
-                  setError(d.error || 'Could not add the part.')
-                  return
+                let added = 0
+                for (const r of valid) {
+                  const res = await fetch('/api/parts', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ vehicleId, name: r.name.trim(), url: r.url.trim() || null, notes: r.notes.trim() || null }),
+                  })
+                  if (res.ok) added++
                 }
-                onAdded()
+                if (added === 0) { setError('Could not add the parts.'); return }
+                if (added < valid.length) setError(`${added}/${valid.length} added — retry the rest.`)
+                else onAdded()
               } finally {
                 setSaving(false)
               }
             }}
             style={{
               flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
-              background: saving || !vehicleId || !name.trim() ? '#e5e5e5' : '#1a1a1a',
+              background: saving || !vehicleId || !rows.some(r => r.name.trim()) ? '#e5e5e5' : '#1a1a1a',
               color: '#fff', fontSize: 14, fontWeight: 700,
-              cursor: saving || !vehicleId || !name.trim() ? 'not-allowed' : 'pointer',
+              cursor: saving || !vehicleId || !rows.some(r => r.name.trim()) ? 'not-allowed' : 'pointer',
             }}
-          >{saving ? 'Adding...' : 'Add Part'}</button>
+          >{saving
+            ? 'Adding…'
+            : rows.filter(r => r.name.trim()).length > 1
+              ? `Add ${rows.filter(r => r.name.trim()).length} Parts`
+              : 'Add Part'}</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+
+/**
+ * "Bought in person" — someone drove out and bought the part; no link, no
+ * order step. Receipt + price attach if in hand; otherwise admin gets a
+ * reminder task to enter them later.
+ */
+function BoughtModal({ part, onClose, onDone }: {
+  part: { id: string; name: string }
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [price, setPrice] = useState('')
+  const [receipt, setReceipt] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setError(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (res.ok) setReceipt(data.url)
+      else setError('Upload failed — try again.')
+    } catch { setError('Upload failed — try again.') }
+    setUploading(false)
+  }
+
+  async function submit(receiptToAdmin: boolean) {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/parts/${part.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selfPurchase: true,
+          price: price.trim() || undefined,
+          orderImage: receipt || undefined,
+          receiptToAdmin,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error || 'Could not save.')
+        return
+      }
+      onDone()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const hasProof = !!(price.trim() || receipt)
+
+  return (
+    <div onClick={() => !saving && onClose()} className="modal-below-topbar" style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420,
+        padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+      }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Bought in person</h2>
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 18 }}>{part.name} — marks it received, no link or order step needed.</p>
+
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Price paid</p>
+        <input
+          value={price}
+          onChange={e => setPrice(e.target.value)}
+          placeholder="e.g. $84.99"
+          inputMode="decimal"
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, marginBottom: 16 }}
+        />
+
+        <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Receipt photo</p>
+        {receipt ? (
+          <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', marginBottom: 16 }}>
+            <img src={receipt} alt="Receipt" style={{ width: '100%', maxHeight: 160, objectFit: 'contain', background: '#f9fafb' }} />
+            <button onClick={() => setReceipt(null)} style={{ width: '100%', padding: '8px 0', border: 'none', borderTop: '1px solid var(--border)', background: '#fff', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>Remove</button>
+          </div>
+        ) : (
+          <label style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            padding: '14px', borderRadius: 10, border: '1.5px dashed var(--border)',
+            fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: 16,
+          }}>
+            {uploading ? 'Uploading…' : '📷 Snap / upload the receipt'}
+            <input type="file" accept="image/*" capture="environment" onChange={handleUpload} style={{ display: 'none' }} disabled={uploading} />
+          </label>
+        )}
+
+        {error && <p style={{ fontSize: 13, color: '#dc2626', margin: '0 0 12px' }}>{error}</p>}
+
+        <button
+          disabled={saving || uploading || !hasProof}
+          onClick={() => submit(false)}
+          style={{
+            width: '100%', padding: '12px 0', borderRadius: 10, border: 'none',
+            background: saving || !hasProof ? '#e5e5e5' : '#1a1a1a', color: '#fff',
+            fontSize: 14, fontWeight: 700, cursor: saving || !hasProof ? 'not-allowed' : 'pointer', marginBottom: 8,
+          }}
+        >{saving ? 'Saving…' : '✓ Done — receipt & price attached'}</button>
+        <button
+          disabled={saving || uploading}
+          onClick={() => submit(true)}
+          style={{
+            width: '100%', padding: '12px 0', borderRadius: 10,
+            border: '1px solid var(--border)', background: '#fff',
+            fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: 8,
+          }}
+        >Admin has the receipt — remind them to enter it</button>
+        <button disabled={saving} onClick={onClose} style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: 'none', background: 'none', fontSize: 13, color: 'var(--text-muted)', cursor: 'pointer' }}>Cancel</button>
       </div>
     </div>
   )

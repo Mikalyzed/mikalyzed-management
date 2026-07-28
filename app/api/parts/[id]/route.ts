@@ -45,6 +45,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Ordering and receiving are admin steps — set it ready to order instead.' }, { status: 403 })
   }
 
+  // Bought in person: skip the link/order pipeline entirely — someone drove
+  // out and bought the part. Straight to received; receipt + price attach if
+  // in hand, otherwise an admin reminder task is created to enter them.
+  if (updates.selfPurchase === true) {
+    const allowed = user.role === 'admin' || user.role === 'shop_coordinator' || part.assignedToId === user.id
+    if (!allowed) return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+    data.status = 'received'
+    if (typeof updates.price === 'string' && updates.price.trim()) data.price = updates.price.trim()
+    if (typeof updates.orderImage === 'string' && updates.orderImage) data.orderImage = updates.orderImage
+    data.notes = [part.notes, `Bought in person by ${user.name}`].filter(Boolean).join(' · ')
+    if (updates.receiptToAdmin === true) {
+      await prisma.task.create({
+        data: {
+          title: `Enter receipt & price — ${part.name} (#${part.vehicle.stockNumber})`,
+          description: `Bought in person by ${user.name}. Receipt/price are with admin — attach them to the part.`,
+          category: 'admin',
+          priority: 1,
+          createdById: user.id,
+          stockNumbers: [part.vehicle.stockNumber],
+        },
+      }).catch(() => {})
+    }
+    await prisma.activityLog.create({
+      data: {
+        entityType: 'part', entityId: id, action: 'part_bought_in_person', actorId: user.id,
+        details: { partName: part.name, vehicleStockNumber: part.vehicle.stockNumber, price: data.price ?? null, receiptToAdmin: updates.receiptToAdmin === true },
+      },
+    }).catch(() => {})
+    statusChangeLogged = true
+  }
+
   if ('url' in updates) {
     data.url = updates.url
     if (updates.url && part.status === 'requested') {
