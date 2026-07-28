@@ -3,6 +3,7 @@ import { getSessionUser, requireRole } from '@/lib/auth'
 import { buildVehicleStatusReport } from '@/lib/reports/vehicle-status'
 import { detectBottlenecks } from '@/lib/reports/bottlenecks'
 import { renderVehicleStatusPdf } from '@/lib/reports/pdf'
+import { refreshPartTracking } from '@/lib/refresh-part-tracking'
 
 /**
  * GET /api/reports/vehicle-status — the management inventory snapshot.
@@ -18,6 +19,9 @@ export async function GET(req: NextRequest) {
   if (!requireRole(user.role, ['sales_manager'])) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
+
+  // Fresh carrier truth before the meeting looks at anything
+  await refreshPartTracking().catch(() => {})
 
   const report = await buildVehicleStatusReport()
   const bottlenecks = detectBottlenecks(report)
