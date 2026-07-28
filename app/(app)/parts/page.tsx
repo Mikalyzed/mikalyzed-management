@@ -474,25 +474,36 @@ export default function PartsOverviewPage() {
       )}
       {editingPart && (
         <div onClick={() => setEditingPart(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, padding: '24px', boxShadow: '0 -4px 30px rgba(0,0,0,0.15)' }}>
-            <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Part Details</h3>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 4 }}>{editingPart.name}</p>
-            <div style={{ marginBottom: 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 440, padding: '24px', boxShadow: '0 -4px 30px rgba(0,0,0,0.15)', maxHeight: '86vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+              <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Part Details</h3>
               <span style={{
-                display: 'inline-block', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 4,
+                display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
+                fontSize: 10.5, fontWeight: 650, padding: '3px 10px', borderRadius: 100,
                 background: (STATUS_COLORS[editingPart.status] || STATUS_COLORS.requested).bg,
                 color: (STATUS_COLORS[editingPart.status] || STATUS_COLORS.requested).color,
-                border: `1px solid ${(STATUS_COLORS[editingPart.status] || STATUS_COLORS.requested).border}`,
-              }}>{STATUS_LABELS[editingPart.status]}</span>
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: (STATUS_COLORS[editingPart.status] || STATUS_COLORS.requested).color, flexShrink: 0 }} />
+                {STATUS_LABELS[editingPart.status]}
+              </span>
             </div>
+            <p style={{
+              fontSize: 13.5, fontWeight: 640, letterSpacing: '-0.01em', lineHeight: 1.4, margin: '0 0 6px',
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }}>{editingPart.name}</p>
+            {editingPart.url && (
+              <a href={editingPart.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: '#2563eb', textDecoration: 'none', fontWeight: 600, display: 'inline-block', marginBottom: 14, minHeight: 0 }}>
+                View link ↗
+              </a>
+            )}
 
             {/* Admin: move part to any other status (recover from mistaken clicks) */}
             {isAdmin && (
-              <div style={{ marginBottom: 20, padding: '12px 14px', background: '#fafaf8', border: '1px solid var(--border)', borderRadius: 10 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 8px' }}>
-                  Move to status (admin)
+              <div style={{ marginBottom: 18 }}>
+                <p style={{ fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>
+                  Status
                 </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                   {(['requested', 'sourced', 'ready_to_order', 'ordered', 'received'] as const).map(s => {
                     const isCurrent = s === editingPart.status
                     const c = STATUS_COLORS[s]
@@ -506,45 +517,40 @@ export default function PartsOverviewPage() {
                           setEditingPart({ ...editingPart, status: s })
                         }}
                         style={{
-                          padding: '5px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600,
-                          background: isCurrent ? c.bg : '#fff',
+                          padding: '4px 12px', borderRadius: 100, fontSize: 11.5, fontWeight: 650,
+                          background: isCurrent ? c.bg : 'var(--bg-card)',
                           color: isCurrent ? c.color : 'var(--text-secondary)',
-                          border: `1px solid ${isCurrent ? c.border : 'var(--border)'}`,
-                          cursor: isCurrent ? 'default' : 'pointer',
-                          opacity: isCurrent ? 0.6 : 1,
+                          border: `1px solid ${isCurrent ? 'transparent' : 'var(--border)'}`,
+                          cursor: isCurrent ? 'default' : 'pointer', minHeight: 0,
+                          display: 'inline-flex', alignItems: 'center', gap: 5,
                         }}
-                      >{STATUS_LABELS[s]}</button>
+                      >
+                        {isCurrent && <span style={{ width: 5, height: 5, borderRadius: '50%', background: c.color, flexShrink: 0 }} />}
+                        {STATUS_LABELS[s]}
+                      </button>
                     )
                   })}
                 </div>
               </div>
             )}
 
-            {editingPart.url && (
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Link</label>
-                <a href={editingPart.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, color: '#2563eb', wordBreak: 'break-all' }}>
-                  {editingPart.url}
-                </a>
-              </div>
-            )}
-
             {editingPart.status === 'ordered' && (
               <>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Tracking Number</label>
-                  <input type="text" value={editTracking} onChange={e => setEditTracking(e.target.value)} placeholder="Enter tracking number..."
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
-                </div>
-
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Expected Delivery Date</label>
-                  <input type="date" value={editDelivery} onChange={e => setEditDelivery(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 14 }} />
+                <div className="form-row" style={{ marginBottom: 16 }}>
+                  <div style={{ flex: 1.2, minWidth: 0 }}>
+                    <label style={{ display: 'block', fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Tracking #</label>
+                    <input type="text" value={editTracking} onChange={e => setEditTracking(e.target.value)} placeholder="Tracking number…"
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 14 }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <label style={{ display: 'block', fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Expected</label>
+                    <input type="date" value={editDelivery} onChange={e => setEditDelivery(e.target.value)}
+                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 14 }} />
+                  </div>
                 </div>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Order Confirmation / Receipt</label>
+              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Order confirmation / receipt</label>
               {editImage ? (
                 <div>
                   <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer' }}
@@ -552,19 +558,9 @@ export default function PartsOverviewPage() {
                     <img src={editImage} alt="Order confirmation" style={{ width: '100%', maxHeight: 200, objectFit: 'contain', background: '#f9fafb' }} />
                   </div>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <button onClick={() => window.open(editImage, '_blank')} style={{
-                      flex: 1, padding: '6px 0', borderRadius: 6, border: '1px solid var(--border)',
-                      background: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
-                    }}>View Full Size</button>
-                    <a href={editImage} download={`receipt-${editingPart?.name?.replace(/\s+/g, '-')}`} style={{
-                      flex: 1, padding: '6px 0', borderRadius: 6, border: '1px solid var(--border)',
-                      background: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
-                      textAlign: 'center', textDecoration: 'none',
-                    }}>Download</a>
-                    <button onClick={() => setEditImage(null)} style={{
-                      padding: '6px 10px', borderRadius: 6, border: '1px solid #fca5a5',
-                      background: '#fef2f2', fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#ef4444',
-                    }}>Remove</button>
+                    <button onClick={() => window.open(editImage, '_blank')} className="prt-btn" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}>View Full Size</button>
+                    <a href={editImage} download={`receipt-${editingPart?.name?.replace(/\s+/g, '-')}`} className="prt-btn" style={{ flex: 1, justifyContent: 'center', fontSize: 12, textDecoration: 'none' }}>Download</a>
+                    <button onClick={() => setEditImage(null)} className="prt-btn prt-btn-danger" style={{ fontSize: 12 }}>Remove</button>
                   </div>
                 </div>
               ) : (
@@ -624,7 +620,7 @@ export default function PartsOverviewPage() {
                     setEditingPart(null)
                   }} disabled={saving === editingPart.id} style={{
                     flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
-                    background: '#1a1a1a', color: '#dffd6e', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+                    background: '#1a1a1a', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
                     opacity: saving === editingPart.id ? 0.5 : 1,
                   }}>{saving === editingPart.id ? 'Saving...' : 'Save'}</button>
                 </div>
@@ -638,35 +634,34 @@ export default function PartsOverviewPage() {
               }}>Close</button>
             )}
 
-            {/* Wrong Part — for any status past requested */}
-            {['sourced', 'ready_to_order', 'ordered', 'received'].includes(editingPart.status) && (
+            {/* Danger zone — quiet text actions, both behind a confirm */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-light, #f0f0ec)' }}>
+              {['sourced', 'ready_to_order', 'ordered', 'received'].includes(editingPart.status) && (
+                <button onClick={async () => {
+                  if (!confirm('Mark as wrong part and reset to Requested? The link will be cleared.')) return
+                  setSaving(editingPart.id)
+                  await updatePart(editingPart.id, {
+                    status: 'requested', url: null, tracking: null,
+                    expectedDelivery: null, orderImage: null,
+                  })
+                  setEditingPart(null)
+                }} disabled={saving === editingPart.id} style={{
+                  border: 'none', background: 'none', color: '#b45309',
+                  fontSize: 12.5, fontWeight: 600, cursor: 'pointer', minHeight: 0, padding: '4px 6px',
+                }}>Wrong part — reset</button>
+              )}
               <button onClick={async () => {
-                if (!confirm('Mark as wrong part and reset to Requested? The link will be cleared.')) return
+                if (!confirm('Delete this part?')) return
                 setSaving(editingPart.id)
-                await updatePart(editingPart.id, {
-                  status: 'requested', url: null, tracking: null,
-                  expectedDelivery: null, orderImage: null,
-                })
+                await fetch(`/api/parts/${editingPart.id}`, { method: 'DELETE' })
+                setSaving(null)
                 setEditingPart(null)
+                load()
               }} disabled={saving === editingPart.id} style={{
-                width: '100%', marginTop: 10, padding: '10px 0', borderRadius: 10,
-                border: '1px solid #f59e0b', background: '#fffbeb', color: '#b45309',
-                fontSize: 13, fontWeight: 600, cursor: 'pointer',
-              }}>Wrong Part — Reset</button>
-            )}
-
-            <button onClick={async () => {
-              if (!confirm('Delete this part?')) return
-              setSaving(editingPart.id)
-              await fetch(`/api/parts/${editingPart.id}`, { method: 'DELETE' })
-              setSaving(null)
-              setEditingPart(null)
-              load()
-            }} disabled={saving === editingPart.id} style={{
-              width: '100%', marginTop: 10, padding: '10px 0', borderRadius: 10,
-              border: '1px solid #fca5a5', background: '#fef2f2', color: '#ef4444',
-              fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            }}>Delete Part</button>
+                border: 'none', background: 'none', color: '#ef4444',
+                fontSize: 12.5, fontWeight: 600, cursor: 'pointer', minHeight: 0, padding: '4px 6px',
+              }}>Delete part</button>
+            </div>
           </div>
         </div>
       )}
