@@ -578,11 +578,25 @@ export default function VehiclesPage() {
     setModalChecklist(updated)
     setModalSaving(true)
     try {
-      await fetch(`/api/stages/${stage.id}`, {
+      const res = await fetch(`/api/stages/${stage.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ checklist: updated }),
       })
+      if (res.status === 409) {
+        const d = await res.json().catch(() => ({}))
+        if (d.code === 'install_duplicate') {
+          if (confirm(`${d.error}\n\nAdd it anyway?`)) {
+            await fetch(`/api/stages/${stage.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ checklist: updated, allowDuplicateInstall: true }),
+            })
+          } else {
+            setModalChecklist(modalChecklist) // revert — use the parts flow instead
+          }
+        }
+      }
     } catch { /* ignore */ }
     setModalSaving(false)
   }, [modalChecklist, getCurrentStage])
@@ -599,11 +613,25 @@ export default function VehiclesPage() {
     setModalChecklist(updated)
     setModalSaving(true)
     try {
-      await fetch(`/api/stages/${stage.id}`, {
+      const res = await fetch(`/api/stages/${stage.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ checklist: updated }),
       })
+      if (res.status === 409) {
+        const d = await res.json().catch(() => ({}))
+        if (d.code === 'install_duplicate') {
+          if (confirm(`${d.error}\n\nAdd it anyway?`)) {
+            await fetch(`/api/stages/${stage.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ checklist: updated, allowDuplicateInstall: true }),
+            })
+          } else {
+            setModalChecklist(modalChecklist) // revert — use the parts flow instead
+          }
+        }
+      }
     } catch { /* ignore */ }
     setModalSaving(false)
   }, [modalChecklist, getCurrentStage, mechanics])
@@ -623,11 +651,25 @@ export default function VehiclesPage() {
     setModalChecklist(updated)
     setModalSaving(true)
     try {
-      await fetch(`/api/stages/${stage.id}`, {
+      const res = await fetch(`/api/stages/${stage.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ checklist: updated }),
       })
+      if (res.status === 409) {
+        const d = await res.json().catch(() => ({}))
+        if (d.code === 'install_duplicate') {
+          if (confirm(`${d.error}\n\nAdd it anyway?`)) {
+            await fetch(`/api/stages/${stage.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ checklist: updated, allowDuplicateInstall: true }),
+            })
+          } else {
+            setModalChecklist(modalChecklist) // revert — use the parts flow instead
+          }
+        }
+      }
     } catch { /* ignore */ }
     setModalSaving(false)
   }, [modalChecklist, getCurrentStage])
@@ -639,11 +681,25 @@ export default function VehiclesPage() {
     setModalChecklist(updated)
     setModalSaving(true)
     try {
-      await fetch(`/api/stages/${stage.id}`, {
+      const res = await fetch(`/api/stages/${stage.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ checklist: updated }),
       })
+      if (res.status === 409) {
+        const d = await res.json().catch(() => ({}))
+        if (d.code === 'install_duplicate') {
+          if (confirm(`${d.error}\n\nAdd it anyway?`)) {
+            await fetch(`/api/stages/${stage.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ checklist: updated, allowDuplicateInstall: true }),
+            })
+          } else {
+            setModalChecklist(modalChecklist) // revert — use the parts flow instead
+          }
+        }
+      }
     } catch { /* ignore */ }
     setModalSaving(false)
   }, [modalChecklist, getCurrentStage])

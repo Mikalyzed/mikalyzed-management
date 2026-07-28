@@ -42,6 +42,7 @@ type BottleneckFix =
   | { kind: 'reschedule_stage'; stageId: string }
   | { kind: 'install_tasks'; vehicleId: string; canCreate: boolean; parts: Array<{ id: string; name: string }> }
   | { kind: 'confirm_received'; partId: string }
+  | { kind: 'remove_task'; stageId: string; idx: number; item: string }
 type Bottleneck = {
   severity: 'crit' | 'warn'
   stock: string | null
@@ -441,14 +442,25 @@ export default function MorningMeetingPage() {
     if (!res.ok) { notify('Could not load the stage.', true); return false }
     const { stage } = await res.json()
     const checklist = Array.isArray(stage.checklist) ? stage.checklist : []
-    const patch = await fetch(`/api/stages/${carRef.stageId}`, {
+    const newList = [...checklist, {
+      item, done: false, note: '',
+      addedByMechanic: true, approved: 'approved',
+      assigneeId: stage.assigneeId ?? null, assigneeName: stage.assignee?.name ?? null,
+    }]
+    let patch = await fetch(`/api/stages/${carRef.stageId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ checklist: [...checklist, {
-        item, done: false, note: '',
-        addedByMechanic: true, approved: 'approved',
-        assigneeId: stage.assigneeId ?? null, assigneeName: stage.assignee?.name ?? null,
-      }] }),
+      body: JSON.stringify({ checklist: newList }),
     })
+    if (patch.status === 409) {
+      const d = await patch.json().catch(() => ({}))
+      if (d.code === 'install_duplicate') {
+        if (!confirm(`${d.error}\n\nAdd it anyway?`)) { notify('Skipped — use the parts flow (mark it received).'); return false }
+        patch = await fetch(`/api/stages/${carRef.stageId}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ checklist: newList, allowDuplicateInstall: true }),
+        })
+      }
+    }
     if (!patch.ok) { notify('Could not add the task.', true); return false }
     notify(`Task added to ${carRef.stock}: ${item}`)
     loadReport()
@@ -544,6 +556,24 @@ export default function MorningMeetingPage() {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'received' }),
       })
+    } else if (b.fix.kind === 'remove_task') {
+      const fix = b.fix
+      const stageRes = await fetch(`/api/stages/${fix.stageId}`)
+      if (stageRes.ok) {
+        const { stage } = await stageRes.json()
+        const checklist = Array.isArray(stage.checklist) ? [...stage.checklist] : []
+        if (checklist[fix.idx]?.item === fix.item) {
+          checklist.splice(fix.idx, 1)
+          res = await fetch(`/api/stages/${fix.stageId}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ checklist }),
+          })
+        } else {
+          notify('That checklist changed — refreshing.', true)
+          loadReport()
+          return
+        }
+      }
     } else if (b.fix.kind === 'reschedule_stage') {
       res = await fetch(`/api/stages/${b.fix.stageId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -1203,6 +1233,8 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
     verbs.push({ label: 'Reschedule', onClick: () => setModal('reschedule') })
   } else if (b.fix?.kind === 'confirm_received') {
     verbs.push({ label: '✓ Mark received', onClick: () => run(() => onFix(b, 0)) })
+  } else if (b.fix?.kind === 'remove_task') {
+    verbs.push({ label: 'Remove — use parts flow', onClick: () => run(() => onFix(b, 0)) })
   } else if (installFix) {
     verbs.push({ label: 'Parts…', onClick: openDetail })
   }

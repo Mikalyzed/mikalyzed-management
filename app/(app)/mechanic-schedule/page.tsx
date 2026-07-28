@@ -2490,11 +2490,25 @@ export default function MechanicBoard() {
                         setModalChecklist(updated)
                         input.value = ''
                         try {
-                          await fetch(`/api/stages/${selectedJob.id}`, {
+                          const res = await fetch(`/api/stages/${selectedJob.id}`, {
                             method: 'PATCH',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ checklist: updated }),
                           })
+                          if (res.status === 409) {
+                            const d = await res.json().catch(() => ({}))
+                            if (d.code === 'install_duplicate') {
+                              if (confirm(`${d.error}\n\nAdd it anyway?`)) {
+                                await fetch(`/api/stages/${selectedJob.id}`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ checklist: updated, allowDuplicateInstall: true }),
+                                })
+                              } else {
+                                setModalChecklist(modalChecklist) // revert — the flow handles it
+                              }
+                            }
+                          }
                         } catch { /* ignore */ }
                       }}
                       style={{ display: 'flex', gap: 8 }}

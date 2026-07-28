@@ -64,7 +64,7 @@ export async function buildVehicleStatusReport() {
 
   const now = Date.now()
 
-  type ChecklistItem = { item?: string; done?: boolean; note?: string; assigneeName?: string }
+  type ChecklistItem = { item?: string; done?: boolean; note?: string; assigneeName?: string; fromPart?: boolean }
   const stageTasks = (checklist: unknown) =>
     (Array.isArray(checklist) ? (checklist as ChecklistItem[]) : [])
       .map((t, idx) => ({
@@ -75,6 +75,7 @@ export async function buildVehicleStatusReport() {
         done: t.done === true,
         note: t.note?.trim() || null,
         assignee: t.assigneeName?.trim() || null,
+        fromPart: t.fromPart === true,
       }))
       .filter(t => t.item)
 

@@ -1,4 +1,5 @@
 import type { VehicleStatusReport } from './vehicle-status'
+import { isInstallLike, taskMatchesPart } from '@/lib/install-task-match'
 
 /**
  * Bottleneck detection for the Morning Meeting board.
@@ -22,6 +23,7 @@ export type BottleneckFix =
   | { kind: 'reschedule_stage'; stageId: string }
   | { kind: 'install_tasks'; vehicleId: string; canCreate: boolean; parts: Array<{ id: string; name: string }> }
   | { kind: 'confirm_received'; partId: string }
+  | { kind: 'remove_task'; stageId: string; idx: number; item: string }
 
 export type Bottleneck = {
   severity: 'crit' | 'warn'
@@ -157,6 +159,48 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
         detail: `"${p.part}" shows ${p.trackingStatus === 'available_for_pickup' ? 'ready for pickup' : 'delivered'} by the carrier — confirm it arrived and mark it received.`,
         fix: { kind: 'confirm_received', partId: p.partId },
       })
+    }
+  }
+
+  // 5c. Hand-written install tasks that bypass the parts flow. The correct
+  // flow is: mark the part Received → the install task creates itself
+  // (fromPart). A manual "install X" either doubles the auto task or hides
+  // the fact the part never got received.
+  const partsByStock = new Map<string, typeof r.parts>()
+  for (const p of r.parts) {
+    if (!partsByStock.has(p.stock)) partsByStock.set(p.stock, [])
+    partsByStock.get(p.stock)!.push(p)
+  }
+  for (const v of r.recon) {
+    if (!v.stageId) continue
+    const carParts = partsByStock.get(v.stock) ?? []
+    if (carParts.length === 0) continue
+    for (const t of v.tasks) {
+      if (t.done || t.fromPart || !isInstallLike(t.item)) continue
+      const match = carParts.find(p => taskMatchesPart(t.item, p.part))
+      if (!match) continue
+      const autoExists = v.tasks.some(x => x.fromPart && !x.done && taskMatchesPart(x.item, match.part))
+      if (autoExists) {
+        out.push({
+          severity: 'warn',
+          stock: v.stock,
+          vehicle: v.vehicle,
+          where: whereOf(v.stock),
+          issue: 'Duplicate install task',
+          detail: `"${t.item.slice(0, 50)}" was written by hand but the parts flow already created the install task for "${match.part.slice(0, 45)}". Remove the manual one.`,
+          fix: { kind: 'remove_task', stageId: v.stageId, idx: t.idx, item: t.item },
+        })
+      } else if (match.status !== 'received') {
+        out.push({
+          severity: 'warn',
+          stock: v.stock,
+          vehicle: v.vehicle,
+          where: whereOf(v.stock),
+          issue: 'Install task written by hand',
+          detail: `"${t.item.slice(0, 50)}" — but the part "${match.part.slice(0, 45)}" is still ${match.status}. Mark the part Received when it arrives and the install task creates itself; this manual one will double up.`,
+          fix: { kind: 'remove_task', stageId: v.stageId, idx: t.idx, item: t.item },
+        })
+      }
     }
   }
 

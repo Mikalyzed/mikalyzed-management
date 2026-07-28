@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
+import { findInstallDuplicate } from '@/lib/install-task-match'
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
@@ -82,6 +83,38 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   // Update checklist
   if (body.checklist) {
+    // Guard: hand-written install tasks that duplicate the parts flow.
+    // Correct flow = mark the part Received → the install task creates itself.
+    // Newly added, non-auto items that look like an install for one of this
+    // car's parts get bounced with guidance (override via allowDuplicateInstall).
+    if (body.allowDuplicateInstall !== true) {
+      const oldItems = new Set(
+        (Array.isArray(stage.checklist) ? (stage.checklist as Array<Record<string, unknown>>) : [])
+          .map(c => String(c?.item ?? '').trim().toLowerCase()).filter(Boolean),
+      )
+      const added = (Array.isArray(body.checklist) ? (body.checklist as Array<Record<string, unknown>>) : [])
+        .filter(it => typeof it?.item === 'string' && it.item.trim() && !it.fromPart && !oldItems.has(it.item.trim().toLowerCase()))
+      if (added.length > 0) {
+        const parts = await prisma.part.findMany({
+          where: { vehicleId: stage.vehicleId, status: { in: ['requested', 'sourced', 'ready_to_order', 'ordered', 'received'] } },
+          select: { id: true, name: true, status: true, installTaskCreatedAt: true },
+        })
+        for (const it of added) {
+          const dup = findInstallDuplicate(String(it.item), parts)
+          if (dup) {
+            const guidance = dup.status === 'received'
+              ? (dup.installTaskCreatedAt
+                ? `an install task for it already exists on this car`
+                : `mark it received on the Parts page and the install task creates itself`)
+              : `the part is still "${dup.status}" — when it arrives, mark it Received and the install task creates itself`
+            return NextResponse.json({
+              error: `"${String(it.item).slice(0, 60)}" looks like the install for the part "${dup.name.slice(0, 60)}" — ${guidance}. Adding it by hand doubles things up.`,
+              code: 'install_duplicate',
+            }, { status: 409 })
+          }
+        }
+      }
+    }
     data.checklist = body.checklist
 
     // Invariant: a mechanic must not stay "done" while they still own an unchecked
