@@ -48,6 +48,7 @@ export default function PartsOverviewPage() {
   const [parts, setParts] = useState<Part[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('active')
+  const [search, setSearch] = useState('')
   const [saving, setSaving] = useState<string | null>(null)
   const [addingUrlId, setAddingUrlId] = useState<string | null>(null)
   const [urlInput, setUrlInput] = useState('')
@@ -123,6 +124,15 @@ export default function PartsOverviewPage() {
 
   const filtered = (() => {
     let list = filter === 'active' ? parts.filter(p => p.status !== 'received') : parts.filter(p => p.status === filter)
+    const q = search.trim().toLowerCase()
+    if (q) {
+      list = list.filter(p =>
+        [p.name, p.vehicle.stockNumber, String(p.vehicle.year ?? ''), p.vehicle.make, p.vehicle.model, p.assignedTo?.name, p.requestedBy?.name]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(q))
+    }
     // Sort ordered parts by expected delivery (soonest first, null at end)
     if (filter === 'ordered' || filter === 'active') {
       list = [...list].sort((a, b) => {
@@ -149,13 +159,25 @@ export default function PartsOverviewPage() {
 
   return (
     <div>
-      <div className="page-h1-mobile-pad" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: '24px', flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-0.02em', margin: 0 }}>Parts Management</h1>
+      <div className="page-h1-mobile-pad" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '24px' }}>
+        <input
+          type="search"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search parts, vehicle, stock #, person…"
+          style={{
+            flex: 1, minWidth: 0, padding: '10px 14px', borderRadius: 10,
+            border: '1px solid var(--border)', fontSize: 14, background: 'var(--bg-card)',
+            outline: 'none',
+          }}
+          onFocus={e => { e.currentTarget.style.borderColor = 'var(--accent-dark)'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(223,253,110,0.35)' }}
+          onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.boxShadow = 'none' }}
+        />
         {(isAdmin || myRole === 'shop_coordinator') && (
           <button
             onClick={() => setShowAddPart(true)}
             style={{
-              padding: '10px 18px', borderRadius: 10, border: 'none',
+              padding: '10px 18px', borderRadius: 10, border: 'none', flexShrink: 0,
               background: '#1a1a1a', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer',
             }}
           >+ Add Part</button>
