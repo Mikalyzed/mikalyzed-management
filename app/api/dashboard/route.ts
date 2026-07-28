@@ -274,8 +274,37 @@ export async function GET(request: Request) {
     }
   }
 
+  // ── Domain overview (DealerCenter-style at-a-glance counts) ──
+  let overview: Record<string, unknown> | null = null
+  if (['admin', 'shop_coordinator', 'sales_manager'].includes(user.role)) {
+    const [invActive, invStock, invRecon, invExternal, dealsDraft, dealsProceeded, dealsFunded30,
+           pReq, pSourced, pReady, pOrdered, extOpen, extOverdue, extNotSent] = await Promise.all([
+      prisma.vehicle.count({ where: { OR: [{ inventoryStatus: null }, { inventoryStatus: { notIn: ['sold', 'removed'] } }] } }),
+      prisma.vehicle.count({ where: { inventoryStatus: 'in_stock' } }),
+      prisma.vehicle.count({ where: { inventoryStatus: 'in_recon' } }),
+      prisma.vehicle.count({ where: { inventoryStatus: 'external_repair' } }),
+      prisma.deal.count({ where: { status: 'draft', proceededAt: null } }),
+      prisma.deal.count({ where: { status: 'draft', proceededAt: { not: null } } }),
+      prisma.deal.count({ where: { status: 'funded', fundedAt: { gte: new Date(Date.now() - 30 * 86400000) } } }),
+      prisma.part.count({ where: { status: 'requested' } }),
+      prisma.part.count({ where: { status: 'sourced' } }),
+      prisma.part.count({ where: { status: 'ready_to_order' } }),
+      prisma.part.count({ where: { status: 'ordered' } }),
+      prisma.externalRepair.count({ where: { status: { in: ['sent', 'in_progress', 'ready'] } } }),
+      prisma.externalRepair.count({ where: { status: { in: ['sent', 'in_progress', 'ready'] }, expectedReturn: { lt: new Date() } } }),
+      prisma.externalRepair.count({ where: { status: 'pending' } }),
+    ])
+    overview = {
+      inventory: { active: invActive, inStock: invStock, inRecon: invRecon, external: invExternal },
+      deals: user.role === 'shop_coordinator' ? null : { draft: dealsDraft, inContract: dealsProceeded, funded30: dealsFunded30 },
+      parts: { requested: pReq, approval: pSourced, readyToOrder: pReady, ordered: pOrdered },
+      external: { open: extOpen, overdue: extOverdue, notSent: extNotSent },
+    }
+  }
+
   return NextResponse.json({
     attention,
+    overview,
     user: { name: user.name, role: user.role, id: user.id },
     pipeline,
     myTasks,

@@ -32,6 +32,12 @@ type DashboardData = {
     stuck: Array<{ id: string; name: string; stock: string; ageDays: number }>
     mechanics: Array<{ id: string; name: string }>
   } | null
+  overview?: {
+    inventory: { active: number; inStock: number; inRecon: number; external: number }
+    deals: { draft: number; inContract: number; funded30: number } | null
+    parts: { requested: number; approval: number; readyToOrder: number; ordered: number }
+    external: { open: number; overdue: number; notSent: number }
+  } | null
   pipeline: { mechanic: number; detailing: number; content: number; publish: number; completed: number; externalRepairs: number; partsPending: number }
   myTasks: number
   recentVehicles: Array<{
@@ -87,6 +93,79 @@ type DashboardData = {
 
 const STAGE_LABELS: Record<string, string> = {
   mechanic: 'Mechanic', detailing: 'Detailing', content: 'Content', publish: 'Publish', completed: 'Done',
+}
+
+// ─── Domain overview — the whole operation counted, one glance ───
+function OverviewGrid({ o }: { o: NonNullable<DashboardData['overview']> }) {
+  const chip = (n: number, hot = false): React.CSSProperties => ({
+    minWidth: 30, height: 24, padding: '0 8px', borderRadius: 8,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', flexShrink: 0,
+    background: hot ? 'rgba(185,28,28,0.10)' : 'var(--bg-primary, #f4f4f2)',
+    color: hot ? '#b91c1c' : 'var(--text-primary)',
+  })
+  const row: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0',
+    fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', minHeight: 0,
+  }
+  const head: React.CSSProperties = {
+    fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em',
+    color: 'var(--text-muted)', marginBottom: 6,
+  }
+  const cards: Array<{ title: string; href: string; rows: Array<{ n: number; label: string; href: string; hot?: boolean }> }> = [
+    {
+      title: 'Inventory', href: '/inventory',
+      rows: [
+        { n: o.inventory.active, label: 'active vehicles', href: '/inventory' },
+        { n: o.inventory.inStock, label: 'in stock', href: '/inventory' },
+        { n: o.inventory.inRecon, label: 'in recon', href: '/vehicles' },
+        { n: o.inventory.external, label: 'at external repair', href: '/external' },
+      ],
+    },
+    ...(o.deals ? [{
+      title: 'Deals', href: '/deals',
+      rows: [
+        { n: o.deals.draft, label: 'in worksheet', href: '/deals' },
+        { n: o.deals.inContract, label: 'in contract', href: '/deals' },
+        { n: o.deals.funded30, label: 'funded (last 30)', href: '/deals' },
+      ],
+    }] : []),
+    {
+      title: 'Parts', href: '/parts',
+      rows: [
+        { n: o.parts.requested, label: 'requested', href: '/parts' },
+        { n: o.parts.approval, label: 'pending approval', href: '/parts' },
+        { n: o.parts.readyToOrder, label: 'ready to order', href: '/parts' },
+        { n: o.parts.ordered, label: 'ordered', href: '/parts' },
+      ],
+    },
+    {
+      title: 'External Repairs', href: '/external',
+      rows: [
+        { n: o.external.open, label: 'at shops now', href: '/external' },
+        { n: o.external.overdue, label: 'past return date', href: '/external', hot: true },
+        { n: o.external.notSent, label: 'created, not sent', href: '/external' },
+      ],
+    },
+  ]
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 16, marginBottom: 24 }}>
+      {cards.map(c => (
+        <div key={c.title} className="card" style={{ padding: '16px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+            <div style={head}>{c.title}</div>
+            <Link href={c.href} style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 0 }}>Open ›</Link>
+          </div>
+          {c.rows.map(r => (
+            <Link key={r.label} href={r.href} style={row}>
+              <span style={chip(r.n, r.hot && r.n > 0)}>{r.n}</span>
+              <span style={{ fontWeight: 500 }}>{r.label}</span>
+            </Link>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // ─── Attention Center — everything waiting on an admin decision ───
@@ -757,6 +836,8 @@ export default function DashboardPage() {
         const fresh = await fetch('/api/dashboard').then(r => r.json()).catch(() => null)
         if (fresh) setData(fresh)
       }} />}
+
+      {data.overview && <OverviewGrid o={data.overview} />}
 
       {(isAdmin || data.user.role === 'sales_manager') && financials && <FleetFinancialsWidget f={financials} />}
 
