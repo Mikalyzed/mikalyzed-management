@@ -41,6 +41,7 @@ type BottleneckFix =
   | { kind: 'part_status'; partId: string }
   | { kind: 'reschedule_stage'; stageId: string }
   | { kind: 'install_tasks'; vehicleId: string; canCreate: boolean; parts: Array<{ id: string; name: string }> }
+  | { kind: 'confirm_received'; partId: string }
 type Bottleneck = {
   severity: 'crit' | 'warn'
   stock: string | null
@@ -537,6 +538,11 @@ export default function MorningMeetingPage() {
       res = await fetch(`/api/parts/${b.fix.partId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: choice === 0 ? 'sourced' : 'ordered' }),
+      })
+    } else if (b.fix.kind === 'confirm_received') {
+      res = await fetch(`/api/parts/${b.fix.partId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'received' }),
       })
     } else if (b.fix.kind === 'reschedule_stage') {
       res = await fetch(`/api/stages/${b.fix.stageId}`, {
@@ -1195,6 +1201,8 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
     verbs.push({ label: 'Mark ordered', onClick: () => run(() => onFix(b, 1)) })
   } else if (b.fix?.kind === 'reschedule_stage') {
     verbs.push({ label: 'Reschedule', onClick: () => setModal('reschedule') })
+  } else if (b.fix?.kind === 'confirm_received') {
+    verbs.push({ label: '✓ Mark received', onClick: () => run(() => onFix(b, 0)) })
   } else if (installFix) {
     verbs.push({ label: 'Parts…', onClick: openDetail })
   }

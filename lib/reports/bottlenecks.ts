@@ -21,6 +21,7 @@ export type BottleneckFix =
   | { kind: 'part_status'; partId: string }              // requested → sourced/ordered
   | { kind: 'reschedule_stage'; stageId: string }
   | { kind: 'install_tasks'; vehicleId: string; canCreate: boolean; parts: Array<{ id: string; name: string }> }
+  | { kind: 'confirm_received'; partId: string }
 
 export type Bottleneck = {
   severity: 'crit' | 'warn'
@@ -139,6 +140,22 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
         issue: 'Missed its scheduled date',
         detail: `Was scheduled for ${v.scheduledDate}; the ${v.stage} stage is still pending.`,
         fix: { kind: 'reschedule_stage', stageId: v.stageId },
+      })
+    }
+  }
+
+  // 5b. Carrier says delivered but nobody marked the part received —
+  // the package is probably sitting in receiving unlogged.
+  for (const p of r.parts) {
+    if (p.status === 'ordered' && (p.trackingStatus === 'delivered' || p.trackingStatus === 'available_for_pickup')) {
+      out.push({
+        severity: 'warn',
+        stock: p.stock,
+        vehicle: p.vehicle,
+        where: whereOf(p.stock),
+        issue: p.trackingStatus === 'available_for_pickup' ? 'Package ready for pickup' : 'Carrier says delivered',
+        detail: `"${p.part}" shows ${p.trackingStatus === 'available_for_pickup' ? 'ready for pickup' : 'delivered'} by the carrier — confirm it arrived and mark it received.`,
+        fix: { kind: 'confirm_received', partId: p.partId },
       })
     }
   }

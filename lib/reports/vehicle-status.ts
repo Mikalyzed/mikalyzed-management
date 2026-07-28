@@ -46,7 +46,7 @@ export async function buildVehicleStatusReport() {
         },
         parts: {
           where: { status: { in: ['requested', 'sourced', 'ordered', 'received'] } },
-          select: { id: true, name: true, status: true, expectedDelivery: true, installTaskCreatedAt: true, createdAt: true },
+          select: { id: true, name: true, status: true, expectedDelivery: true, installTaskCreatedAt: true, createdAt: true, trackingStatus: true },
         },
       },
       orderBy: { stockNumber: 'asc' },
@@ -156,6 +156,7 @@ export async function buildVehicleStatusReport() {
       vehicle: vehicleName(v),
       part: p.name,
       status: p.status,
+      trackingStatus: p.trackingStatus,
       eta: p.expectedDelivery?.toISOString().slice(0, 10) ?? null,
       ageDays: daysSince(p.createdAt) ?? 0,
       installTaskCreated: !!p.installTaskCreatedAt,
