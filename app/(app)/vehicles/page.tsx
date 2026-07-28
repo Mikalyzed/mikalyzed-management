@@ -268,6 +268,50 @@ export default function VehiclesPage() {
     return () => { document.body.removeChild(ghost) }
   }, [])
 
+  // Open the routing modal pre-filled for a vehicle. Used by the board's
+  // Route button AND the ?route=<vehicleId> deep link (dashboard Attention).
+  const openRoutingFor = useCallback((v: VehicleWithStage) => {
+    setRoutingVehicle(v)
+    const checklist = (v.lastCompleted?.checklist || []) as any[]
+    const fixes = extractIssueFixTasks(checklist)
+    const installs = v.pendingInstalls || []
+    const shouldGoToMechanic = fixes.length > 0 || installs.length > 0
+    setRoutingNext(shouldGoToMechanic ? 'mechanic' : 'detailing')
+    setRoutingReason('')
+    const prefilledTasks = [
+      ...fixes.map(f => f.note ? `${f.item} — ${f.note}` : f.item),
+      ...installs.map(p => `Install: ${p.name}`),
+    ]
+    setRoutingTasks(prefilledTasks)
+    const installMap: Record<string, string> = {}
+    for (const p of installs) installMap[`Install: ${p.name}`] = p.id
+    setRoutingInstallMap(installMap)
+    const addedTasks = checklist
+      .map((t, i) => ({ t, i }))
+      .filter(({ t }) => t.addedByMechanic && t.approved !== 'declined')
+    setRoutingCarry(new Set(addedTasks.map(({ i }) => i)))
+    setRoutingNewTask('')
+    setRoutingEstHours('')
+    setRoutingAssigneeId('')
+    setRoutingScopeName('')
+    setRoutingSoldDelivery(false)
+    setRoutingSelectedTemplateIds([])
+  }, [])
+
+  // Deep link: /vehicles?route=<vehicleId> opens the routing modal directly
+  const routeParamConsumed = useRef(false)
+  useEffect(() => {
+    if (routeParamConsumed.current || vehicles.length === 0) return
+    const id = new URLSearchParams(window.location.search).get('route')
+    if (!id) { routeParamConsumed.current = true; return }
+    const v = vehicles.find(x => x.id === id)
+    if (v) {
+      routeParamConsumed.current = true
+      openRoutingFor(v)
+      window.history.replaceState(null, '', '/vehicles')
+    }
+  }, [vehicles, openRoutingFor])
+
   // Load checklist templates for the routing modal's target stage. Refires when
   // the admin switches the destination (Mechanic / Detailing / …). Selection is
   // reset on every stage change — the stage-switch handler strips the old
@@ -1111,35 +1155,7 @@ export default function VehiclesPage() {
                       className="routing-route-btn"
                       onClick={(e) => {
                         e.stopPropagation()
-                        setRoutingVehicle(v)
-                        const checklist = (v.lastCompleted?.checklist || []) as any[]
-                        const fixes = extractIssueFixTasks(checklist)
-                        const installs = v.pendingInstalls || []
-                        const shouldGoToMechanic = fixes.length > 0 || installs.length > 0
-                        // Pre-select mechanic if there's anything to fix or install; otherwise default to detailing
-                        setRoutingNext(shouldGoToMechanic ? 'mechanic' : 'detailing')
-                        setRoutingReason('')
-                        // Pre-fill the new checklist with Fix tasks + Install tasks
-                        const prefilledTasks = [
-                          ...fixes.map(f => f.note ? `${f.item} — ${f.note}` : f.item),
-                          ...installs.map(p => `Install: ${p.name}`),
-                        ]
-                        setRoutingTasks(prefilledTasks)
-                        // Track which task names correspond to which part IDs so we can stamp them on confirm
-                        const installMap: Record<string, string> = {}
-                        for (const p of installs) installMap[`Install: ${p.name}`] = p.id
-                        setRoutingInstallMap(installMap)
-                        // Pre-check all (still-actionable) added tasks for carryover
-                        const addedTasks = checklist
-                          .map((t, i) => ({ t, i }))
-                          .filter(({ t }) => t.addedByMechanic && t.approved !== 'declined')
-                        setRoutingCarry(new Set(addedTasks.map(({ i }) => i)))
-                        setRoutingNewTask('')
-                        setRoutingEstHours('')
-                        setRoutingAssigneeId('')
-                        setRoutingScopeName('')
-                        setRoutingSoldDelivery(false)
-                        setRoutingSelectedTemplateIds([])
+                        openRoutingFor(v)
                       }}
                       style={{
                         display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,

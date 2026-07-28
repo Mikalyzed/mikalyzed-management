@@ -23,8 +23,14 @@ type FleetFinancials = {
 type DashboardData = {
   user: { name: string; role: string; id: string }
   attention?: {
-    awaitingRouting: number; unassignedInstalls: number; carrierDelivered: number
-    pendingApproval: number; overdueExternal: number; stuckRequested: number
+    routing: Array<{ id: string; stock: string; vehicle: string }>
+    installs: Array<{ stageId: string; item: string; stock: string; vehicle: string }>
+    installsTotal: number
+    delivered: Array<{ id: string; name: string; stock: string }>
+    approvals: Array<{ id: string; name: string; url: string | null; stock: string }>
+    overdue: Array<{ id: string; stock: string; vehicle: string; shop: string; overdueDays: number }>
+    stuck: Array<{ id: string; name: string; stock: string; ageDays: number }>
+    mechanics: Array<{ id: string; name: string }>
   } | null
   pipeline: { mechanic: number; detailing: number; content: number; publish: number; completed: number; externalRepairs: number; partsPending: number }
   myTasks: number
@@ -84,18 +90,53 @@ const STAGE_LABELS: Record<string, string> = {
 }
 
 // ─── Attention Center — everything waiting on an admin decision ───
-function AttentionCard({ a, isAdmin }: {
+// Rows expand to the actual items; each executes right here (assign, receive,
+// approve, push a date) — routing deep-links into the recon board with the
+// routing modal already open.
+function AttentionCard({ a, isAdmin, onAction }: {
   a: NonNullable<DashboardData['attention']>
   isAdmin: boolean
+  onAction: () => Promise<void>
 }) {
-  const rows = [
-    { n: a.awaitingRouting, label: 'cars waiting to be routed', href: '/vehicles', crit: false },
-    { n: a.unassignedInstalls, label: 'arrived-part installs need a mechanic', href: '/vehicles', crit: false },
-    { n: a.carrierDelivered, label: 'carrier says delivered — confirm received', href: '/parts', crit: true },
-    { n: a.pendingApproval, label: 'sourced parts waiting for approval', href: '/parts', crit: false },
-    { n: a.overdueExternal, label: 'external repairs past their return date', href: '/external', crit: true },
-    { n: a.stuckRequested, label: 'parts stuck in requested 7+ days', href: '/parts', crit: false },
+  const [open, setOpen] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [assignFor, setAssignFor] = useState<string | null>(null) // stageId|item key
+
+  const act = async (fn: () => Promise<Response>) => {
+    setBusy(true)
+    try {
+      await fn()
+      await onAction()
+    } finally {
+      setBusy(false)
+      setAssignFor(null)
+    }
+  }
+
+  const rows: Array<{ key: string; n: number; label: string; crit?: boolean }> = [
+    { key: 'routing', n: a.routing.length, label: 'cars waiting to be routed' },
+    { key: 'installs', n: a.installsTotal, label: 'arrived-part installs need a mechanic' },
+    { key: 'delivered', n: a.delivered.length, label: 'carrier says delivered — confirm received', crit: true },
+    { key: 'approvals', n: a.approvals.length, label: 'sourced parts waiting for approval' },
+    { key: 'overdue', n: a.overdue.length, label: 'external repairs past their return date', crit: true },
+    { key: 'stuck', n: a.stuck.length, label: 'parts stuck in requested 7+ days' },
   ].filter(r => r.n > 0)
+
+  const itemRow: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 10, padding: '7px 4px 7px 38px',
+    fontSize: 12.5, borderTop: '1px solid var(--border-light, #f0f0ec)',
+  }
+  const miniBtn: React.CSSProperties = {
+    border: '1px solid var(--border)', background: 'var(--bg-card, #fff)', borderRadius: 8,
+    padding: '4px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 0,
+    whiteSpace: 'nowrap', color: 'var(--text-primary)',
+  }
+  const stockChip: React.CSSProperties = {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)',
+    background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border)',
+    padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0,
+  }
 
   return (
     <div className="card" style={{ marginBottom: 24, padding: 22, borderLeft: rows.length ? '3px solid #d97706' : '3px solid #16a34a' }}>
@@ -116,25 +157,134 @@ function AttentionCard({ a, isAdmin }: {
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '6px 0 0' }}>Nothing pending — routing, parts, and externals are all handled. ✓</p>
       )}
       {rows.map((r, i) => (
-        <Link
-          key={r.label}
-          href={r.href}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px',
-            borderTop: i ? '1px solid var(--border-light, #f0f0ec)' : 'none',
-            textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13.5, minHeight: 0,
-          }}
-        >
-          <span style={{
-            minWidth: 26, height: 22, padding: '0 7px', borderRadius: 100,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-            background: r.crit ? 'rgba(185,28,28,0.10)' : 'rgba(180,83,9,0.10)',
-            color: r.crit ? '#b91c1c' : '#b45309',
-          }}>{r.n}</span>
-          <span style={{ flex: 1, fontWeight: 500 }}>{r.label}</span>
-          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>›</span>
-        </Link>
+        <div key={r.key}>
+          <button
+            onClick={() => setOpen(open === r.key ? null : r.key)}
+            aria-expanded={open === r.key}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', width: '100%',
+              borderTop: i ? '1px solid var(--border-light, #f0f0ec)' : 'none', textAlign: 'left',
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-primary)', fontSize: 13.5, minHeight: 0,
+            }}
+          >
+            <span style={{
+              minWidth: 26, height: 22, padding: '0 7px', borderRadius: 100,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+              background: r.crit ? 'rgba(185,28,28,0.10)' : 'rgba(180,83,9,0.10)',
+              color: r.crit ? '#b91c1c' : '#b45309',
+            }}>{r.n}</span>
+            <span style={{ flex: 1, fontWeight: 500 }}>{r.label}</span>
+            <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 11, transform: open === r.key ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>▸</span>
+          </button>
+
+          {open === r.key && r.key === 'routing' && a.routing.map(v => (
+            <div key={v.id} style={itemRow}>
+              <span style={stockChip}>#{v.stock}</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{v.vehicle}</span>
+              <Link href={`/vehicles?route=${v.id}`} style={{ ...miniBtn, textDecoration: 'none', background: '#1a1a1a', color: '#fff', border: 'none' }}>Route →</Link>
+            </div>
+          ))}
+
+          {open === r.key && r.key === 'installs' && a.installs.map(it => {
+            const k = `${it.stageId}|${it.item}`
+            return (
+              <div key={k} style={{ ...itemRow, position: 'relative', flexWrap: 'wrap' }}>
+                <span style={stockChip}>#{it.stock}</span>
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{it.item}</span>
+                <button style={miniBtn} disabled={busy} onClick={() => setAssignFor(assignFor === k ? null : k)}>
+                  Assign ▾
+                </button>
+                {assignFor === k && (
+                  <span style={{
+                    position: 'absolute', right: 4, top: 'calc(100% - 2px)', zIndex: 30, minWidth: 160,
+                    background: 'var(--bg-card, #fff)', border: '1px solid var(--border)', borderRadius: 10,
+                    boxShadow: '0 8px 24px rgba(24,24,27,0.16)', overflow: 'hidden', display: 'block',
+                  }}>
+                    {a.mechanics.map(m => (
+                      <button
+                        key={m.id}
+                        disabled={busy}
+                        onClick={() => act(() => fetch(`/api/stages/${it.stageId}/assign-task`, {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ assigneeId: m.id, item: it.item }),
+                        }))}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 12, background: 'var(--bg-card, #fff)', border: 'none', borderBottom: '1px solid var(--border-light, #f0f0ec)', cursor: 'pointer', minHeight: 0, color: 'var(--text-primary)' }}
+                      >{m.name}</button>
+                    ))}
+                  </span>
+                )}
+              </div>
+            )
+          })}
+
+          {open === r.key && r.key === 'delivered' && a.delivered.map(p => (
+            <div key={p.id} style={itemRow}>
+              <span style={stockChip}>#{p.stock}</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{p.name}</span>
+              <button
+                style={{ ...miniBtn, color: '#16a34a' }} disabled={busy}
+                onClick={() => act(() => fetch(`/api/parts/${p.id}`, {
+                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'received' }),
+                }))}
+              >✓ Received</button>
+            </div>
+          ))}
+
+          {open === r.key && r.key === 'approvals' && a.approvals.map(p => (
+            <div key={p.id} style={itemRow}>
+              <span style={stockChip}>#{p.stock}</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                {p.name}
+                {p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: '#2563eb', fontWeight: 600, textDecoration: 'none', fontSize: 12 }}>View link ↗</a>}
+              </span>
+              <button
+                style={{ ...miniBtn, color: '#16a34a' }} disabled={busy}
+                onClick={() => act(() => fetch(`/api/parts/${p.id}`, {
+                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'ready_to_order' }),
+                }))}
+              >✓ Approve</button>
+              <button
+                style={{ ...miniBtn, color: '#b91c1c' }} disabled={busy}
+                onClick={() => act(() => fetch(`/api/parts/${p.id}`, {
+                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status: 'requested', url: null }),
+                }))}
+              >✗</button>
+            </div>
+          ))}
+
+          {open === r.key && r.key === 'overdue' && a.overdue.map(e => (
+            <div key={e.id} style={itemRow}>
+              <span style={stockChip}>#{e.stock}</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                {e.vehicle} <span style={{ color: '#b91c1c', fontWeight: 600 }}>· {e.overdueDays}d late at {e.shop}</span>
+              </span>
+              <button
+                style={miniBtn} disabled={busy}
+                title="Called the shop — expected back in a week"
+                onClick={() => act(() => fetch(`/api/external/${e.id}`, {
+                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ expectedReturn: new Date(Date.now() + 7 * 86400000).toISOString() }),
+                }))}
+              >+1 wk</button>
+              <Link href="/external" style={{ ...miniBtn, textDecoration: 'none' }}>Open ›</Link>
+            </div>
+          ))}
+
+          {open === r.key && r.key === 'stuck' && a.stuck.map(p => (
+            <div key={p.id} style={itemRow}>
+              <span style={stockChip}>#{p.stock}</span>
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
+                {p.name} <span style={{ color: '#b45309', fontWeight: 600 }}>· {p.ageDays}d in requested</span>
+              </span>
+              <Link href={`/parts#part-${p.id}`} style={{ ...miniBtn, textDecoration: 'none' }}>Open ›</Link>
+            </div>
+          ))}
+        </div>
       ))}
     </div>
   )
@@ -554,7 +704,10 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ Fleet Financials (admin + sales_manager only) ═══ */}
-      {data.attention && <AttentionCard a={data.attention} isAdmin={isAdmin} />}
+      {data.attention && <AttentionCard a={data.attention} isAdmin={isAdmin} onAction={async () => {
+        const fresh = await fetch('/api/dashboard').then(r => r.json()).catch(() => null)
+        if (fresh) setData(fresh)
+      }} />}
 
       {(isAdmin || data.user.role === 'sales_manager') && financials && <FleetFinancialsWidget f={financials} />}
 

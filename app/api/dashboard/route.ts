@@ -213,23 +213,65 @@ export async function GET(request: Request) {
     }
   })
 
-  // ── Admin attention center: everything waiting on a decision ──
-  let attention: Record<string, number> | null = null
+  // ── Admin attention center: everything waiting on a decision, with the
+  //    actual items so each can be executed inline on the dashboard ──
+  let attention: Record<string, unknown> | null = null
   if (user.role === 'admin' || user.role === 'shop_coordinator') {
-    const [awaitingRouting, activeStages, carrierDelivered, pendingApproval, overdueExternal, stuckRequested] = await Promise.all([
-      prisma.vehicle.count({ where: { status: 'awaiting_routing' } }),
+    const vName = (v: { year: number | null; make: string; model: string }) => `${v.year ?? ''} ${v.make} ${v.model}`.trim()
+    const [routingVehicles, activeStages, deliveredParts, approvalParts, overdueExternals, stuckParts, mechanics] = await Promise.all([
+      prisma.vehicle.findMany({
+        where: { status: 'awaiting_routing' },
+        select: { id: true, stockNumber: true, year: true, make: true, model: true },
+        take: 15,
+      }),
       prisma.vehicleStage.findMany({
         where: { status: { in: ['pending', 'in_progress'] } },
-        select: { checklist: true },
+        select: { id: true, checklist: true, vehicle: { select: { stockNumber: true, year: true, make: true, model: true } } },
       }),
-      prisma.part.count({ where: { status: 'ordered', trackingStatus: { in: ['delivered', 'available_for_pickup'] } } }),
-      prisma.part.count({ where: { status: 'sourced' } }),
-      prisma.externalRepair.count({ where: { status: { in: ['sent', 'in_progress', 'ready'] }, expectedReturn: { lt: new Date() } } }),
-      prisma.part.count({ where: { status: 'requested', createdAt: { lt: new Date(Date.now() - 7 * 86400000) } } }),
+      prisma.part.findMany({
+        where: { status: 'ordered', trackingStatus: { in: ['delivered', 'available_for_pickup'] } },
+        select: { id: true, name: true, vehicle: { select: { stockNumber: true } } },
+        take: 15,
+      }),
+      prisma.part.findMany({
+        where: { status: 'sourced' },
+        select: { id: true, name: true, url: true, vehicle: { select: { stockNumber: true } } },
+        take: 15,
+      }),
+      prisma.externalRepair.findMany({
+        where: { status: { in: ['sent', 'in_progress', 'ready'] }, expectedReturn: { lt: new Date() } },
+        select: { id: true, stockNumber: true, year: true, make: true, model: true, shopName: true, expectedReturn: true },
+        orderBy: { expectedReturn: 'asc' },
+        take: 15,
+      }),
+      prisma.part.findMany({
+        where: { status: 'requested', createdAt: { lt: new Date(Date.now() - 7 * 86400000) } },
+        select: { id: true, name: true, createdAt: true, vehicle: { select: { stockNumber: true } } },
+        take: 15,
+      }),
+      prisma.user.findMany({ where: { role: 'mechanic', isActive: true }, select: { id: true, name: true } }),
     ])
-    const unassignedInstalls = activeStages.reduce((n, s) =>
-      n + (Array.isArray(s.checklist) ? (s.checklist as Array<Record<string, unknown>>).filter(c => c?.fromPart && !c?.assigneeId && !c?.done).length : 0), 0)
-    attention = { awaitingRouting, unassignedInstalls, carrierDelivered, pendingApproval, overdueExternal, stuckRequested }
+    const installItems = activeStages.flatMap(s =>
+      (Array.isArray(s.checklist) ? (s.checklist as Array<Record<string, unknown>>) : [])
+        .filter(c => c?.fromPart && !c?.assigneeId && !c?.done)
+        .map(c => ({ stageId: s.id, item: String(c.item ?? ''), stock: s.vehicle.stockNumber, vehicle: vName(s.vehicle) })),
+    )
+    attention = {
+      routing: routingVehicles.map(v => ({ id: v.id, stock: v.stockNumber, vehicle: vName(v) })),
+      installs: installItems.slice(0, 15),
+      installsTotal: installItems.length,
+      delivered: deliveredParts.map(p => ({ id: p.id, name: p.name, stock: p.vehicle.stockNumber })),
+      approvals: approvalParts.map(p => ({ id: p.id, name: p.name, url: p.url, stock: p.vehicle.stockNumber })),
+      overdue: overdueExternals.map(e => ({
+        id: e.id, stock: e.stockNumber, vehicle: vName(e), shop: e.shopName,
+        overdueDays: Math.floor((Date.now() - (e.expectedReturn?.getTime() ?? Date.now())) / 86400000),
+      })),
+      stuck: stuckParts.map(p => ({
+        id: p.id, name: p.name, stock: p.vehicle.stockNumber,
+        ageDays: Math.floor((Date.now() - p.createdAt.getTime()) / 86400000),
+      })),
+      mechanics,
+    }
   }
 
   return NextResponse.json({
