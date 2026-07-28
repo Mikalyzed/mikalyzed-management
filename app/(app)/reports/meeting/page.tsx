@@ -16,6 +16,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 // ── types (mirror /api/reports/vehicle-status + /api/board-tasks) ──────
 
 type StageTask = { idx: number; item: string; done: boolean; note: string | null; assignee: string | null }
+type CarPlan = {
+  goal: string | null; stepId: string | null; step: string | null; stepDetail: string | null
+  stepSinceDays: number | null; finished: number; total: number
+}
 type InboundPart = { partId: string; name: string; status: string; eta: string | null }
 type ReconRow = {
   stock: string; vehicle: string; vehicleId: string; stageId: string | null
@@ -24,6 +28,7 @@ type ReconRow = {
   awaitingParts: boolean; awaitingPartsName: string | null; paused: boolean
   scheduledDate: string | null; daysInStock: number | null; openParts: number
   tasks: StageTask[]; stageNotes: string | null; partsInbound: InboundPart[]
+  plan: CarPlan | null
 }
 type ExternalRow = {
   externalId: string
@@ -57,6 +62,7 @@ type StockRow = {
   year: number | null; make: string; model: string
   color: string | null; location: string | null
   askingPrice: number | null; daysInStock: number | null
+  plan: CarPlan | null
 }
 type PartRow = {
   partId: string; vehicleId: string
@@ -584,6 +590,24 @@ export default function MorningMeetingPage() {
     else notify('That fix did not go through.', true)
   }
 
+  /** Game plan: complete the active step — the system activates the next one
+   *  and creates its admin follow-up automatically. */
+  async function advancePlan(vehicleId: string, stepId: string) {
+    const res = await fetch(`/api/vehicles/${vehicleId}/plan`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'advance', stepId }),
+    })
+    const d = await res.json().catch(() => ({}))
+    if (res.ok) {
+      const nextStep = d.plan?.steps?.find((s: { status: string }) => s.status === 'active')
+      notify(d.done ? 'Game plan complete — every step done. 🏁' : `Next up: ${nextStep?.title ?? 'next step'} (follow-up created)`)
+      loadReport()
+      loadFollowups()
+    } else {
+      notify(d.error || 'Could not advance the plan.', true)
+    }
+  }
+
   async function markExternalReturned(externalId: string) {
     const res = await fetch(`/api/external/${externalId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -993,6 +1017,7 @@ export default function MorningMeetingPage() {
               </>
             }
           >
+            <PlanBlock vehicleId={v.vehicleId} plan={v.plan} onAdvance={advancePlan} onSaved={() => { loadReport(); loadFollowups() }} />
             <StageTaskList tasks={v.tasks} notes={v.stageNotes} stageId={v.stageId} stage={v.stage} stock={v.stock} users={users} onToggle={toggleStageTask} onAssign={assignStageTask} />
             <InboundList parts={v.partsInbound} onReceive={markPartReceived} />
             <FollowupList items={followupsByStock.get(v.stock) ?? []} onDone={completeFollowup} onEdit={editFollowup} />
@@ -1636,6 +1661,130 @@ function ExternalQuickControls({ externalId, onReturned, onDelete }: {
       <button className="mtg-btn" onClick={() => setStep('return')}>✓ Returned</button>
       <button className="mtg-btn mtg-btn-danger" onClick={() => setStep('delete')}>Delete…</button>
     </span>
+  )
+}
+
+/** The car's game plan inside a meeting-card expansion: current step, one-tap
+ *  advance, paste-a-master-sheet import when no plan exists yet. */
+function PlanBlock({ vehicleId, plan, onAdvance, onSaved }: {
+  vehicleId: string | null
+  plan: CarPlan | null
+  onAdvance: (vehicleId: string, stepId: string) => Promise<void>
+  onSaved: () => void
+}) {
+  const [importOpen, setImportOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [preview, setPreview] = useState<{ goal: string | null; steps: Array<{ title: string; detail?: string }> } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  if (!vehicleId) return null
+
+  return (
+    <>
+      <DetailLabel>
+        Game Plan{plan ? ` · step ${Math.min(plan.finished + 1, plan.total)} of ${plan.total}` : ''}
+      </DetailLabel>
+      {plan?.step ? (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          border: '1px solid var(--border-light)', borderRadius: 10, padding: '9px 12px',
+          background: 'var(--bg-card)', marginBottom: 4,
+        }}>
+          <span style={{ flex: 1, minWidth: 180 }}>
+            <span style={{ fontWeight: 650 }}>{plan.step}</span>
+            {plan.stepDetail && <span style={{ color: 'var(--text-muted)' }}> — {plan.stepDetail}</span>}
+            {plan.stepSinceDays != null && plan.stepSinceDays > 0 && (
+              <span style={{ color: plan.stepSinceDays > 7 ? '#b45309' : 'var(--text-muted)', fontWeight: 600 }}> · {plan.stepSinceDays}d</span>
+            )}
+          </span>
+          {plan.stepId && (
+            <button className="mtg-btn" style={{ color: '#16a34a', fontSize: 12 }} onClick={() => onAdvance(vehicleId, plan.stepId!)}>
+              ✓ Done — next step
+            </button>
+          )}
+        </div>
+      ) : plan ? (
+        <p style={{ margin: '0 0 4px', color: '#16a34a', fontWeight: 650, fontSize: 12.5 }}>Plan complete 🏁</p>
+      ) : (
+        <button className="mtg-btn mtg-add" style={{ fontSize: 12 }} onClick={() => setImportOpen(true)}>
+          + Paste master plan…
+        </button>
+      )}
+
+      {importOpen && (
+        <div className="mm-backdrop" onClick={() => !busy && setImportOpen(false)} style={{ zIndex: 1300 }}>
+          <div className="mm-panel" onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 520, padding: 24, maxHeight: '86vh', overflowY: 'auto' }}>
+            <h3 style={{ fontSize: 17, fontWeight: 700, margin: '0 0 4px' }}>Import Master Plan</h3>
+            <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 12px', lineHeight: 1.5 }}>
+              Paste the master sheet — the AI structures it into ordered steps for review. The first step becomes active and its follow-up is created automatically.
+            </p>
+            {!preview ? (
+              <>
+                <textarea
+                  autoFocus rows={9}
+                  className="mtg-input"
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  placeholder={'Current status…\nNext steps…\nGoal…'}
+                  style={{ width: '100%', resize: 'vertical', marginBottom: 12 }}
+                />
+                {err && <p style={{ fontSize: 12.5, color: '#b45309', margin: '0 0 10px' }}>{err}</p>}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="mtg-btn mtg-btn-dark" disabled={busy || !text.trim()}
+                    style={{ flex: 1, justifyContent: 'center', padding: '10px 14px' }}
+                    onClick={async () => {
+                      setBusy(true); setErr(null)
+                      try {
+                        const res = await fetch(`/api/vehicles/${vehicleId}/plan/parse`, {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ text }),
+                        })
+                        const d = await res.json()
+                        if (res.ok) setPreview({ goal: d.goal, steps: d.steps })
+                        else setErr(d.error || 'Could not parse.')
+                      } finally { setBusy(false) }
+                    }}
+                  >{busy ? 'Reading…' : 'Structure it'}</button>
+                  <button className="mtg-btn" disabled={busy} onClick={() => setImportOpen(false)}>Cancel</button>
+                </div>
+              </>
+            ) : (
+              <>
+                {preview.goal && (
+                  <p style={{ fontSize: 12.5, margin: '0 0 10px' }}><span style={{ fontWeight: 700 }}>Goal:</span> {preview.goal}</p>
+                )}
+                <ol style={{ margin: '0 0 14px', paddingLeft: 20, fontSize: 12.5, lineHeight: 1.6 }}>
+                  {preview.steps.map((s, i) => (
+                    <li key={i} style={{ marginBottom: 4 }}>
+                      <span style={{ fontWeight: 600 }}>{s.title}</span>
+                      {s.detail && <span style={{ color: 'var(--text-muted)' }}> — {s.detail}</span>}
+                    </li>
+                  ))}
+                </ol>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    className="mtg-btn mtg-btn-dark" disabled={busy}
+                    style={{ flex: 1, justifyContent: 'center', padding: '10px 14px' }}
+                    onClick={async () => {
+                      setBusy(true)
+                      try {
+                        const res = await fetch(`/api/vehicles/${vehicleId}/plan`, {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ goal: preview.goal, steps: preview.steps }),
+                        })
+                        if (res.ok) { setImportOpen(false); setPreview(null); setText(''); onSaved() }
+                      } finally { setBusy(false) }
+                    }}
+                  >{busy ? 'Saving…' : `Save plan (${preview.steps.length} steps)`}</button>
+                  <button className="mtg-btn" disabled={busy} onClick={() => setPreview(null)}>Edit text</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 

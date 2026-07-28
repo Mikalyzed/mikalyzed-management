@@ -24,7 +24,7 @@ function daysSince(d: Date | null) {
 }
 
 export async function buildVehicleStatusReport() {
-  const [vehicles, externals] = await Promise.all([
+  const [vehicles, externals, plans] = await Promise.all([
     prisma.vehicle.findMany({
       where: {
         OR: [
@@ -60,7 +60,23 @@ export async function buildVehicleStatusReport() {
       },
       orderBy: { expectedReturn: 'asc' },
     }),
+    prisma.vehiclePlan.findMany({ include: { steps: { orderBy: { order: 'asc' } } } }),
   ])
+
+  // Game plans: current step per vehicle — the system's "what's next" for a car
+  const planByVehicleId = new Map(plans.map(p => {
+    const active = p.steps.find(s => s.status === 'active')
+    const finished = p.steps.filter(s => s.status === 'done' || s.status === 'skipped').length
+    return [p.vehicleId, {
+      goal: p.goal,
+      stepId: active?.id ?? null,
+      step: active?.title ?? null,
+      stepDetail: active?.detail ?? null,
+      stepSinceDays: active?.activatedAt ? daysSince(active.activatedAt) : null,
+      finished,
+      total: p.steps.length,
+    }] as const
+  }))
 
   const now = Date.now()
 
@@ -108,6 +124,7 @@ export async function buildVehicleStatusReport() {
         tasks: stageTasks(cur?.checklist),
         stageNotes: cur?.notes?.trim() || null,
         partsInbound: inboundParts(v),
+        plan: planByVehicleId.get(v.id) ?? null,
       }
     })
     .sort((a, b) => (b.daysInStock ?? 0) - (a.daysInStock ?? 0))
@@ -181,6 +198,7 @@ export async function buildVehicleStatusReport() {
       location: v.location,
       askingPrice: v.askingPrice,
       daysInStock: daysSince(v.dateInStock),
+      plan: planByVehicleId.get(v.id) ?? null,
     }))
     .sort((a, b) => (b.daysInStock ?? 0) - (a.daysInStock ?? 0))
 

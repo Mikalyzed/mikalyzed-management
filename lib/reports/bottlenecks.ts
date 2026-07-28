@@ -204,6 +204,22 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
     }
   }
 
+  // 5d. Game plan stalled: the active step hasn't moved in a week — the
+  // system's "what's next" is being ignored.
+  for (const v of [...r.recon, ...r.inStock]) {
+    const p = (v as { plan?: { step: string | null; stepSinceDays: number | null; finished: number; total: number } }).plan
+    if (p?.step && p.stepSinceDays != null && p.stepSinceDays > 7) {
+      out.push({
+        severity: 'warn',
+        stock: v.stock,
+        vehicle: v.vehicle,
+        where: whereOf(v.stock),
+        issue: `Game plan stalled ${p.stepSinceDays}d`,
+        detail: `Step ${p.finished + 1}/${p.total} — "${p.step.slice(0, 60)}" — has been the next move for ${p.stepSinceDays} days.`,
+      })
+    }
+  }
+
   // 6. Received parts with no install task
   const activeMechanicByStock = new Map(
     r.recon

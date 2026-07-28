@@ -129,6 +129,7 @@ model Vehicle {
   costAdds          CostAdd[]
   mediaAssets       MediaAsset[]
   deals             Deal[]
+  plan              VehiclePlan?
 
   @@index([status])
   @@index([currentAssigneeId])
@@ -709,6 +710,39 @@ model ExternalRepair {
 
   @@index([status])
   @@map("external_repairs")
+}
+
+// Per-vehicle Game Plan: the ordered master roadmap for a car (from sale
+// prep master sheets). Exactly one step is "active"; completing it activates
+// the next and auto-creates the admin follow-up — the system tells the admin
+// what's next, not the other way around.
+model VehiclePlan {
+  id        String   @id @default(uuid())
+  vehicleId String   @unique @map("vehicle_id")
+  goal      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  vehicle Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  steps   VehiclePlanStep[]
+
+  @@map("vehicle_plans")
+}
+
+model VehiclePlanStep {
+  id          String    @id @default(uuid())
+  planId      String    @map("plan_id")
+  order       Int
+  title       String
+  detail      String?
+  status      String    @default("pending") // pending | active | done | skipped
+  activatedAt DateTime? @map("activated_at")
+  doneAt      DateTime? @map("done_at")
+
+  plan VehiclePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@map("vehicle_plan_steps")
 }
 
 // Confirmed Morning Meeting smart-input plans — replayed to the interpreter
