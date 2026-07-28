@@ -15,8 +15,10 @@ export async function GET(request: Request) {
   const status = searchParams.get('status')
   const assignee = searchParams.get('assignee')
   const stockNumber = searchParams.get('stockNumber')
+  const id = searchParams.get('id')
 
   const where: Record<string, unknown> = {}
+  if (id) where.id = id
   if (status) where.status = status
   if (assignee) where.currentAssigneeId = assignee
   if (stockNumber) where.stockNumber = stockNumber

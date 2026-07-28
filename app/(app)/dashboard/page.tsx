@@ -204,13 +204,17 @@ function AttentionCard({ a, isAdmin, onAction }: {
   const [busy, setBusy] = useState(false)
   const [assignFor, setAssignFor] = useState<string | null>(null) // stageId|item key
   const [peekUrl, setPeekUrl] = useState<string | null>(null)
+  const [peekReady, setPeekReady] = useState(false)
 
   // The recon board (in the peek iframe) announces a completed routing —
   // close the overlay and refresh the counts.
   useEffect(() => {
     function onMsg(e: MessageEvent) {
-      if (e.origin === window.location.origin && (e.data?.type === 'mm:routed' || e.data?.type === 'mm:close')) {
+      if (e.origin !== window.location.origin) return
+      if (e.data?.type === 'mm:ready') setPeekReady(true)
+      if (e.data?.type === 'mm:routed' || e.data?.type === 'mm:close') {
         setPeekUrl(null)
+        setPeekReady(false)
         if (e.data?.type === 'mm:routed') onAction()
       }
     }
@@ -303,7 +307,7 @@ function AttentionCard({ a, isAdmin, onAction }: {
               <button
                 style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }}
                 disabled={busy}
-                onClick={() => setPeekUrl(`/vehicles?route=${v.id}`)}
+                onClick={() => { setPeekReady(false); setPeekUrl(`/vehicles?route=${v.id}`) }}
               >Route →</button>
             </div>
           ))}
@@ -433,6 +437,15 @@ function AttentionCard({ a, isAdmin, onAction }: {
               aria-label="Close"
             >×</button>
             <iframe src={peekUrl} style={{ flex: 1, width: '100%', border: 'none' }} title="Route vehicle" />
+            {!peekReady && (
+              <div style={{
+                position: 'absolute', inset: 0, background: 'var(--bg-card, #fff)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12,
+              }}>
+                <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--border)', borderTopColor: 'transparent' }} />
+                <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>Opening routing…</span>
+              </div>
+            )}
           </div>
         </div>
       )}

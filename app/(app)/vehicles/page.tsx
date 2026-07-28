@@ -232,7 +232,14 @@ export default function VehiclesPage() {
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null)
   const didDrag = useRef(false)
   useEffect(() => {
-    fetch('/api/vehicles')
+    // Solo routing (dashboard peek): fetch just the one car — ~100x lighter
+    // than the whole board's payload.
+    let url = '/api/vehicles'
+    try {
+      const rid = new URLSearchParams(window.location.search).get('route')
+      if (rid && window.self !== window.top) url = `/api/vehicles?id=${rid}`
+    } catch { /* ignore */ }
+    fetch(url)
       .then((r) => r.json())
       .then((data) => setVehicles(data.vehicles || []))
       .catch(console.error)
@@ -320,12 +327,12 @@ export default function VehiclesPage() {
       if (window.self === window.top) window.history.replaceState(null, '', '/vehicles')
     }
   }, [vehicles, openRoutingFor])
-  // Solo mode: closing the modal (cancel/backdrop) closes the dashboard overlay
+  // Solo mode: announce open (parent lifts its loading veil) and close
   useEffect(() => {
     if (!soloRoute || !routeParamConsumed.current) return
-    if (!routingVehicle) {
-      try { window.parent.postMessage({ type: 'mm:close' }, window.location.origin) } catch { /* ignore */ }
-    }
+    try {
+      window.parent.postMessage({ type: routingVehicle ? 'mm:ready' : 'mm:close' }, window.location.origin)
+    } catch { /* ignore */ }
   }, [soloRoute, routingVehicle])
 
   // Load checklist templates for the routing modal's target stage. Refires when
