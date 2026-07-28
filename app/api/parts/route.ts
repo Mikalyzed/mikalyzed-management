@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
 import { sendNotificationEmail } from '@/lib/email'
+import { getTracker, isEasyPostConfigured } from '@/lib/easypost'
 import { partsRequestEmail } from '@/lib/email-templates'
 
 export async function GET(req: NextRequest) {
@@ -31,6 +32,35 @@ export async function GET(req: NextRequest) {
       { assignedToId: user.id },
       { vehicle: { currentAssigneeId: user.id } }
     ]
+  }
+
+  // Live tracking refresh: undelivered tracked parts older than 30 min get a
+  // quiet carrier check (max 10 per load — pennies, and bounded).
+  if (isEasyPostConfigured()) {
+    const STALE_MS = 30 * 60 * 1000
+    const stale = await prisma.part.findMany({
+      where: {
+        epTrackerId: { not: null },
+        status: 'ordered',
+        OR: [
+          { trackingUpdatedAt: null },
+          { trackingUpdatedAt: { lt: new Date(Date.now() - STALE_MS) } },
+        ],
+        NOT: { trackingStatus: { in: ['delivered', 'cancelled', 'return_to_sender'] } },
+      },
+      select: { id: true, epTrackerId: true, trackingStatus: true },
+      take: 10,
+    })
+    await Promise.all(stale.map(async p => {
+      const t = await getTracker(p.epTrackerId!)
+      const data: Record<string, unknown> = { trackingUpdatedAt: new Date() }
+      if (t) {
+        data.trackingStatus = t.status
+        data.trackingCarrier = t.carrier
+        if (t.estDeliveryDate) data.expectedDelivery = t.estDeliveryDate
+      }
+      await prisma.part.update({ where: { id: p.id }, data }).catch(() => {})
+    }))
   }
 
   const parts = await prisma.part.findMany({
@@ -174,6 +204,35 @@ export async function POST(req: NextRequest) {
 
 // Helper function to update vehicle awaitingParts status
 async function updateVehiclePartsStatus(vehicleId: string) {
+  // Live tracking refresh: undelivered tracked parts older than 30 min get a
+  // quiet carrier check (max 10 per load — pennies, and bounded).
+  if (isEasyPostConfigured()) {
+    const STALE_MS = 30 * 60 * 1000
+    const stale = await prisma.part.findMany({
+      where: {
+        epTrackerId: { not: null },
+        status: 'ordered',
+        OR: [
+          { trackingUpdatedAt: null },
+          { trackingUpdatedAt: { lt: new Date(Date.now() - STALE_MS) } },
+        ],
+        NOT: { trackingStatus: { in: ['delivered', 'cancelled', 'return_to_sender'] } },
+      },
+      select: { id: true, epTrackerId: true, trackingStatus: true },
+      take: 10,
+    })
+    await Promise.all(stale.map(async p => {
+      const t = await getTracker(p.epTrackerId!)
+      const data: Record<string, unknown> = { trackingUpdatedAt: new Date() }
+      if (t) {
+        data.trackingStatus = t.status
+        data.trackingCarrier = t.carrier
+        if (t.estDeliveryDate) data.expectedDelivery = t.estDeliveryDate
+      }
+      await prisma.part.update({ where: { id: p.id }, data }).catch(() => {})
+    }))
+  }
+
   const parts = await prisma.part.findMany({
     where: { vehicleId },
     select: { status: true }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
 import { sendNotificationEmail } from '@/lib/email'
+import { createTracker, isEasyPostConfigured } from '@/lib/easypost'
 import { partsRequestEmail } from '@/lib/email-templates'
 import { notifyPartReceived } from '@/lib/part-notifications'
 
@@ -100,7 +101,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   if ('price' in updates) data.price = updates.price
-  if ('tracking' in updates) data.tracking = updates.tracking
+  if ('tracking' in updates) {
+    data.tracking = updates.tracking
+    // Live tracking: a new tracking number registers an EasyPost tracker —
+    // carrier auto-detected, expected date auto-filled from the carrier's
+    // estimate (no more typing it by hand). No-ops when unconfigured.
+    if (typeof updates.tracking === 'string' && updates.tracking.trim() && updates.tracking !== part.tracking && isEasyPostConfigured()) {
+      const tracker = await createTracker(updates.tracking)
+      if (tracker) {
+        data.epTrackerId = tracker.id
+        data.trackingCarrier = tracker.carrier
+        data.trackingStatus = tracker.status
+        data.trackingUpdatedAt = new Date()
+        if (tracker.estDeliveryDate && !('expectedDelivery' in updates)) {
+          data.expectedDelivery = tracker.estDeliveryDate
+        }
+      }
+    } else if (!updates.tracking) {
+      data.epTrackerId = null
+      data.trackingCarrier = null
+      data.trackingStatus = null
+      data.trackingUpdatedAt = null
+    }
+  }
   if ('orderImage' in updates) data.orderImage = updates.orderImage
   if ('expectedDelivery' in updates) data.expectedDelivery = updates.expectedDelivery ? new Date(updates.expectedDelivery) : null
   if ('notes' in updates) data.notes = updates.notes

@@ -279,6 +279,11 @@ model Part {
   tracking             String?
   orderImage           String?   @map("order_image")
   expectedDelivery     DateTime? @map("expected_delivery")
+  // Live carrier tracking via EasyPost (config-guarded — null when unused)
+  epTrackerId          String?   @map("ep_tracker_id")
+  trackingCarrier      String?   @map("tracking_carrier")
+  trackingStatus       String?   @map("tracking_status") // pre_transit / in_transit / out_for_delivery / delivered / …
+  trackingUpdatedAt    DateTime? @map("tracking_updated_at")
   notes                String?
   // Stamped when admin generates an "Install [part]" task in mechanic via routing.
   // Used to prevent the same install from being re-suggested in future routing cycles.

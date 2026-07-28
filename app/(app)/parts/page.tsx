@@ -11,6 +11,8 @@ type Part = {
   status: string
   price: string | null
   tracking: string | null
+  trackingStatus: string | null
+  trackingCarrier: string | null
   expectedDelivery: string | null
   orderImage: string | null
   notes: string | null
@@ -69,6 +71,16 @@ const PRT_CSS = `
 .prt-tab:hover { background: var(--bg-card-hover); }
 .prt-tab.on { background: #1a1a1a; border-color: #1a1a1a; color: #fff; }
 `
+
+const LIVE_LABELS: Record<string, string> = {
+  pre_transit: 'Label created', in_transit: 'In transit', out_for_delivery: 'Out for delivery',
+  delivered: 'Delivered', available_for_pickup: 'Ready for pickup', return_to_sender: 'Returning to sender',
+  failure: 'Delivery problem', cancelled: 'Cancelled', error: 'Tracking error', unknown: 'Tracking…',
+}
+const LIVE_COLORS: Record<string, string> = {
+  delivered: '#16a34a', available_for_pickup: '#16a34a', out_for_delivery: '#2563eb', in_transit: '#2563eb',
+  pre_transit: '#6b6b6b', return_to_sender: '#dc2626', failure: '#dc2626', error: '#dc2626',
+}
 
 export default function PartsOverviewPage() {
   const [parts, setParts] = useState<Part[]>([])
@@ -445,11 +457,25 @@ export default function PartsOverviewPage() {
                       {needsInfo && (
                         <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 600, whiteSpace: 'nowrap' }}>Needs info</span>
                       )}
-                      {part.status === 'ordered' && part.expectedDelivery && (
+                      {part.status === 'ordered' && part.trackingStatus ? (
+                        <span
+                          title={`Live from ${part.trackingCarrier ?? 'carrier'}`}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+                            color: LIVE_COLORS[part.trackingStatus] ?? '#6b6b6b',
+                          }}
+                        >
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: LIVE_COLORS[part.trackingStatus] ?? '#6b6b6b', flexShrink: 0 }} />
+                          {LIVE_LABELS[part.trackingStatus] ?? part.trackingStatus}
+                          {part.expectedDelivery && !['delivered', 'available_for_pickup'].includes(part.trackingStatus) &&
+                            ` · ${new Date(part.expectedDelivery).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                        </span>
+                      ) : part.status === 'ordered' && part.expectedDelivery ? (
                         <span style={{ fontSize: 12, color: '#2563eb', fontWeight: 600, whiteSpace: 'nowrap' }}>
                           Expected {new Date(part.expectedDelivery).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         </span>
-                      )}
+                      ) : null}
                     </span>
                   </div>
                 )}
