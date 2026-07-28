@@ -54,12 +54,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     data.status = 'received'
     if (typeof updates.price === 'string' && updates.price.trim()) data.price = updates.price.trim()
     if (typeof updates.orderImage === 'string' && updates.orderImage) data.orderImage = updates.orderImage
-    data.notes = [part.notes, `Bought in person by ${user.name}`].filter(Boolean).join(' · ')
+    data.notes = [part.notes, `Purchased in store by ${user.name}`].filter(Boolean).join(' · ')
     if (updates.receiptToAdmin === true) {
       await prisma.task.create({
         data: {
           title: `Enter receipt & price — ${part.name} (#${part.vehicle.stockNumber})`,
-          description: `Bought in person by ${user.name}. Receipt/price are with admin — attach them to the part.`,
+          description: `Purchased in store by ${user.name}. Receipt/price are with admin — attach them to the part.`,
           category: 'admin',
           priority: 1,
           createdById: user.id,

@@ -386,7 +386,7 @@ export default function PartsOverviewPage() {
                     <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Add Link</button>
                   )}
                   {['requested', 'sourced', 'ready_to_order'].includes(part.status) && (
-                    <button onClick={() => setBoughtPart({ id: part.id, name: part.name })} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #a16207', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>🛒 Bought it</button>
+                    <button onClick={() => setBoughtPart({ id: part.id, name: part.name })} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #a16207', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>🛒 Purchased in store</button>
                   )}
                   {isAdmin && part.status === 'sourced' && (
                     <>
@@ -878,7 +878,7 @@ function BoughtModal({ part, onClose, onDone }: {
         background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420,
         padding: 24, boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
       }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Bought in person</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Purchased in store</h2>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 18 }}>{part.name} — marks it received, no link or order step needed.</p>
 
         <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 6px' }}>Price paid</p>
