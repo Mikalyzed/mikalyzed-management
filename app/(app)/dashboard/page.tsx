@@ -218,13 +218,13 @@ function AttentionCard({ a, isAdmin, onAction }: {
     }
   }
 
-  const rows: Array<{ key: string; n: number; label: string; crit?: boolean }> = [
-    { key: 'routing', n: a.routing.length, label: 'Cars Waiting to Be Routed' },
-    { key: 'installs', n: a.installsTotal, label: 'Arrived Parts — Assign the Install' },
-    { key: 'delivered', n: a.delivered.length, label: 'Carrier Says Delivered — Confirm Received', crit: true },
-    { key: 'approvals', n: a.approvals.length, label: 'Sourced Parts Awaiting Approval' },
-    { key: 'overdue', n: a.overdue.length, label: 'External Repairs Past Return Date', crit: true },
-    { key: 'stuck', n: a.stuck.length, label: 'Parts Stuck in Requested 7+ Days' },
+  const rows: Array<{ key: string; n: number; area: string; label: string; crit?: boolean }> = [
+    { key: 'routing', n: a.routing.length, area: 'Recon Board', label: 'Cars waiting to be routed' },
+    { key: 'installs', n: a.installsTotal, area: 'Recon Board', label: 'Arrived parts — assign the install' },
+    { key: 'delivered', n: a.delivered.length, area: 'Parts', label: 'Carrier says delivered — confirm received', crit: true },
+    { key: 'approvals', n: a.approvals.length, area: 'Parts', label: 'Sourced parts awaiting approval' },
+    { key: 'stuck', n: a.stuck.length, area: 'Parts', label: 'Stuck in requested 7+ days' },
+    { key: 'overdue', n: a.overdue.length, area: 'External', label: 'Repairs past their return date', crit: true },
   ].filter(r => r.n > 0)
 
   const itemRow: React.CSSProperties = {
@@ -285,7 +285,10 @@ function AttentionCard({ a, isAdmin, onAction }: {
               background: r.crit ? 'rgba(185,28,28,0.10)' : 'rgba(180,83,9,0.10)',
               color: r.crit ? '#b91c1c' : '#b45309',
             }}>{r.n}</span>
-            <span style={{ flex: 1, fontWeight: 600, letterSpacing: '-0.005em' }}>{r.label}</span>
+            <span style={{ flex: 1, minWidth: 0, letterSpacing: '-0.005em' }}>
+              <span style={{ fontWeight: 700 }}>{r.area}:</span>{' '}
+              <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{r.label}</span>
+            </span>
             <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 11, transform: open === r.key ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>▸</span>
           </button>
 
