@@ -213,7 +213,27 @@ export async function GET(request: Request) {
     }
   })
 
+  // ── Admin attention center: everything waiting on a decision ──
+  let attention: Record<string, number> | null = null
+  if (user.role === 'admin' || user.role === 'shop_coordinator') {
+    const [awaitingRouting, activeStages, carrierDelivered, pendingApproval, overdueExternal, stuckRequested] = await Promise.all([
+      prisma.vehicle.count({ where: { status: 'awaiting_routing' } }),
+      prisma.vehicleStage.findMany({
+        where: { status: { in: ['pending', 'in_progress'] } },
+        select: { checklist: true },
+      }),
+      prisma.part.count({ where: { status: 'ordered', trackingStatus: { in: ['delivered', 'available_for_pickup'] } } }),
+      prisma.part.count({ where: { status: 'sourced' } }),
+      prisma.externalRepair.count({ where: { status: { in: ['sent', 'in_progress', 'ready'] }, expectedReturn: { lt: new Date() } } }),
+      prisma.part.count({ where: { status: 'requested', createdAt: { lt: new Date(Date.now() - 7 * 86400000) } } }),
+    ])
+    const unassignedInstalls = activeStages.reduce((n, s) =>
+      n + (Array.isArray(s.checklist) ? (s.checklist as Array<Record<string, unknown>>).filter(c => c?.fromPart && !c?.assigneeId && !c?.done).length : 0), 0)
+    attention = { awaitingRouting, unassignedInstalls, carrierDelivered, pendingApproval, overdueExternal, stuckRequested }
+  }
+
   return NextResponse.json({
+    attention,
     user: { name: user.name, role: user.role, id: user.id },
     pipeline,
     myTasks,

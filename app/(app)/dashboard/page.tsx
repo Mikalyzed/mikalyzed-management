@@ -22,6 +22,10 @@ type FleetFinancials = {
 
 type DashboardData = {
   user: { name: string; role: string; id: string }
+  attention?: {
+    awaitingRouting: number; unassignedInstalls: number; carrierDelivered: number
+    pendingApproval: number; overdueExternal: number; stuckRequested: number
+  } | null
   pipeline: { mechanic: number; detailing: number; content: number; publish: number; completed: number; externalRepairs: number; partsPending: number }
   myTasks: number
   recentVehicles: Array<{
@@ -77,6 +81,63 @@ type DashboardData = {
 
 const STAGE_LABELS: Record<string, string> = {
   mechanic: 'Mechanic', detailing: 'Detailing', content: 'Content', publish: 'Publish', completed: 'Done',
+}
+
+// ─── Attention Center — everything waiting on an admin decision ───
+function AttentionCard({ a, isAdmin }: {
+  a: NonNullable<DashboardData['attention']>
+  isAdmin: boolean
+}) {
+  const rows = [
+    { n: a.awaitingRouting, label: 'cars waiting to be routed', href: '/vehicles', crit: false },
+    { n: a.unassignedInstalls, label: 'arrived-part installs need a mechanic', href: '/vehicles', crit: false },
+    { n: a.carrierDelivered, label: 'carrier says delivered — confirm received', href: '/parts', crit: true },
+    { n: a.pendingApproval, label: 'sourced parts waiting for approval', href: '/parts', crit: false },
+    { n: a.overdueExternal, label: 'external repairs past their return date', href: '/external', crit: true },
+    { n: a.stuckRequested, label: 'parts stuck in requested 7+ days', href: '/parts', crit: false },
+  ].filter(r => r.n > 0)
+
+  return (
+    <div className="card" style={{ marginBottom: 24, padding: 22, borderLeft: rows.length ? '3px solid #d97706' : '3px solid #16a34a' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: rows.length ? 8 : 0 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>Attention</div>
+          <h2 style={{ fontSize: 17, fontWeight: 700, margin: '2px 0 0' }}>
+            {rows.length ? `Waiting on you — ${rows.reduce((s, r) => s + r.n, 0)} items` : 'All clear'}
+          </h2>
+        </div>
+        {isAdmin && (
+          <Link href="/reports/meeting" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', whiteSpace: 'nowrap', minHeight: 0 }}>
+            Morning Meeting →
+          </Link>
+        )}
+      </div>
+      {rows.length === 0 && (
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '6px 0 0' }}>Nothing pending — routing, parts, and externals are all handled. ✓</p>
+      )}
+      {rows.map((r, i) => (
+        <Link
+          key={r.label}
+          href={r.href}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px',
+            borderTop: i ? '1px solid var(--border-light, #f0f0ec)' : 'none',
+            textDecoration: 'none', color: 'var(--text-primary)', fontSize: 13.5, minHeight: 0,
+          }}
+        >
+          <span style={{
+            minWidth: 26, height: 22, padding: '0 7px', borderRadius: 100,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+            background: r.crit ? 'rgba(185,28,28,0.10)' : 'rgba(180,83,9,0.10)',
+            color: r.crit ? '#b91c1c' : '#b45309',
+          }}>{r.n}</span>
+          <span style={{ flex: 1, fontWeight: 500 }}>{r.label}</span>
+          <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>›</span>
+        </Link>
+      ))}
+    </div>
+  )
 }
 
 // ─── My Assignments Component ───
@@ -493,6 +554,8 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ Fleet Financials (admin + sales_manager only) ═══ */}
+      {data.attention && <AttentionCard a={data.attention} isAdmin={isAdmin} />}
+
       {(isAdmin || data.user.role === 'sales_manager') && financials && <FleetFinancialsWidget f={financials} />}
 
       {/* ═══ Recon Pipeline ═══ */}
