@@ -101,6 +101,21 @@ function AttentionCard({ a, isAdmin, onAction }: {
   const [open, setOpen] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [assignFor, setAssignFor] = useState<string | null>(null) // stageId|item key
+  const [peekUrl, setPeekUrl] = useState<string | null>(null)
+
+  // The recon board (in the peek iframe) announces a completed routing —
+  // close the overlay and refresh the counts.
+  useEffect(() => {
+    function onMsg(e: MessageEvent) {
+      if (e.origin === window.location.origin && e.data?.type === 'mm:routed') {
+        setPeekUrl(null)
+        onAction()
+      }
+    }
+    window.addEventListener('message', onMsg)
+    return () => window.removeEventListener('message', onMsg)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const act = async (fn: () => Promise<Response>) => {
     setBusy(true)
@@ -183,7 +198,11 @@ function AttentionCard({ a, isAdmin, onAction }: {
             <div key={v.id} style={itemRow}>
               <span style={stockChip}>#{v.stock}</span>
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{v.vehicle}</span>
-              <Link href={`/vehicles?route=${v.id}`} style={{ ...miniBtn, textDecoration: 'none', background: '#1a1a1a', color: '#fff', border: 'none' }}>Route →</Link>
+              <button
+                style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }}
+                disabled={busy}
+                onClick={() => setPeekUrl(`/vehicles?route=${v.id}`)}
+              >Route →</button>
             </div>
           ))}
 
@@ -286,6 +305,36 @@ function AttentionCard({ a, isAdmin, onAction }: {
           ))}
         </div>
       ))}
+
+      {/* Peek overlay — the real recon-board routing modal, over the dashboard */}
+      {peekUrl && (
+        <div
+          onClick={() => { setPeekUrl(null); onAction() }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(18,18,20,0.55)', zIndex: 1200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14,
+          }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{
+            width: 'min(1100px, 96vw)', height: '92vh', background: 'var(--bg-primary, #f8f8f6)',
+            borderRadius: 16, overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
+            display: 'flex', flexDirection: 'column',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 16px', background: '#1a1a1a', color: '#fff', flexShrink: 0,
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Route vehicle</span>
+              <button
+                onClick={() => { setPeekUrl(null); onAction() }}
+                style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', minHeight: 0, lineHeight: 1 }}
+                aria-label="Close"
+              >×</button>
+            </div>
+            <iframe src={peekUrl} style={{ flex: 1, width: '100%', border: 'none' }} title="Route vehicle" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

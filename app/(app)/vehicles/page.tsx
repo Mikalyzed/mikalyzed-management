@@ -1917,6 +1917,10 @@ export default function VehiclesPage() {
                   setVehicles(data.vehicles || [])
                   setRoutingSaving(false)
                   setRoutingVehicle(null)
+                  // Embedded in the dashboard's peek overlay → let it close + refresh
+                  try {
+                    if (window.self !== window.top) window.parent.postMessage({ type: 'mm:routed' }, window.location.origin)
+                  } catch { /* ignore */ }
                 }}
                 style={{
                   flex: 1, padding: 12, borderRadius: 10, border: 'none',
