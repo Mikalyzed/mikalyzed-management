@@ -253,11 +253,6 @@ function AttentionCard({ a, isAdmin, onAction }: {
             {rows.length ? `Waiting on you — ${rows.reduce((s, r) => s + r.n, 0)} items` : 'All clear'}
           </h2>
         </div>
-        {isAdmin && (
-          <Link href="/reports/meeting" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', whiteSpace: 'nowrap', minHeight: 0 }}>
-            Morning Meeting →
-          </Link>
-        )}
       </div>
       {rows.length === 0 && (
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '6px 0 0' }}>Nothing pending — routing, parts, and externals are all handled. ✓</p>
