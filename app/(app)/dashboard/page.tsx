@@ -96,70 +96,93 @@ const STAGE_LABELS: Record<string, string> = {
 }
 
 // ─── Domain overview — the whole operation counted, one glance ───
+// Recon-board KPI anatomy: eyebrow, hero number + unit, hairline divider,
+// dot-coded rows with right-aligned tabular numbers.
 function OverviewGrid({ o }: { o: NonNullable<DashboardData['overview']> }) {
-  const chip = (n: number, hot = false): React.CSSProperties => ({
-    minWidth: 30, height: 24, padding: '0 8px', borderRadius: 8,
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-    fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', flexShrink: 0,
-    background: hot ? 'rgba(185,28,28,0.10)' : 'var(--bg-primary, #f4f4f2)',
-    color: hot ? '#b91c1c' : 'var(--text-primary)',
-  })
-  const row: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0',
-    fontSize: 13, color: 'var(--text-primary)', textDecoration: 'none', minHeight: 0,
-  }
-  const head: React.CSSProperties = {
-    fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em',
-    color: 'var(--text-muted)', marginBottom: 6,
-  }
-  const cards: Array<{ title: string; href: string; rows: Array<{ n: number; label: string; href: string; hot?: boolean }> }> = [
+  type Row = { n: number; label: string; href: string; dot: string; hot?: boolean }
+  const cards: Array<{ title: string; href: string; hero: number; unit: string; rows: Row[] }> = [
     {
       title: 'Inventory', href: '/inventory',
+      hero: o.inventory.active, unit: o.inventory.active === 1 ? 'vehicle' : 'vehicles',
       rows: [
-        { n: o.inventory.active, label: 'active vehicles', href: '/inventory' },
-        { n: o.inventory.inStock, label: 'in stock', href: '/inventory' },
-        { n: o.inventory.inRecon, label: 'in recon', href: '/vehicles' },
-        { n: o.inventory.external, label: 'at external repair', href: '/external' },
+        { n: o.inventory.inStock, label: 'in stock', href: '/inventory', dot: '#16a34a' },
+        { n: o.inventory.inRecon, label: 'in recon', href: '/vehicles', dot: '#f59e0b' },
+        { n: o.inventory.external, label: 'at external repair', href: '/external', dot: '#3b82f6' },
       ],
     },
     ...(o.deals ? [{
       title: 'Deals', href: '/deals',
+      hero: o.deals.draft + o.deals.inContract, unit: o.deals.draft + o.deals.inContract === 1 ? 'active deal' : 'active deals',
       rows: [
-        { n: o.deals.draft, label: 'in worksheet', href: '/deals' },
-        { n: o.deals.inContract, label: 'in contract', href: '/deals' },
-        { n: o.deals.funded30, label: 'funded (last 30)', href: '/deals' },
+        { n: o.deals.draft, label: 'in worksheet', href: '/deals', dot: '#9a9a96' },
+        { n: o.deals.inContract, label: 'in contract', href: '/deals', dot: '#3b82f6' },
+        { n: o.deals.funded30, label: 'funded, last 30 days', href: '/deals', dot: '#16a34a' },
       ],
     }] : []),
     {
       title: 'Parts', href: '/parts',
+      hero: o.parts.requested + o.parts.approval + o.parts.readyToOrder + o.parts.ordered,
+      unit: 'in the pipeline',
       rows: [
-        { n: o.parts.requested, label: 'requested', href: '/parts' },
-        { n: o.parts.approval, label: 'pending approval', href: '/parts' },
-        { n: o.parts.readyToOrder, label: 'ready to order', href: '/parts' },
-        { n: o.parts.ordered, label: 'ordered', href: '/parts' },
+        { n: o.parts.requested, label: 'requested', href: '/parts', dot: '#f59e0b' },
+        { n: o.parts.approval, label: 'pending approval', href: '/parts', dot: '#9333ea' },
+        { n: o.parts.readyToOrder, label: 'ready to order', href: '/parts', dot: '#2563eb' },
+        { n: o.parts.ordered, label: 'ordered', href: '/parts', dot: '#16a34a' },
       ],
     },
     {
       title: 'External Repairs', href: '/external',
+      hero: o.external.open, unit: o.external.open === 1 ? 'car at a shop' : 'cars at shops',
       rows: [
-        { n: o.external.open, label: 'at shops now', href: '/external' },
-        { n: o.external.overdue, label: 'past return date', href: '/external', hot: true },
-        { n: o.external.notSent, label: 'created, not sent', href: '/external' },
+        { n: o.external.overdue, label: 'past return date', href: '/external', dot: '#dc2626', hot: true },
+        { n: o.external.notSent, label: 'created, not sent', href: '/external', dot: '#9a9a96' },
       ],
     },
   ]
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 16, marginBottom: 24 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(235px, 1fr))', gap: 14, marginBottom: 24 }}>
+      <style>{`
+        .dash-ov-card { transition: box-shadow 0.16s ease, border-color 0.16s ease; }
+        .dash-ov-card:hover { border-color: var(--border-light, #f0f0ec); box-shadow: 0 2px 4px rgba(24,24,27,0.05), 0 8px 20px -10px rgba(24,24,27,0.14); }
+        .dash-ov-row { border-radius: 8px; transition: background 0.12s ease; }
+        .dash-ov-row:hover { background: var(--bg-card-hover, #fafaf8); }
+        .dash-ov-open { opacity: 0; transition: opacity 0.15s ease; }
+        .dash-ov-card:hover .dash-ov-open { opacity: 1; }
+      `}</style>
       {cards.map(c => (
-        <div key={c.title} className="card" style={{ padding: '16px 18px' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-            <div style={head}>{c.title}</div>
-            <Link href={c.href} style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 0 }}>Open ›</Link>
+        <div key={c.title} className="dash-ov-card" style={{
+          background: 'var(--bg-card, #fff)', border: '1px solid var(--border)', borderRadius: 14,
+          boxShadow: '0 1px 2px rgba(24,24,27,.04), 0 4px 12px -8px rgba(24,24,27,.12)',
+          padding: '15px 17px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>
+              {c.title}
+            </div>
+            <Link href={c.href} className="dash-ov-open" style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', minHeight: 0, whiteSpace: 'nowrap' }}>
+              Open ›
+            </Link>
           </div>
+          <Link href={c.href} style={{ textDecoration: 'none', color: 'var(--text-primary)', minHeight: 0 }}>
+            <div style={{ marginTop: 6, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span style={{ fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                {c.hero}
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 550, color: 'var(--text-secondary)', letterSpacing: '-0.01em' }}>{c.unit}</span>
+            </div>
+          </Link>
+          <div style={{ height: 1, background: 'var(--border-light, #f0f0ec)', margin: '12px 0 6px' }} />
           {c.rows.map(r => (
-            <Link key={r.label} href={r.href} style={row}>
-              <span style={chip(r.n, r.hot && r.n > 0)}>{r.n}</span>
-              <span style={{ fontWeight: 500 }}>{r.label}</span>
+            <Link key={r.label} href={r.href} className="dash-ov-row" style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '5.5px 6px',
+              fontSize: 12.5, textDecoration: 'none', color: 'var(--text-primary)', minHeight: 0,
+            }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: r.dot, flexShrink: 0, opacity: r.n > 0 ? 1 : 0.35 }} />
+              <span style={{ flex: 1, fontWeight: 500, color: r.n > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>{r.label}</span>
+              <span style={{
+                fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: 13,
+                color: r.hot && r.n > 0 ? '#dc2626' : r.n > 0 ? 'var(--text-primary)' : 'var(--text-muted)',
+              }}>{r.n}</span>
             </Link>
           ))}
         </div>
