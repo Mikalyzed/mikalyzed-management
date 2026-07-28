@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
 import { sendNotificationEmail } from '@/lib/email'
 import { getTracker, isEasyPostConfigured } from '@/lib/easypost'
+import { notifyCarrierDelivered } from '@/lib/part-notifications'
 import { partsRequestEmail } from '@/lib/email-templates'
 
 export async function GET(req: NextRequest) {
@@ -48,7 +49,10 @@ export async function GET(req: NextRequest) {
         ],
         NOT: { trackingStatus: { in: ['delivered', 'cancelled', 'return_to_sender'] } },
       },
-      select: { id: true, epTrackerId: true, trackingStatus: true },
+      select: {
+        id: true, epTrackerId: true, trackingStatus: true, name: true,
+        vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+      },
       take: 10,
     })
     await Promise.all(stale.map(async p => {
@@ -60,6 +64,19 @@ export async function GET(req: NextRequest) {
         if (t.estDeliveryDate) data.expectedDelivery = t.estDeliveryDate
       }
       await prisma.part.update({ where: { id: p.id }, data }).catch(() => {})
+      // Transition into delivered while still "ordered" → ping the admins
+      const wasDelivered = ['delivered', 'available_for_pickup'].includes(p.trackingStatus ?? '')
+      const nowDelivered = !!t && ['delivered', 'available_for_pickup'].includes(t.status)
+      if (nowDelivered && !wasDelivered) {
+        await notifyCarrierDelivered({
+          partId: p.id,
+          partName: p.name,
+          vehicleId: p.vehicle.id,
+          vehicleStockNumber: p.vehicle.stockNumber,
+          vehicleDesc: `${p.vehicle.year ?? ''} ${p.vehicle.make} ${p.vehicle.model}`.trim(),
+          carrier: t?.carrier ?? null,
+        })
+      }
     }))
   }
 
@@ -218,7 +235,10 @@ async function updateVehiclePartsStatus(vehicleId: string) {
         ],
         NOT: { trackingStatus: { in: ['delivered', 'cancelled', 'return_to_sender'] } },
       },
-      select: { id: true, epTrackerId: true, trackingStatus: true },
+      select: {
+        id: true, epTrackerId: true, trackingStatus: true, name: true,
+        vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+      },
       take: 10,
     })
     await Promise.all(stale.map(async p => {
@@ -230,6 +250,19 @@ async function updateVehiclePartsStatus(vehicleId: string) {
         if (t.estDeliveryDate) data.expectedDelivery = t.estDeliveryDate
       }
       await prisma.part.update({ where: { id: p.id }, data }).catch(() => {})
+      // Transition into delivered while still "ordered" → ping the admins
+      const wasDelivered = ['delivered', 'available_for_pickup'].includes(p.trackingStatus ?? '')
+      const nowDelivered = !!t && ['delivered', 'available_for_pickup'].includes(t.status)
+      if (nowDelivered && !wasDelivered) {
+        await notifyCarrierDelivered({
+          partId: p.id,
+          partName: p.name,
+          vehicleId: p.vehicle.id,
+          vehicleStockNumber: p.vehicle.stockNumber,
+          vehicleDesc: `${p.vehicle.year ?? ''} ${p.vehicle.make} ${p.vehicle.model}`.trim(),
+          carrier: t?.carrier ?? null,
+        })
+      }
     }))
   }
 

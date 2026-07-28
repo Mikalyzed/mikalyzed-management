@@ -53,3 +53,42 @@ export async function notifyPartReceived(args: {
     console.error('[notifyPartReceived]', e)
   }
 }
+
+
+/**
+ * Carrier says a package is delivered (via live tracking) but the part is
+ * still "ordered" in the system — ping the admins to confirm receipt.
+ * Fired once per part, on the transition into delivered.
+ */
+export async function notifyCarrierDelivered(args: {
+  partId: string
+  partName: string
+  vehicleId: string
+  vehicleStockNumber: string
+  vehicleDesc: string
+  carrier: string | null
+}): Promise<void> {
+  try {
+    const admins = await prisma.user.findMany({
+      where: { role: { in: ['admin', 'shop_coordinator'] }, isActive: true },
+      select: { id: true },
+    })
+    if (admins.length === 0) return
+
+    const title = `Carrier says delivered — ${args.vehicleStockNumber}`
+    const message = `${args.carrier ?? 'The carrier'} shows "${args.partName}" delivered for ${args.vehicleDesc}, but it hasn't been marked received. Confirm it arrived on the Parts page.`
+
+    await prisma.notification.createMany({
+      data: admins.map(a => ({
+        userId: a.id,
+        type: 'part_carrier_delivered',
+        title,
+        message,
+        entityType: 'vehicle',
+        entityId: args.vehicleId,
+      })),
+    })
+  } catch (e) {
+    console.error('[notifyCarrierDelivered]', e)
+  }
+}
