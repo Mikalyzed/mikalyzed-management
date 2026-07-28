@@ -40,20 +40,56 @@ function parseTracker(t: Record<string, unknown>): TrackerInfo {
   }
 }
 
-/** Register a tracking number — EasyPost auto-detects the carrier. */
+/**
+ * The tracking field is typed by humans: "USPS 9400…", "Fed Ex 527…",
+ * "Back Order". Pull out the actual code (and remember the carrier word as
+ * a hint for the retry).
+ */
+const CARRIER_WORDS: Array<[RegExp, string]> = [
+  [/\bfed\s*ex\b/i, 'FedEx'],
+  [/\busps\b/i, 'USPS'],   // before UPS — "USPS" contains "ups"
+  [/\bups\b/i, 'UPS'],
+  [/\bdhl\b/i, 'DHL'],
+  [/\bontrac\b/i, 'OnTrac'],
+]
+export function extractTrackingCode(raw: string): { code: string | null; carrierHint: string | null } {
+  let s = raw.trim()
+  let carrierHint: string | null = null
+  for (const [re, name] of CARRIER_WORDS) {
+    if (re.test(s)) { carrierHint = name; s = s.replace(re, ' '); break }
+  }
+  const compact = s.replace(/[^A-Za-z0-9]/g, '')
+  if (compact.length < 8 || compact.length > 40) return { code: null, carrierHint }
+  return { code: compact, carrierHint }
+}
+
+/** Register a tracking number — carrier auto-detected, hint used as fallback. */
 export async function createTracker(trackingCode: string): Promise<TrackerInfo | null> {
   if (!API_KEY) return null
-  try {
+  const { code, carrierHint } = extractTrackingCode(trackingCode)
+  if (!code) return null
+
+  const attempt = async (body: Record<string, unknown>) => {
     const res = await fetch(`${BASE}/trackers`, {
       method: 'POST',
       headers: { Authorization: authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tracker: { tracking_code: trackingCode.trim() } }),
+      body: JSON.stringify({ tracker: body }),
     })
     if (!res.ok) {
       console.error('[easypost] createTracker failed', res.status, await res.text().catch(() => ''))
       return null
     }
     return parseTracker(await res.json())
+  }
+
+  try {
+    const auto = await attempt({ tracking_code: code })
+    if (auto) return auto
+    // Auto-detect failed — retry with the carrier the human wrote, if any
+    if (carrierHint && ['USPS', 'UPS', 'FedEx'].includes(carrierHint)) {
+      return await attempt({ tracking_code: code, carrier: carrierHint })
+    }
+    return null
   } catch (e) {
     console.error('[easypost] createTracker error', e)
     return null
