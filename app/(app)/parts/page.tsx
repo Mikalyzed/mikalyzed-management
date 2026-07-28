@@ -416,7 +416,7 @@ export default function PartsOverviewPage() {
                     <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} className="prt-btn">Add Link</button>
                   )}
                   {['requested', 'sourced', 'ready_to_order'].includes(part.status) && (
-                    <button onClick={() => setBoughtPart({ id: part.id, name: part.name })} className="prt-btn">🛒 In store</button>
+                    <button onClick={() => setBoughtPart({ id: part.id, name: part.name })} className="prt-btn">In Store</button>
                   )}
                   {isAdmin && part.status === 'sourced' && (
                     <>
@@ -932,7 +932,7 @@ function BoughtModal({ part, onClose, onDone }: {
             padding: '14px', borderRadius: 10, border: '1.5px dashed var(--border)',
             fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer', marginBottom: 16,
           }}>
-            {uploading ? 'Uploading…' : '📷 Snap / upload the receipt'}
+            {uploading ? 'Uploading…' : 'Snap / upload the receipt'}
             <input type="file" accept="image/*" capture="environment" onChange={handleUpload} style={{ display: 'none' }} disabled={uploading} />
           </label>
         )}
