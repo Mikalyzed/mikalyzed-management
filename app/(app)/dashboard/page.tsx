@@ -209,9 +209,9 @@ function AttentionCard({ a, isAdmin, onAction }: {
   // close the overlay and refresh the counts.
   useEffect(() => {
     function onMsg(e: MessageEvent) {
-      if (e.origin === window.location.origin && e.data?.type === 'mm:routed') {
+      if (e.origin === window.location.origin && (e.data?.type === 'mm:routed' || e.data?.type === 'mm:close')) {
         setPeekUrl(null)
-        onAction()
+        if (e.data?.type === 'mm:routed') onAction()
       }
     }
     window.addEventListener('message', onMsg)
@@ -418,21 +418,20 @@ function AttentionCard({ a, isAdmin, onAction }: {
           }}
         >
           <div onClick={e => e.stopPropagation()} style={{
-            width: 'min(1100px, 96vw)', height: '92vh', background: 'var(--bg-primary, #f8f8f6)',
-            borderRadius: 16, overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
-            display: 'flex', flexDirection: 'column',
+            width: 'min(780px, 96vw)', height: 'min(760px, 92vh)', background: 'var(--bg-card, #fff)',
+            borderRadius: 18, overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.35)',
+            display: 'flex', flexDirection: 'column', position: 'relative',
           }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '10px 16px', background: '#1a1a1a', color: '#fff', flexShrink: 0,
-            }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>Route vehicle</span>
-              <button
-                onClick={() => { setPeekUrl(null); onAction() }}
-                style={{ background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', minHeight: 0, lineHeight: 1 }}
-                aria-label="Close"
-              >×</button>
-            </div>
+            <button
+              onClick={() => { setPeekUrl(null); onAction() }}
+              style={{
+                position: 'absolute', top: 10, right: 10, zIndex: 5,
+                width: 30, height: 30, borderRadius: 9, border: 'none', cursor: 'pointer',
+                background: 'var(--bg-primary, #f4f4f2)', color: 'var(--text-secondary)',
+                fontSize: 17, lineHeight: 1, minHeight: 0,
+              }}
+              aria-label="Close"
+            >×</button>
             <iframe src={peekUrl} style={{ flex: 1, width: '100%', border: 'none' }} title="Route vehicle" />
           </div>
         </div>

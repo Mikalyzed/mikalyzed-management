@@ -298,8 +298,17 @@ export default function VehiclesPage() {
     setRoutingSelectedTemplateIds([])
   }, [])
 
-  // Deep link: /vehicles?route=<vehicleId> opens the routing modal directly
+  // Deep link: /vehicles?route=<vehicleId> opens the routing modal directly.
+  // When embedded (dashboard peek), "solo" mode hides the board — the overlay
+  // shows just the routing modal.
   const routeParamConsumed = useRef(false)
+  const [soloRoute, setSoloRoute] = useState(false)
+  useEffect(() => {
+    try {
+      const hasRoute = !!new URLSearchParams(window.location.search).get('route')
+      if (hasRoute && window.self !== window.top) setSoloRoute(true)
+    } catch { /* ignore */ }
+  }, [])
   useEffect(() => {
     if (routeParamConsumed.current || vehicles.length === 0) return
     const id = new URLSearchParams(window.location.search).get('route')
@@ -308,9 +317,16 @@ export default function VehiclesPage() {
     if (v) {
       routeParamConsumed.current = true
       openRoutingFor(v)
-      window.history.replaceState(null, '', '/vehicles')
+      if (window.self === window.top) window.history.replaceState(null, '', '/vehicles')
     }
   }, [vehicles, openRoutingFor])
+  // Solo mode: closing the modal (cancel/backdrop) closes the dashboard overlay
+  useEffect(() => {
+    if (!soloRoute || !routeParamConsumed.current) return
+    if (!routingVehicle) {
+      try { window.parent.postMessage({ type: 'mm:close' }, window.location.origin) } catch { /* ignore */ }
+    }
+  }, [soloRoute, routingVehicle])
 
   // Load checklist templates for the routing modal's target stage. Refires when
   // the admin switches the destination (Mechanic / Detailing / …). Selection is
@@ -905,7 +921,14 @@ export default function VehiclesPage() {
   }
 
   return (
-    <div>
+    <div className="recon-root">
+      {soloRoute && (
+        <style>{`
+          .recon-root > *:not(.routing-overlay) { display: none !important; }
+          .routing-overlay { background: transparent !important; padding: 0 !important; align-items: stretch !important; }
+          .routing-overlay > div { max-height: none !important; height: 100% !important; border-radius: 0 !important; width: 100% !important; max-width: none !important; }
+        `}</style>
+      )}
       {/* Clean solid canvas just for the recon board — sits over the app-wide
           glass mesh (z-index:-1) so a data-dense board reads calm and white
           cards keep their contrast instead of floating on coloured haze. */}
@@ -1470,6 +1493,7 @@ export default function VehiclesPage() {
       {/* Routing Modal */}
       {routingVehicle && (
         <div
+          className="routing-overlay"
           onClick={() => !routingSaving && setRoutingVehicle(null)}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
         >
