@@ -44,6 +44,32 @@ const STATUS_COLORS: Record<string, { bg: string; color: string; border: string 
   received: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
 }
 
+const PRT_CSS = `
+.prt-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary);
+  border-radius: 9px; padding: 6px 13px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; min-height: 0; white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+.prt-btn:hover { background: var(--bg-card-hover); border-color: #ddddd8; }
+.prt-btn:active { transform: scale(0.98); }
+.prt-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.prt-btn-dark { border: 1px solid #1a1a1a; background: #1a1a1a; color: #fff; }
+.prt-btn-dark:hover { background: #2e2e2e; border-color: #2e2e2e; }
+.prt-btn-danger { color: #b91c1c; }
+.prt-btn-danger:hover { background: #fef2f2; border-color: rgba(185,28,28,0.35); }
+.prt-tab {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); background: var(--bg-card); color: var(--text-secondary);
+  border-radius: 100px; padding: 7px 15px; font-size: 13px; font-weight: 600;
+  cursor: pointer; min-height: 0; white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.prt-tab:hover { background: var(--bg-card-hover); }
+.prt-tab.on { background: #1a1a1a; border-color: #1a1a1a; color: #fff; }
+`
+
 export default function PartsOverviewPage() {
   const [parts, setParts] = useState<Part[]>([])
   const [loading, setLoading] = useState(true)
@@ -160,6 +186,7 @@ export default function PartsOverviewPage() {
 
   return (
     <div>
+      <style>{PRT_CSS}</style>
       <div className="page-h1-mobile-pad" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '24px' }}>
         <input
           type="search"
@@ -309,13 +336,14 @@ export default function PartsOverviewPage() {
             const ss = STATUS_COLORS[part.status] || STATUS_COLORS.requested
 
             return (
-              <div key={part.id} id={`part-${part.id}`} className="parts-row" onClick={() => {
+              <div key={part.id} id={`part-${part.id}`} onClick={() => {
                 if (isAdmin) {
                   setEditingPart(part); setEditTracking(part.tracking || ''); setEditDelivery(part.expectedDelivery ? part.expectedDelivery.slice(0, 10) : ''); setEditImage(part.orderImage || null)
                 }
-              }} style={{
-                background: '#fff', border: '1px solid var(--border)', borderRadius: '12px',
-                padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px',
+              }} className="parts-row routing-card" style={{
+                background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px',
+                padding: '13px 15px', display: 'flex', alignItems: 'center', gap: '16px',
+                boxShadow: '0 1px 2px rgba(24,24,27,.04)',
                 cursor: isAdmin ? 'pointer' : 'default',
               }}>
                 {/* Part info */}
@@ -369,10 +397,12 @@ export default function PartsOverviewPage() {
                 {/* Status badge */}
                 <div className="parts-status-badge" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                   <div style={{
-                    background: ss.bg, color: ss.color, border: `1px solid ${ss.border}`,
-                    padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600,
-                    whiteSpace: 'nowrap',
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    background: ss.bg, color: ss.color,
+                    padding: '3px 10px', borderRadius: 100, fontSize: '10.5px', fontWeight: 650,
+                    whiteSpace: 'nowrap', letterSpacing: '-0.005em',
                   }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: ss.color, flexShrink: 0 }} />
                     {STATUS_LABELS[part.status]}
                   </div>
                   {part.status === 'ordered' && !part.tracking && !part.orderImage && (
@@ -383,22 +413,22 @@ export default function PartsOverviewPage() {
                 {/* Actions */}
                 <div className="parts-actions" onClick={e => e.stopPropagation()} style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
                   {part.status === 'requested' && !part.url && (
-                    <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Add Link</button>
+                    <button onClick={() => { setAddingUrlId(part.id); setUrlInput('') }} className="prt-btn">Add Link</button>
                   )}
                   {['requested', 'sourced', 'ready_to_order'].includes(part.status) && (
-                    <button onClick={() => setBoughtPart({ id: part.id, name: part.name })} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #a16207', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>🛒 Purchased in store</button>
+                    <button onClick={() => setBoughtPart({ id: part.id, name: part.name })} className="prt-btn">🛒 In store</button>
                   )}
                   {isAdmin && part.status === 'sourced' && (
                     <>
-                      <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>✓ Approve</button>
-                      <button onClick={() => updatePart(part.id, { status: 'requested', url: null })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #ef4444', background: '#fef2f2', color: '#ef4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>✗ Decline</button>
+                      <button onClick={() => updatePart(part.id, { status: 'ready_to_order' })} disabled={saving === part.id} className="prt-btn prt-btn-dark">✓ Approve</button>
+                      <button onClick={() => updatePart(part.id, { status: 'requested', url: null })} disabled={saving === part.id} className="prt-btn prt-btn-danger">✗ Decline</button>
                     </>
                   )}
                   {isAdmin && part.status === 'ready_to_order' && (
-                    <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #eab308', background: '#fefce8', color: '#a16207', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mark Ordered</button>
+                    <button onClick={() => setOrderModalPart({ id: part.id, name: part.name })} disabled={saving === part.id} className="prt-btn prt-btn-dark">Mark Ordered</button>
                   )}
                   {part.status === 'ordered' && myRole !== 'shop_coordinator' && (
-                    <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving === part.id} style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Mark Received</button>
+                    <button onClick={() => updatePart(part.id, { status: 'received' })} disabled={saving === part.id} className="prt-btn prt-btn-dark">Mark Received</button>
                   )}
                 </div>
                 {/* Inline URL input */}
@@ -407,9 +437,9 @@ export default function PartsOverviewPage() {
                     <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)} placeholder="Paste part link here..." autoFocus
                       onKeyDown={async e => { if (e.key === 'Enter' && urlInput.trim()) { e.preventDefault(); await updatePart(part.id, { url: urlInput }); setAddingUrlId(null); setUrlInput('') } }}
                       style={{ flex: 1, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '13px' }} />
-                    <button onClick={() => { setAddingUrlId(null); setUrlInput('') }} style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: '#fff', fontSize: '12px', cursor: 'pointer' }}>Cancel</button>
+                    <button onClick={() => { setAddingUrlId(null); setUrlInput('') }} className="prt-btn">Cancel</button>
                     <button onClick={async () => { if (!urlInput.trim()) return; await updatePart(part.id, { url: urlInput }); setAddingUrlId(null); setUrlInput('') }}
-                      disabled={!urlInput.trim()} style={{ padding: '8px 12px', borderRadius: '6px', border: 'none', background: '#1a1a1a', color: '#dffd6e', fontSize: '12px', fontWeight: 600, cursor: 'pointer', opacity: !urlInput.trim() ? 0.5 : 1 }}>Submit</button>
+                      disabled={!urlInput.trim()} className="prt-btn prt-btn-dark">Submit</button>
                   </div>
                 )}
               </div>
