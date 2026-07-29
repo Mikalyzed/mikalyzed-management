@@ -433,7 +433,7 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                         {carName}
                       </div>
                     )}
-                    <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.45, color: 'var(--text-primary)' }}>
+                    <div style={{ fontWeight: 400, fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-secondary)' }}>
                       {cleanTitle}
                     </div>
                     {t.dueDate && (
