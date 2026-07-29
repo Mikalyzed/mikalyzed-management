@@ -3,6 +3,13 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import OrderPartModal from '@/components/OrderPartModal'
+import PartDetailModal from '@/components/PartDetailModal'
+import {
+  PART_STATUS_LABELS as STATUS_LABELS,
+  PART_STATUS_COLORS as STATUS_COLORS,
+  PART_LIVE_LABELS as LIVE_LABELS,
+  PART_LIVE_COLORS as LIVE_COLORS,
+} from '@/lib/parts-ui'
 
 type Part = {
   id: string
@@ -28,22 +35,6 @@ type Part = {
   }
   requestedBy: { id: string; name: string }
   assignedTo: { id: string; name: string } | null
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  requested: 'Requested',
-  sourced: 'Pending Approval',
-  ready_to_order: 'Ready to Order',
-  ordered: 'Ordered',
-  received: 'Received',
-}
-
-const STATUS_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-  requested: { bg: '#fef2f2', color: '#ef4444', border: '#fecaca' },
-  sourced: { bg: '#fef9c3', color: '#a16207', border: '#fde047' },
-  ready_to_order: { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
-  ordered: { bg: '#fefce8', color: '#eab308', border: '#fde047' },
-  received: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
 }
 
 const PRT_CSS = `
@@ -72,16 +63,6 @@ const PRT_CSS = `
 .prt-tab.on { background: #1a1a1a; border-color: #1a1a1a; color: #fff; }
 `
 
-const LIVE_LABELS: Record<string, string> = {
-  pre_transit: 'Label created', in_transit: 'In transit', out_for_delivery: 'Out for delivery',
-  delivered: 'Delivered', available_for_pickup: 'Ready for pickup', return_to_sender: 'Returning to sender',
-  failure: 'Delivery problem', cancelled: 'Cancelled', error: 'Tracking error', unknown: 'Tracking…',
-}
-const LIVE_COLORS: Record<string, string> = {
-  delivered: '#16a34a', available_for_pickup: '#16a34a', out_for_delivery: '#2563eb', in_transit: '#2563eb',
-  pre_transit: '#6b6b6b', return_to_sender: '#dc2626', failure: '#dc2626', error: '#dc2626',
-}
-
 export default function PartsOverviewPage() {
   const [parts, setParts] = useState<Part[]>([])
   const [loading, setLoading] = useState(true)
@@ -96,10 +77,6 @@ export default function PartsOverviewPage() {
   const [showAddPart, setShowAddPart] = useState(false)
   const [boughtPart, setBoughtPart] = useState<{ id: string; name: string } | null>(null)
   const [editingPart, setEditingPart] = useState<Part | null>(null)
-  const [editTracking, setEditTracking] = useState('')
-  const [editDelivery, setEditDelivery] = useState('')
-  const [editImage, setEditImage] = useState<string | null>(null)
-  const [editUploading, setEditUploading] = useState(false)
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
@@ -343,7 +320,7 @@ export default function PartsOverviewPage() {
                       <span style={{ fontSize: 11.5, color: 'var(--text-muted)', fontWeight: 600 }}>{g.items.length} parts</span>
                     )}
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(330px, 100%), 1fr))', gap: 10 }}>
           {g.items.map((part) => {
             const ss = STATUS_COLORS[part.status] || STATUS_COLORS.requested
             const needsInfo = part.status === 'ordered' && !part.tracking && !part.orderImage
@@ -358,7 +335,7 @@ export default function PartsOverviewPage() {
                 className="routing-card"
                 onClick={() => {
                   if (isAdmin) {
-                    setEditingPart(part); setEditTracking(part.tracking || ''); setEditDelivery(part.expectedDelivery ? part.expectedDelivery.slice(0, 10) : ''); setEditImage(part.orderImage || null)
+                    setEditingPart(part)
                   }
                 }}
                 style={{
@@ -499,197 +476,13 @@ export default function PartsOverviewPage() {
         <BoughtModal part={boughtPart} onClose={() => setBoughtPart(null)} onDone={() => { setBoughtPart(null); load() }} />
       )}
       {editingPart && (
-        <div onClick={() => setEditingPart(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 440, padding: '24px', boxShadow: '0 -4px 30px rgba(0,0,0,0.15)', maxHeight: '86vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
-              <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Part Details</h3>
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
-                fontSize: 10.5, fontWeight: 650, padding: '3px 10px', borderRadius: 100,
-                background: (STATUS_COLORS[editingPart.status] || STATUS_COLORS.requested).bg,
-                color: (STATUS_COLORS[editingPart.status] || STATUS_COLORS.requested).color,
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: (STATUS_COLORS[editingPart.status] || STATUS_COLORS.requested).color, flexShrink: 0 }} />
-                {STATUS_LABELS[editingPart.status]}
-              </span>
-            </div>
-            <p style={{
-              fontSize: 13.5, fontWeight: 640, letterSpacing: '-0.01em', lineHeight: 1.4, margin: '0 0 6px',
-              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-            }}>{editingPart.name}</p>
-            {editingPart.url && (
-              <a href={editingPart.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: '#2563eb', textDecoration: 'none', fontWeight: 600, display: 'inline-block', marginBottom: 14, minHeight: 0 }}>
-                View link ↗
-              </a>
-            )}
-
-            {/* Admin: move part to any other status (recover from mistaken clicks) */}
-            {isAdmin && (
-              <div style={{ marginBottom: 18 }}>
-                <p style={{ fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>
-                  Status
-                </p>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                  {(['requested', 'sourced', 'ready_to_order', 'ordered', 'received'] as const).map(s => {
-                    const isCurrent = s === editingPart.status
-                    const c = STATUS_COLORS[s]
-                    return (
-                      <button
-                        key={s}
-                        disabled={isCurrent || saving === editingPart.id}
-                        onClick={async () => {
-                          if (!confirm(`Move "${editingPart.name.trim()}" to ${STATUS_LABELS[s]}?`)) return
-                          await updatePart(editingPart.id, { status: s })
-                          setEditingPart({ ...editingPart, status: s })
-                        }}
-                        style={{
-                          padding: '4px 12px', borderRadius: 100, fontSize: 11.5, fontWeight: 650,
-                          background: isCurrent ? c.bg : 'var(--bg-card)',
-                          color: isCurrent ? c.color : 'var(--text-secondary)',
-                          border: `1px solid ${isCurrent ? 'transparent' : 'var(--border)'}`,
-                          cursor: isCurrent ? 'default' : 'pointer', minHeight: 0,
-                          display: 'inline-flex', alignItems: 'center', gap: 5,
-                        }}
-                      >
-                        {isCurrent && <span style={{ width: 5, height: 5, borderRadius: '50%', background: c.color, flexShrink: 0 }} />}
-                        {STATUS_LABELS[s]}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {editingPart.status === 'ordered' && (
-              <>
-                <div className="form-row" style={{ marginBottom: 16 }}>
-                  <div style={{ flex: 1.2, minWidth: 0 }}>
-                    <label style={{ display: 'block', fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Tracking #</label>
-                    <input type="text" value={editTracking} onChange={e => setEditTracking(e.target.value)} placeholder="Tracking number…"
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 14 }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <label style={{ display: 'block', fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Expected</label>
-                    <input type="date" value={editDelivery} onChange={e => setEditDelivery(e.target.value)}
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 14 }} />
-                  </div>
-                </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Order confirmation / receipt</label>
-              {editImage ? (
-                <div>
-                  <div style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border)', cursor: 'pointer' }}
-                    onClick={() => window.open(editImage, '_blank')}>
-                    <img src={editImage} alt="Order confirmation" style={{ width: '100%', maxHeight: 200, objectFit: 'contain', background: '#f9fafb' }} />
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <button onClick={() => window.open(editImage, '_blank')} className="prt-btn" style={{ flex: 1, justifyContent: 'center', fontSize: 12 }}>View Full Size</button>
-                    <a href={editImage} download={`receipt-${editingPart?.name?.replace(/\s+/g, '-')}`} className="prt-btn" style={{ flex: 1, justifyContent: 'center', fontSize: 12, textDecoration: 'none' }}>Download</a>
-                    <button onClick={() => setEditImage(null)} className="prt-btn prt-btn-danger" style={{ fontSize: 12 }}>Remove</button>
-                  </div>
-                </div>
-              ) : (
-                <label
-                  onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = '#2563eb' }}
-                  onDragLeave={e => { e.preventDefault(); e.currentTarget.style.borderColor = '' }}
-                  onDrop={async e => {
-                    e.preventDefault(); e.currentTarget.style.borderColor = ''
-                    const file = e.dataTransfer.files?.[0]
-                    if (!file) return
-                    setEditUploading(true)
-                    try {
-                      const formData = new FormData()
-                      formData.append('file', file)
-                      const res = await fetch('/api/upload', { method: 'POST', body: formData })
-                      const data = await res.json()
-                      if (res.ok) setEditImage(data.url)
-                    } catch { /* ignore */ }
-                    setEditUploading(false)
-                  }}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    padding: '20px', borderRadius: 8, border: '2px dashed var(--border)',
-                    background: '#f9fafb', cursor: 'pointer', fontSize: 14, color: 'var(--text-muted)',
-                    transition: 'border-color 0.15s',
-                  }}>
-                  <input type="file" accept="image/*,.pdf" onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    if (!file) return
-                    setEditUploading(true)
-                    try {
-                      const formData = new FormData()
-                      formData.append('file', file)
-                      const res = await fetch('/api/upload', { method: 'POST', body: formData })
-                      const data = await res.json()
-                      if (res.ok) setEditImage(data.url)
-                    } catch { /* ignore */ }
-                    setEditUploading(false)
-                  }} style={{ display: 'none' }} />
-                  {editUploading ? 'Uploading...' : 'Click or drag file here'}
-                </label>
-              )}
-            </div>
-
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => setEditingPart(null)} style={{
-                    flex: 1, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
-                    background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-                  }}>Cancel</button>
-                  <button onClick={async () => {
-                    setSaving(editingPart.id)
-                    await updatePart(editingPart.id, {
-                      tracking: editTracking.trim() || null,
-                      expectedDelivery: editDelivery || null,
-                      orderImage: editImage || null,
-                    })
-                    setEditingPart(null)
-                  }} disabled={saving === editingPart.id} style={{
-                    flex: 1, padding: '12px 0', borderRadius: 10, border: 'none',
-                    background: '#1a1a1a', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-                    opacity: saving === editingPart.id ? 0.5 : 1,
-                  }}>{saving === editingPart.id ? 'Saving...' : 'Save'}</button>
-                </div>
-              </>
-            )}
-
-            {editingPart.status !== 'ordered' && (
-              <button onClick={() => setEditingPart(null)} style={{
-                width: '100%', padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
-                background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-              }}>Close</button>
-            )}
-
-            {/* Danger zone — quiet text actions, both behind a confirm */}
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-light, #f0f0ec)' }}>
-              {['sourced', 'ready_to_order', 'ordered', 'received'].includes(editingPart.status) && (
-                <button onClick={async () => {
-                  if (!confirm('Mark as wrong part and reset to Requested? The link will be cleared.')) return
-                  setSaving(editingPart.id)
-                  await updatePart(editingPart.id, {
-                    status: 'requested', url: null, tracking: null,
-                    expectedDelivery: null, orderImage: null,
-                  })
-                  setEditingPart(null)
-                }} disabled={saving === editingPart.id} style={{
-                  border: 'none', background: 'none', color: '#b45309',
-                  fontSize: 12.5, fontWeight: 600, cursor: 'pointer', minHeight: 0, padding: '4px 6px',
-                }}>Wrong part — reset</button>
-              )}
-              <button onClick={async () => {
-                if (!confirm('Delete this part?')) return
-                setSaving(editingPart.id)
-                await fetch(`/api/parts/${editingPart.id}`, { method: 'DELETE' })
-                setSaving(null)
-                setEditingPart(null)
-                load()
-              }} disabled={saving === editingPart.id} style={{
-                border: 'none', background: 'none', color: '#ef4444',
-                fontSize: 12.5, fontWeight: 600, cursor: 'pointer', minHeight: 0, padding: '4px 6px',
-              }}>Delete part</button>
-            </div>
-          </div>
-        </div>
+        <PartDetailModal
+          partId={editingPart.id}
+          isAdmin={isAdmin}
+          role={myRole}
+          onClose={() => setEditingPart(null)}
+          onChanged={load}
+        />
       )}
     </div>
   )
@@ -705,13 +498,21 @@ function AddPartModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
   const [vehicles, setVehicles] = useState<Array<{ id: string; stockNumber: string; year: number | null; make: string; model: string }>>([])
   const [search, setSearch] = useState('')
   const [vehicleId, setVehicleId] = useState<string | null>(null)
-  const [rows, setRows] = useState<Array<{ name: string; url: string; notes: string }>>([{ name: '', url: '', notes: '' }])
+  type PartRow = { name: string; url: string; notes: string; assigneeId: string | null; assigneeName: string | null }
+  const emptyRow = (): PartRow => ({ name: '', url: '', notes: '', assigneeId: null, assigneeName: null })
+  const [rows, setRows] = useState<PartRow[]>([emptyRow()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const setRow = (i: number, patch: Partial<{ name: string; url: string; notes: string }>) =>
+  const [team, setTeam] = useState<Array<{ id: string; name: string }>>([])
+  const [assignOpenFor, setAssignOpenFor] = useState<number | null>(null)
+  const setRow = (i: number, patch: Partial<PartRow>) =>
     setRows(r => r.map((row, ri) => ri === i ? { ...row, ...patch } : row))
 
   useEffect(() => {
+    fetch('/api/users').then(r => r.json()).then(d => {
+      const list = (d.users || d) as Array<{ id: string; name: string; isActive?: boolean }>
+      setTeam(list.filter(u => u.isActive !== false).map(u => ({ id: u.id, name: u.name })))
+    }).catch(() => {})
     fetch('/api/vehicles')
       .then(r => r.json())
       .then(d => {
@@ -814,10 +615,52 @@ function AddPartModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
                 style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 13, minWidth: 0 }}
               />
             </div>
+            {/* Who's on this part — anyone on the team, not just the coordinator */}
+            <div style={{ position: 'relative', marginTop: 8 }}>
+              <button
+                type="button"
+                onClick={() => setAssignOpenFor(assignOpenFor === i ? null : i)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  border: '1px solid var(--border)', background: row.assigneeId ? 'var(--bg-primary)' : '#fff',
+                  borderRadius: 100, padding: '5px 12px', fontSize: 12, fontWeight: 600,
+                  color: row.assigneeId ? 'var(--text-primary)' : 'var(--text-muted)',
+                  cursor: 'pointer', minHeight: 0,
+                }}
+              >
+                {row.assigneeName ? `→ ${row.assigneeName}` : 'Assign to… ▾'}
+              </button>
+              {assignOpenFor === i && (
+                <div style={{
+                  position: 'absolute', left: 0, top: 'calc(100% + 4px)', zIndex: 40, minWidth: 180,
+                  background: '#fff', border: '1px solid var(--border)', borderRadius: 10,
+                  boxShadow: '0 8px 24px rgba(24,24,27,0.16)', overflow: 'hidden', maxHeight: 200, overflowY: 'auto',
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => { setRow(i, { assigneeId: null, assigneeName: null }); setAssignOpenFor(null) }}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 12.5, background: '#fff', border: 'none', borderBottom: '1px solid var(--border-light, #f0f0ec)', cursor: 'pointer', minHeight: 0, color: 'var(--text-muted)' }}
+                  >Unassigned</button>
+                  {team.map(u => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => { setRow(i, { assigneeId: u.id, assigneeName: u.name }); setAssignOpenFor(null) }}
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 12.5,
+                        background: row.assigneeId === u.id ? 'var(--bg-primary)' : '#fff',
+                        fontWeight: row.assigneeId === u.id ? 650 : 500,
+                        border: 'none', borderBottom: '1px solid var(--border-light, #f0f0ec)', cursor: 'pointer', minHeight: 0, color: 'var(--text-primary)',
+                      }}
+                    >{u.name}</button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         ))}
         <button
-          onClick={() => setRows(r => [...r, { name: '', url: '', notes: '' }])}
+          onClick={() => setRows(r => [...r, emptyRow()])}
           style={{
             width: '100%', padding: '10px 0', borderRadius: 10, border: '1.5px dashed var(--border)',
             background: 'none', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)',
@@ -844,7 +687,7 @@ function AddPartModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
                 for (const r of valid) {
                   const res = await fetch('/api/parts', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ vehicleId, name: r.name.trim(), url: r.url.trim() || null, notes: r.notes.trim() || null }),
+                    body: JSON.stringify({ vehicleId, name: r.name.trim(), url: r.url.trim() || null, notes: r.notes.trim() || null, assignedToId: r.assigneeId || null }),
                   })
                   if (res.ok) added++
                 }

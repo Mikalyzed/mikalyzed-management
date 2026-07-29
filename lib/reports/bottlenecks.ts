@@ -204,6 +204,29 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
     }
   }
 
+  // 5c2. Part is here but the car isn't in recon — no mechanic checklist
+  // exists to carry the install task, so the part sits on a shelf invisible.
+  // Re-fires until the car gets routed into recon (or the part is used).
+  // Capped at 21 days since the part was last touched: fresh arrivals get a
+  // card; long-settled parts (installed before this rule existed) don't flood
+  // the meeting. Each new arrival also gets a durable admin follow-up task.
+  const reconStocks = new Set(r.recon.map(v => v.stock))
+  for (const p of r.parts) {
+    const touched = (p as { touchedAgeDays?: number }).touchedAgeDays ?? 99
+    if (p.status === 'received' && !p.installTaskCreated && !reconStocks.has(p.stock) && touched <= 21) {
+      out.push({
+        severity: 'warn',
+        stock: p.stock,
+        vehicle: p.vehicle,
+        where: whereOf(p.stock),
+        issue: (p as { soldCar?: boolean }).soldCar ? 'Part here, car already sold' : 'Part here, car not in recon',
+        detail: (p as { soldCar?: boolean }).soldCar
+          ? `"${p.part}" arrived but this car is marked sold — install it before delivery, or return the part.`
+          : `"${p.part}" arrived but this car has no active recon stage to carry the install. Route it into recon (the install task will surface in routing) or log where the part is being held.`,
+      })
+    }
+  }
+
   // 5d. Game plan stalled: the active step hasn't moved in a week — the
   // system's "what's next" is being ignored.
   for (const v of [...r.recon, ...r.inStock]) {

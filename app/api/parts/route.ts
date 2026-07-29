@@ -15,6 +15,10 @@ export async function GET(req: NextRequest) {
 
   const where: any = {}
 
+  // Single-part fetch (dashboard part modal)
+  const partId = searchParams.get('id')
+  if (partId) where.id = partId
+
   // Filter by vehicle if specified
   if (vehicleId) {
     where.vehicleId = vehicleId

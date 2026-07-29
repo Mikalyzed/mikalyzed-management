@@ -24,7 +24,7 @@ function daysSince(d: Date | null) {
 }
 
 export async function buildVehicleStatusReport() {
-  const [vehicles, externals, plans] = await Promise.all([
+  const [vehicles, externals, plans, strayParts] = await Promise.all([
     prisma.vehicle.findMany({
       where: {
         OR: [
@@ -46,7 +46,7 @@ export async function buildVehicleStatusReport() {
         },
         parts: {
           where: { status: { in: ['requested', 'sourced', 'ordered', 'received'] } },
-          select: { id: true, name: true, status: true, expectedDelivery: true, installTaskCreatedAt: true, createdAt: true, trackingStatus: true },
+          select: { id: true, name: true, status: true, expectedDelivery: true, installTaskCreatedAt: true, createdAt: true, updatedAt: true, trackingStatus: true },
         },
       },
       orderBy: { stockNumber: 'asc' },
@@ -61,6 +61,20 @@ export async function buildVehicleStatusReport() {
       orderBy: { expectedReturn: 'asc' },
     }),
     prisma.vehiclePlan.findMany({ include: { steps: { orderBy: { order: 'asc' } } } }),
+    // Open parts whose car fell OUT of the active set (sold/removed): the part
+    // still needs resolving — install before delivery, or return it. Without
+    // this they'd vanish from the pipeline the moment the car sells.
+    prisma.part.findMany({
+      where: {
+        status: { in: ['requested', 'sourced', 'ordered', 'received'] },
+        vehicle: { inventoryStatus: { in: ['sold', 'removed'] } },
+      },
+      select: {
+        id: true, name: true, status: true, expectedDelivery: true,
+        installTaskCreatedAt: true, createdAt: true, updatedAt: true, trackingStatus: true,
+        vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
+      },
+    }),
   ])
 
   // Game plans: current step per vehicle — the system's "what's next" for a car
@@ -73,6 +87,11 @@ export async function buildVehicleStatusReport() {
       step: active?.title ?? null,
       stepDetail: active?.detail ?? null,
       stepSinceDays: active?.activatedAt ? daysSince(active.activatedAt) : null,
+      // Operational action carried by the active step (confirm-first chip)
+      stepKind: active?.kind ?? null,
+      stepActionStage: active?.actionStage ?? null,
+      stepActionShop: active?.actionShop ?? null,
+      stepActionDone: !!active?.actionCreatedAt,
       finished,
       total: p.steps.length,
     }] as const
@@ -80,7 +99,7 @@ export async function buildVehicleStatusReport() {
 
   const now = Date.now()
 
-  type ChecklistItem = { item?: string; done?: boolean; note?: string; assigneeName?: string; fromPart?: boolean }
+  type ChecklistItem = { item?: string; done?: boolean; note?: string; assigneeName?: string; fromPart?: boolean; doneAt?: string }
   const stageTasks = (checklist: unknown) =>
     (Array.isArray(checklist) ? (checklist as ChecklistItem[]) : [])
       .map((t, idx) => ({
@@ -91,6 +110,7 @@ export async function buildVehicleStatusReport() {
         done: t.done === true,
         note: t.note?.trim() || null,
         assignee: t.assigneeName?.trim() || null,
+        doneAt: typeof t.doneAt === 'string' ? t.doneAt : null,
         fromPart: t.fromPart === true,
       }))
       .filter(t => t.item)
@@ -177,7 +197,23 @@ export async function buildVehicleStatusReport() {
       trackingStatus: p.trackingStatus,
       eta: p.expectedDelivery?.toISOString().slice(0, 10) ?? null,
       ageDays: daysSince(p.createdAt) ?? 0,
+      touchedAgeDays: daysSince(p.updatedAt) ?? 0,
       installTaskCreated: !!p.installTaskCreatedAt,
+      soldCar: false,
+    })))
+    .concat(strayParts.map(p => ({
+      partId: p.id,
+      vehicleId: p.vehicle.id,
+      stock: p.vehicle.stockNumber,
+      vehicle: [p.vehicle.year, p.vehicle.make, p.vehicle.model].filter(Boolean).join(' '),
+      part: p.name,
+      status: p.status,
+      trackingStatus: p.trackingStatus,
+      eta: p.expectedDelivery?.toISOString().slice(0, 10) ?? null,
+      ageDays: daysSince(p.createdAt) ?? 0,
+      touchedAgeDays: daysSince(p.updatedAt) ?? 0,
+      installTaskCreated: !!p.installTaskCreatedAt,
+      soldCar: true,
     })))
     .sort((a, b) =>
       (PART_STATUS_ORDER[a.status] ?? 9) - (PART_STATUS_ORDER[b.status] ?? 9) || b.ageDays - a.ageDays)

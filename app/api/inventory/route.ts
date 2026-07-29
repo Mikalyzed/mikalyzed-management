@@ -121,10 +121,11 @@ export async function GET(req: NextRequest) {
   // shop AND a mechanic stage is still live on the recon board).
   const reconStockSet = new Set<string>()
   const externalStockSet = new Set<string>()
+  const externalPendingSet = new Set<string>()
   try {
     const stockNumbers = vehicles.map(v => v.stockNumber).filter(Boolean)
     if (stockNumbers.length > 0) {
-      const [activeReconRows, activeExternalRows] = await Promise.all([
+      const [activeReconRows, externalRows] = await Promise.all([
         prisma.vehicle.findMany({
           where: {
             stockNumber: { in: stockNumbers },
@@ -138,11 +139,16 @@ export async function GET(req: NextRequest) {
             stockNumber: { in: stockNumbers },
             status: { not: 'returned' },
           },
-          select: { stockNumber: true },
+          select: { stockNumber: true, status: true },
         }),
       ])
       for (const r of activeReconRows) reconStockSet.add(r.stockNumber)
-      for (const r of activeExternalRows) externalStockSet.add(r.stockNumber)
+      for (const r of externalRows) {
+        // 'pending' = repair planned but the car never left the lot — a
+        // different fact than being out at the shop, so a different flag.
+        if (r.status === 'pending') externalPendingSet.add(r.stockNumber)
+        else externalStockSet.add(r.stockNumber)
+      }
     }
   } catch (flagsErr) {
     console.warn('[inventory] recon/external flag enrichment failed:', flagsErr)
@@ -153,6 +159,7 @@ export async function GET(req: NextRequest) {
     heroUrl: heroByStock.get(v.stockNumber) || null,
     inRecon: reconStockSet.has(v.stockNumber),
     atExternal: externalStockSet.has(v.stockNumber),
+    externalPending: externalPendingSet.has(v.stockNumber) && !externalStockSet.has(v.stockNumber),
   }))
 
   return NextResponse.json({ vehicles: enriched, total, counts: countsByStatus })

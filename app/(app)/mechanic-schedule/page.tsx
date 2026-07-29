@@ -22,6 +22,13 @@ type ChecklistItem = {
   // (vs the car's default owner). Name cached for display without a join.
   assigneeId?: string | null
   assigneeName?: string | null
+  doneAt?: string | null
+}
+
+// "Jul 28" next to a completed task — when it was checked off.
+function fmtDoneDate(iso: string): string {
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 // Status pills can store either a plain string (legacy) or { status, note } (new)
@@ -575,7 +582,9 @@ export default function MechanicBoard() {
     setSelectedJob(job)
     setModalTab('tasks')
     setShowCompleted(false)
-    const inspItems = (job.checklist || []).filter(c => !c.addedByMechanic)
+    // Auto-fold only a true inspection section; a flat task list stays open.
+    const isInspJob = (job.checklist || []).some(c => !!c.type)
+    const inspItems = isInspJob ? (job.checklist || []).filter(c => !c.addedByMechanic) : []
     setCollapseInspection(inspItems.length > 0 && inspItems.every(c => c.done))
     setCollapseAdded(false)
     setModalChecklist(JSON.parse(JSON.stringify(job.checklist || [])))
@@ -680,11 +689,13 @@ export default function MechanicBoard() {
   // Finished work stays out of the way until asked for.
   const completedCount = visibleChecklist.filter(x => x.item.done).length
   const shownChecklist = showCompleted ? visibleChecklist : visibleChecklist.filter(x => !x.item.done)
-  // Two sections: the (inspection) checklist vs mechanic/admin-added tasks.
-  const inspectionAll = visibleChecklist.filter(x => !x.item.addedByMechanic)
-  const addedAll = visibleChecklist.filter(x => x.item.addedByMechanic)
-  const inspectionShown = shownChecklist.filter(x => !x.item.addedByMechanic)
-  const addedShown = shownChecklist.filter(x => x.item.addedByMechanic)
+  // Sections only exist when the checklist is a real inspection (typed items);
+  // an ordinary job shows one flat task list no matter who added what.
+  const splitTaskSections = modalChecklist.some(it => !!it.type)
+  const inspectionAll = splitTaskSections ? visibleChecklist.filter(x => !x.item.addedByMechanic) : visibleChecklist
+  const addedAll = splitTaskSections ? visibleChecklist.filter(x => x.item.addedByMechanic) : []
+  const inspectionShown = splitTaskSections ? shownChecklist.filter(x => !x.item.addedByMechanic) : shownChecklist
+  const addedShown = splitTaskSections ? shownChecklist.filter(x => x.item.addedByMechanic) : []
   type TaskEntry = { header: true } | { pair: { item: ChecklistItem; i: number; mine: boolean } }
   const taskEntries: TaskEntry[] = [
     ...(collapseInspection ? [] : inspectionShown).map(p => ({ pair: p })),
@@ -1519,8 +1530,8 @@ export default function MechanicBoard() {
                 {modalTab === 'tasks' && (
                 <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
                   {(() => {
-                    const isInspection = modalChecklist.some(it => !!it.type)
-                    const inspectionItems = modalChecklist.filter(it => !it.addedByMechanic)
+                    const isInspection = splitTaskSections
+                    const inspectionItems = inspectionAll.map(x => x.item)
                     const inspectionDone = inspectionItems.filter(it => it.done).length
                     if (inspectionItems.length === 0) return null
                     return (
@@ -1672,6 +1683,11 @@ export default function MechanicBoard() {
                                     }}>Needs assign</span>
                                   )
                                 })()}
+                                {item.done && item.doneAt && (
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                                    {fmtDoneDate(item.doneAt)}
+                                  </span>
+                                )}
                                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{isExpanded ? '▾' : '▸'}</span>
                               </div>
                             </div>
@@ -3156,7 +3172,7 @@ function Section({ title, count, color, children }: { title: string; count: numb
 function CardGrid({ children }: { children: React.ReactNode }) {
   // gridAutoRows: 1fr + stretch → every card in the grid is the same height
   // (as tall as the tallest), instead of each sizing to its own content.
-  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gridAutoRows: '1fr', alignItems: 'stretch', gap: 12 }}>{children}</div>
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gridAutoRows: '1fr', alignItems: 'stretch', gap: 12 }}>{children}</div>
 }
 
 function ActionBtn({ label, color, disabled, onClick, className, title }: { label: string; color: string; disabled?: boolean; onClick: () => void; className?: string; title?: string }) {

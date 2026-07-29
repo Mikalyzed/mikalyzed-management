@@ -15,10 +15,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 // ── types (mirror /api/reports/vehicle-status + /api/board-tasks) ──────
 
-type StageTask = { idx: number; item: string; done: boolean; note: string | null; assignee: string | null }
+type StageTask = { idx: number; item: string; done: boolean; note: string | null; assignee: string | null; doneAt?: string | null }
 type CarPlan = {
   goal: string | null; stepId: string | null; step: string | null; stepDetail: string | null
   stepSinceDays: number | null; finished: number; total: number
+  stepKind?: string | null; stepActionStage?: string | null; stepActionShop?: string | null; stepActionDone?: boolean
 }
 type InboundPart = { partId: string; name: string; status: string; eta: string | null }
 type ReconRow = {
@@ -933,7 +934,7 @@ export default function MorningMeetingPage() {
             <span style={pill('rgba(180,83,9,0.12)', '#b45309')}>{report.bottlenecks.length} caught</span>
             <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Tap a card to fix it right here.</span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', gap: 14 }}>
             {report.bottlenecks.map((b, i) => (
               <BottleneckCard
                 key={i}
@@ -1017,7 +1018,7 @@ export default function MorningMeetingPage() {
               </>
             }
           >
-            <PlanBlock vehicleId={v.vehicleId} plan={v.plan} onAdvance={advancePlan} onSaved={() => { loadReport(); loadFollowups() }} />
+            <PlanBlock vehicleId={v.vehicleId} plan={v.plan} onAdvance={advancePlan} onSaved={() => { loadReport(); loadFollowups() }} notifyFn={notify} />
             <StageTaskList tasks={v.tasks} notes={v.stageNotes} stageId={v.stageId} stage={v.stage} stock={v.stock} users={users} onToggle={toggleStageTask} onAssign={assignStageTask} />
             <InboundList parts={v.partsInbound} onReceive={markPartReceived} />
             <FollowupList items={followupsByStock.get(v.stock) ?? []} onDone={completeFollowup} onEdit={editFollowup} />
@@ -1666,13 +1667,19 @@ function ExternalQuickControls({ externalId, onReturned, onDelete }: {
 
 /** The car's game plan inside a meeting-card expansion: current step, one-tap
  *  advance, paste-a-master-sheet import when no plan exists yet. */
-function PlanBlock({ vehicleId, plan, onAdvance, onSaved }: {
+function PlanBlock({ vehicleId, plan, onAdvance, onSaved, notifyFn }: {
   vehicleId: string | null
   plan: CarPlan | null
   onAdvance: (vehicleId: string, stepId: string) => Promise<void>
   onSaved: () => void
+  notifyFn: (msg: string, isError?: boolean) => void
 }) {
   const [importOpen, setImportOpen] = useState(false)
+  const [addOpen, setAddOpen] = useState(false)
+  const [addTitle, setAddTitle] = useState('')
+  const [addType, setAddType] = useState('generic') // generic | mechanic | detailing | content | external
+  const [addShop, setAddShop] = useState('')
+  const [addPosition, setAddPosition] = useState<'next' | 'end'>('next')
   const [text, setText] = useState('')
   const [preview, setPreview] = useState<{ goal: string | null; steps: Array<{ title: string; detail?: string }> } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -1697,10 +1704,115 @@ function PlanBlock({ vehicleId, plan, onAdvance, onSaved }: {
               <span style={{ color: plan.stepSinceDays > 7 ? '#b45309' : 'var(--text-muted)', fontWeight: 600 }}> · {plan.stepSinceDays}d</span>
             )}
           </span>
+          {/* Confirm-first: the step maps to real work — one tap stages it in the right place */}
+          {plan.stepId && plan.stepKind === 'external' && plan.stepActionShop && !plan.stepActionDone && (
+            <button
+              className="mtg-btn" style={{ color: '#2563eb', fontSize: 12 }}
+              onClick={async () => {
+                const res = await fetch(`/api/vehicles/${vehicleId}/plan/step-action`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ stepId: plan.stepId }),
+                })
+                const d = await res.json().catch(() => ({}))
+                if (res.ok) { notifyFn(`External drafted at ${plan.stepActionShop} — Not Scheduled. Send it from the External page when it goes out.`); onSaved() }
+                else notifyFn(d.error || 'Could not create.', true)
+              }}
+            >⚙ Create external at {plan.stepActionShop}</button>
+          )}
+          {plan.stepId && plan.stepKind === 'task' && plan.stepActionStage && !plan.stepActionDone && (
+            <button
+              className="mtg-btn" style={{ color: '#2563eb', fontSize: 12 }}
+              onClick={async () => {
+                const res = await fetch(`/api/vehicles/${vehicleId}/plan/step-action`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ stepId: plan.stepId }),
+                })
+                const d = await res.json().catch(() => ({}))
+                if (res.ok) { notifyFn(`Task added to the ${plan.stepActionStage} checklist.`); onSaved() }
+                else if (d.code === 'not_in_stage') notifyFn(d.error)
+                else notifyFn(d.error || 'Could not create.', true)
+              }}
+            >⚙ Add to {plan.stepActionStage} tasks</button>
+          )}
           {plan.stepId && (
             <button className="mtg-btn" style={{ color: '#16a34a', fontSize: 12 }} onClick={() => onAdvance(vehicleId, plan.stepId!)}>
               ✓ Done — next step
             </button>
+          )}
+          <button className="mtg-btn" style={{ fontSize: 12 }} onClick={() => setAddOpen(o => !o)}>+ Step</button>
+          {addOpen && (
+            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8, borderTop: '1px solid var(--border-light)' }}>
+              <input
+                autoFocus className="mtg-input" value={addTitle} onChange={e => setAddTitle(e.target.value)}
+                placeholder="What came up? e.g. Replace the shifter bushing"
+                style={{ width: '100%' }}
+              />
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                {[
+                  { v: 'generic', l: 'Reminder' },
+                  { v: 'mechanic', l: 'Mechanic' },
+                  { v: 'detailing', l: 'Detailing' },
+                  { v: 'content', l: 'Content' },
+                  { v: 'external', l: 'External' },
+                ].map(o => (
+                  <button
+                    key={o.v}
+                    className="mtg-btn"
+                    style={{
+                      fontSize: 11.5, padding: '4px 11px', borderRadius: 100,
+                      background: addType === o.v ? '#1a1a1a' : undefined,
+                      color: addType === o.v ? '#fff' : undefined,
+                      borderColor: addType === o.v ? '#1a1a1a' : undefined,
+                    }}
+                    onClick={() => setAddType(o.v)}
+                  >{o.l}</button>
+                ))}
+                {addType === 'external' && (
+                  <input
+                    className="mtg-input" value={addShop} onChange={e => setAddShop(e.target.value)}
+                    placeholder="Shop name…" style={{ flex: 1, minWidth: 120 }}
+                  />
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <button
+                  className="mtg-btn"
+                  style={{ fontSize: 11.5, background: addPosition === 'next' ? 'var(--info-bg, #eaf0fe)' : undefined }}
+                  onClick={() => setAddPosition('next')}
+                >Do next</button>
+                <button
+                  className="mtg-btn"
+                  style={{ fontSize: 11.5, background: addPosition === 'end' ? 'var(--info-bg, #eaf0fe)' : undefined }}
+                  onClick={() => setAddPosition('end')}
+                >At the end</button>
+                <span style={{ flex: 1 }} />
+                <button
+                  className="mtg-btn mtg-btn-dark" disabled={!addTitle.trim() || (addType === 'external' && !addShop.trim())}
+                  style={{ fontSize: 12 }}
+                  onClick={async () => {
+                    const isStage = ['mechanic', 'detailing', 'content'].includes(addType)
+                    const res = await fetch(`/api/vehicles/${vehicleId}/plan/steps`, {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        title: addTitle.trim(),
+                        kind: addType === 'external' ? 'external' : isStage ? 'task' : 'generic',
+                        stage: isStage ? addType : undefined,
+                        shop: addType === 'external' ? addShop.trim() : undefined,
+                        position: addPosition,
+                      }),
+                    })
+                    if (res.ok) {
+                      notifyFn(addPosition === 'next' ? 'Step added — it comes up right after the current one.' : 'Step added at the end of the plan.')
+                      setAddOpen(false); setAddTitle(''); setAddShop(''); setAddType('generic')
+                      onSaved()
+                    } else {
+                      const d = await res.json().catch(() => ({}))
+                      notifyFn(d.error || 'Could not add the step.', true)
+                    }
+                  }}
+                >Add Step</button>
+              </div>
+            </div>
           )}
         </div>
       ) : plan ? (
@@ -1921,6 +2033,11 @@ function StageTaskList({ tasks, notes, stageId, stage, stock, users, onToggle, o
                   {t.item}
                   {t.note && <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}> ({t.note})</span>}
                 </span>
+                {t.done && t.doneAt && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                    {new Date(t.doneAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                )}
                 <button
                   disabled={!stageId}
                   title="Reassign this task"

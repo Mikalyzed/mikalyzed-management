@@ -63,12 +63,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const body = await req.json().catch(() => ({}))
   const goal = typeof body.goal === 'string' ? body.goal.trim() || null : null
-  const rawSteps: Array<{ title?: unknown; detail?: unknown }> = Array.isArray(body.steps) ? body.steps : []
+  const rawSteps: Array<{ title?: unknown; detail?: unknown; kind?: unknown; stage?: unknown; shop?: unknown }> = Array.isArray(body.steps) ? body.steps : []
   const steps = rawSteps
-    .map(s => ({
-      title: typeof s.title === 'string' ? s.title.trim() : '',
-      detail: typeof s.detail === 'string' && s.detail.trim() ? s.detail.trim() : null,
-    }))
+    .map(s => {
+      const kind = s.kind === 'task' || s.kind === 'external' ? s.kind : 'generic'
+      const stage = typeof s.stage === 'string' && ['mechanic', 'detailing', 'content', 'publish'].includes(s.stage) ? s.stage : null
+      const shop = typeof s.shop === 'string' && s.shop.trim() ? s.shop.trim() : null
+      return {
+        title: typeof s.title === 'string' ? s.title.trim() : '',
+        detail: typeof s.detail === 'string' && s.detail.trim() ? s.detail.trim() : null,
+        kind: (kind === 'task' && !stage) || (kind === 'external' && !shop) ? 'generic' : kind,
+        actionStage: kind === 'task' ? stage : null,
+        actionShop: kind === 'external' ? shop : null,
+      }
+    })
     .filter(s => s.title)
   if (steps.length === 0) return NextResponse.json({ error: 'At least one step required' }, { status: 400 })
 
@@ -83,6 +91,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           order: i,
           title: s.title,
           detail: s.detail,
+          kind: s.kind,
+          actionStage: s.actionStage,
+          actionShop: s.actionShop,
           status: i === 0 ? 'active' : 'pending',
           activatedAt: i === 0 ? new Date() : null,
         })),

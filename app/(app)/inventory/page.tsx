@@ -15,6 +15,7 @@ type Vehicle = {
   // simultaneously on the recon board AND out at an external repair shop.
   inRecon?: boolean
   atExternal?: boolean
+  externalPending?: boolean
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
@@ -610,6 +611,11 @@ function VehicleLedgerRow({
           </>
         ) : (
           <SatinTag tone={statusTone}>{status}</SatinTag>
+        )}
+        {/* Planned external, car still on the lot — so a scheduled repair
+            is never invisible, without claiming the car is out. */}
+        {v.externalPending && (
+          <SatinTag tone={{ bg: 'rgba(180, 83, 9, 0.08)', fg: '#92400e', dot: '#d9a406' }}>External Pending</SatinTag>
         )}
       </div>
     </div>

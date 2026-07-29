@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
+import { buildVehicleStatusReport } from '@/lib/reports/vehicle-status'
+import { detectBottlenecks } from '@/lib/reports/bottlenecks'
 
 export async function GET(request: Request) {
   const user = await getSessionUser()
@@ -218,7 +220,7 @@ export async function GET(request: Request) {
   let attention: Record<string, unknown> | null = null
   if (user.role === 'admin' || user.role === 'shop_coordinator') {
     const vName = (v: { year: number | null; make: string; model: string }) => `${v.year ?? ''} ${v.make} ${v.model}`.trim()
-    const [routingVehicles, activeStages, deliveredParts, approvalParts, overdueExternals, stuckParts, mechanics] = await Promise.all([
+    const [routingVehicles, activeStages, deliveredParts, approvalParts, overdueExternals, stuckParts, strandedParts, mechanics] = await Promise.all([
       prisma.vehicle.findMany({
         where: { status: 'awaiting_routing' },
         select: { id: true, stockNumber: true, year: true, make: true, model: true },
@@ -230,12 +232,12 @@ export async function GET(request: Request) {
       }),
       prisma.part.findMany({
         where: { status: 'ordered', trackingStatus: { in: ['delivered', 'available_for_pickup'] } },
-        select: { id: true, name: true, vehicle: { select: { stockNumber: true } } },
+        select: { id: true, name: true, vehicle: { select: { stockNumber: true, year: true, make: true, model: true } } },
         take: 15,
       }),
       prisma.part.findMany({
         where: { status: 'sourced' },
-        select: { id: true, name: true, url: true, vehicle: { select: { stockNumber: true } } },
+        select: { id: true, name: true, url: true, vehicle: { select: { stockNumber: true, year: true, make: true, model: true } } },
         take: 15,
       }),
       prisma.externalRepair.findMany({
@@ -246,7 +248,19 @@ export async function GET(request: Request) {
       }),
       prisma.part.findMany({
         where: { status: 'requested', createdAt: { lt: new Date(Date.now() - 7 * 86400000) } },
-        select: { id: true, name: true, createdAt: true, vehicle: { select: { stockNumber: true } } },
+        select: { id: true, name: true, createdAt: true, vehicle: { select: { stockNumber: true, year: true, make: true, model: true } } },
+        take: 15,
+      }),
+      // Part is here but the car has no recon stage to carry the install —
+      // it would sit on a shelf invisible. 21-day window since last touch.
+      prisma.part.findMany({
+        where: {
+          status: 'received',
+          installTaskCreatedAt: null,
+          updatedAt: { gte: new Date(Date.now() - 21 * 86400000) },
+          vehicle: { OR: [{ inventoryStatus: null }, { inventoryStatus: { not: 'in_recon' } }] },
+        },
+        select: { id: true, name: true, vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true, inventoryStatus: true } } },
         take: 15,
       }),
       prisma.user.findMany({ where: { role: 'mechanic', isActive: true }, select: { id: true, name: true } }),
@@ -260,15 +274,19 @@ export async function GET(request: Request) {
       routing: routingVehicles.map(v => ({ id: v.id, stock: v.stockNumber, vehicle: vName(v) })),
       installs: installItems.slice(0, 15),
       installsTotal: installItems.length,
-      delivered: deliveredParts.map(p => ({ id: p.id, name: p.name, stock: p.vehicle.stockNumber })),
-      approvals: approvalParts.map(p => ({ id: p.id, name: p.name, url: p.url, stock: p.vehicle.stockNumber })),
+      delivered: deliveredParts.map(p => ({ id: p.id, name: p.name, stock: p.vehicle.stockNumber, vehicle: vName(p.vehicle) })),
+      approvals: approvalParts.map(p => ({ id: p.id, name: p.name, url: p.url, stock: p.vehicle.stockNumber, vehicle: vName(p.vehicle) })),
       overdue: overdueExternals.map(e => ({
         id: e.id, stock: e.stockNumber, vehicle: vName(e), shop: e.shopName,
         overdueDays: Math.floor((Date.now() - (e.expectedReturn?.getTime() ?? Date.now())) / 86400000),
       })),
       stuck: stuckParts.map(p => ({
-        id: p.id, name: p.name, stock: p.vehicle.stockNumber,
+        id: p.id, name: p.name, stock: p.vehicle.stockNumber, vehicle: vName(p.vehicle),
         ageDays: Math.floor((Date.now() - p.createdAt.getTime()) / 86400000),
+      })),
+      stranded: strandedParts.map(p => ({
+        id: p.id, name: p.name, stock: p.vehicle.stockNumber, vehicleId: p.vehicle.id, vehicle: vName(p.vehicle),
+        sold: p.vehicle.inventoryStatus === 'sold' || p.vehicle.inventoryStatus === 'removed',
       })),
       mechanics,
     }
@@ -302,7 +320,92 @@ export async function GET(request: Request) {
     }
   }
 
+  // ── Shop Coordinator board — Lenny's whole loop, derived from the same
+  //    report the morning meeting uses (no prices in any of these fields) ──
+  let coordinator: Record<string, unknown> | null = null
+  const wantCoordinator = user.role === 'shop_coordinator' ||
+    (user.role === 'admin' && new URL(request.url).searchParams.get('view') === 'coordinator')
+  if (wantCoordinator) {
+    const report = await buildVehicleStatusReport()
+    const bottlenecks = detectBottlenecks(report)
+    const toInstallByStock = new Map<string, number>()
+    for (const pt of report.parts) {
+      if (pt.status === 'received' && !pt.installTaskCreated) {
+        toInstallByStock.set(pt.stock, (toInstallByStock.get(pt.stock) ?? 0) + 1)
+      }
+    }
+    const lanesByName = new Map<string, { name: string; cars: number; paused: number; awaitingParts: number }>()
+    for (const v of report.recon) {
+      if (v.stage !== 'mechanic') continue
+      const name = v.assignee ?? 'Unassigned'
+      const lane = lanesByName.get(name) ?? { name, cars: 0, paused: 0, awaitingParts: 0 }
+      lane.cars += 1
+      if (v.paused) lane.paused += 1
+      if (v.awaitingParts) lane.awaitingParts += 1
+      lanesByName.set(name, lane)
+    }
+    coordinator = {
+      sourceQueue: report.parts
+        .filter(pt => pt.status === 'requested')
+        .map(pt => ({ partId: pt.partId, part: pt.part, stock: pt.stock, vehicle: pt.vehicle, ageDays: pt.ageDays })),
+      lanes: Array.from(lanesByName.values()).sort((a, b) => b.cars - a.cars),
+      externalOut: report.externalRepairs
+        .filter(e => !e.partOnly && ['sent', 'in_progress', 'ready'].includes(e.status))
+        .map(e => ({
+          externalId: e.externalId, stock: e.stock, vehicle: e.vehicle, shop: e.shop,
+          status: e.status, expectedBack: e.expectedBack, overdueDays: e.overdueDays,
+          toInstall: toInstallByStock.get(e.stock) ?? 0,
+        })),
+      watchlist: bottlenecks,
+    }
+  }
+
+  // ── "New For You" — everything assigned to this user since they last hit
+  //    Got It. Nothing is ever added silently: it sits here until acknowledged.
+  //    (Trial: shop coordinator first.)
+  let newForYou: Record<string, unknown> | null = null
+  const coordinatorPreview = user.role === 'admin' && wantCoordinator
+    ? await prisma.user.findFirst({ where: { role: 'shop_coordinator', isActive: true }, select: { id: true, name: true, dashboardSeenAt: true } })
+    : null
+  if (user.role === 'shop_coordinator' || coordinatorPreview) {
+    const targetId = coordinatorPreview?.id ?? user.id
+    const me = coordinatorPreview ?? await prisma.user.findUnique({ where: { id: user.id }, select: { dashboardSeenAt: true } })
+    // First-ever visit: show the last 7 days rather than all history
+    const since = me?.dashboardSeenAt ?? new Date(Date.now() - 7 * 86400000)
+    const [newTasks, newParts] = await Promise.all([
+      prisma.task.findMany({
+        where: { assigneeId: targetId, status: { not: 'done' }, createdAt: { gt: since } },
+        select: { id: true, title: true, description: true, priority: true, stockNumbers: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+      prisma.part.findMany({
+        where: { assignedToId: targetId, status: { in: ['requested', 'sourced', 'ready_to_order'] }, createdAt: { gt: since } },
+        select: { id: true, name: true, status: true, createdAt: true, vehicle: { select: { stockNumber: true, year: true, make: true, model: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ])
+    newForYou = {
+      since: since.toISOString(),
+      previewFor: coordinatorPreview?.name ?? null,
+      tasks: newTasks.map(t => ({
+        id: t.id, title: t.title, description: t.description, priority: t.priority,
+        stock: Array.isArray(t.stockNumbers) && t.stockNumbers.length > 0 ? String(t.stockNumbers[0]) : null,
+        createdAt: t.createdAt.toISOString(),
+      })),
+      parts: newParts.map(pt => ({
+        id: pt.id, name: pt.name, status: pt.status,
+        stock: pt.vehicle.stockNumber,
+        vehicle: `${pt.vehicle.year ?? ''} ${pt.vehicle.make} ${pt.vehicle.model}`.trim(),
+        createdAt: pt.createdAt.toISOString(),
+      })),
+    }
+  }
+
   return NextResponse.json({
+    newForYou,
+    coordinator,
     attention,
     overview,
     user: { name: user.name, role: user.role, id: user.id },

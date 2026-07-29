@@ -216,6 +216,10 @@ export default function VehiclesPage() {
   const [externalVendor, setExternalVendor] = useState<VendorResult | null>(null)
   const [externalAtDealership, setExternalAtDealership] = useState(false)
   const [skipping, setSkipping] = useState(false)
+  const [externalOut, setExternalOut] = useState<Array<{
+    id: string; stockNumber: string; year: number | null; make: string; model: string
+    shopName: string; status: string; expectedReturn: string | null; repairDescription: string
+  }>>([])
   const mouseDownPos = useRef<{ x: number; y: number } | null>(null)
   const didDrag = useRef(false)
   useEffect(() => {
@@ -224,6 +228,15 @@ export default function VehiclesPage() {
       .then((data) => setVehicles(data.vehicles || []))
       .catch(console.error)
       .finally(() => setLoading(false))
+
+    // "Waiting to return" strip: which cars are physically out at a shop
+    fetch('/api/external')
+      .then((r) => r.json())
+      .then((data) => setExternalOut(
+        (data.repairs || []).filter((e: { status: string; partOnly?: boolean }) =>
+          ['sent', 'in_progress', 'ready'].includes(e.status) && !e.partOnly)
+      ))
+      .catch(() => {})
 
     fetch('/api/auth/me')
       .then((r) => r.json())
@@ -1390,6 +1403,68 @@ export default function VehiclesPage() {
       </div>
       <KanbanScrollbar boardRef={kanbanRef} />
 
+      {/* At External — cars out at a shop, so the board shows the whole recon
+          picture. A queued-install pill flags parts waiting on the return
+          (they surface automatically in routing when the car comes back). */}
+      {(isAdmin || myRole === 'shop_coordinator') && externalOut.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 10 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>
+              At External — Waiting to Return
+            </p>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{externalOut.length}</span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', gap: 10 }}>
+            {externalOut.map(e => {
+              const v = vehicles.find(x => x.stockNumber === e.stockNumber)
+              const toInstall = v ? ((v as any).partsToInstall ?? 0) : 0
+              const overdueDays = e.expectedReturn && new Date(e.expectedReturn).getTime() < Date.now()
+                ? Math.floor((Date.now() - new Date(e.expectedReturn).getTime()) / 86400000)
+                : 0
+              return (
+                <Link key={e.id} href="/external" style={{
+                  display: 'block', textDecoration: 'none', color: 'inherit',
+                  background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14,
+                  padding: '12px 14px', boxShadow: '0 1px 2px rgba(24,24,27,.04)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                    <span style={{
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                      fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)',
+                      background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                      padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0,
+                    }}>#{e.stockNumber}</span>
+                    <span style={{ flex: 1 }} />
+                    {e.status === 'ready' && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 650, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16a34a' }} />Ready for pickup
+                      </span>
+                    )}
+                    {overdueDays > 0 && (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 650, color: '#b91c1c', background: '#fdecef', border: '1px solid #fecaca', padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#e11d48' }} />{overdueDays}d overdue
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: 13.5, fontWeight: 650, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
+                    {`${e.year ?? ''} ${e.make} ${e.model}`.trim()}
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    At {e.shopName}{e.expectedReturn ? ` · back ${new Date(e.expectedReturn).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}
+                  </p>
+                  {toInstall > 0 && (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 7, fontSize: 10.5, fontWeight: 650, color: '#1d4ed8', background: '#eaf0fe', border: '1px solid #bfd3fc', padding: '2px 8px', borderRadius: 100 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb' }} />
+                      {toInstall} part{toInstall === 1 ? '' : 's'} to install on return
+                    </span>
+                  )}
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Routing Modal — shared component (same one the dashboard uses) */}
       {routingVehicle && (
         <RouteVehicleModal
@@ -1577,15 +1652,16 @@ export default function VehiclesPage() {
                           const showOf = (list: typeof pairs) => (showDoneTasks ? list : list.filter(p => !p.item.done))
                           const inspDone = inspPairs.filter(p => p.item.done).length
                           const addedDone = addedPairs.filter(p => p.item.done).length
-                          // Section headers only earn their place when there's a split to show
-                          const withHeaders = inspPairs.length > 0 && (anyType || addedPairs.length > 0)
+                          // Sections only exist for a real inspection (typed items) —
+                          // an ordinary checklist is one flat task list.
+                          const withHeaders = anyType && inspPairs.length > 0
                           type Entry = { header: 'insp' | 'added' } | { pair: { item: (typeof modalChecklist)[number]; i: number } }
-                          const entries: Entry[] = [
-                            ...(withHeaders ? ([{ header: 'insp' }] as Entry[]) : []),
-                            ...(withHeaders && collapseInspTasks ? [] : showOf(inspPairs)).map(p => ({ pair: p })),
+                          const entries: Entry[] = withHeaders ? [
+                            { header: 'insp' },
+                            ...(collapseInspTasks ? [] : showOf(inspPairs)).map(p => ({ pair: p })),
                             ...(addedPairs.length > 0 ? ([{ header: 'added' }] as Entry[]) : []),
                             ...(collapseAddedTasks ? [] : showOf(addedPairs)).map(p => ({ pair: p })),
-                          ]
+                          ] : showOf(pairs).map(p => ({ pair: p }))
                           return (
                             <>
                               {openPairs.length === 0 && !showDoneTasks && (
@@ -1650,6 +1726,11 @@ export default function VehiclesPage() {
                             }}>
                               {item.item}
                             </span>
+                            {item.done && (item as Record<string, unknown>).doneAt ? (
+                              <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                                {new Date(String((item as Record<string, unknown>).doneAt)).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
+                            ) : null}
                             {/* Effective-owner chip on EVERY task so it's never ambiguous who's on it.
                                 Explicit assignee → them; original task → car owner; added+unassigned → needs admin. */}
                             {currentStage?.stage === 'mechanic' && (() => {

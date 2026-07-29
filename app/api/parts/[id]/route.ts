@@ -200,6 +200,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       }
     }
+
+    // No active recon stage → there is no checklist to carry the install and
+    // the part would silently sit on a shelf. Create a priority admin follow-up
+    // so the reminder machinery (dashboard / meeting follow-ups) surfaces it;
+    // the meeting watchlist also re-fires on this until the car gets routed.
+    const activeStage = vehicleNow?.currentStageId
+      ? await prisma.vehicleStage.findUnique({
+          where: { id: vehicleNow.currentStageId },
+          select: { status: true },
+        })
+      : null
+    const inRecon = !!activeStage && activeStage.status !== 'done' && activeStage.status !== 'skipped'
+    if (!inRecon) {
+      const title = `Part arrived — #${part.vehicle.stockNumber}: ${part.name} (car not in recon)`.slice(0, 200)
+      const dup = await prisma.task.findFirst({
+        where: { title, status: { not: 'done' } },
+        select: { id: true },
+      })
+      if (!dup) {
+        await prisma.task.create({
+          data: {
+            title,
+            description: 'The part is here but this car has no active recon stage to carry the install task. Route the car into recon or decide where the part is held.',
+            category: 'admin',
+            priority: 1,
+            createdById: user.id,
+            stockNumbers: [part.vehicle.stockNumber],
+          },
+        }).catch(() => {})
+      }
+    }
   }
 
   if (!statusChangeLogged) {

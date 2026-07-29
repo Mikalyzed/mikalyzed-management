@@ -4,8 +4,11 @@ import { getSessionUser } from '@/lib/auth'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
 import { markVehicleAsAtExternal } from '@/lib/external-repair-flow'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id')
   const repairs = await prisma.externalRepair.findMany({
+    where: id ? { id } : undefined,
     orderBy: [{ status: 'asc' }, { sentDate: 'desc' }],
   })
   return NextResponse.json({ repairs })

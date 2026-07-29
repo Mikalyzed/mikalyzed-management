@@ -16,6 +16,9 @@ model User {
   role           String   @default("sales")
   password       String   @default("")
   isActive       Boolean  @default(true) @map("is_active")
+  // "New For You" cutoff — everything assigned after this shows in the
+  // dashboard's what's-new card until the user taps Got It (which stamps it).
+  dashboardSeenAt DateTime? @map("dashboard_seen_at")
   twilioNumber   String?  @unique @map("twilio_number") // E.164 format, owns inbound + outbound SMS for this rep
   emailSignature String?  @map("email_signature") // user's outlook signature — stripped from mirrored emails
   createdAt      DateTime @default(now()) @map("created_at")
@@ -738,6 +741,14 @@ model VehiclePlanStep {
   status      String    @default("pending") // pending | active | done | skipped
   activatedAt DateTime? @map("activated_at")
   doneAt      DateTime? @map("done_at")
+
+  // Operational typing — a step can stage REAL work when it activates
+  // (confirm-first): kind 'task' appends to a recon stage checklist, kind
+  // 'external' drafts an external repair. 'generic' stays a reminder.
+  kind            String    @default("generic") // generic | task | external
+  actionStage     String?   @map("action_stage") // mechanic | detailing | content | publish (kind=task)
+  actionShop      String?   @map("action_shop") // shop name (kind=external)
+  actionCreatedAt DateTime? @map("action_created_at") // the real work exists — never double-create
 
   plan VehiclePlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 

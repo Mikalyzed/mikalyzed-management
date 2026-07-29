@@ -1,8 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import RouteVehicleModal from '@/components/RouteVehicleModal'
+import PartDetailModal from '@/components/PartDetailModal'
+import ExternalRepairModal from '@/components/ExternalRepairModal'
 import { CALENDAR_TYPE_LABELS, CALENDAR_TYPE_COLORS } from '@/lib/calendar'
 import ReconTaskCard from '@/components/ReconTaskCard'
 
@@ -23,14 +26,27 @@ type FleetFinancials = {
 
 type DashboardData = {
   user: { name: string; role: string; id: string }
+  newForYou?: {
+    since: string
+    previewFor?: string | null
+    tasks: Array<{ id: string; title: string; description: string | null; priority: number; stock: string | null; createdAt: string }>
+    parts: Array<{ id: string; name: string; status: string; stock: string; vehicle: string; createdAt: string }>
+  } | null
+  coordinator?: {
+    sourceQueue: Array<{ partId: string; part: string; stock: string; vehicle: string; ageDays: number }>
+    lanes: Array<{ name: string; cars: number; paused: number; awaitingParts: number }>
+    externalOut: Array<{ externalId: string; stock: string; vehicle: string; shop: string; status: string; expectedBack: string | null; overdueDays: number; toInstall: number }>
+    watchlist: Array<{ severity: string; stock: string | null; vehicle: string | null; where: string | null; issue: string; detail: string }>
+  } | null
   attention?: {
     routing: Array<{ id: string; stock: string; vehicle: string }>
     installs: Array<{ stageId: string; item: string; stock: string; vehicle: string }>
     installsTotal: number
-    delivered: Array<{ id: string; name: string; stock: string }>
-    approvals: Array<{ id: string; name: string; url: string | null; stock: string }>
+    delivered: Array<{ id: string; name: string; stock: string; vehicle: string }>
+    approvals: Array<{ id: string; name: string; url: string | null; stock: string; vehicle: string }>
     overdue: Array<{ id: string; stock: string; vehicle: string; shop: string; overdueDays: number }>
-    stuck: Array<{ id: string; name: string; stock: string; ageDays: number }>
+    stuck: Array<{ id: string; name: string; stock: string; vehicle: string; ageDays: number }>
+    stranded: Array<{ id: string; name: string; stock: string; vehicleId: string; vehicle: string; sold: boolean }>
     mechanics: Array<{ id: string; name: string }>
   } | null
   overview?: {
@@ -193,19 +209,319 @@ function OverviewGrid({ o }: { o: NonNullable<DashboardData['overview']> }) {
   )
 }
 
+// /dashboard?view=coordinator lets an admin see Lenny's board; Lenny gets it by role.
+function dashboardUrl() {
+  const wantView = typeof window !== 'undefined' && window.location.search.includes('view=coordinator')
+  return wantView ? '/api/dashboard?view=coordinator' : '/api/dashboard'
+}
+
+// ─── New For You — nothing is ever assigned silently. Everything added since
+// the user's last "Got it" waits here, at the very top, until acknowledged. ───
+function NewForYouCard({ n, onAcknowledge }: {
+  n: NonNullable<DashboardData['newForYou']>
+  onAcknowledge: () => Promise<void>
+}) {
+  const [busy, setBusy] = useState(false)
+  const count = n.tasks.length + n.parts.length
+  if (count === 0) return null
+  const isPreview = !!n.previewFor
+  const sinceLabel = new Date(n.since).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const timeOf = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const stockChip: React.CSSProperties = {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)',
+    background: 'var(--bg-card, #fff)', border: '1px solid var(--border)',
+    padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0,
+  }
+  return (
+    <div className="card" style={{ marginBottom: 24, padding: 22, borderLeft: '3px solid #2563eb' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>
+            New For You
+          </div>
+          <h2 style={{ fontSize: 17, fontWeight: 700, margin: '2px 0 0' }}>
+            {count} new since {sinceLabel}
+          </h2>
+          {isPreview && (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>
+              What {n.previewFor} sees at the top of his dashboard — waiting for him to acknowledge.
+            </p>
+          )}
+        </div>
+        {!isPreview && <button
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true)
+            try {
+              await fetch('/api/dashboard/seen', { method: 'POST' })
+              await onAcknowledge()
+            } finally { setBusy(false) }
+          }}
+          style={{
+            border: 'none', background: '#1a1a1a', color: '#fff', borderRadius: 10,
+            padding: '8px 16px', fontSize: 13, fontWeight: 650, cursor: 'pointer', minHeight: 0,
+            opacity: busy ? 0.6 : 1, whiteSpace: 'nowrap',
+          }}
+        >✓ Got It</button>}
+      </div>
+      {n.tasks.map(t => (
+        <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 0', borderTop: '1px solid var(--border-light, #f0f0ec)' }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: '#1d4ed8', background: '#eaf0fe', border: '1px solid #bfd3fc', padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0, marginTop: 1 }}>Task</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+              {t.stock && <span style={stockChip}>#{t.stock}</span>}
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{t.title}</span>
+              {t.priority > 0 && <span style={{ fontSize: 10.5, fontWeight: 700, color: '#b91c1c', whiteSpace: 'nowrap' }}>High priority</span>}
+            </div>
+            {t.description && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0', lineHeight: 1.45 }}>{t.description}</p>
+            )}
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{timeOf(t.createdAt)}</span>
+        </div>
+      ))}
+      {n.parts.map(pt => (
+        <div key={pt.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 0', borderTop: '1px solid var(--border-light, #f0f0ec)' }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: '#92400e', background: '#fdf3e7', border: '1px solid #fcd34d', padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0, marginTop: 1 }}>Part</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flexWrap: 'wrap' }}>
+              <span style={stockChip}>#{pt.stock}</span>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{pt.name}</span>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '3px 0 0' }}>{pt.vehicle} — find it in your Source Queue below</p>
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{timeOf(pt.createdAt)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Shop Coordinator Board — Lenny's whole loop on one page ───
+function CoordinatorBoard({ c, onChanged }: {
+  c: NonNullable<DashboardData['coordinator']>
+  onChanged: () => Promise<void>
+}) {
+  const [linkFor, setLinkFor] = useState<string | null>(null)
+  const [linkInput, setLinkInput] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const eyebrow: React.CSSProperties = {
+    fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)',
+  }
+  const stockChip: React.CSSProperties = {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)',
+    background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border)',
+    padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0,
+  }
+  const miniBtn: React.CSSProperties = {
+    border: '1px solid var(--border)', background: 'var(--bg-card, #fff)', borderRadius: 8,
+    padding: '4px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer', minHeight: 0,
+    whiteSpace: 'nowrap', color: 'var(--text-primary)',
+  }
+  const itemRow: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0',
+    fontSize: 12.5, borderBottom: '1px solid var(--border-light, #f0f0ec)',
+  }
+
+  const submitLink = async (partId: string) => {
+    if (!linkInput.trim()) return
+    setBusy(true)
+    try {
+      await fetch(`/api/parts/${partId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: linkInput.trim(), status: 'sourced' }),
+      })
+      setLinkFor(null); setLinkInput('')
+      await onChanged()
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <>
+      {/* ── Source Queue — find links for requested parts ── */}
+      <div className="card" style={{ marginBottom: 24, padding: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div>
+            <div style={eyebrow}>Source Queue</div>
+            <h2 style={{ fontSize: 17, fontWeight: 700, margin: '2px 0 0' }}>
+              {c.sourceQueue.length ? `${c.sourceQueue.length} part${c.sourceQueue.length === 1 ? '' : 's'} need a link` : 'Nothing to source'}
+            </h2>
+          </div>
+          <Link href="/parts" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>Parts page →</Link>
+        </div>
+        {c.sourceQueue.length === 0 && (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>Every requested part has been sourced. ✓</p>
+        )}
+        {c.sourceQueue.map(pt => (
+          <div key={pt.partId} style={itemRow}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <span style={stockChip}>#{pt.stock}</span>
+                <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.vehicle}</span>
+                {pt.ageDays > 7 && <span style={{ fontSize: 10.5, fontWeight: 650, color: '#b45309', whiteSpace: 'nowrap' }}>{pt.ageDays}d waiting</span>}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.part}</div>
+            </div>
+            {linkFor === pt.partId ? (
+              <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                <input
+                  autoFocus value={linkInput} onChange={e => setLinkInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') submitLink(pt.partId) }}
+                  placeholder="Paste the link…"
+                  style={{ width: 180, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5 }}
+                />
+                <button style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy || !linkInput.trim()} onClick={() => submitLink(pt.partId)}>Save</button>
+                <button style={miniBtn} disabled={busy} onClick={() => { setLinkFor(null); setLinkInput('') }}>✗</button>
+              </span>
+            ) : (
+              <button style={miniBtn} disabled={busy} onClick={() => { setLinkFor(pt.partId); setLinkInput('') }}>+ Link</button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Lanes Snapshot ── */}
+      {c.lanes.length > 0 && (
+        <div className="card" style={{ marginBottom: 24, padding: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+            <div style={eyebrow}>Mechanic Lanes</div>
+            <Link href="/mechanic-schedule" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>Mechanic board →</Link>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+            {c.lanes.map(l => (
+              <div key={l.name} style={{ background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 12, padding: '12px 14px' }}>
+                <p style={{ fontSize: 12.5, fontWeight: 700, margin: 0 }}>{l.name}</p>
+                <p style={{ fontSize: 20, fontWeight: 700, margin: '4px 0 0', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                  {l.cars}<span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-muted)' }}>{l.cars === 1 ? 'car' : 'cars'}</span>
+                </p>
+                {(l.paused > 0 || l.awaitingParts > 0) && (
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#b45309', margin: '3px 0 0' }}>
+                    {[l.paused > 0 ? `${l.paused} paused` : null, l.awaitingParts > 0 ? `${l.awaitingParts} on parts` : null].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Waiting on External ── */}
+      {c.externalOut.length > 0 && (
+        <div className="card" style={{ marginBottom: 24, padding: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={eyebrow}>Waiting on External · {c.externalOut.length}</div>
+            <Link href="/external" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>External page →</Link>
+          </div>
+          {c.externalOut.map(e => (
+            <div key={e.externalId} style={itemRow}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  <span style={stockChip}>#{e.stock}</span>
+                  <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.vehicle}</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  At {e.shop}
+                  {e.expectedBack ? ` · back ${e.expectedBack}` : ''}
+                  {e.overdueDays > 0 && <span style={{ color: '#b91c1c', fontWeight: 650 }}> · {e.overdueDays}d overdue</span>}
+                  {e.toInstall > 0 && <span style={{ color: '#1d4ed8', fontWeight: 650 }}> · {e.toInstall} part{e.toInstall === 1 ? '' : 's'} to install on return</span>}
+                </div>
+              </div>
+              {e.status === 'ready' && (
+                <span style={{ fontSize: 10.5, fontWeight: 650, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap' }}>Ready for pickup</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Shop Watchlist — same rules as the morning meeting ── */}
+      {c.watchlist.length > 0 && (
+        <div className="card" style={{ marginBottom: 24, padding: 22 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={eyebrow}>Shop Watchlist · {c.watchlist.length}</div>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Same catches as the morning meeting</span>
+          </div>
+          {c.watchlist.map((b, i) => (
+            <div key={i} style={itemRow}>
+              <span style={{
+                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                background: b.severity === 'crit' ? '#e11d48' : '#f59e0b',
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                  {b.stock && <span style={stockChip}>#{b.stock}</span>}
+                  <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.vehicle ?? '—'}</span>
+                  <span style={{ fontSize: 12, fontWeight: 650, color: b.severity === 'crit' ? '#b91c1c' : '#b45309', whiteSpace: 'nowrap' }}>{b.issue}</span>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.detail}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+// The car-first lead block every Attention item uses: stock chip + vehicle
+// name on top, the actual task/part underneath. Clickable when there's a
+// detail modal to open.
+function CarLead({ stock, vehicle, detail, sold, onOpen }: {
+  stock: string
+  vehicle: string
+  detail: React.ReactNode
+  sold?: boolean
+  onOpen?: () => void
+}) {
+  return (
+    <div
+      onClick={onOpen}
+      role={onOpen ? 'button' : undefined}
+      style={{ flex: 1, minWidth: 0, cursor: onOpen ? 'pointer' : 'default' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <span style={{
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+          fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)',
+          background: 'var(--bg-card, #fff)', border: '1px solid var(--border)',
+          padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0,
+        }}>#{stock}</span>
+        <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+          {vehicle}
+        </span>
+        {sold && <span style={{ fontSize: 10.5, fontWeight: 650, color: '#b91c1c', background: '#fdecef', border: '1px solid #fecaca', padding: '1px 7px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0 }}>Sold</span>}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {detail}
+      </div>
+    </div>
+  )
+}
+
 // ─── Attention Center — everything waiting on an admin decision ───
 // Rows expand to the actual items; each executes right here (assign, receive,
 // approve, push a date) — routing deep-links into the recon board with the
 // routing modal already open.
-function AttentionCard({ a, isAdmin, onAction }: {
+function AttentionCard({ a, isAdmin, role, onAction }: {
   a: NonNullable<DashboardData['attention']>
   isAdmin: boolean
+  role: string
   onAction: () => Promise<void>
 }) {
   const [open, setOpen] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [assignFor, setAssignFor] = useState<string | null>(null) // stageId|item key
   const [routeVehicleId, setRouteVehicleId] = useState<string | null>(null)
+  const [detailPartId, setDetailPartId] = useState<string | null>(null)
+  const [externalModalId, setExternalModalId] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const flash = (msg: string) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(t => (t === msg ? null : t)), 6000)
+  }
 
   const act = async (fn: () => Promise<Response>) => {
     setBusy(true)
@@ -218,12 +534,45 @@ function AttentionCard({ a, isAdmin, onAction }: {
     }
   }
 
+  /** Stranded part → mechanic. The server decides what's possible; the two
+   *  ask-first cases (car in recon elsewhere, car at external) come back as
+   *  409s and turn into a question / explanation here. */
+  const sendToMechanic = async (vehicleId: string, vehicleLabel: string, partIds: string[]) => {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/vehicles/${vehicleId}/send-to-mechanic`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partIds }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok) {
+        await onAction()
+        flash(d.mode === 'created'
+          ? `${vehicleLabel} is now in the Mechanic lane on the recon board with ${d.count} install task${d.count === 1 ? '' : 's'} — assign it under "Arrived parts — assign the install".`
+          : `${d.count} install task${d.count === 1 ? '' : 's'} added to ${vehicleLabel}'s mechanic checklist — assign under "Arrived parts — assign the install".`)
+        return
+      }
+      if (d.code === 'in_recon') {
+        if (window.confirm(`${vehicleLabel} is in recon at ${d.stage}. Open routing to move it to mechanic? The install tasks will be pre-filled.`)) {
+          setRouteVehicleId(vehicleId)
+        }
+      } else if (d.code === 'external') {
+        window.alert(`${vehicleLabel} is at ${d.shop}${d.expectedBack ? ` (expected back ${d.expectedBack})` : ''}. The install is queued — when the car returns and gets routed back into recon, these parts surface automatically in the routing modal.`)
+      } else {
+        window.alert(d.error || 'Could not send to mechanic.')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const rows: Array<{ key: string; n: number; area: string; label: string; crit?: boolean }> = [
     { key: 'routing', n: a.routing.length, area: 'Recon Board', label: 'Cars waiting to be routed' },
     { key: 'installs', n: a.installsTotal, area: 'Recon Board', label: 'Arrived parts — assign the install' },
     { key: 'delivered', n: a.delivered.length, area: 'Parts', label: 'Carrier says delivered — confirm received', crit: true },
     { key: 'approvals', n: a.approvals.length, area: 'Parts', label: 'Sourced parts awaiting approval' },
     { key: 'stuck', n: a.stuck.length, area: 'Parts', label: 'Stuck in requested 7+ days' },
+    { key: 'stranded', n: (a.stranded ?? []).length, area: 'Parts', label: 'Part here — car not in recon, no install plan', crit: true },
     { key: 'overdue', n: a.overdue.length, area: 'External', label: 'Repairs past their return date', crit: true },
   ].filter(r => r.n > 0)
 
@@ -289,8 +638,7 @@ function AttentionCard({ a, isAdmin, onAction }: {
 
           {open === r.key && r.key === 'routing' && a.routing.map(v => (
             <div key={v.id} style={itemRow}>
-              <span style={stockChip}>#{v.stock}</span>
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{v.vehicle}</span>
+              <CarLead stock={v.stock} vehicle={v.vehicle} detail="Finished its stage — waiting to be routed" />
               <button
                 style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }}
                 disabled={busy}
@@ -303,8 +651,7 @@ function AttentionCard({ a, isAdmin, onAction }: {
             const k = `${it.stageId}|${it.item}`
             return (
               <div key={k} style={{ ...itemRow, position: 'relative', flexWrap: 'wrap' }}>
-                <span style={stockChip}>#{it.stock}</span>
-                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{it.item}</span>
+                <CarLead stock={it.stock} vehicle={it.vehicle} detail={it.item} />
                 <button style={miniBtn} disabled={busy} onClick={() => setAssignFor(assignFor === k ? null : k)}>
                   Assign ▾
                 </button>
@@ -333,8 +680,7 @@ function AttentionCard({ a, isAdmin, onAction }: {
 
           {open === r.key && r.key === 'delivered' && a.delivered.map(p => (
             <div key={p.id} style={itemRow}>
-              <span style={stockChip}>#{p.stock}</span>
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{p.name}</span>
+              <CarLead stock={p.stock} vehicle={p.vehicle} detail={`${p.name} — carrier says delivered`} onOpen={() => setDetailPartId(p.id)} />
               <button
                 style={{ ...miniBtn, color: '#16a34a' }} disabled={busy}
                 onClick={() => act(() => fetch(`/api/parts/${p.id}`, {
@@ -347,11 +693,11 @@ function AttentionCard({ a, isAdmin, onAction }: {
 
           {open === r.key && r.key === 'approvals' && a.approvals.map(p => (
             <div key={p.id} style={itemRow}>
-              <span style={stockChip}>#{p.stock}</span>
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
-                {p.name}
-                {p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: '#2563eb', fontWeight: 600, textDecoration: 'none', fontSize: 12 }}>View link ↗</a>}
-              </span>
+              <CarLead
+                stock={p.stock} vehicle={p.vehicle}
+                detail={<>{p.name}{p.url && <a href={p.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ marginLeft: 8, color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>View link ↗</a>}</>}
+                onOpen={() => setDetailPartId(p.id)}
+              />
               <button
                 style={{ ...miniBtn, color: '#16a34a' }} disabled={busy}
                 onClick={() => act(() => fetch(`/api/parts/${p.id}`, {
@@ -371,10 +717,11 @@ function AttentionCard({ a, isAdmin, onAction }: {
 
           {open === r.key && r.key === 'overdue' && a.overdue.map(e => (
             <div key={e.id} style={itemRow}>
-              <span style={stockChip}>#{e.stock}</span>
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
-                {e.vehicle} <span style={{ color: '#b91c1c', fontWeight: 600 }}>· {e.overdueDays}d late at {e.shop}</span>
-              </span>
+              <CarLead
+                stock={e.stock} vehicle={e.vehicle}
+                detail={<span style={{ color: '#b91c1c', fontWeight: 600 }}>{e.overdueDays}d late at {e.shop}</span>}
+                onOpen={() => setExternalModalId(e.id)}
+              />
               <button
                 style={miniBtn} disabled={busy}
                 title="Called the shop — expected back in a week"
@@ -383,21 +730,95 @@ function AttentionCard({ a, isAdmin, onAction }: {
                   body: JSON.stringify({ expectedReturn: new Date(Date.now() + 7 * 86400000).toISOString() }),
                 }))}
               >+1 wk</button>
-              <Link href="/external" style={{ ...miniBtn, textDecoration: 'none' }}>Open ›</Link>
+              <button style={miniBtn} disabled={busy} onClick={() => setExternalModalId(e.id)}>Open ›</button>
             </div>
           ))}
 
+          {open === r.key && r.key === 'stranded' && (() => {
+            // One block per car — a car with several stranded parts reads as
+            // one problem with N parts, not N separate rows.
+            const byStock = new Map<string, typeof a.stranded>()
+            for (const p of a.stranded ?? []) {
+              if (!byStock.has(p.stock)) byStock.set(p.stock, [])
+              byStock.get(p.stock)!.push(p)
+            }
+            return Array.from(byStock.values()).map(group => {
+              const v = group[0]
+              if (group.length === 1) return (
+                <div key={v.id} style={itemRow}>
+                  <CarLead
+                    stock={v.stock} vehicle={v.vehicle}
+                    sold={v.sold}
+                    detail={v.name}
+                    onOpen={() => setDetailPartId(v.id)}
+                  />
+                  <button
+                    style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy}
+                    onClick={() => sendToMechanic(v.vehicleId, v.vehicle, [v.id])}
+                  >→ Mechanic</button>
+                </div>
+              )
+              return (
+                <div key={v.stock}>
+                  <div style={{ ...itemRow, paddingBottom: 4 }}>
+                    <CarLead stock={v.stock} vehicle={v.vehicle} sold={v.sold} detail={`${group.length} parts arrived — no install plan`} />
+                    <button
+                      style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy}
+                      onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
+                    >→ Mechanic</button>
+                  </div>
+                  {group.map(p => (
+                    <div key={p.id} style={{ ...itemRow, borderTop: 'none', paddingTop: 3, paddingBottom: 6, paddingLeft: 62 }}>
+                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500, fontSize: 12.5 }}>{p.name}</span>
+                      <button style={miniBtn} disabled={busy} onClick={() => setDetailPartId(p.id)}>Open ›</button>
+                    </div>
+                  ))}
+                </div>
+              )
+            })
+          })()}
+
           {open === r.key && r.key === 'stuck' && a.stuck.map(p => (
             <div key={p.id} style={itemRow}>
-              <span style={stockChip}>#{p.stock}</span>
-              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
-                {p.name} <span style={{ color: '#b45309', fontWeight: 600 }}>· {p.ageDays}d in requested</span>
-              </span>
-              <Link href={`/parts#part-${p.id}`} style={{ ...miniBtn, textDecoration: 'none' }}>Open ›</Link>
+              <CarLead
+                stock={p.stock} vehicle={p.vehicle}
+                detail={<>{p.name} <span style={{ color: '#b45309', fontWeight: 600 }}>· {p.ageDays}d in requested</span></>}
+                onOpen={() => setDetailPartId(p.id)}
+              />
+              <button style={miniBtn} disabled={busy} onClick={() => setDetailPartId(p.id)}>Open ›</button>
             </div>
           ))}
         </div>
       ))}
+
+      {toast && (
+        <div role="status" style={{
+          position: 'fixed', left: '50%', bottom: 28, transform: 'translateX(-50%)', zIndex: 1400,
+          maxWidth: 'min(560px, calc(100vw - 32px))',
+          background: '#1a1a1a', color: '#fff', borderRadius: 12, padding: '12px 18px',
+          fontSize: 13, fontWeight: 500, lineHeight: 1.45,
+          boxShadow: '0 8px 24px rgba(24,24,27,0.28)',
+        }}>
+          {toast}
+        </div>
+      )}
+
+      {detailPartId && (
+        <PartDetailModal
+          partId={detailPartId}
+          isAdmin={isAdmin}
+          role={role}
+          onClose={() => setDetailPartId(null)}
+          onChanged={onAction}
+        />
+      )}
+      {externalModalId && (
+        <ExternalRepairModal
+          externalId={externalModalId}
+          onClose={() => setExternalModalId(null)}
+          onChanged={onAction}
+        />
+      )}
 
       {/* The real routing modal, natively — instant, no iframe */}
       {routeVehicleId && (
@@ -768,15 +1189,37 @@ function AddButton() {
 }
 
 // ─── Main Dashboard ───
+// Suspense wrapper: useSearchParams (coordinator view toggle) requires it
+// for static prerendering in Next 15.
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardInner />
+    </Suspense>
+  )
+}
+
+function DashboardInner() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [financials, setFinancials] = useState<FleetFinancials | null>(null)
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [expandedApproval, setExpandedApproval] = useState<string | null>(null)
   const [adjustedHours, setAdjustedHours] = useState<Record<string, number>>({})
+  // Refetch when ?view=coordinator toggles — a query-only nav doesn't remount the page
+  const searchParams = useSearchParams()
+  const coordinatorView = searchParams.get('view') === 'coordinator'
 
   useEffect(() => {
-    fetch('/api/dashboard').then(r => r.json()).then(setData).catch(console.error)
+    // Tolerant parse: a mid-restart or errored server returns an empty body —
+    // keep the spinner (and log) rather than crashing the page.
+    fetch(dashboardUrl())
+      .then(async r => {
+        if (!r.ok) throw new Error(`dashboard ${r.status}`)
+        const txt = await r.text()
+        return txt ? (JSON.parse(txt) as DashboardData) : null
+      })
+      .then(d => { if (d) setData(d) })
+      .catch(console.error)
     fetch('/api/dashboard/financials')
       .then(async (r) => {
         if (!r.ok) return null
@@ -786,12 +1229,42 @@ export default function DashboardPage() {
       })
       .then((d) => d && setFinancials(d))
       .catch(() => {})
-  }, [])
+  }, [coordinatorView])
 
   if (!data) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <div style={{ width: 24, height: 24, border: '2px solid #e0e0e0', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      </div>
+    )
+  }
+
+  // Admin visiting ?view=coordinator gets the BOARD, not their dashboard with
+  // extra cards buried below — a distinct page so the nav click visibly lands.
+  const coordinatorFocus = coordinatorView && data.user.role === 'admin'
+  if (coordinatorFocus) {
+    const refreshBoard = async () => {
+      const fresh = await fetch(dashboardUrl()).then(r => r.json()).catch(() => null)
+      if (fresh) setData(fresh)
+    }
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 24, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>Boards</div>
+            <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', margin: '2px 0 0' }}>Shop Coordinator Board</h1>
+          </div>
+          <Link href="/dashboard" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>← My Dashboard</Link>
+        </div>
+        {data.newForYou && <NewForYouCard n={data.newForYou} onAcknowledge={refreshBoard} />}
+        {data.attention && (
+          <AttentionCard a={data.attention} isAdmin={true} role={data.user.role} onAction={refreshBoard} />
+        )}
+        {data.coordinator ? (
+          <CoordinatorBoard c={data.coordinator} onChanged={refreshBoard} />
+        ) : (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading board…</p>
+        )}
       </div>
     )
   }
@@ -828,12 +1301,22 @@ export default function DashboardPage() {
       </div>
 
       {/* ═══ Fleet Financials (admin + sales_manager only) ═══ */}
-      {data.attention && <AttentionCard a={data.attention} isAdmin={isAdmin} onAction={async () => {
-        const fresh = await fetch('/api/dashboard').then(r => r.json()).catch(() => null)
+      {data.newForYou && <NewForYouCard n={data.newForYou} onAcknowledge={async () => {
+        const fresh = await fetch(dashboardUrl()).then(r => r.json()).catch(() => null)
         if (fresh) setData(fresh)
       }} />}
 
-      {data.overview && <OverviewGrid o={data.overview} />}
+      {data.attention && <AttentionCard a={data.attention} isAdmin={isAdmin} role={data.user.role} onAction={async () => {
+        const fresh = await fetch(dashboardUrl()).then(r => r.json()).catch(() => null)
+        if (fresh) setData(fresh)
+      }} />}
+
+      {data.overview && !coordinatorFocus && <OverviewGrid o={data.overview} />}
+
+      {data.coordinator && <CoordinatorBoard c={data.coordinator} onChanged={async () => {
+        const fresh = await fetch(dashboardUrl()).then(r => r.json()).catch(() => null)
+        if (fresh) setData(fresh)
+      }} />}
 
       {(isAdmin || data.user.role === 'sales_manager') && financials && <FleetFinancialsWidget f={financials} />}
 

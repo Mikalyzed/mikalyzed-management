@@ -215,6 +215,45 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       },
     }).catch(() => {})
 
+    // Game plan hook: if the plan's ACTIVE step is a task for THIS stage and
+    // its work hasn't been created yet, attach it to the fresh checklist now —
+    // the roadmap's work arrives with the car, nobody has to remember it.
+    {
+      const planStep = await tx.vehiclePlanStep.findFirst({
+        where: {
+          plan: { vehicleId: id },
+          status: 'active',
+          kind: 'task',
+          actionStage: nextStage,
+          actionCreatedAt: null,
+        },
+      })
+      if (planStep) {
+        const fresh = await tx.vehicleStage.findUnique({ where: { id: newStage.id }, select: { checklist: true } })
+        const list = Array.isArray(fresh?.checklist) ? fresh!.checklist as Array<Record<string, unknown>> : []
+        const have = list.some(c => String(c?.item ?? '').trim().toLowerCase() === planStep.title.trim().toLowerCase())
+        if (!have) {
+          await tx.vehicleStage.update({
+            where: { id: newStage.id },
+            data: {
+              checklist: [...list, {
+                item: planStep.title, done: false, note: planStep.detail ?? '',
+                addedByMechanic: true, approved: 'approved',
+                assigneeId: null, assigneeName: null, fromPlan: true,
+              }] as object[],
+            },
+          })
+        }
+        await tx.vehiclePlanStep.update({ where: { id: planStep.id }, data: { actionCreatedAt: new Date() } })
+        await tx.activityLog.create({
+          data: {
+            entityType: 'vehicle', entityId: id, action: 'plan_step_action_task', actorId: user.id,
+            details: { step: planStep.title, stage: nextStage, via: 'routing' },
+          },
+        }).catch(() => {})
+      }
+    }
+
     // Stamp parts whose install task was just generated so they don't get re-suggested
     // in future routing cycles.
     if (installPartIds.length > 0) {

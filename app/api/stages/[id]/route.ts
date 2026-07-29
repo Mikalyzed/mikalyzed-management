@@ -115,6 +115,36 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
       }
     }
+    // Stamp doneAt on the transition to done, server-side, so every client agrees
+    // on when a task was finished. Items that were already done keep their prior
+    // doneAt — legacy completions (pre-feature, no timestamp) stay undated rather
+    // than getting today's date. Unchecking clears the stamp.
+    if (Array.isArray(body.checklist)) {
+      const oldList = Array.isArray(stage.checklist) ? (stage.checklist as Array<Record<string, unknown>>) : []
+      const prevDone = new Map<string, Array<unknown>>()
+      for (const c of oldList) {
+        if (!c?.done) continue
+        const k = String(c.item ?? '').trim().toLowerCase()
+        if (!prevDone.has(k)) prevDone.set(k, [])
+        prevDone.get(k)!.push(c.doneAt ?? null)
+      }
+      const nowIso = new Date().toISOString()
+      for (const it of body.checklist as Array<Record<string, unknown>>) {
+        if (!it || typeof it !== 'object') continue
+        if (it.done) {
+          const q = prevDone.get(String(it.item ?? '').trim().toLowerCase())
+          if (q && q.length > 0) {
+            const prior = q.shift()
+            if (prior) it.doneAt = prior
+            else delete it.doneAt
+          } else if (!it.doneAt) {
+            it.doneAt = nowIso
+          }
+        } else {
+          delete it.doneAt
+        }
+      }
+    }
     data.checklist = body.checklist
 
     // Invariant: a mechanic must not stay "done" while they still own an unchecked
