@@ -301,8 +301,9 @@ function NewForYouCard({ n, onAcknowledge }: {
 }
 
 // ─── Shop Coordinator Board — Lenny's whole loop on one page ───
-function CoordinatorBoard({ c, onChanged }: {
+function CoordinatorBoard({ c, tasks, onChanged }: {
   c: NonNullable<DashboardData['coordinator']>
+  tasks: DashboardData['myBoardTasks']
   onChanged: () => Promise<void>
 }) {
   const [linkFor, setLinkFor] = useState<string | null>(null)
@@ -345,19 +346,49 @@ function CoordinatorBoard({ c, onChanged }: {
 
   return (
     <>
-      {/* ── Source Queue — find links for requested parts ── */}
+      {/* ── Assignments — his tasks + parts to source, one section ── */}
       <div className="card" style={{ marginBottom: 24, padding: 22 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
           <div>
-            <div style={eyebrow}>Source Queue</div>
+            <div style={eyebrow}>Assignments</div>
             <h2 style={{ fontSize: 17, fontWeight: 700, margin: '2px 0 0' }}>
-              {c.sourceQueue.length ? `${c.sourceQueue.length} part${c.sourceQueue.length === 1 ? '' : 's'} need a link` : 'Nothing to source'}
+              {(tasks || []).length + c.sourceQueue.length === 0
+                ? 'All caught up'
+                : [
+                    (tasks || []).length ? `${(tasks || []).length} task${(tasks || []).length === 1 ? '' : 's'}` : null,
+                    c.sourceQueue.length ? `${c.sourceQueue.length} part${c.sourceQueue.length === 1 ? '' : 's'} to source` : null,
+                  ].filter(Boolean).join(' · ')}
             </h2>
           </div>
           <Link href="/parts" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>Parts page →</Link>
         </div>
-        {c.sourceQueue.length === 0 && (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>Every requested part has been sourced. ✓</p>
+        {(tasks || []).map(t => (
+          <div key={t.id} style={itemRow}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.4 }}>{t.title}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
+                {t.priority > 0 ? 'High priority' : 'Task'}
+                {t.dueDate && ` · due ${new Date(t.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+              </div>
+            </div>
+            <button
+              style={{ ...miniBtn, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650 }}
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true)
+                try {
+                  await fetch(`/api/board-tasks/${t.id}`, {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'done' }),
+                  })
+                  await onChanged()
+                } finally { setBusy(false) }
+              }}
+            >✓ Done</button>
+          </div>
+        ))}
+        {(tasks || []).length === 0 && c.sourceQueue.length === 0 && (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>No open tasks and every requested part has been sourced. ✓</p>
         )}
         {c.sourceQueue.map(pt => (
           <div key={pt.partId} style={{ ...itemRow, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
@@ -1306,7 +1337,7 @@ function DashboardInner() {
           <AttentionCard a={data.attention} isAdmin={true} role={data.user.role} onAction={refreshBoard} />
         )}
         {data.coordinator ? (
-          <CoordinatorBoard c={data.coordinator} onChanged={refreshBoard} />
+          <CoordinatorBoard c={data.coordinator} tasks={data.myBoardTasks || []} onChanged={refreshBoard} />
         ) : (
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading board…</p>
         )}
@@ -1374,7 +1405,7 @@ function DashboardInner() {
       )}
 
 
-      {data.coordinator && <CoordinatorBoard c={data.coordinator} onChanged={async () => {
+      {data.coordinator && <CoordinatorBoard c={data.coordinator} tasks={data.myBoardTasks || []} onChanged={async () => {
         const fresh = await fetch(dashboardUrl()).then(r => r.json()).catch(() => null)
         if (fresh) setData(fresh)
       }} />}
@@ -1417,12 +1448,12 @@ function DashboardInner() {
       )}
 
       {/* ═══ My Assignments — between pipeline and approvals so personal items aren't buried ═══ */}
-      {hasAssignments && <MyAssignments data={data} refresh={async () => {
+      {hasAssignments && data.user.role !== 'shop_coordinator' && <MyAssignments data={data} refresh={async () => {
         const fresh = await fetch('/api/dashboard').then(r => r.json())
         setData(fresh)
       }} />}
 
-      {!hasAssignments && !isAdmin && (
+      {!hasAssignments && !isAdmin && data.user.role !== 'shop_coordinator' && (
         <div className="card" style={{ textAlign: 'center', padding: 40, marginBottom: 32, color: 'var(--text-muted)' }}>
           No assignments right now. You're all caught up.
         </div>
