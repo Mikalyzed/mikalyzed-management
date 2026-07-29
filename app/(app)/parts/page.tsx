@@ -511,7 +511,17 @@ function AddPartModal({ onClose, onAdded }: { onClose: () => void; onAdded: () =
   useEffect(() => {
     fetch('/api/users').then(r => r.json()).then(d => {
       const list = (d.users || d) as Array<{ id: string; name: string; isActive?: boolean }>
-      setTeam(list.filter(u => u.isActive !== false).map(u => ({ id: u.id, name: u.name })))
+      // Picker order: the people who actually get parts first (Lenny, Paul,
+      // Andrej), everyone else alphabetical after.
+      const FIRST = ['lenny', 'paul', 'andrej']
+      const rank = (n: string) => {
+        const i = FIRST.findIndex(f => n.toLowerCase().startsWith(f))
+        return i === -1 ? FIRST.length : i
+      }
+      setTeam(list
+        .filter(u => u.isActive !== false)
+        .map(u => ({ id: u.id, name: u.name }))
+        .sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name)))
     }).catch(() => {})
     fetch('/api/vehicles')
       .then(r => r.json())
