@@ -69,9 +69,6 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
   const [selectedChip, setSelectedChip] = useState<number | null>(null)
   const [updateNote, setUpdateNote] = useState('')
   const [customOpen, setCustomOpen] = useState(false)
-  // Note-only follow-up (no date change)
-  const [followNote, setFollowNote] = useState('')
-  const [showFollowForm, setShowFollowForm] = useState(false)
 
   const load = () => fetch(`/api/external?id=${externalId}`)
     .then(r => r.json())
@@ -272,29 +269,6 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                   ))}
                 </div>
               </>
-            )}
-
-            {showFollowForm ? (
-              <div style={{ marginBottom: 16 }}>
-                <textarea
-                  autoFocus rows={2} value={followNote} onChange={e => setFollowNote(e.target.value)}
-                  placeholder="Called the shop — what did they say?"
-                  style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 13.5, resize: 'vertical', marginBottom: 8 }}
-                />
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    style={{ ...btn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc' }}
-                    disabled={saving || !followNote.trim()}
-                    onClick={async () => {
-                      const ok = await patch({ addFollowUp: { note: followNote.trim() } })
-                      if (ok) { setFollowNote(''); setShowFollowForm(false) }
-                    }}
-                  >Log Follow-Up</button>
-                  <button style={btn} disabled={saving} onClick={() => setShowFollowForm(false)}>Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <button style={{ ...btn, marginBottom: 12 }} disabled={saving} onClick={() => setShowFollowForm(true)}>+ Follow-Up</button>
             )}
 
             {/* Terminal actions: 50/50, then Close full width */}
