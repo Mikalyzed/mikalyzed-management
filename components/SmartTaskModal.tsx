@@ -123,26 +123,58 @@ export default function SmartTaskModal({ onClose, onCreated }: {
           </div>
         )}
 
-        {proposal && !question && (
+        {proposal && !question && (() => {
+          const stockPart = proposal.vehicleLabel?.split(' · ') ?? []
+          const previewSteps = proposal.kind === 'coordination' ? [
+            { n: '✓', label: `External logged — ${proposal.shop ?? 'shop'}`, sub: `${proposal.work ?? 'work as described'} · created now as Not Scheduled`, green: true },
+            { n: '2', label: 'Transport arranged', sub: `${proposal.assigneeName?.split(' ')[0] ?? 'The assignee'} sets up the tow (or drive) from the card` },
+            { n: '3', label: `At ${proposal.shop ?? 'the shop'}`, sub: 'Marked Sent when it actually leaves' },
+          ] : []
+          return (
           <div style={{ border: '1px solid var(--border)', background: 'var(--bg-primary, #f8f8f6)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
-            <p style={eyebrow}>This creates</p>
-            <p style={{ fontSize: 13.5, fontWeight: 650, margin: '0 0 8px', lineHeight: 1.4 }}>{proposal.title}</p>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: proposal.kind === 'coordination' ? 10 : 0 }}>
-              {proposal.vehicleLabel && <span style={chip}>{proposal.vehicleLabel}</span>}
-              {proposal.assigneeName && <span style={chip}>→ {proposal.assigneeName}</span>}
-              <span style={{ ...chip, background: proposal.kind === 'coordination' ? '#eaf0fe' : 'var(--bg-primary, #f8f8f6)', color: proposal.kind === 'coordination' ? '#1d4ed8' : 'var(--text-secondary)', border: proposal.kind === 'coordination' ? '1px solid #bfd3fc' : '1px solid var(--border)' }}>
-                {proposal.kind === 'coordination' ? 'Coordination — with checkpoints' : 'Simple task'}
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+              <p style={{ ...eyebrow, margin: 0 }}>This creates</p>
+              <span style={{ fontSize: 10.5, fontWeight: 650, color: proposal.kind === 'coordination' ? '#1d4ed8' : 'var(--text-muted)' }}>
+                {proposal.kind === 'coordination' ? 'Coordination' : 'Simple task'}
               </span>
             </div>
-            {proposal.kind === 'coordination' && (
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                <div>① External logged{proposal.shop ? ` — ${proposal.shop}` : ''}{proposal.work ? ` · ${proposal.work}` : ''} <span style={{ color: '#16a34a', fontWeight: 650 }}>(created now, Not Scheduled)</span></div>
-                <div>② Transport arranged — from the task card when it's set up</div>
-                <div>③ At {proposal.shop ?? 'the shop'} — marked when it actually leaves</div>
+
+            {/* Mirrors the task card Lenny will actually see */}
+            {stockPart[0] && <div style={{ marginBottom: 4 }}><span style={chip}>{stockPart[0]}</span></div>}
+            {stockPart[1] && (
+              <div style={{ fontWeight: 700, fontSize: 13, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: 2 }}>
+                {stockPart[1]}
+              </div>
+            )}
+            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.45 }}>{proposal.title}</div>
+            {proposal.assigneeName && (
+              <div style={{ fontSize: 11.5, fontWeight: 650, color: 'var(--text-muted)', marginTop: 3 }}>→ {proposal.assigneeName}</div>
+            )}
+
+            {previewSteps.length > 0 && (
+              <div style={{ position: 'relative', marginTop: 10, paddingLeft: 2 }}>
+                <div aria-hidden style={{ position: 'absolute', left: 10, top: 12, bottom: 12, width: 2, background: 'var(--border-light, #f0f0ec)', borderRadius: 2 }} />
+                {previewSteps.map((st, si) => (
+                  <div key={si} style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: si === previewSteps.length - 1 ? '5px 0 0' : '5px 0 12px', position: 'relative' }}>
+                    <span style={{
+                      width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 10, fontWeight: 800, zIndex: 1, boxSizing: 'border-box',
+                      background: st.green ? '#16a34a' : '#fff',
+                      color: st.green ? '#fff' : 'var(--text-muted)',
+                      border: st.green ? '2px solid #16a34a' : '2px solid var(--border)',
+                    }}>{st.n}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 12.5, fontWeight: st.green ? 500 : 650, lineHeight: 1.3, color: st.green ? 'var(--text-muted)' : 'var(--text-primary)' }}>{st.label}</span>
+                      <span style={{ display: 'block', fontSize: 11, color: st.green ? '#16a34a' : 'var(--text-muted)', marginTop: 1, lineHeight: 1.4 }}>{st.sub}</span>
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
-        )}
+          )
+        })()}
 
         {error && <p style={{ fontSize: 12.5, color: '#b91c1c', margin: '0 0 10px' }}>{error}</p>}
 
