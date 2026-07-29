@@ -55,6 +55,7 @@ export default function WatchlistPage() {
   const [partId, setPartId] = useState<string | null>(null)
   const [routeVehicleId, setRouteVehicleId] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
+  const [expandedParts, setExpandedParts] = useState<Set<number>>(new Set())
   const [role, setRole] = useState('')
 
   const notify = (msg: string) => {
@@ -264,6 +265,33 @@ export default function WatchlistPage() {
               </p>
               {it.where && (
                 <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '6px 0 0' }}>Now: {it.where}</p>
+              )}
+              {it.fix?.kind === 'install_tasks' && it.fix.parts.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <button
+                    onClick={() => setExpandedParts(prev => {
+                      const next = new Set(prev)
+                      if (next.has(i)) next.delete(i); else next.add(i)
+                      return next
+                    })}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      background: 'none', border: 'none', padding: 0, minHeight: 0, cursor: 'pointer',
+                      fontSize: 12, fontWeight: 650, color: '#1d4ed8',
+                    }}
+                  >
+                    {expandedParts.has(i) ? '▾ Hide parts' : `▸ Show ${it.fix.parts.length} parts`}
+                  </button>
+                  {expandedParts.has(i) && (
+                    <div style={{ border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 8, marginTop: 6, overflow: 'hidden' }}>
+                      {it.fix.parts.map(pt => (
+                        <div key={pt.id} style={{ padding: '6px 10px', fontSize: 12, borderBottom: '1px solid var(--border-light, #f0f0ec)', lineHeight: 1.4 }}>
+                          {pt.name}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
               {actionsFor(it) && (
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
