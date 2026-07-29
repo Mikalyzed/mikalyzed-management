@@ -662,7 +662,8 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
             <div key={v.id} style={itemRow}>
               <CarLead stock={v.stock} vehicle={v.vehicle} detail="Finished its stage — waiting to be routed" />
               <button
-                style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }}
+                className="att-mech-btn"
+                style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }}
                 disabled={busy}
                 onClick={() => setRouteVehicleId(v.id)}
               >Route →</button>
