@@ -25,6 +25,7 @@ export type BottleneckFix =
   | { kind: 'confirm_received'; partId: string }
   | { kind: 'remove_task'; stageId: string; idx: number; item: string }
   | { kind: 'send_to_mechanic'; vehicleId: string; partId: string } // stranded part → car into mechanic
+  | { kind: 'set_transport_date'; transportId: string } // tow needs a pickup date
 
 export type Bottleneck = {
   severity: 'crit' | 'warn'
@@ -225,6 +226,32 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
           ? `"${p.part}" arrived but this car is marked sold — install it before delivery, or return the part.`
           : `"${p.part}" arrived but this car has no active recon stage to carry the install. Route it into recon (the install task will surface in routing) or log where the part is being held.`,
         fix: { kind: 'send_to_mechanic', vehicleId: p.vehicleId, partId: p.partId },
+      })
+    }
+  }
+
+  // 5c3. Tows that fall through the cracks: requested with no pickup date,
+  // or the pickup date came and went while the request just sat there.
+  for (const tr of r.transports) {
+    if (!tr.scheduledDate && tr.ageDays >= 2) {
+      out.push({
+        severity: 'warn',
+        stock: tr.stock,
+        vehicle: tr.vehicle,
+        where: whereOf(tr.stock),
+        issue: `Tow not scheduled — requested ${tr.ageDays}d ago`,
+        detail: `${tr.from} → ${tr.to}. Nobody has set a pickup date — set one or the car never moves.`,
+        fix: { kind: 'set_transport_date', transportId: tr.transportId },
+      })
+    } else if (tr.scheduledDate && tr.scheduledDate < today) {
+      out.push({
+        severity: 'warn',
+        stock: tr.stock,
+        vehicle: tr.vehicle,
+        where: whereOf(tr.stock),
+        issue: 'Pickup date passed',
+        detail: `${tr.from} → ${tr.to} was scheduled for ${tr.scheduledDate}. If the tow happened, mark the external Sent; otherwise set a new date.`,
+        fix: { kind: 'set_transport_date', transportId: tr.transportId },
       })
     }
   }

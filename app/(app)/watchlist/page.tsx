@@ -16,6 +16,7 @@ type Fix =
   | { kind: 'confirm_received'; partId: string }
   | { kind: 'remove_task'; stageId: string; idx: number; item: string }
   | { kind: 'send_to_mechanic'; vehicleId: string; partId: string }
+  | { kind: 'set_transport_date'; transportId: string }
 
 type Item = {
   severity: 'crit' | 'warn'
@@ -192,6 +193,20 @@ export default function WatchlistPage() {
             style={blueBtn} disabled={busy}
             onClick={() => sendToMechanic(f.vehicleId, it.vehicle ?? 'This car', f.partId)}
           >→ Add Vehicle to Recon</button>
+        )
+      case 'set_transport_date':
+        return (
+          <>
+            {[{ d: 1, l: 'Tomorrow' }, { d: 3, l: '+3d' }, { d: 7, l: '+1wk' }].map(o => (
+              <button
+                key={o.d} style={blueBtn} disabled={busy}
+                onClick={() => run(() => fetch(`/api/transport/${f.transportId}`, {
+                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ scheduledDate: new Date(Date.now() + o.d * DAY_MS).toISOString(), status: 'scheduled' }),
+                }), 'Pickup scheduled.')}
+              >{o.l}</button>
+            ))}
+          </>
         )
       case 'remove_task':
         return (

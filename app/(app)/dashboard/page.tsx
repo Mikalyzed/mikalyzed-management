@@ -317,6 +317,8 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
   const [boughtPart, setBoughtPart] = useState<{ id: string; name: string } | null>(null)
   const [externalActionId, setExternalActionId] = useState<string | null>(null)
   const [assignTab, setAssignTab] = useState<'all' | 'tasks' | 'parts'>('all')
+  const [towAskFor, setTowAskFor] = useState<string | null>(null) // task id
+  const [towDate, setTowDate] = useState('')
   const [busy, setBusy] = useState(false)
 
   const eyebrow: React.CSSProperties = {
@@ -461,34 +463,7 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                     : 'No tow scheduled yet',
                   action: transportArranged
                     ? <Link href="/transport" style={{ fontSize: 12, fontWeight: 650, color: '#1d4ed8', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0, minHeight: 0 }}>Open ›</Link>
-                    : (m.vehicleId ? textLink('+ Create', async () => {
-                        setBusy(true)
-                        try {
-                          const res = await fetch('/api/transport', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              vehicleId: m.vehicleId,
-                              vehicleDescription: `${m.vehicleDesc} (#${m.stock})`,
-                              vin: m.vin || undefined,
-                              pickupLocation: 'Mikalyzed — Warehouse',
-                              deliveryLocation: m.shop,
-                              purpose: 'other',
-                              purposeNote: t.title,
-                            }),
-                          })
-                          if (res.ok) {
-                            const d = await res.json().catch(() => ({}))
-                            const trId = d.request?.id ?? d.id
-                            if (trId) {
-                              await fetch(`/api/board-tasks/${t.id}`, {
-                                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ transportRequestId: trId }),
-                              })
-                            }
-                            await onChanged()
-                          }
-                        } finally { setBusy(false) }
-                      }) : undefined),
+                    : (m.vehicleId ? textLink('+ Create', () => { setTowAskFor(towAskFor === t.id ? null : t.id); setTowDate('') }) : undefined),
                 })
                 steps.push({
                   done: atShop,
@@ -525,6 +500,66 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                   </div>
                 )
               })()}
+              {/* Pickup-date ask: a tow without a date is tracked as unscheduled
+                  and chased by the watchlist — it never just floats. */}
+              {t.mission && towAskFor === t.id && !t.mission.transportId && (() => {
+                const m = t.mission
+                const createTow = async (withDate: boolean) => {
+                  setBusy(true)
+                  try {
+                    const res = await fetch('/api/transport', {
+                      method: 'POST', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        vehicleId: m.vehicleId,
+                        vehicleDescription: `${m.vehicleDesc} (#${m.stock})`,
+                        vin: m.vin || undefined,
+                        pickupLocation: 'Mikalyzed — Warehouse',
+                        deliveryLocation: m.shop,
+                        purpose: 'other',
+                        purposeNote: t.title,
+                        ...(withDate && towDate ? { scheduledDate: towDate } : {}),
+                      }),
+                    })
+                    if (res.ok) {
+                      const d = await res.json().catch(() => ({}))
+                      const trId = d.request?.id ?? d.id
+                      if (trId) {
+                        await fetch(`/api/board-tasks/${t.id}`, {
+                          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ transportRequestId: trId }),
+                        })
+                      }
+                      setTowAskFor(null); setTowDate('')
+                      await onChanged()
+                    }
+                  } finally { setBusy(false) }
+                }
+                return (
+                  <div style={{ border: '1px solid #bfd3fc', background: '#f6f9ff', borderRadius: 10, padding: '10px 12px', marginTop: 8 }}>
+                    <p style={{ fontSize: 12, fontWeight: 650, margin: '0 0 7px' }}>When is the pickup?</p>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <input
+                        type="date" value={towDate} onChange={e => setTowDate(e.target.value)}
+                        style={{ flex: 1, minWidth: 130, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5, background: '#fff' }}
+                      />
+                      <button
+                        style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650, opacity: towDate ? 1 : 0.5 }}
+                        disabled={busy || !towDate}
+                        onClick={() => createTow(true)}
+                      >Create — Scheduled</button>
+                      <button
+                        style={{ ...miniBtn, fontWeight: 650 }}
+                        disabled={busy}
+                        onClick={() => createTow(false)}
+                      >Not Scheduled Yet</button>
+                    </div>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '7px 0 0', lineHeight: 1.45 }}>
+                      No date is fine — it goes in as unscheduled and the system reminds until a pickup date is set.
+                    </p>
+                  </div>
+                )
+              })()}
+
               {/* Completion is EARNED: the button appears once the records say the work happened */}
               {t.mission?.looksDone && (
                 <button

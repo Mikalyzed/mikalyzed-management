@@ -24,7 +24,7 @@ function daysSince(d: Date | null) {
 }
 
 export async function buildVehicleStatusReport() {
-  const [vehicles, externals, plans, strayParts] = await Promise.all([
+  const [vehicles, externals, plans, activeTransports, strayParts] = await Promise.all([
     prisma.vehicle.findMany({
       where: {
         OR: [
@@ -61,6 +61,16 @@ export async function buildVehicleStatusReport() {
       orderBy: { expectedReturn: 'asc' },
     }),
     prisma.vehiclePlan.findMany({ include: { steps: { orderBy: { order: 'asc' } } } }),
+    // Open tows: a transport without a pickup date (or past one) is a crack
+    // things fall into — the watchlist chases them.
+    prisma.transportRequest.findMany({
+      where: { status: { in: ['requested', 'scheduled'] } },
+      select: {
+        id: true, vehicleDescription: true, pickupLocation: true, deliveryLocation: true,
+        scheduledDate: true, createdAt: true, status: true,
+        vehicle: { select: { stockNumber: true, year: true, make: true, model: true } },
+      },
+    }),
     // Open parts whose car fell OUT of the active set (sold/removed): the part
     // still needs resolving — install before delivery, or return it. Without
     // this they'd vanish from the pipeline the moment the car sells.
@@ -242,7 +252,19 @@ export async function buildVehicleStatusReport() {
     .filter(v => v.inventoryStatus == null)
     .map(v => `${v.stockNumber} ${vehicleName(v)} — no inventory status set (recon status: ${v.status})`)
 
+  const transports = activeTransports.map(t => ({
+    transportId: t.id,
+    stock: t.vehicle?.stockNumber ?? null,
+    vehicle: t.vehicle ? `${t.vehicle.year ?? ''} ${t.vehicle.make} ${t.vehicle.model}`.trim() : (t.vehicleDescription ?? '—'),
+    from: t.pickupLocation,
+    to: t.deliveryLocation,
+    status: t.status,
+    scheduledDate: t.scheduledDate?.toISOString().slice(0, 10) ?? null,
+    ageDays: daysSince(t.createdAt) ?? 0,
+  }))
+
   return {
+    transports,
     generatedAt: new Date().toISOString(),
     counts: {
       activeVehicles: vehicles.length,
