@@ -68,6 +68,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
   const [pendingDate, setPendingDate] = useState<string | null>(null) // YYYY-MM-DD
   const [selectedChip, setSelectedChip] = useState<number | null>(null)
   const [updateNote, setUpdateNote] = useState('')
+  const [customOpen, setCustomOpen] = useState(false)
   // Note-only follow-up (no date change)
   const [followNote, setFollowNote] = useState('')
   const [showFollowForm, setShowFollowForm] = useState(false)
@@ -122,11 +123,12 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
   const su = repair ? (STATUS_UI[repair.status] ?? STATUS_UI.pending) : STATUS_UI.pending
   const followUps = (repair?.followUps ?? []).filter(f => f?.note)
 
-  const clearStaged = () => { setPendingDate(null); setSelectedChip(null); setUpdateNote('') }
+  const clearStaged = () => { setPendingDate(null); setSelectedChip(null); setUpdateNote(''); setCustomOpen(false) }
 
   const toggleChip = (d: number) => {
     if (selectedChip === d) { clearStaged(); return }
     setSelectedChip(d)
+    setCustomOpen(false)
     setPendingDate(localYmd(Date.now() + d * DAY_MS))
   }
 
@@ -180,24 +182,17 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
               </>
             )}
 
-            <p style={eyebrow}>Expected Back</p>
-            <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px', marginBottom: 16, background: 'var(--bg-primary, #f8f8f6)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-                <p style={{ fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
-                  {currentDate ? fmtDay(currentDate) : 'No date set'}
-                  {overdueDays > 0 && <span style={{ color: '#b91c1c', fontWeight: 650, fontSize: 12 }}> · {overdueDays}d overdue</span>}
-                </p>
-                <input
-                  type="date"
-                  value={pendingDate ?? currentDate}
-                  disabled={saving}
-                  onChange={e => { setPendingDate(e.target.value || null); setSelectedChip(null) }}
-                  style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5, background: '#fff' }}
-                />
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
-                <span style={{ fontSize: 11, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Push to</span>
-                {QUICK_DAYS.map(q => {
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+              <p style={eyebrow}>Expected Back</p>
+              <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>
+                {currentDate ? fmtDay(currentDate) : 'No date set'}
+                {overdueDays > 0 && <span style={{ color: '#b91c1c', fontWeight: 650, fontSize: 11.5 }}> · {overdueDays}d overdue</span>}
+              </p>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              {/* Segmented push control — tap to stage, tap again to clear */}
+              <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+                {QUICK_DAYS.map((q, qi) => {
                   const on = selectedChip === q.d
                   return (
                     <button
@@ -205,19 +200,43 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                       disabled={saving}
                       onClick={() => toggleChip(q.d)}
                       style={{
-                        ...btn, padding: '4px 13px', borderRadius: 100, fontWeight: 650, fontSize: 12,
+                        flex: 1, padding: '8px 0', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', minHeight: 0,
+                        border: 'none', borderLeft: qi === 0 ? 'none' : '1px solid var(--border-light, #f0f0ec)',
                         background: on ? '#eaf0fe' : '#fff',
                         color: on ? '#1d4ed8' : 'var(--text-secondary)',
-                        border: on ? '1px solid #bfd3fc' : '1px solid var(--border)',
                       }}
-                    >{q.label}</button>
+                    >+{q.label}</button>
                   )
                 })}
+                <button
+                  disabled={saving}
+                  onClick={() => {
+                    if (customOpen) { clearStaged(); return }
+                    setSelectedChip(null)
+                    setCustomOpen(true)
+                  }}
+                  style={{
+                    flex: 1.2, padding: '8px 0', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', minHeight: 0,
+                    border: 'none', borderLeft: '1px solid var(--border-light, #f0f0ec)',
+                    background: customOpen ? '#eaf0fe' : '#fff',
+                    color: customOpen ? '#1d4ed8' : 'var(--text-secondary)',
+                  }}
+                >Date…</button>
               </div>
+              {customOpen && (
+                <input
+                  type="date"
+                  autoFocus
+                  value={pendingDate ?? currentDate}
+                  disabled={saving}
+                  onChange={e => { setPendingDate(e.target.value || null); setSelectedChip(null) }}
+                  style={{ width: '100%', marginTop: 8, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 13.5, background: '#fff' }}
+                />
+              )}
 
               {/* A new date only commits WITH the reason — the history must explain it */}
               {hasDateChange && (
-                <div style={{ borderTop: '1px solid var(--border-light, #f0f0ec)', marginTop: 12, paddingTop: 12 }}>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 10, background: 'var(--bg-primary, #f8f8f6)', marginTop: 8, padding: '10px 12px' }}>
                   <p style={{ fontSize: 12.5, fontWeight: 650, margin: '0 0 6px' }}>
                     {currentDate ? fmtDay(currentDate) : '—'} → <span style={{ color: '#1d4ed8' }}>{fmtDay(pendingDate!)}</span>
                     <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}> · what did the shop say?</span>
