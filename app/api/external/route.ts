@@ -11,6 +11,15 @@ export async function GET(request: Request) {
     where: id ? { id } : undefined,
     orderBy: [{ status: 'asc' }, { sentDate: 'desc' }],
   })
+  // Single-repair fetch (the action modal): carry the linked mission task so
+  // the modal can notice a skipped step (e.g. Sent without a ride arranged)
+  if (id && repairs.length === 1) {
+    const task = await prisma.task.findFirst({
+      where: { externalRepairId: id, status: { notIn: ['done', 'skipped'] } },
+      select: { id: true, missionType: true, transportRequestId: true, selfTransport: true },
+    })
+    return NextResponse.json({ repairs, linkedTask: task })
+  }
   return NextResponse.json({ repairs })
 }
 

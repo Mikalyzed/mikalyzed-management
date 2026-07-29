@@ -549,14 +549,16 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                   action: textLink('Open ›', () => setExternalActionId(m.externalId)),
                 })
                 steps.push({
-                  done: transportArranged,
+                  done: transportArranged || m.selfTransport,
                   label: 'Transport arranged',
-                  sub: transportArranged
-                    ? (m.transportDate ? `Scheduled ${m.transportDate.slice(5).replace('-', '/')}` : 'Requested — no date yet')
-                    : 'No tow scheduled yet',
+                  sub: m.selfTransport
+                    ? 'Taken over without a tow — who took it is in the history'
+                    : transportArranged
+                      ? (m.transportDate ? `Scheduled ${m.transportDate.slice(5).replace('-', '/')}` : 'Requested — no date yet')
+                      : 'No tow scheduled yet',
                   action: transportArranged
                     ? <Link href="/transport" style={{ fontSize: 12, fontWeight: 650, color: '#1d4ed8', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0, minHeight: 0 }}>Open ›</Link>
-                    : (m.vehicleId ? textLink('Create ›', () => { setTowAskFor(towAskFor === t.id ? null : t.id); setTowDate('') }) : undefined),
+                    : (!m.selfTransport && m.vehicleId ? textLink('Create ›', () => { setTowAskFor(towAskFor === t.id ? null : t.id); setTowDate('') }) : undefined),
                 })
                 steps.push({
                   done: atShop,

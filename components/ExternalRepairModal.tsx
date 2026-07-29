@@ -75,6 +75,9 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
   // What the send plan was when the modal opened — tapping a lit chip
   // reverts to this instead of wiping the date.
   const originalPlannedRef = useRef<string | null | undefined>(undefined)
+  const [linkedTask, setLinkedTask] = useState<{ id: string; missionType: string | null; transportRequestId: string | null; selfTransport: boolean } | null>(null)
+  const [whoTookIt, setWhoTookIt] = useState('')
+  const [askWhoTookIt, setAskWhoTookIt] = useState(false)
 
   const load = () => fetch(`/api/external?id=${externalId}`)
     .then(r => r.json())
@@ -85,6 +88,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
           originalPlannedRef.current = rep.plannedSendDate ? rep.plannedSendDate.slice(0, 10) : null
         }
         setRepair(rep)
+        setLinkedTask(d.linkedTask ?? null)
       }
     })
     .catch(() => {})
@@ -363,18 +367,56 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
               </>
             )}
 
-            {/* Not-sent repairs: the forward action is sending it out */}
-            {repair.status === 'pending' && (
+            {/* Not-sent repairs: the forward action is sending it out. If the
+                linked mission never arranged a ride, a skipped step is a
+                QUESTION, not a shrug — capture who actually took it. */}
+            {repair.status === 'pending' && !askWhoTookIt && (
               <button
                 style={{ ...btn, width: '100%', padding: '10px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', marginBottom: 8 }}
                 disabled={saving}
-                onClick={() => setConfirmState({
-                  title: `Send to ${repair.shopName} today?`,
-                  message: repair.partOnly ? 'The part will show as out at the shop.' : 'The car will show as at the shop and leave the recon board.',
-                  confirmLabel: 'Mark Sent',
-                  onConfirm: () => { patch({ status: 'sent', fromStatus: 'pending', sentDate: new Date().toISOString() }) },
-                })}
+                onClick={() => {
+                  const rideSkipped = linkedTask && linkedTask.missionType !== 'retrieve' && !linkedTask.transportRequestId && !linkedTask.selfTransport
+                  if (rideSkipped) { setAskWhoTookIt(true); return }
+                  setConfirmState({
+                    title: `Send to ${repair.shopName} today?`,
+                    message: repair.partOnly ? 'The part will show as out at the shop.' : 'The car will show as at the shop and leave the recon board.',
+                    confirmLabel: 'Mark Sent',
+                    onConfirm: () => { patch({ status: 'sent', fromStatus: 'pending', sentDate: new Date().toISOString() }) },
+                  })
+                }}
               >✓ Mark Sent Today</button>
+            )}
+            {repair.status === 'pending' && askWhoTookIt && (
+              <div style={{ border: '1px solid #bfd3fc', background: '#f6f9ff', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                <p style={{ fontSize: 12.5, fontWeight: 650, margin: '0 0 3px' }}>No transport was arranged — who took it to {repair.shopName}?</p>
+                <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '0 0 8px' }}>Goes in the follow-up history so the trip is on record.</p>
+                <input
+                  autoFocus value={whoTookIt} onChange={e => setWhoTookIt(e.target.value)}
+                  placeholder="e.g. Willy hauled it / Lenny drove it over / shop picked it up"
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5, background: '#fff', marginBottom: 8 }}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button style={{ ...btn, flex: 1 }} disabled={saving} onClick={() => { setAskWhoTookIt(false); setWhoTookIt('') }}>Cancel</button>
+                  <button
+                    style={{ ...btn, flex: 1, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', opacity: whoTookIt.trim() ? 1 : 0.5 }}
+                    disabled={saving || !whoTookIt.trim()}
+                    onClick={async () => {
+                      const ok = await patch({
+                        status: 'sent', fromStatus: 'pending', sentDate: new Date().toISOString(),
+                        addFollowUp: { note: `Taken to ${repair.shopName}: ${whoTookIt.trim()}` },
+                      })
+                      if (ok && linkedTask) {
+                        // Resolve the ride step as informally handled
+                        await fetch(`/api/board-tasks/${linkedTask.id}`, {
+                          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ selfTransport: true }),
+                        }).catch(() => {})
+                      }
+                      if (ok) { setAskWhoTookIt(false); setWhoTookIt('') }
+                    }}
+                  >✓ Mark Sent</button>
+                </div>
+              </div>
             )}
 
             {/* Terminal actions: 50/50, then Close full width */}
