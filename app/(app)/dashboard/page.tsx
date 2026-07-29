@@ -351,15 +351,15 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
       <div className="card" style={{ marginBottom: 24, padding: 22 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
           <div>
-            <div style={eyebrow}>Assignments</div>
-            <h2 style={{ fontSize: 17, fontWeight: 700, margin: '2px 0 0' }}>
+            <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Assignments</h2>
+            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '2px 0 0' }}>
               {(tasks || []).length + c.sourceQueue.length === 0
-                ? 'All caught up'
+                ? 'All caught up ✓'
                 : [
                     (tasks || []).length ? `${(tasks || []).length} task${(tasks || []).length === 1 ? '' : 's'}` : null,
                     c.sourceQueue.length ? `${c.sourceQueue.length} part${c.sourceQueue.length === 1 ? '' : 's'} to source` : null,
                   ].filter(Boolean).join(' · ')}
-            </h2>
+            </p>
           </div>
           <Link href="/parts" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>Parts page →</Link>
         </div>
@@ -400,6 +400,9 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>No open tasks and every requested part has been sourced. ✓</p>
         )}
 
+        {assignTab === 'all' && (tasks || []).length > 0 && (
+          <div style={{ ...eyebrow, margin: '2px 0 8px' }}>Tasks</div>
+        )}
         {assignTab !== 'parts' && (tasks || []).map(t => (
           <div key={t.id} style={{
             background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border-light, #f0f0ec)',
@@ -442,6 +445,9 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
           </div>
         ))}
 
+        {assignTab === 'all' && c.sourceQueue.length > 0 && (
+          <div style={{ ...eyebrow, margin: '10px 0 8px' }}>Parts to Source</div>
+        )}
         {assignTab !== 'tasks' && c.sourceQueue.map(pt => (
           <div key={pt.partId} style={{
             background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border-light, #f0f0ec)',
