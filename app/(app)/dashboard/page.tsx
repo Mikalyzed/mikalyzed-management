@@ -85,6 +85,7 @@ type DashboardData = {
   myBoardTasks: Array<{
     id: string; title: string; category: string; status: string; priority: number; dueDate: string | null
     stock?: string | null
+    vehicleName?: string | null
     mission?: {
       externalId: string; shop: string; externalStatus: string; stock: string
       vehicleId: string | null; vehicleDesc: string; vin: string | null
@@ -437,10 +438,13 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
             <div style={{ flex: 1, minWidth: 0 }}>
               {(() => {
                 const stock = t.mission?.stock ?? t.stock ?? null
-                const carName = t.mission?.vehicleDesc ?? null
+                const carName = t.mission?.vehicleDesc ?? t.vehicleName ?? null
                 // The title often repeats the car — the card already leads with
                 // it, so strip the "(#N101146)" tail and trailing separators.
-                const cleanTitle = t.title.replace(/\s*\(#[A-Z0-9]+\)\s*$/i, '').replace(/\s+[—–-]\s*$/, '')
+                const cleanTitle = t.title
+                  .replace(/\s*\(#[A-Z0-9]+\)\s*$/i, '')
+                  .replace(/\s*[—–-]\s*#[A-Z0-9]+\s*$/i, '')
+                  .replace(/\s+[—–-]\s*$/, '')
                 return (
                   <>
                     {stock && <div style={{ marginBottom: 4 }}><span style={stockChip}>#{stock}</span></div>}

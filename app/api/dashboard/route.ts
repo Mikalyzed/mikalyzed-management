@@ -134,8 +134,10 @@ export async function GET(request: Request) {
       select: { id: true, status: true, scheduledDate: true, carrierInfo: true },
     }) : Promise.resolve([]),
   ])
-  const missionVehicles = linkedExts.length ? await prisma.vehicle.findMany({
-    where: { stockNumber: { in: linkedExts.map(e => e.stockNumber) } },
+  const taskStocks = myBoardTasksRaw
+    .flatMap(t => Array.isArray(t.stockNumbers) ? t.stockNumbers.map(String) : [])
+  const missionVehicles = (linkedExts.length || taskStocks.length) ? await prisma.vehicle.findMany({
+    where: { stockNumber: { in: [...new Set([...linkedExts.map(e => e.stockNumber), ...taskStocks])] } },
     select: { id: true, stockNumber: true, year: true, make: true, model: true, vin: true },
   }) : []
   const mvByStock = new Map(missionVehicles.map(v => [v.stockNumber, v]))
@@ -144,9 +146,12 @@ export async function GET(request: Request) {
   const myBoardTasks = myBoardTasksRaw.map(t => {
     const ext = t.externalRepairId ? extById.get(t.externalRepairId) : null
     const tr = t.transportRequestId ? trById.get(t.transportRequestId) : null
+    const taskStock = Array.isArray(t.stockNumbers) && t.stockNumbers.length > 0 ? String(t.stockNumbers[0]) : null
+    const taskVehicle = taskStock ? mvByStock.get(taskStock) : null
     return {
       ...t,
-      stock: Array.isArray(t.stockNumbers) && t.stockNumbers.length > 0 ? String(t.stockNumbers[0]) : null,
+      stock: taskStock,
+      vehicleName: taskVehicle ? `${taskVehicle.year ?? ''} ${taskVehicle.make} ${taskVehicle.model}`.trim() : null,
       mission: ext ? {
         externalId: ext.id,
         shop: ext.shopName,
