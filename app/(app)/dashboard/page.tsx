@@ -357,10 +357,8 @@ function CoordinatorBoard({ c, onChanged }: {
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>Every requested part has been sourced. ✓</p>
         )}
         {c.sourceQueue.map(pt => (
-          <div key={pt.partId} style={itemRow}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Chip row first, then the vehicle name on its own full-width
-                  line — small screens were ellipsizing it into uselessness. */}
+          <div key={pt.partId} style={{ ...itemRow, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+            <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 <span style={stockChip}>#{pt.stock}</span>
                 {pt.ageDays > 7 && <span style={{ fontSize: 10.5, fontWeight: 650, color: '#b45309', whiteSpace: 'nowrap' }}>{pt.ageDays}d waiting</span>}
@@ -368,22 +366,23 @@ function CoordinatorBoard({ c, onChanged }: {
               <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.vehicle}</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.part}</div>
             </div>
+            {/* Actions live under the text — never beside it squeezing the name */}
             {linkFor === pt.partId ? (
-              <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <input
                   autoFocus value={linkInput} onChange={e => setLinkInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') submitLink(pt.partId) }}
                   placeholder="Paste the link…"
-                  style={{ width: 180, padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5 }}
+                  style={{ flex: 1, minWidth: 0, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5 }}
                 />
                 <button style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy || !linkInput.trim()} onClick={() => submitLink(pt.partId)}>Save</button>
                 <button style={miniBtn} disabled={busy} onClick={() => { setLinkFor(null); setLinkInput('') }}>✗</button>
-              </span>
+              </div>
             ) : (
-              <span style={{ display: 'inline-flex', gap: 6, flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 6 }}>
                 <button style={miniBtn} disabled={busy} onClick={() => { setLinkFor(pt.partId); setLinkInput('') }}>+ Link</button>
                 <button style={miniBtn} disabled={busy} onClick={() => setBoughtPart({ id: pt.partId, name: pt.part })}>In Store</button>
-              </span>
+              </div>
             )}
           </div>
         ))}
