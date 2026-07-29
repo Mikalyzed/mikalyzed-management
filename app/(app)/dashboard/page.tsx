@@ -6,6 +6,7 @@ import Link from 'next/link'
 import RouteVehicleModal from '@/components/RouteVehicleModal'
 import PartDetailModal from '@/components/PartDetailModal'
 import ExternalRepairModal from '@/components/ExternalRepairModal'
+import BoughtPartModal from '@/components/BoughtPartModal'
 import { CALENDAR_TYPE_LABELS, CALENDAR_TYPE_COLORS } from '@/lib/calendar'
 import ReconTaskCard from '@/components/ReconTaskCard'
 
@@ -305,6 +306,7 @@ function CoordinatorBoard({ c, onChanged }: {
 }) {
   const [linkFor, setLinkFor] = useState<string | null>(null)
   const [linkInput, setLinkInput] = useState('')
+  const [boughtPart, setBoughtPart] = useState<{ id: string; name: string } | null>(null)
   const [busy, setBusy] = useState(false)
 
   const eyebrow: React.CSSProperties = {
@@ -379,10 +381,20 @@ function CoordinatorBoard({ c, onChanged }: {
                 <button style={miniBtn} disabled={busy} onClick={() => { setLinkFor(null); setLinkInput('') }}>✗</button>
               </span>
             ) : (
-              <button style={miniBtn} disabled={busy} onClick={() => { setLinkFor(pt.partId); setLinkInput('') }}>+ Link</button>
+              <span style={{ display: 'inline-flex', gap: 6, flexShrink: 0 }}>
+                <button style={miniBtn} disabled={busy} onClick={() => { setLinkFor(pt.partId); setLinkInput('') }}>+ Link</button>
+                <button style={miniBtn} disabled={busy} onClick={() => setBoughtPart({ id: pt.partId, name: pt.part })}>In Store</button>
+              </span>
             )}
           </div>
         ))}
+        {boughtPart && (
+          <BoughtPartModal
+            part={boughtPart}
+            onClose={() => setBoughtPart(null)}
+            onDone={async () => { setBoughtPart(null); await onChanged() }}
+          />
+        )}
       </div>
 
       {/* ── Lanes Snapshot ── */}
