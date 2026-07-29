@@ -310,6 +310,7 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
   const [linkInput, setLinkInput] = useState('')
   const [boughtPart, setBoughtPart] = useState<{ id: string; name: string } | null>(null)
   const [externalActionId, setExternalActionId] = useState<string | null>(null)
+  const [assignTab, setAssignTab] = useState<'all' | 'tasks' | 'parts'>('all')
   const [busy, setBusy] = useState(false)
 
   const eyebrow: React.CSSProperties = {
@@ -346,9 +347,9 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
 
   return (
     <>
-      {/* ── Assignments — his tasks + parts to source, one section ── */}
+      {/* ── Assignments — his tasks + parts to source, tabbed ── */}
       <div className="card" style={{ marginBottom: 24, padding: 22 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
           <div>
             <div style={eyebrow}>Assignments</div>
             <h2 style={{ fontSize: 17, fontWeight: 700, margin: '2px 0 0' }}>
@@ -362,17 +363,70 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
           </div>
           <Link href="/parts" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>Parts page →</Link>
         </div>
-        {(tasks || []).map(t => (
-          <div key={t.id} style={itemRow}>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
+          {([
+            { key: 'all', label: 'All', n: (tasks || []).length + c.sourceQueue.length },
+            { key: 'tasks', label: 'Tasks', n: (tasks || []).length },
+            { key: 'parts', label: 'Parts', n: c.sourceQueue.length },
+          ] as const).map(t => {
+            const on = assignTab === t.key
+            return (
+              <button
+                key={t.key}
+                onClick={() => setAssignTab(t.key)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  border: on ? '1px solid #1a1a1a' : '1px solid var(--border)',
+                  background: on ? '#1a1a1a' : 'var(--bg-card, #fff)',
+                  color: on ? '#fff' : 'var(--text-secondary)',
+                  borderRadius: 100, padding: '6px 14px', fontSize: 12.5, fontWeight: 600,
+                  cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
+                }}
+              >
+                {t.label}
+                <span style={{
+                  fontSize: 10.5, fontWeight: 700, padding: '1px 7px', borderRadius: 100, fontVariantNumeric: 'tabular-nums',
+                  background: on ? 'rgba(255,255,255,0.18)' : 'var(--bg-primary, #f8f8f6)',
+                  color: on ? '#fff' : 'var(--text-muted)',
+                }}>{t.n}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {(tasks || []).length + c.sourceQueue.length === 0 && (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>No open tasks and every requested part has been sourced. ✓</p>
+        )}
+
+        {assignTab !== 'parts' && (tasks || []).map(t => (
+          <div key={t.id} style={{
+            background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border-light, #f0f0ec)',
+            borderRadius: 12, padding: '11px 14px', marginBottom: 8,
+            display: 'flex', alignItems: 'center', gap: 12,
+          }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.4 }}>{t.title}</div>
-              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
-                {t.priority > 0 ? 'High priority' : 'Task'}
-                {t.dueDate && ` · due ${new Date(t.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap',
+                  background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc',
+                }}>Task</span>
+                {t.priority > 0 && (
+                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap', background: '#fdecef', color: '#b91c1c', border: '1px solid #fecaca' }}>
+                    {t.priority === 2 ? 'Urgent' : 'High'}
+                  </span>
+                )}
+                {t.dueDate && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    due {new Date(t.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  </span>
+                )}
               </div>
+              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.45, marginTop: 5 }}>{t.title}</div>
             </div>
             <button
-              style={{ ...miniBtn, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650 }}
+              style={{ ...miniBtn, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650, flexShrink: 0 }}
               disabled={busy}
               onClick={async () => {
                 setBusy(true)
@@ -387,33 +441,35 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
             >✓ Done</button>
           </div>
         ))}
-        {(tasks || []).length === 0 && c.sourceQueue.length === 0 && (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>No open tasks and every requested part has been sourced. ✓</p>
-        )}
-        {c.sourceQueue.map(pt => (
-          <div key={pt.partId} style={{ ...itemRow, flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                <span style={stockChip}>#{pt.stock}</span>
-                {pt.ageDays > 7 && <span style={{ fontSize: 10.5, fontWeight: 650, color: '#b45309', whiteSpace: 'nowrap' }}>{pt.ageDays}d waiting</span>}
-              </div>
-              <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.vehicle}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.part}</div>
+
+        {assignTab !== 'tasks' && c.sourceQueue.map(pt => (
+          <div key={pt.partId} style={{
+            background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border-light, #f0f0ec)',
+            borderRadius: 12, padding: '11px 14px', marginBottom: 8,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{
+                fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap',
+                background: '#fdf3e7', color: '#92400e', border: '1px solid #fcd34d',
+              }}>Source</span>
+              <span style={stockChip}>#{pt.stock}</span>
+              {pt.ageDays > 7 && <span style={{ fontSize: 10.5, fontWeight: 650, color: '#b45309', whiteSpace: 'nowrap' }}>{pt.ageDays}d waiting</span>}
             </div>
-            {/* Actions live under the text — never beside it squeezing the name */}
+            <div style={{ fontWeight: 600, fontSize: 13, marginTop: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.vehicle}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.part}</div>
             {linkFor === pt.partId ? (
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 9 }}>
                 <input
                   autoFocus value={linkInput} onChange={e => setLinkInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') submitLink(pt.partId) }}
                   placeholder="Paste the link…"
-                  style={{ flex: 1, minWidth: 0, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5 }}
+                  style={{ flex: 1, minWidth: 0, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5, background: '#fff' }}
                 />
-                <button style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy || !linkInput.trim()} onClick={() => submitLink(pt.partId)}>Save</button>
+                <button style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }} disabled={busy || !linkInput.trim()} onClick={() => submitLink(pt.partId)}>Save</button>
                 <button style={miniBtn} disabled={busy} onClick={() => { setLinkFor(null); setLinkInput('') }}>✗</button>
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>
                 <button
                   style={{ ...miniBtn, flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '5px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }}
                   disabled={busy} onClick={() => { setLinkFor(pt.partId); setLinkInput('') }}
@@ -426,6 +482,7 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
             )}
           </div>
         ))}
+
         {boughtPart && (
           <BoughtPartModal
             part={boughtPart}
