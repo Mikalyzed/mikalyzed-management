@@ -28,6 +28,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     data.followUps = [...current, overrideEntry]
   }
   if (body.notes !== undefined) data.notes = body.notes
+  if (body.plannedSendDate !== undefined) data.plannedSendDate = body.plannedSendDate ? new Date(body.plannedSendDate) : null
   if (body.shopName !== undefined) data.shopName = body.shopName
   if (body.shopPhone !== undefined) data.shopPhone = body.shopPhone
   if (body.repairDescription !== undefined) data.repairDescription = body.repairDescription

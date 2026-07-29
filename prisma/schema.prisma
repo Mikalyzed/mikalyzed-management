@@ -703,6 +703,9 @@ model ExternalRepair {
   repairDescription String    @map("repair_description")
   estimatedDays     Int?      @map("estimated_days")
   sentDate          DateTime? @map("sent_date")
+  // Planned send-out: a pending repair with a date the car is SUPPOSED to
+  // leave — the watchlist nags when the date passes and it still hasn't.
+  plannedSendDate   DateTime? @map("planned_send_date")
   expectedReturn    DateTime? @map("expected_return")
   status            String    @default("sent") // pending, sent, in_progress, ready, returned
   notes             String?

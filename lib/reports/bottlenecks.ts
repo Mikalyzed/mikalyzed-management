@@ -81,16 +81,30 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
     }
   }
 
-  // 2. External repairs created but never sent to the shop
+  // 2. External repairs created but never sent to the shop. A planned send
+  // date that passed fires immediately; no plan at all gets a 5-day grace.
+  const todayStr = new Date().toISOString().slice(0, 10)
   for (const e of r.externalRepairs) {
-    if (e.status === 'pending' && e.createdAgoDays >= NEVER_SENT_DAYS) {
+    if (e.status !== 'pending') continue
+    const plannedSend = (e as { plannedSend?: string | null }).plannedSend ?? null
+    if (plannedSend && plannedSend < todayStr) {
+      out.push({
+        severity: 'warn',
+        stock: e.stock,
+        vehicle: e.vehicle,
+        where: whereOf(e.stock),
+        issue: `Was supposed to go to ${e.shop} on ${plannedSend}`,
+        detail: `Still here. If it left, mark it Sent; otherwise set a new send date. Work: ${e.work.slice(0, 60)}`,
+        fix: { kind: 'external_mark_sent', externalId: e.externalId },
+      })
+    } else if (!plannedSend && e.createdAgoDays >= NEVER_SENT_DAYS) {
       out.push({
         severity: 'warn',
         stock: e.stock,
         vehicle: e.vehicle,
         where: whereOf(e.stock),
         issue: `Never sent to ${e.shop}`,
-        detail: `Created ${e.createdAgoDays}d ago for: ${e.work.slice(0, 80)}`,
+        detail: `Created ${e.createdAgoDays}d ago with no send date planned. Work: ${e.work.slice(0, 70)}`,
         fix: { kind: 'external_mark_sent', externalId: e.externalId },
       })
     }

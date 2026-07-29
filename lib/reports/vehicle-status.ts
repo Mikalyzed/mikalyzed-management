@@ -56,7 +56,7 @@ export async function buildVehicleStatusReport() {
       select: {
         id: true, stockNumber: true, year: true, make: true, model: true, shopName: true,
         repairDescription: true, status: true, sentDate: true, expectedReturn: true,
-        atDealership: true, partOnly: true, notes: true, createdAt: true, followUps: true,
+        atDealership: true, partOnly: true, notes: true, createdAt: true, followUps: true, plannedSendDate: true,
       },
       orderBy: { expectedReturn: 'asc' },
     }),
@@ -177,6 +177,7 @@ export async function buildVehicleStatusReport() {
       atDealership: e.atDealership,
       partOnly: e.partOnly,
       sent: e.sentDate?.toISOString().slice(0, 10) ?? null,
+      plannedSend: e.plannedSendDate?.toISOString().slice(0, 10) ?? null,
       expectedBack: e.expectedReturn?.toISOString().slice(0, 10) ?? null,
       overdueDays,
       createdAgoDays: daysSince(e.createdAt) ?? 0,

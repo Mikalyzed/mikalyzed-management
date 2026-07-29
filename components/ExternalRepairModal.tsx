@@ -16,6 +16,7 @@ type Repair = {
   partOnly: boolean
   atDealership: boolean
   sentDate: string | null
+  plannedSendDate: string | null
   expectedReturn: string | null
   notes: string | null
   followUps: Array<{ date?: string; note?: string; etaDays?: number | null }> | null
@@ -124,11 +125,18 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
 
   const clearStaged = () => { setPendingDate(null); setSelectedChip(null); setUpdateNote(''); setCustomOpen(false) }
 
-  const toggleChip = (d: number) => {
+  const toggleChip = async (d: number) => {
     if (selectedChip === d) { clearStaged(); return }
+    const ymd = localYmd(Date.now() + d * DAY_MS)
+    if (!currentDate) {
+      // First estimate — no prior date to explain away, commit directly
+      await patch({ expectedReturn: ymd })
+      clearStaged()
+      return
+    }
     setSelectedChip(d)
     setCustomOpen(false)
-    setPendingDate(localYmd(Date.now() + d * DAY_MS))
+    setPendingDate(ymd)
   }
 
   const commitUpdate = async () => {
@@ -170,7 +178,11 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
               At <span style={{ fontWeight: 650 }}>{repair.shopName}</span>
             </p>
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 12px' }}>
-              {repair.sentDate ? `sent ${fmtDate(repair.sentDate)}` : 'not sent yet'}
+              {repair.sentDate
+                ? `sent ${fmtDate(repair.sentDate)}`
+                : repair.plannedSendDate
+                  ? `going out ${fmtDay(repair.plannedSendDate)}`
+                  : 'not sent yet — no send date planned'}
               {daysOut != null && <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}> · {daysOut}d out</span>}
             </p>
 
@@ -183,6 +195,58 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
               </>
             )}
 
+            {/* ── Not sent yet: plan the send-out first — return dates come later ── */}
+            {repair.status === 'pending' && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                  <p style={eyebrow}>Going Out</p>
+                  <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>
+                    {repair.plannedSendDate ? fmtDay(repair.plannedSendDate) : 'No send date'}
+                  </p>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+                    {QUICK_DAYS.map((q, qi) => (
+                      <button
+                        key={q.d}
+                        disabled={saving}
+                        onClick={() => patch({ plannedSendDate: localYmd(Date.now() + q.d * DAY_MS) })}
+                        style={{
+                          flex: 1, padding: '8px 0', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', minHeight: 0,
+                          border: 'none', borderLeft: qi === 0 ? 'none' : '1px solid var(--border-light, #f0f0ec)',
+                          background: '#fff', color: 'var(--text-secondary)',
+                        }}
+                      >+{q.label}</button>
+                    ))}
+                    <button
+                      disabled={saving}
+                      onClick={() => { setCustomOpen(o => !o) }}
+                      style={{
+                        flex: 1.2, padding: '8px 0', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', minHeight: 0,
+                        border: 'none', borderLeft: '1px solid var(--border-light, #f0f0ec)',
+                        background: customOpen ? '#eaf0fe' : '#fff',
+                        color: customOpen ? '#1d4ed8' : 'var(--text-secondary)',
+                      }}
+                    >Date…</button>
+                  </div>
+                  {customOpen && (
+                    <input
+                      type="date"
+                      autoFocus
+                      value={repair.plannedSendDate ? repair.plannedSendDate.slice(0, 10) : ''}
+                      disabled={saving}
+                      onChange={e => { if (e.target.value) patch({ plannedSendDate: e.target.value }) }}
+                      style={{ width: '100%', marginTop: 8, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 13.5, background: '#fff' }}
+                    />
+                  )}
+                  <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '7px 0 0', lineHeight: 1.45 }}>
+                    If the send date passes and it hasn't left, it shows up on Issues Detected automatically.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {repair.status !== 'pending' && (<>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
               <p style={eyebrow}>Expected Back</p>
               <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>
@@ -259,6 +323,8 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
               )}
             </div>
 
+            </>)}
+
             {followUps.length > 0 && (
               <>
                 <p style={eyebrow}>Follow-Up History</p>
@@ -290,6 +356,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
             )}
 
             {/* Terminal actions: 50/50, then Close full width */}
+            {repair.status !== 'pending' && (
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <button
                 style={{ ...btn, flex: 1, padding: '10px 0', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', opacity: ['sent', 'in_progress'].includes(repair.status) ? 1 : 0.45 }}
@@ -307,6 +374,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                 })}
               >✓ Returned</button>
             </div>
+            )}
             <button onClick={onClose} style={{
               width: '100%', padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
               background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
