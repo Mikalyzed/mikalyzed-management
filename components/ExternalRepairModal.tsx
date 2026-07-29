@@ -164,9 +164,11 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
             <p style={{ fontSize: 15.5, fontWeight: 700, letterSpacing: '-0.01em', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {`${repair.year ?? ''} ${repair.make} ${repair.model}`.trim()}
             </p>
-            <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 12px' }}>
+            <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: 0 }}>
               At <span style={{ fontWeight: 650 }}>{repair.shopName}</span>
-              {repair.sentDate ? ` · sent ${fmtDate(repair.sentDate)}` : ' · not sent yet'}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 12px' }}>
+              {repair.sentDate ? `sent ${fmtDate(repair.sentDate)}` : 'not sent yet'}
               {daysOut != null && <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}> · {daysOut}d out</span>}
             </p>
 
