@@ -381,11 +381,11 @@ function CoordinatorBoard({ c, onChanged }: {
             ) : (
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
-                  style={{ ...miniBtn, flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '8px 0', background: '#1a1a1a', color: '#fff', border: 'none', fontWeight: 650 }}
+                  style={{ ...miniBtn, flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '5px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }}
                   disabled={busy} onClick={() => { setLinkFor(pt.partId); setLinkInput('') }}
                 >+ Link</button>
                 <button
-                  style={{ ...miniBtn, flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '8px 0', background: 'var(--accent, #dffd6e)', color: '#1a1a1a', border: 'none', fontWeight: 650 }}
+                  style={{ ...miniBtn, flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '5px 0', background: '#fdf3e7', color: '#92400e', border: '1px solid #fcd34d', fontWeight: 650 }}
                   disabled={busy} onClick={() => setBoughtPart({ id: pt.partId, name: pt.part })}
                 >In Store</button>
               </div>
