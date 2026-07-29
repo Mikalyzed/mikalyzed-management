@@ -480,21 +480,25 @@ function CarLead({ stock, vehicle, detail, sold, onOpen }: {
     <div
       onClick={onOpen}
       role={onOpen ? 'button' : undefined}
-      style={{ flex: 1, minWidth: 0, cursor: onOpen ? 'pointer' : 'default' }}
+      style={{ flex: '1 1 220px', minWidth: 0, cursor: onOpen ? 'pointer' : 'default' }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <span style={{
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
           fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)',
           background: 'var(--bg-card, #fff)', border: '1px solid var(--border)',
           padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0,
         }}>#{stock}</span>
-        <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-          {vehicle}
-        </span>
         {sold && <span style={{ fontSize: 10.5, fontWeight: 650, color: '#b91c1c', background: '#fdecef', border: '1px solid #fecaca', padding: '1px 7px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0 }}>Sold</span>}
       </div>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {/* The car is the headline — full width, never squeezed by buttons */}
+      <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {vehicle}
+      </div>
+      <div style={{
+        fontSize: 12, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.45,
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      }}>
         {detail}
       </div>
     </div>
@@ -577,7 +581,8 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
   ].filter(r => r.n > 0)
 
   const itemRow: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px 8px 40px',
+    display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+    padding: '8px 14px 8px 40px',
     fontSize: 12.5, borderTop: '1px solid var(--border-light, #f0f0ec)',
     background: 'var(--bg-card, #fff)',
   }
@@ -768,8 +773,11 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                     >→ Mechanic</button>
                   </div>
                   {group.map(p => (
-                    <div key={p.id} style={{ ...itemRow, borderTop: 'none', paddingTop: 3, paddingBottom: 6, paddingLeft: 62 }}>
-                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500, fontSize: 12.5 }}>{p.name}</span>
+                    <div key={p.id} style={{ ...itemRow, flexWrap: 'nowrap', borderTop: 'none', paddingTop: 3, paddingBottom: 6, paddingLeft: 46 }}>
+                      <span style={{
+                        flex: 1, minWidth: 0, fontWeight: 500, fontSize: 12.5, lineHeight: 1.4,
+                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      }}>{p.name}</span>
                       <button style={miniBtn} disabled={busy} onClick={() => setDetailPartId(p.id)}>Open ›</button>
                     </div>
                   ))}
