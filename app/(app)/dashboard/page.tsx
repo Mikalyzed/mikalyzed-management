@@ -427,28 +427,14 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                 const cleanTitle = t.title.replace(/\s*\(#[A-Z0-9]+\)\s*$/i, '').replace(/\s+[—–-]\s*$/, '')
                 return (
                   <>
-                    {(stock || carName) && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, marginBottom: 4 }}>
-                        {stock && <span style={stockChip}>#{stock}</span>}
-                        {carName && (
-                          <span style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, letterSpacing: '-0.01em' }}>
-                            {carName}
-                          </span>
-                        )}
-                        {t.priority > 0 && (
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0, background: '#fdecef', color: '#b91c1c', border: '1px solid #fecaca' }}>
-                            {t.priority === 2 ? 'Urgent' : 'High'}
-                          </span>
-                        )}
+                    {stock && <div style={{ marginBottom: 4 }}><span style={stockChip}>#{stock}</span></div>}
+                    {carName && (
+                      <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em', marginBottom: 3 }}>
+                        {carName}
                       </div>
                     )}
                     <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.45, color: 'var(--text-primary)' }}>
                       {cleanTitle}
-                      {!stock && !carName && t.priority > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 100, whiteSpace: 'nowrap', marginLeft: 8, background: '#fdecef', color: '#b91c1c', border: '1px solid #fecaca', verticalAlign: '1px' }}>
-                          {t.priority === 2 ? 'Urgent' : 'High'}
-                        </span>
-                      )}
                     </div>
                     {t.dueDate && (
                       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginTop: 2 }}>
@@ -494,7 +480,7 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                   sub: atShop
                     ? (m.externalStatus === 'returned' ? 'This mission is moot — complete it' : 'Pickup happened')
                     : 'Waiting on the pickup',
-                  action: !atShop ? textLink('Mark Sent ›', () => setExternalActionId(m.externalId)) : undefined,
+                  action: !atShop ? textLink('Send ›', () => setExternalActionId(m.externalId)) : undefined,
                 })
                 return (
                   <div style={{ position: 'relative', marginTop: 10, paddingLeft: 2 }}>
