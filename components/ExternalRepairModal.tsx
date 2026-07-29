@@ -205,30 +205,40 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                   </p>
                 </div>
                 <div style={{ marginBottom: 12 }}>
+                  {(() => {
+                    const planned = repair.plannedSendDate ? repair.plannedSendDate.slice(0, 10) : null
+                    const chipMatches = QUICK_DAYS.some(q => planned === localYmd(Date.now() + q.d * DAY_MS))
+                    return (
                   <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-                    {QUICK_DAYS.map((q, qi) => (
-                      <button
-                        key={q.d}
-                        disabled={saving}
-                        onClick={() => patch({ plannedSendDate: localYmd(Date.now() + q.d * DAY_MS) })}
-                        style={{
-                          flex: 1, padding: '8px 0', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', minHeight: 0,
-                          border: 'none', borderLeft: qi === 0 ? 'none' : '1px solid var(--border-light, #f0f0ec)',
-                          background: '#fff', color: 'var(--text-secondary)',
-                        }}
-                      >+{q.label}</button>
-                    ))}
+                    {QUICK_DAYS.map((q, qi) => {
+                      const on = planned === localYmd(Date.now() + q.d * DAY_MS)
+                      return (
+                        <button
+                          key={q.d}
+                          disabled={saving}
+                          onClick={() => patch({ plannedSendDate: on ? null : localYmd(Date.now() + q.d * DAY_MS) })}
+                          style={{
+                            flex: 1, padding: '8px 0', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', minHeight: 0,
+                            border: 'none', borderLeft: qi === 0 ? 'none' : '1px solid var(--border-light, #f0f0ec)',
+                            background: on ? '#eaf0fe' : '#fff',
+                            color: on ? '#1d4ed8' : 'var(--text-secondary)',
+                          }}
+                        >+{q.label}</button>
+                      )
+                    })}
                     <button
                       disabled={saving}
                       onClick={() => { setCustomOpen(o => !o) }}
                       style={{
                         flex: 1.2, padding: '8px 0', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', minHeight: 0,
                         border: 'none', borderLeft: '1px solid var(--border-light, #f0f0ec)',
-                        background: customOpen ? '#eaf0fe' : '#fff',
-                        color: customOpen ? '#1d4ed8' : 'var(--text-secondary)',
+                        background: (customOpen || (planned && !chipMatches)) ? '#eaf0fe' : '#fff',
+                        color: (customOpen || (planned && !chipMatches)) ? '#1d4ed8' : 'var(--text-secondary)',
                       }}
                     >Date…</button>
                   </div>
+                    )
+                  })()}
                   {customOpen && (
                     <input
                       type="date"
