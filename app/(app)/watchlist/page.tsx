@@ -282,15 +282,31 @@ export default function WatchlistPage() {
                   >
                     {expandedParts.has(i) ? '▾ Hide parts' : `▸ Show ${it.fix.parts.length} parts`}
                   </button>
-                  {expandedParts.has(i) && (
-                    <div style={{ border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 8, marginTop: 6, overflow: 'hidden' }}>
-                      {it.fix.parts.map(pt => (
-                        <div key={pt.id} style={{ padding: '6px 10px', fontSize: 12, borderBottom: '1px solid var(--border-light, #f0f0ec)', lineHeight: 1.4 }}>
-                          {pt.name}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {expandedParts.has(i) && (() => {
+                    const fixRef = it.fix
+                    return (
+                      <div style={{ border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 8, marginTop: 6, overflow: 'hidden' }}>
+                        {fixRef.parts.map(pt => (
+                          <div key={pt.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', fontSize: 12, borderBottom: '1px solid var(--border-light, #f0f0ec)', lineHeight: 1.4 }}>
+                            <span style={{ flex: 1, minWidth: 0 }}>{pt.name}</span>
+                            {/* Already on the car? One tap closes it out — no task created.
+                                Create Install Tasks below handles whatever remains. */}
+                            <button
+                              disabled={busy}
+                              onClick={() => run(() => fetch('/api/parts/install-tasks', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ vehicleId: fixRef.vehicleId, partIds: [pt.id], mode: 'mark' }),
+                              }), 'Marked installed — no task needed.')}
+                              style={{
+                                border: 'none', background: 'none', padding: '2px 4px', minHeight: 0,
+                                fontSize: 11.5, fontWeight: 650, color: '#16a34a', cursor: 'pointer', whiteSpace: 'nowrap',
+                              }}
+                            >✓ Installed</button>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
               {actionsFor(it) && (
