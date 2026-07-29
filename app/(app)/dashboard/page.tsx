@@ -358,12 +358,14 @@ function CoordinatorBoard({ c, onChanged }: {
         {c.sourceQueue.map(pt => (
           <div key={pt.partId} style={itemRow}>
             <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Chip row first, then the vehicle name on its own full-width
+                  line — small screens were ellipsizing it into uselessness. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                 <span style={stockChip}>#{pt.stock}</span>
-                <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.vehicle}</span>
                 {pt.ageDays > 7 && <span style={{ fontSize: 10.5, fontWeight: 650, color: '#b45309', whiteSpace: 'nowrap' }}>{pt.ageDays}d waiting</span>}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.part}</div>
+              <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.vehicle}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pt.part}</div>
             </div>
             {linkFor === pt.partId ? (
               <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -418,11 +420,9 @@ function CoordinatorBoard({ c, onChanged }: {
           {c.externalOut.map(e => (
             <div key={e.externalId} style={itemRow}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                  <span style={stockChip}>#{e.stock}</span>
-                  <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.vehicle}</span>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={stockChip}>#{e.stock}</span>
+                <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.vehicle}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   At {e.shop}
                   {e.expectedBack ? ` · back ${e.expectedBack}` : ''}
                   {e.overdueDays > 0 && <span style={{ color: '#b91c1c', fontWeight: 650 }}> · {e.overdueDays}d overdue</span>}
@@ -451,12 +451,12 @@ function CoordinatorBoard({ c, onChanged }: {
                 background: b.severity === 'crit' ? '#e11d48' : '#f59e0b',
               }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' }}>
                   {b.stock && <span style={stockChip}>#{b.stock}</span>}
-                  <span style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.vehicle ?? '—'}</span>
                   <span style={{ fontSize: 12, fontWeight: 650, color: b.severity === 'crit' ? '#b91c1c' : '#b45309', whiteSpace: 'nowrap' }}>{b.issue}</span>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.detail}</div>
+                <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.vehicle ?? '—'}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.45 }}>{b.detail}</div>
               </div>
             </div>
           ))}
