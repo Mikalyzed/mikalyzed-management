@@ -165,11 +165,11 @@ export default function WatchlistPage() {
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>Boards</div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', margin: '2px 0 0' }}>Shop Watchlist</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em', margin: '2px 0 0' }}>Issues Detected</h1>
         </div>
         {items && (
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)' }}>
-            {items.length === 0 ? 'All clear ✓' : `${items.length} caught — same rules as the morning meeting`}
+            {items.length === 0 ? 'All clear ✓' : `${items.length} detected — same rules as the morning meeting`}
           </span>
         )}
       </div>
@@ -178,7 +178,7 @@ export default function WatchlistPage() {
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading…</p>
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
-          Nothing on the watchlist — every rule passes right now. ✓
+          No issues detected — every rule passes right now. ✓
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(330px, 100%), 1fr))', gap: 12 }}>

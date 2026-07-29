@@ -453,7 +453,7 @@ function CoordinatorBoard({ c, onChanged }: {
               fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
               background: 'rgba(180,83,9,0.10)', color: '#b45309',
             }}>{c.watchlist.length}</span>
-            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>Bottlenecks Detected</span>
+            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>Issues Detected</span>
             <span style={{ fontSize: 13, fontWeight: 650, color: '#1d4ed8' }}>Open ›</span>
           </div>
         </Link>
@@ -1357,7 +1357,7 @@ function DashboardInner() {
               fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
               background: 'rgba(180,83,9,0.10)', color: '#b45309',
             }}>{data.watchlistCount}</span>
-            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>Bottlenecks Detected</span>
+            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>Issues Detected</span>
             <span style={{ fontSize: 13, fontWeight: 650, color: '#1d4ed8' }}>Open ›</span>
           </div>
         </Link>
