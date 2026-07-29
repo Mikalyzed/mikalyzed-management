@@ -440,77 +440,88 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                 const m = t.mission
                 const transportArranged = !!m.transportId
                 const atShop = m.looksDone
-                const row = (done: boolean, label: string, action?: React.ReactNode) => (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px',
-                    borderBottom: '1px solid var(--border-light, #f0f0ec)', background: 'var(--bg-card, #fff)',
-                  }}>
-                    <span style={{
-                      width: 17, height: 17, borderRadius: '50%', flexShrink: 0,
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 10, fontWeight: 800,
-                      background: done ? '#16a34a' : 'var(--bg-primary, #f8f8f6)',
-                      color: done ? '#fff' : 'var(--text-muted)',
-                      border: done ? 'none' : '1px solid var(--border)',
-                    }}>{done ? '✓' : ''}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: done ? 500 : 600, color: done ? 'var(--text-muted)' : 'var(--text-primary)' }}>{label}</span>
-                    {action}
-                  </div>
+                const steps: Array<{ done: boolean; label: string; sub: string; action?: React.ReactNode }> = []
+                const textLink = (label: string, onClick: () => void) => (
+                  <button
+                    disabled={busy} onClick={onClick}
+                    style={{ border: 'none', background: 'none', padding: 0, minHeight: 0, fontSize: 12, fontWeight: 650, color: '#1d4ed8', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                  >{label}</button>
                 )
-                const rowBtn: React.CSSProperties = {
-                  border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
-                  borderRadius: 8, padding: '3px 11px', fontSize: 11.5, fontWeight: 650,
-                  cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap', flexShrink: 0,
-                }
+                steps.push({
+                  done: true,
+                  label: 'External logged',
+                  sub: `${m.shop} · ${m.externalStatus === 'pending' ? 'Not Scheduled' : m.externalStatus === 'returned' ? 'Returned' : m.externalStatus === 'ready' ? 'Ready for pickup' : 'Sent'}`,
+                  action: textLink('Open ›', () => setExternalActionId(m.externalId)),
+                })
+                steps.push({
+                  done: transportArranged,
+                  label: 'Transport arranged',
+                  sub: transportArranged
+                    ? (m.transportDate ? `Scheduled ${m.transportDate.slice(5).replace('-', '/')}` : 'Requested — no date yet')
+                    : 'No tow scheduled yet',
+                  action: transportArranged
+                    ? <Link href="/transport" style={{ fontSize: 12, fontWeight: 650, color: '#1d4ed8', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0, minHeight: 0 }}>Open ›</Link>
+                    : (m.vehicleId ? textLink('+ Create', async () => {
+                        setBusy(true)
+                        try {
+                          const res = await fetch('/api/transport', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              vehicleId: m.vehicleId,
+                              vehicleDescription: `${m.vehicleDesc} (#${m.stock})`,
+                              vin: m.vin || undefined,
+                              pickupLocation: 'Mikalyzed — Warehouse',
+                              deliveryLocation: m.shop,
+                              purpose: 'other',
+                              purposeNote: t.title,
+                            }),
+                          })
+                          if (res.ok) {
+                            const d = await res.json().catch(() => ({}))
+                            const trId = d.request?.id ?? d.id
+                            if (trId) {
+                              await fetch(`/api/board-tasks/${t.id}`, {
+                                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ transportRequestId: trId }),
+                              })
+                            }
+                            await onChanged()
+                          }
+                        } finally { setBusy(false) }
+                      }) : undefined),
+                })
+                steps.push({
+                  done: atShop,
+                  label: m.externalStatus === 'returned' ? 'Back already' : `At ${m.shop}`,
+                  sub: atShop
+                    ? (m.externalStatus === 'returned' ? 'This mission is moot — complete it' : 'Pickup happened')
+                    : 'Waiting on the pickup',
+                  action: !atShop ? textLink('Mark Sent ›', () => setExternalActionId(m.externalId)) : undefined,
+                })
                 return (
-                  <div style={{ border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 10, marginTop: 8, overflow: 'hidden' }}>
-                    {row(true, `External logged — ${m.shop}`,
-                      <button style={rowBtn} disabled={busy} onClick={() => setExternalActionId(m.externalId)}>Open ›</button>
-                    )}
-                    {row(transportArranged, transportArranged
-                      ? `Transport arranged${m.transportDate ? ` — ${m.transportDate.slice(5).replace('-', '/')}` : ''}`
-                      : 'Transport arranged',
-                      transportArranged
-                        ? <Link href="/transport" style={{ ...rowBtn, textDecoration: 'none' }}>Open ›</Link>
-                        : (m.vehicleId ? (
-                          <button
-                            style={rowBtn} disabled={busy}
-                            onClick={async () => {
-                              setBusy(true)
-                              try {
-                                const res = await fetch('/api/transport', {
-                                  method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    vehicleId: m.vehicleId,
-                                    vehicleDescription: `${m.vehicleDesc} (#${m.stock})`,
-                                    vin: m.vin || undefined,
-                                    pickupLocation: 'Mikalyzed — Warehouse',
-                                    deliveryLocation: m.shop,
-                                    purpose: 'other',
-                                    purposeNote: t.title,
-                                  }),
-                                })
-                                if (res.ok) {
-                                  const d = await res.json().catch(() => ({}))
-                                  const trId = d.request?.id ?? d.id
-                                  if (trId) {
-                                    await fetch(`/api/board-tasks/${t.id}`, {
-                                      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ transportRequestId: trId }),
-                                    })
-                                  }
-                                  await onChanged()
-                                }
-                              } finally { setBusy(false) }
-                            }}
-                          >+ Create</button>
-                        ) : undefined)
-                    )}
-                    {row(atShop, m.externalStatus === 'returned' ? `Back from ${m.shop} already` : `At ${m.shop}`,
-                      !atShop
-                        ? <button style={rowBtn} disabled={busy} onClick={() => setExternalActionId(m.externalId)}>Mark Sent ›</button>
-                        : undefined
-                    )}
+                  <div style={{ position: 'relative', marginTop: 10, paddingLeft: 2 }}>
+                    {/* connector spine */}
+                    <div aria-hidden style={{ position: 'absolute', left: 10, top: 12, bottom: 12, width: 2, background: 'var(--border-light, #f0f0ec)', borderRadius: 2 }} />
+                    {steps.map((st, si) => (
+                      <div key={si} style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: si === steps.length - 1 ? '5px 0 0' : '5px 0 12px', position: 'relative' }}>
+                        <span style={{
+                          width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 10, fontWeight: 800, zIndex: 1,
+                          background: st.done ? '#16a34a' : 'var(--bg-primary, #f8f8f6)',
+                          color: st.done ? '#fff' : 'var(--text-muted)',
+                          border: st.done ? '2px solid #16a34a' : '2px solid var(--border)',
+                          boxSizing: 'border-box',
+                        }}>{st.done ? '✓' : si + 1}</span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 12.5, fontWeight: st.done ? 500 : 650, lineHeight: 1.3, color: st.done ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                            {st.label}
+                          </span>
+                          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{st.sub}</span>
+                        </span>
+                        {st.action}
+                      </div>
+                    ))}
                   </div>
                 )
               })()}
