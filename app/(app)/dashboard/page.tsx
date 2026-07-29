@@ -379,9 +379,15 @@ function CoordinatorBoard({ c, onChanged }: {
                 <button style={miniBtn} disabled={busy} onClick={() => { setLinkFor(null); setLinkInput('') }}>✗</button>
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button style={miniBtn} disabled={busy} onClick={() => { setLinkFor(pt.partId); setLinkInput('') }}>+ Link</button>
-                <button style={miniBtn} disabled={busy} onClick={() => setBoughtPart({ id: pt.partId, name: pt.part })}>In Store</button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  style={{ ...miniBtn, flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '8px 0', background: '#1a1a1a', color: '#fff', border: 'none', fontWeight: 650 }}
+                  disabled={busy} onClick={() => { setLinkFor(pt.partId); setLinkInput('') }}
+                >+ Link</button>
+                <button
+                  style={{ ...miniBtn, flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '8px 0', background: 'var(--accent, #dffd6e)', color: '#1a1a1a', border: 'none', fontWeight: 650 }}
+                  disabled={busy} onClick={() => setBoughtPart({ id: pt.partId, name: pt.part })}
+                >In Store</button>
               </div>
             )}
           </div>
