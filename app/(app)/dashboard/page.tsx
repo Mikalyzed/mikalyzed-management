@@ -389,17 +389,14 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                   ].filter(Boolean).join(' · ')}
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button
-              onClick={() => setAddTaskOpen(true)}
-              style={{
-                border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
-                borderRadius: 9, padding: '6px 14px', fontSize: 12.5, fontWeight: 650,
-                cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
-              }}
-            >+ Add Task</button>
-            <Link href="/parts" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>Parts page →</Link>
-          </div>
+          <button
+            onClick={() => setAddTaskOpen(true)}
+            style={{
+              border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
+              borderRadius: 9, padding: '6px 14px', fontSize: 12.5, fontWeight: 650,
+              cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
+            }}
+          >+ Add Task</button>
         </div>
 
         {/* Tabs */}
