@@ -334,21 +334,10 @@ export async function GET(request: Request) {
         toInstallByStock.set(pt.stock, (toInstallByStock.get(pt.stock) ?? 0) + 1)
       }
     }
-    const lanesByName = new Map<string, { name: string; cars: number; paused: number; awaitingParts: number }>()
-    for (const v of report.recon) {
-      if (v.stage !== 'mechanic') continue
-      const name = v.assignee ?? 'Unassigned'
-      const lane = lanesByName.get(name) ?? { name, cars: 0, paused: 0, awaitingParts: 0 }
-      lane.cars += 1
-      if (v.paused) lane.paused += 1
-      if (v.awaitingParts) lane.awaitingParts += 1
-      lanesByName.set(name, lane)
-    }
     coordinator = {
       sourceQueue: report.parts
         .filter(pt => pt.status === 'requested')
         .map(pt => ({ partId: pt.partId, part: pt.part, stock: pt.stock, vehicle: pt.vehicle, ageDays: pt.ageDays })),
-      lanes: Array.from(lanesByName.values()).sort((a, b) => b.cars - a.cars),
       externalOut: report.externalRepairs
         .filter(e => !e.partOnly && ['sent', 'in_progress', 'ready'].includes(e.status))
         .map(e => ({

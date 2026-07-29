@@ -35,7 +35,6 @@ type DashboardData = {
   } | null
   coordinator?: {
     sourceQueue: Array<{ partId: string; part: string; stock: string; vehicle: string; ageDays: number }>
-    lanes: Array<{ name: string; cars: number; paused: number; awaitingParts: number }>
     externalOut: Array<{ externalId: string; stock: string; vehicle: string; shop: string; status: string; expectedBack: string | null; overdueDays: number; toInstall: number }>
     watchlist: Array<{ severity: string; stock: string | null; vehicle: string | null; where: string | null; issue: string; detail: string }>
   } | null
@@ -396,31 +395,6 @@ function CoordinatorBoard({ c, onChanged }: {
           />
         )}
       </div>
-
-      {/* ── Lanes Snapshot ── */}
-      {c.lanes.length > 0 && (
-        <div className="card" style={{ marginBottom: 24, padding: 22 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-            <div style={eyebrow}>Mechanic Lanes</div>
-            <Link href="/mechanic-schedule" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>Mechanic board →</Link>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-            {c.lanes.map(l => (
-              <div key={l.name} style={{ background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 12, padding: '12px 14px' }}>
-                <p style={{ fontSize: 12.5, fontWeight: 700, margin: 0 }}>{l.name}</p>
-                <p style={{ fontSize: 20, fontWeight: 700, margin: '4px 0 0', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                  {l.cars}<span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text-muted)' }}>{l.cars === 1 ? 'car' : 'cars'}</span>
-                </p>
-                {(l.paused > 0 || l.awaitingParts > 0) && (
-                  <p style={{ fontSize: 11, fontWeight: 600, color: '#b45309', margin: '3px 0 0' }}>
-                    {[l.paused > 0 ? `${l.paused} paused` : null, l.awaitingParts > 0 ? `${l.awaitingParts} on parts` : null].filter(Boolean).join(' · ')}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* ── Waiting on External ── */}
       {c.externalOut.length > 0 && (
