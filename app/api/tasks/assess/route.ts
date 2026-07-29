@@ -104,7 +104,7 @@ export async function POST(req: Request) {
         details: { title, kind: c.kind, shop: c.shop ?? null, stock: vehicle?.stockNumber ?? null, linkedExternal: !!externalRepairId },
       },
     }).catch(() => {})
-    return NextResponse.json({ ok: true, taskId: task.id, linkedExternal: !!externalRepairId })
+    return NextResponse.json({ ok: true, taskId: task.id, externalRepairId, stock: vehicle?.stockNumber ?? null })
   }
 
   // ── PROPOSE ──

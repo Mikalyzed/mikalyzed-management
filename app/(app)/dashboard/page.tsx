@@ -328,10 +328,16 @@ function NewForYouCard({ n, onAcknowledge }: {
 }
 
 // ─── Shop Coordinator Board — Lenny's whole loop on one page ───
-function CoordinatorBoard({ c, tasks, onChanged }: {
+type CreatedTaskPayload = {
+  taskId: string; externalRepairId: string | null; stock: string | null
+  proposal: { title: string; kind: 'coordination' | 'simple'; shop: string | null; work: string | null; vehicleId: string | null; vehicleLabel: string | null; assigneeId: string | null; assigneeName: string | null }
+}
+
+function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
   c: NonNullable<DashboardData['coordinator']>
   tasks: DashboardData['myBoardTasks']
   onChanged: () => Promise<void>
+  onTaskCreated: (created: CreatedTaskPayload) => void
 }) {
   const [linkFor, setLinkFor] = useState<string | null>(null)
   const [linkInput, setLinkInput] = useState('')
@@ -734,7 +740,7 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
         ))}
 
         {addTaskOpen && (
-          <SmartTaskModal onClose={() => setAddTaskOpen(false)} onCreated={onChanged} />
+          <SmartTaskModal onClose={() => setAddTaskOpen(false)} onCreated={onTaskCreated} />
         )}
         {boughtPart && (
           <BoughtPartModal
@@ -1632,7 +1638,28 @@ function DashboardInner() {
           <AttentionCard a={data.attention} isAdmin={true} role={data.user.role} onAction={refreshBoard} />
         )}
         {data.coordinator ? (
-          <CoordinatorBoard c={data.coordinator} tasks={data.myBoardTasks || []} onChanged={refreshBoard} />
+          <CoordinatorBoard c={data.coordinator} tasks={data.myBoardTasks || []} onChanged={refreshBoard} onTaskCreated={(created) => {
+            setData(prev => prev ? {
+              ...prev,
+              myBoardTasks: [{
+                id: created.taskId,
+                title: created.proposal.title,
+                category: 'operations', status: 'todo', priority: 1, dueDate: null,
+                stock: created.stock,
+                vehicleName: created.proposal.vehicleLabel?.split(' · ')[1] ?? null,
+                mission: created.externalRepairId ? {
+                  missionType: 'deliver' as const, selfTransport: false,
+                  externalId: created.externalRepairId,
+                  shop: created.proposal.shop ?? '', externalStatus: 'pending',
+                  stock: created.stock ?? '', vehicleId: created.proposal.vehicleId,
+                  vehicleDesc: created.proposal.vehicleLabel?.split(' · ')[1] ?? '',
+                  vin: null, transportId: null, transportStatus: null, transportDate: null,
+                  looksDone: false,
+                } : null,
+              }, ...(prev.myBoardTasks || [])],
+            } : prev)
+            refreshBoard()
+          }} />
         ) : (
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading board…</p>
         )}
@@ -1703,6 +1730,28 @@ function DashboardInner() {
       {data.coordinator && <CoordinatorBoard c={data.coordinator} tasks={data.myBoardTasks || []} onChanged={async () => {
         const fresh = await fetchDashboardFresh()
         if (fresh) setData(fresh)
+      }} onTaskCreated={(created) => {
+        // Show it NOW — the full refresh replaces this within a few seconds
+        setData(prev => prev ? {
+          ...prev,
+          myBoardTasks: [{
+            id: created.taskId,
+            title: created.proposal.title,
+            category: 'operations', status: 'todo', priority: 1, dueDate: null,
+            stock: created.stock,
+            vehicleName: created.proposal.vehicleLabel?.split(' · ')[1] ?? null,
+            mission: created.externalRepairId ? {
+              missionType: 'deliver' as const, selfTransport: false,
+              externalId: created.externalRepairId,
+              shop: created.proposal.shop ?? '', externalStatus: 'pending',
+              stock: created.stock ?? '', vehicleId: created.proposal.vehicleId,
+              vehicleDesc: created.proposal.vehicleLabel?.split(' · ')[1] ?? '',
+              vin: null, transportId: null, transportStatus: null, transportDate: null,
+              looksDone: false,
+            } : null,
+          }, ...(prev.myBoardTasks || [])],
+        } : prev)
+        fetchDashboardFresh().then(fresh => { if (fresh) setData(fresh) })
       }} />}
 
       {(isAdmin || data.user.role === 'sales_manager') && financials && <FleetFinancialsWidget f={financials} />}

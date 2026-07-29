@@ -21,7 +21,7 @@ type Proposal = {
  */
 export default function SmartTaskModal({ onClose, onCreated }: {
   onClose: () => void
-  onCreated: () => void
+  onCreated: (created: { taskId: string; externalRepairId: string | null; stock: string | null; proposal: Proposal }) => void
 }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -69,7 +69,7 @@ export default function SmartTaskModal({ onClose, onCreated }: {
       })
       const d = await safeJson(res)
       if (!res.ok) { setError(d.error || 'Could not create — try again in a moment.'); return }
-      onCreated()
+      onCreated({ taskId: d.taskId, externalRepairId: d.externalRepairId ?? null, stock: d.stock ?? null, proposal })
       onClose()
     } finally { setBusy(false) }
   }
