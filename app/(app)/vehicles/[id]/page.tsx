@@ -348,6 +348,8 @@ export default function VehicleDetailV2() {
   const [carParts, setCarParts] = useState<Array<{
     id: string; name: string; status: string; expectedDelivery: string | null
     trackingStatus: string | null; createdAt: string; updatedAt: string
+    price: string | null; url: string | null; installTaskCreatedAt: string | null
+    requestedBy?: { id: string; name: string } | null
     assignedTo?: { id: string; name: string } | null
   }>>([])
 
@@ -940,7 +942,7 @@ export default function VehicleDetailV2() {
         const externalCount = externalEntries.length
 
         return (
-            <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             {carTasks.length > 0 && (
               <GlassCard>
                 <GlassEyebrow
@@ -1008,22 +1010,39 @@ export default function VehicleDetailV2() {
                     return (
                       <div key={pt.id} style={{
                         border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 12,
-                        padding: '9px 14px', background: 'var(--bg-card, #fff)',
-                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 14px', background: 'var(--bg-card, #fff)',
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
                       }}>
-                        <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: done ? 400 : 600, color: done ? 'var(--text-muted)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {pt.name}
-                        </span>
-                        {!done && pt.expectedDelivery && (
-                          <span style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>
-                            exp {new Date(pt.expectedDelivery).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </span>
-                        )}
-                        <span style={{
-                          fontSize: 10.5, fontWeight: 650, padding: '2px 9px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0,
-                          background: done ? '#f0fdf4' : pt.status === 'requested' ? '#fef2f2' : pt.status === 'ordered' ? '#fefce8' : '#eff6ff',
-                          color: done ? '#16a34a' : pt.status === 'requested' ? '#ef4444' : pt.status === 'ordered' ? '#a16207' : '#2563eb',
-                        }}>{statusLabel}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: 13, fontWeight: done ? 500 : 600, color: done ? 'var(--text-muted)' : 'var(--text-primary)', margin: 0, lineHeight: 1.4 }}>
+                            {pt.name}
+                            {pt.url && (
+                              <a href={pt.url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                                style={{ marginLeft: 8, color: '#2563eb', fontWeight: 600, fontSize: 11.5, textDecoration: 'none' }}>link ↗</a>
+                            )}
+                          </p>
+                          <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '3px 0 0', lineHeight: 1.45 }}>
+                            {[
+                              `requested ${new Date(pt.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${pt.requestedBy ? ` by ${pt.requestedBy.name}` : ''}`,
+                              pt.assignedTo ? `→ ${pt.assignedTo.name}` : null,
+                              pt.price ? pt.price : null,
+                              done ? `received ${new Date(pt.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : null,
+                              done ? (pt.installTaskCreatedAt ? 'install task on the checklist' : 'no install task yet') : null,
+                            ].filter(Boolean).join(' · ')}
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+                          <span style={{
+                            fontSize: 10.5, fontWeight: 650, padding: '2px 9px', borderRadius: 100, whiteSpace: 'nowrap',
+                            background: done ? '#f0fdf4' : pt.status === 'requested' ? '#fef2f2' : pt.status === 'ordered' ? '#fefce8' : '#eff6ff',
+                            color: done ? '#16a34a' : pt.status === 'requested' ? '#ef4444' : pt.status === 'ordered' ? '#a16207' : '#2563eb',
+                          }}>{statusLabel}</span>
+                          {!done && pt.expectedDelivery && (
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>
+                              exp {new Date(pt.expectedDelivery).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
@@ -1395,7 +1414,7 @@ export default function VehicleDetailV2() {
                 </p>
               )}
             </GlassCard>
-            </>
+            </div>
         )
       })()}
       {/* ═══ MARKETING TAB ═══ */}
