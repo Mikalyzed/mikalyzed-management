@@ -41,6 +41,15 @@ const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
 const fmtShort = (iso: string) =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+// For YYYY-MM-DD strings: parse as LOCAL so the label matches the picker
+const fmtDay = (ymd: string) => {
+  const [y, m, d] = ymd.slice(0, 10).split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+const localYmd = (t: number) => {
+  const dt = new Date(t)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
 
 /**
  * External repair action flow. Updating the expected-back date (quick chip or
@@ -118,7 +127,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
   const toggleChip = (d: number) => {
     if (selectedChip === d) { clearStaged(); return }
     setSelectedChip(d)
-    setPendingDate(new Date(Date.now() + d * DAY_MS).toISOString().slice(0, 10))
+    setPendingDate(localYmd(Date.now() + d * DAY_MS))
   }
 
   const commitUpdate = async () => {
@@ -160,7 +169,6 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
               At <span style={{ fontWeight: 650 }}>{repair.shopName}</span>
               {repair.sentDate ? ` · sent ${fmtDate(repair.sentDate)}` : ' · not sent yet'}
               {daysOut != null && <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}> · {daysOut}d out</span>}
-              {overdueDays > 0 && <span style={{ color: '#b91c1c', fontWeight: 650 }}> · {overdueDays}d overdue</span>}
             </p>
 
             <p style={eyebrow}>Work</p>
@@ -172,56 +180,64 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
               </>
             )}
 
-            <p style={eyebrow}>
-              Expected Back{currentDate ? ` — ${fmtShort(currentDate)}` : ' — no date set'}
-            </p>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: hasDateChange ? 10 : 16 }}>
-              {QUICK_DAYS.map(q => {
-                const on = selectedChip === q.d
-                return (
-                  <button
-                    key={q.d}
-                    disabled={saving}
-                    onClick={() => toggleChip(q.d)}
-                    style={{
-                      ...btn, padding: '5px 14px', borderRadius: 100, fontWeight: 650,
-                      background: on ? '#eaf0fe' : 'var(--bg-card, #fff)',
-                      color: on ? '#1d4ed8' : 'var(--text-secondary)',
-                      border: on ? '1px solid #bfd3fc' : '1px solid var(--border)',
-                    }}
-                  >{q.label}</button>
-                )
-              })}
-              <input
-                type="date"
-                value={pendingDate ?? currentDate}
-                disabled={saving}
-                onChange={e => { setPendingDate(e.target.value || null); setSelectedChip(null) }}
-                style={{ flex: 1, minWidth: 130, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5 }}
-              />
-            </div>
-
-            {/* A new date only commits WITH the reason — the history must explain it */}
-            {hasDateChange && (
-              <div style={{ border: '1px solid #bfd3fc', background: '#f6f9ff', borderRadius: 10, padding: '10px 12px', marginBottom: 16 }}>
-                <p style={{ fontSize: 12, fontWeight: 650, color: '#1d4ed8', margin: '0 0 6px' }}>
-                  New date: {fmtShort(pendingDate!)} — what did the shop say?
+            <p style={eyebrow}>Expected Back</p>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: '12px 14px', marginBottom: 16, background: 'var(--bg-primary, #f8f8f6)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                <p style={{ fontSize: 15, fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>
+                  {currentDate ? fmtDay(currentDate) : 'No date set'}
+                  {overdueDays > 0 && <span style={{ color: '#b91c1c', fontWeight: 650, fontSize: 12 }}> · {overdueDays}d overdue</span>}
                 </p>
-                <textarea
-                  autoFocus rows={2} value={updateNote} onChange={e => setUpdateNote(e.target.value)}
-                  placeholder="Required — e.g. Called Rev Auto, compressor came in, one more week."
-                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5, resize: 'vertical', marginBottom: 8, background: '#fff' }}
+                <input
+                  type="date"
+                  value={pendingDate ?? currentDate}
+                  disabled={saving}
+                  onChange={e => { setPendingDate(e.target.value || null); setSelectedChip(null) }}
+                  style={{ padding: '5px 10px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5, background: '#fff' }}
                 />
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    style={{ ...btn, flex: 1, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', opacity: updateNote.trim() ? 1 : 0.5 }}
-                    disabled={saving || !updateNote.trim()}
-                    onClick={commitUpdate}
-                  >Update — back {fmtShort(pendingDate!)}</button>
-                  <button style={btn} disabled={saving} onClick={clearStaged}>Cancel</button>
-                </div>
               </div>
-            )}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
+                <span style={{ fontSize: 11, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Push to</span>
+                {QUICK_DAYS.map(q => {
+                  const on = selectedChip === q.d
+                  return (
+                    <button
+                      key={q.d}
+                      disabled={saving}
+                      onClick={() => toggleChip(q.d)}
+                      style={{
+                        ...btn, padding: '4px 13px', borderRadius: 100, fontWeight: 650, fontSize: 12,
+                        background: on ? '#eaf0fe' : '#fff',
+                        color: on ? '#1d4ed8' : 'var(--text-secondary)',
+                        border: on ? '1px solid #bfd3fc' : '1px solid var(--border)',
+                      }}
+                    >{q.label}</button>
+                  )
+                })}
+              </div>
+
+              {/* A new date only commits WITH the reason — the history must explain it */}
+              {hasDateChange && (
+                <div style={{ borderTop: '1px solid var(--border-light, #f0f0ec)', marginTop: 12, paddingTop: 12 }}>
+                  <p style={{ fontSize: 12.5, fontWeight: 650, margin: '0 0 6px' }}>
+                    {currentDate ? fmtDay(currentDate) : '—'} → <span style={{ color: '#1d4ed8' }}>{fmtDay(pendingDate!)}</span>
+                    <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}> · what did the shop say?</span>
+                  </p>
+                  <textarea
+                    autoFocus rows={2} value={updateNote} onChange={e => setUpdateNote(e.target.value)}
+                    placeholder="Required — e.g. Called Singer, panel is in, one more week."
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5, resize: 'vertical', marginBottom: 8, background: '#fff' }}
+                  />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      style={{ ...btn, flex: 1, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', opacity: updateNote.trim() ? 1 : 0.5 }}
+                      disabled={saving || !updateNote.trim()}
+                      onClick={commitUpdate}
+                    >Update — back {fmtDay(pendingDate!)}</button>
+                    <button style={btn} disabled={saving} onClick={clearStaged}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {followUps.length > 0 && (
               <>
