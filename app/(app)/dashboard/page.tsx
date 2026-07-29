@@ -306,6 +306,7 @@ function CoordinatorBoard({ c, onChanged }: {
   const [linkFor, setLinkFor] = useState<string | null>(null)
   const [linkInput, setLinkInput] = useState('')
   const [boughtPart, setBoughtPart] = useState<{ id: string; name: string } | null>(null)
+  const [externalActionId, setExternalActionId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const eyebrow: React.CSSProperties = {
@@ -409,7 +410,12 @@ function CoordinatorBoard({ c, onChanged }: {
             <Link href="/external" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>External page →</Link>
           </div>
           {c.externalOut.map(e => (
-            <div key={e.externalId} style={itemRow}>
+            <div
+              key={e.externalId}
+              role="button"
+              onClick={() => setExternalActionId(e.externalId)}
+              style={{ ...itemRow, cursor: 'pointer' }}
+            >
               <div style={{ flex: 1, minWidth: 0 }}>
                 <span style={stockChip}>#{e.stock}</span>
                 <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.vehicle}</div>
@@ -423,8 +429,16 @@ function CoordinatorBoard({ c, onChanged }: {
               {e.status === 'ready' && (
                 <span style={{ fontSize: 10.5, fontWeight: 650, color: '#16a34a', background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap' }}>Ready for pickup</span>
               )}
+              <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 13, flexShrink: 0 }}>›</span>
             </div>
           ))}
+          {externalActionId && (
+            <ExternalRepairModal
+              externalId={externalActionId}
+              onClose={() => setExternalActionId(null)}
+              onChanged={onChanged}
+            />
+          )}
         </div>
       )}
 
