@@ -146,6 +146,7 @@ export async function GET(request: Request) {
     const tr = t.transportRequestId ? trById.get(t.transportRequestId) : null
     return {
       ...t,
+      stock: Array.isArray(t.stockNumbers) && t.stockNumbers.length > 0 ? String(t.stockNumbers[0]) : null,
       mission: ext ? {
         externalId: ext.id,
         shop: ext.shopName,

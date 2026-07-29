@@ -84,6 +84,7 @@ type DashboardData = {
   }>
   myBoardTasks: Array<{
     id: string; title: string; category: string; status: string; priority: number; dueDate: string | null
+    stock?: string | null
     mission?: {
       externalId: string; shop: string; externalStatus: string; stock: string
       vehicleId: string | null; vehicleDesc: string; vin: string | null
@@ -418,23 +419,45 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
             display: 'flex', alignItems: 'center', gap: 12,
           }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{
-                  fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap',
-                  background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc',
-                }}>Task</span>
-                {t.priority > 0 && (
-                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap', background: '#fdecef', color: '#b91c1c', border: '1px solid #fecaca' }}>
-                    {t.priority === 2 ? 'Urgent' : 'High'}
-                  </span>
-                )}
-                {t.dueDate && (
-                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                    due {new Date(t.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </span>
-                )}
-              </div>
-              <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.45, marginTop: 5 }}>{t.title}</div>
+              {(() => {
+                const stock = t.mission?.stock ?? t.stock ?? null
+                const carName = t.mission?.vehicleDesc ?? null
+                // The title often repeats the car — the card already leads with
+                // it, so strip the "(#N101146)" tail and trailing separators.
+                const cleanTitle = t.title.replace(/\s*\(#[A-Z0-9]+\)\s*$/i, '').replace(/\s+[—–-]\s*$/, '')
+                return (
+                  <>
+                    {(stock || carName) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, marginBottom: 4 }}>
+                        {stock && <span style={stockChip}>#{stock}</span>}
+                        {carName && (
+                          <span style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, letterSpacing: '-0.01em' }}>
+                            {carName}
+                          </span>
+                        )}
+                        {t.priority > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0, background: '#fdecef', color: '#b91c1c', border: '1px solid #fecaca' }}>
+                            {t.priority === 2 ? 'Urgent' : 'High'}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.45, color: 'var(--text-primary)' }}>
+                      {cleanTitle}
+                      {!stock && !carName && t.priority > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 100, whiteSpace: 'nowrap', marginLeft: 8, background: '#fdecef', color: '#b91c1c', border: '1px solid #fecaca', verticalAlign: '1px' }}>
+                          {t.priority === 2 ? 'Urgent' : 'High'}
+                        </span>
+                      )}
+                    </div>
+                    {t.dueDate && (
+                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginTop: 2 }}>
+                        due {new Date(t.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
               {/* Mission checkpoints — each row is derived from a real record
                   AND actionable in place. The task can only complete once the
                   checkpoints say the work actually happened. */}
