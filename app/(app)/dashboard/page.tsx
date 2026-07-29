@@ -546,21 +546,21 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                 return (
                   <div style={{ border: '1px solid #bfd3fc', background: '#f6f9ff', borderRadius: 10, padding: '10px 12px', marginTop: 8 }}>
                     <p style={{ fontSize: 12, fontWeight: 650, margin: '0 0 7px' }}>When is the pickup?</p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <input
-                        type="date" value={towDate} onChange={e => setTowDate(e.target.value)}
-                        style={{ flex: 1, minWidth: 130, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5, background: '#fff' }}
-                      />
-                      <button
-                        style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650, opacity: towDate ? 1 : 0.5 }}
-                        disabled={busy || !towDate}
-                        onClick={() => createTow(true)}
-                      >Create — Scheduled</button>
+                    <input
+                      type="date" value={towDate} onChange={e => setTowDate(e.target.value)}
+                      style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5, background: '#fff' }}
+                    />
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
                       <button
                         style={{ ...miniBtn, fontWeight: 650 }}
                         disabled={busy}
                         onClick={() => createTow(false)}
                       >Not Scheduled Yet</button>
+                      <button
+                        style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650, opacity: towDate ? 1 : 0.5 }}
+                        disabled={busy || !towDate}
+                        onClick={() => createTow(true)}
+                      >Create — Scheduled</button>
                     </div>
                     <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '7px 0 0', lineHeight: 1.45 }}>
                       No date is fine — it goes in as unscheduled and the system reminds until a pickup date is set.
