@@ -218,6 +218,22 @@ function OverviewGrid({ o }: { o: NonNullable<DashboardData['overview']> }) {
   )
 }
 
+// Refetch with one retry — an action's refresh can land mid-deploy and fail;
+// silently keeping stale data makes buttons look broken when they worked.
+async function fetchDashboardFresh(): Promise<DashboardData | null> {
+  const attempt = () => fetch(dashboardUrl())
+    .then(async r => {
+      if (!r.ok) throw new Error(String(r.status))
+      const txt = await r.text()
+      return txt ? (JSON.parse(txt) as DashboardData) : null
+    })
+    .catch(() => null)
+  const first = await attempt()
+  if (first) return first
+  await new Promise(res => setTimeout(res, 1500))
+  return attempt()
+}
+
 // /dashboard?view=coordinator lets an admin see Lenny's board; Lenny gets it by role.
 function dashboardUrl() {
   const wantView = typeof window !== 'undefined' && window.location.search.includes('view=coordinator')
@@ -1530,7 +1546,7 @@ function DashboardInner() {
   const coordinatorFocus = coordinatorView && data.user.role === 'admin'
   if (coordinatorFocus) {
     const refreshBoard = async () => {
-      const fresh = await fetch(dashboardUrl()).then(r => r.json()).catch(() => null)
+      const fresh = await fetchDashboardFresh()
       if (fresh) setData(fresh)
     }
     return (
@@ -1593,7 +1609,7 @@ function DashboardInner() {
       }} />}
 
       {data.attention && <AttentionCard a={data.attention} isAdmin={isAdmin} role={data.user.role} onAction={async () => {
-        const fresh = await fetch(dashboardUrl()).then(r => r.json()).catch(() => null)
+        const fresh = await fetchDashboardFresh()
         if (fresh) setData(fresh)
       }} />}
 
@@ -1616,7 +1632,7 @@ function DashboardInner() {
 
 
       {data.coordinator && <CoordinatorBoard c={data.coordinator} tasks={data.myBoardTasks || []} onChanged={async () => {
-        const fresh = await fetch(dashboardUrl()).then(r => r.json()).catch(() => null)
+        const fresh = await fetchDashboardFresh()
         if (fresh) setData(fresh)
       }} />}
 
