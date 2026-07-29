@@ -588,7 +588,11 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
     <div className="card" style={{ marginBottom: 24, padding: 22, borderLeft: rows.length ? '3px solid #d97706' : '3px solid #16a34a' }}>
       <style>{`
         @media (max-width: 640px) {
-          .att-mech-btn { width: 100%; justify-content: center; display: inline-flex; margin-top: 2px; padding: 9px 0 !important; }
+          .att-mech-btn { width: 100%; justify-content: center; display: inline-flex; margin-top: 2px; padding: 7px 0 !important; font-size: 12px !important; }
+          .att-hide-mobile { display: none !important; }
+        }
+        @media (min-width: 641px) {
+          .att-mobile-only { display: none !important; }
         }
       `}</style>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: rows.length ? 8 : 0 }}>
@@ -760,7 +764,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                   <div style={{ ...itemRow, paddingBottom: 4 }}>
                     <CarLead stock={v.stock} vehicle={v.vehicle} sold={v.sold} detail={`${group.length} parts arrived — no install plan`} />
                     <button
-                      className="att-mech-btn"
+                      className="att-mech-btn att-hide-mobile"
                       style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy}
                       onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
                     >→ Add Vehicle to Recon</button>
@@ -774,6 +778,13 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                       <button style={miniBtn} disabled={busy} onClick={() => setDetailPartId(p.id)}>Open ›</button>
                     </div>
                   ))}
+                  <div className="att-mobile-only" style={{ padding: '0 14px 10px' }}>
+                    <button
+                      className="att-mech-btn"
+                      style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy}
+                      onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
+                    >→ Add Vehicle to Recon</button>
+                  </div>
                 </div>
               )
             })
