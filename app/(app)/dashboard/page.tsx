@@ -88,6 +88,8 @@ type DashboardData = {
     stock?: string | null
     vehicleName?: string | null
     mission?: {
+      missionType: 'deliver' | 'retrieve'
+      selfTransport: boolean
       externalId: string; shop: string; externalStatus: string; stock: string
       vehicleId: string | null; vehicleDesc: string; vin: string | null
       transportId: string | null; transportStatus: string | null; transportDate: string | null
@@ -479,7 +481,6 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
               {t.mission && (() => {
                 const m = t.mission
                 const transportArranged = !!m.transportId
-                const atShop = m.looksDone
                 const steps: Array<{ done: boolean; label: string; sub: string; action?: React.ReactNode }> = []
                 const textLink = (label: string, onClick: () => void) => (
                   <button
@@ -487,6 +488,54 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                     style={{ border: 'none', background: 'none', padding: 0, minHeight: 0, fontSize: 12, fontWeight: 650, color: '#1d4ed8', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
                   >{label}</button>
                 )
+                if (m.missionType === 'retrieve') {
+                  // Bringing it back: ride is a CHOICE — tow or drive it ourselves
+                  const rideArranged = transportArranged || m.selfTransport
+                  const isBack = m.externalStatus === 'returned'
+                  steps.push({
+                    done: true,
+                    label: `Ready at ${m.shop}`,
+                    sub: 'The shop says it\'s done',
+                    action: textLink('Open ›', () => setExternalActionId(m.externalId)),
+                  })
+                  steps.push({
+                    done: rideArranged,
+                    label: 'Ride back arranged',
+                    sub: m.selfTransport
+                      ? 'Driving it back ourselves'
+                      : transportArranged
+                        ? (m.transportDate ? `Tow scheduled ${m.transportDate.slice(5).replace('-', '/')}` : 'Tow requested — no date yet')
+                        : 'Tow it, or drive it back',
+                    action: rideArranged
+                      ? (transportArranged ? <Link href="/transport" style={{ fontSize: 12, fontWeight: 650, color: '#1d4ed8', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0, minHeight: 0 }}>Open ›</Link>
+                        : textLink('Undo ›', async () => {
+                            setBusy(true)
+                            try {
+                              await fetch(`/api/board-tasks/${t.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selfTransport: false }) })
+                              await onChanged()
+                            } finally { setBusy(false) }
+                          }))
+                      : (
+                        <span style={{ display: 'inline-flex', gap: 10, flexShrink: 0 }}>
+                          {m.vehicleId ? textLink('Tow ›', () => { setTowAskFor(towAskFor === t.id ? null : t.id); setTowDate('') }) : null}
+                          {textLink('Ourselves ›', async () => {
+                            setBusy(true)
+                            try {
+                              await fetch(`/api/board-tasks/${t.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ selfTransport: true }) })
+                              await onChanged()
+                            } finally { setBusy(false) }
+                          })}
+                        </span>
+                      ),
+                  })
+                  steps.push({
+                    done: isBack,
+                    label: 'Back home',
+                    sub: isBack ? 'Returned — car goes to Pending Routing' : 'Mark Returned when it lands',
+                    action: !isBack ? textLink('Returned ›', () => setExternalActionId(m.externalId)) : undefined,
+                  })
+                } else {
+                const atShop = m.looksDone
                 steps.push({
                   done: true,
                   label: 'External logged',
@@ -511,6 +560,7 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                     : 'Waiting on the pickup',
                   action: !atShop ? textLink('Send ›', () => setExternalActionId(m.externalId)) : undefined,
                 })
+                }
                 return (
                   <div style={{ position: 'relative', marginTop: 10, paddingLeft: 2 }}>
                     {/* connector spine */}
@@ -551,8 +601,8 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                         vehicleId: m.vehicleId,
                         vehicleDescription: `${m.vehicleDesc} (#${m.stock})`,
                         vin: m.vin || undefined,
-                        pickupLocation: 'Mikalyzed — Warehouse',
-                        deliveryLocation: m.shop,
+                        pickupLocation: m.missionType === 'retrieve' ? m.shop : 'Mikalyzed — Warehouse',
+                        deliveryLocation: m.missionType === 'retrieve' ? 'Mikalyzed — Warehouse' : m.shop,
                         purpose: 'other',
                         purposeNote: t.title,
                         ...(withDate && towDate ? { scheduledDate: towDate } : {}),
@@ -631,7 +681,9 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                       await onChanged()
                     } finally { setBusy(false) }
                   }}
-                >{t.mission.externalStatus === 'returned' ? `✓ Complete — already back from ${t.mission.shop}` : `✓ Complete — the car is at ${t.mission.shop}`}</button>
+                >{t.mission.missionType === 'retrieve'
+                  ? '✓ Complete — it\'s back home'
+                  : t.mission.externalStatus === 'returned' ? `✓ Complete — already back from ${t.mission.shop}` : `✓ Complete — the car is at ${t.mission.shop}`}</button>
               )}
             </div>
           </div>

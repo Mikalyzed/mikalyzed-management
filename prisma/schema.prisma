@@ -847,6 +847,8 @@ model Task {
   // instead of a flat checkbox nobody updates.
   externalRepairId   String? @map("external_repair_id")
   transportRequestId String? @map("transport_request_id")
+  missionType        String? @map("mission_type") // deliver (car going out) | retrieve (bringing it back)
+  selfTransport      Boolean @default(false) @map("self_transport") // we drive it ourselves — no tow needed
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 

@@ -113,6 +113,34 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const updated = await prisma.externalRepair.update({ where: { id }, data })
   await recomputeInventoryStatus(updated.stockNumber).catch(() => {})
 
+  // Shop says it's READY → the return leg becomes someone's job. Create the
+  // pickup coordination for the shop coordinator (once) — tow or drive-back
+  // is their call on the card.
+  if (typeof data.status === 'string' && data.status === 'ready' && priorStatus !== 'ready' && !partOnly) {
+    const coordinator = await prisma.user.findFirst({ where: { role: 'shop_coordinator', isActive: true }, select: { id: true } })
+    if (coordinator) {
+      const existing = await prisma.task.findFirst({
+        where: { externalRepairId: id, missionType: 'retrieve', status: { not: 'done' } },
+        select: { id: true },
+      })
+      if (!existing) {
+        await prisma.task.create({
+          data: {
+            title: `Pick up from ${updated.shopName} — it's ready (#${updated.stockNumber})`,
+            description: 'The shop says the car is ready. Arrange the ride back — tow or drive it back — then mark the external Returned when it lands.',
+            category: 'operations',
+            priority: 1,
+            assigneeId: coordinator.id,
+            createdById: user.id,
+            stockNumbers: [updated.stockNumber],
+            externalRepairId: id,
+            missionType: 'retrieve',
+          },
+        }).catch(() => {})
+      }
+    }
+  }
+
   // Vehicle status side-effects driven by external repair status transitions:
   if (typeof data.status === 'string' && data.status !== priorStatus && !partOnly) {
     if (data.status === 'sent' || data.status === 'in_progress') {

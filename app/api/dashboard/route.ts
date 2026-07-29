@@ -153,6 +153,8 @@ export async function GET(request: Request) {
       stock: taskStock,
       vehicleName: taskVehicle ? `${taskVehicle.year ?? ''} ${taskVehicle.make} ${taskVehicle.model}`.trim() : null,
       mission: ext ? {
+        missionType: t.missionType === 'retrieve' ? 'retrieve' : 'deliver',
+        selfTransport: t.selfTransport === true,
         externalId: ext.id,
         shop: ext.shopName,
         externalStatus: ext.status,
@@ -163,8 +165,10 @@ export async function GET(request: Request) {
         transportId: tr?.id ?? null,
         transportStatus: tr?.status ?? null,
         transportDate: tr?.scheduledDate?.toISOString().slice(0, 10) ?? null,
-        // The system's read: pickup happened (sent+) means the coordination worked
-        looksDone: ['sent', 'in_progress', 'ready', 'returned'].includes(ext.status),
+        // deliver = done once the car is out; retrieve = done once it's back
+        looksDone: t.missionType === 'retrieve'
+          ? ext.status === 'returned'
+          : ['sent', 'in_progress', 'ready', 'returned'].includes(ext.status),
       } : null,
     }
   })

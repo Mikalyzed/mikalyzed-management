@@ -95,6 +95,7 @@ export async function POST(req: Request) {
         createdById: user.id,
         stockNumbers: vehicle ? [vehicle.stockNumber] : [],
         externalRepairId,
+        missionType: externalRepairId ? 'deliver' : null,
       },
     })
     await prisma.activityLog.create({
