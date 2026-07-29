@@ -532,21 +532,6 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
         </div>
       )}
 
-      {/* ── Shop Watchlist — one-line reference; the page does the work ── */}
-      {c.watchlist.length > 0 && (
-        <Link href="/watchlist" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
-          <div className="card" style={{ marginBottom: 24, padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
-            <span style={{
-              minWidth: 26, height: 22, padding: '0 7px', borderRadius: 100,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-              background: 'rgba(180,83,9,0.10)', color: '#b45309',
-            }}>{c.watchlist.length}</span>
-            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>Issues Detected</span>
-            <span style={{ fontSize: 13, fontWeight: 650, color: '#1d4ed8' }}>Open ›</span>
-          </div>
-        </Link>
-      )}
     </>
   )
 }
