@@ -75,6 +75,7 @@ export default function SmartTaskModal({ onClose, onCreated }: {
   const chip: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 6,
     fontSize: 11.5, fontWeight: 650, padding: '3px 10px', borderRadius: 100, whiteSpace: 'nowrap',
+    maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis',
     background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border)', color: 'var(--text-secondary)',
   }
 
