@@ -226,29 +226,61 @@ export async function POST(request: Request) {
     // All three are "not actually in active recon yet" — treat them the same way
     // and promote into active recon when the admin re-adds the stock number.
     if (existing.status === 'external' || existing.status === 'archived' || existing.status === 'inventory_only') {
-      // Vehicle returning from external repair / promoted from placeholder — re-enter recon
+      // A car coming back from EXTERNAL never gets a fresh default checklist —
+      // it parks in Pending Routing, where the routing modal asks what's next
+      // and RESUMES the stage it was pulled out of (checklist + progress).
+      // This killed the silent 8-item pseudo-inspection on returns.
+      if (existing.status === 'external') {
+        await prisma.$transaction(async (tx) => {
+          await tx.vehicle.update({
+            where: { id: existing.id },
+            data: {
+              year: year ? parseInt(year) : existing.year,
+              make: make || existing.make,
+              model: model || existing.model,
+              color: color || existing.color,
+              vin: vin || existing.vin,
+              status: 'awaiting_routing',
+              currentStageId: null,
+              currentAssigneeId: null,
+            },
+          })
+          await tx.activityLog.create({
+            data: {
+              entityType: 'vehicle',
+              entityId: existing.id,
+              action: 'returned_from_external',
+              actorId: user.id,
+              details: { stockNumber, parked: 'awaiting_routing', note: 'Route from the recon board — prior work resumes' },
+            },
+          })
+        })
+        await recomputeInventoryStatus(stockNumber).catch(() => {})
+        return NextResponse.json({
+          vehicle: existing,
+          parked: true,
+          message: 'Back from external — the car is in Pending Routing on the recon board. Route it and its previous tasks resume automatically.',
+        }, { status: 201 })
+      }
+
+      // Placeholder / inventory-only cars entering recon: no silent defaults —
+      // the Add Vehicle form must send tasks or a template.
       let stageAssignee = assigneeId
       if (!stageAssignee) {
         const config = await prisma.stageConfig.findUnique({ where: { stage: startingStage } })
         stageAssignee = config?.defaultAssigneeId || null
       }
 
-      const stageConfig = await prisma.stageConfig.findUnique({ where: { stage: startingStage } })
-      const configChecklist = (stageConfig?.defaultChecklist as string[] | undefined)?.length
-        ? stageConfig!.defaultChecklist as string[]
-        : null
-      // Default order: explicit checklist from the request -> DB stage config -> single
-      // 'Inspect & clear' placeholder.  No more legacy DEFAULT_CHECKLISTS fallback —
-      // that was producing the old 8-item "New Inventory" template on stages that
-      // shouldn't get it (see the 1973 Camaro case 2026-06-09).  Mechanic templates
-      // ("New Vehicle Inspection", "Sold Vehicle Inspection") live in the DB now.
       let checklistItems: ChecklistInput[] = mechanicChecklist && mechanicChecklist.length > 0
         ? mechanicChecklist
-        : (configChecklist || ['Inspect & clear'])
+        : []
       if (soldDelivery) {
         checklistItems = mechanicChecklist && mechanicChecklist.length > 0
           ? mechanicChecklist
           : SOLD_DELIVERY_TASKS
+      }
+      if (checklistItems.length === 0) {
+        return NextResponse.json({ error: 'Add tasks or pick a template before sending this car into recon.' }, { status: 400 })
       }
       const checklist = checklistItems.map(toChecklistObj)
 
@@ -353,6 +385,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Stock number already exists and is currently in recon.' }, { status: 409 })
   }
 
+  // Ask-first policy: a new recon car needs explicit tasks or a template
+  // (the sold-delivery flow carries its own list).
+  if (startingStage === 'mechanic' && !rawSoldDelivery && (!mechanicChecklist || mechanicChecklist.length === 0)) {
+    return NextResponse.json({ error: 'Add tasks or pick a template before sending this car into recon.' }, { status: 400 })
+  }
+
   // Determine assignee — use provided, or find default for starting stage
   let stageAssigneeId = assigneeId
   if (!stageAssigneeId) {
@@ -378,14 +416,10 @@ export async function POST(request: Request) {
       },
     })
 
-    // Create stage with custom or default checklist
-    const stageConfig = await tx.stageConfig.findUnique({ where: { stage: startingStage } })
-    const configChecklist = (stageConfig?.defaultChecklist as string[] | undefined)?.length
-      ? stageConfig!.defaultChecklist as string[]
-      : null
+    // No silent default checklists — the form asks for tasks or a template.
     let checklistItems: ChecklistInput[] = mechanicChecklist && mechanicChecklist.length > 0
       ? mechanicChecklist
-      : (configChecklist || DEFAULT_CHECKLISTS[startingStage as keyof typeof DEFAULT_CHECKLISTS] || ['Inspect & clear'])
+      : []
     if (soldDelivery) {
       checklistItems = mechanicChecklist && mechanicChecklist.length > 0
         ? mechanicChecklist

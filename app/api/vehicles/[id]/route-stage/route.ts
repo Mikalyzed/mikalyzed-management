@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getSessionUser, requireRole } from '@/lib/auth'
-import { DEFAULT_CHECKLISTS, STAGE_LABELS } from '@/lib/constants'
+import { STAGE_LABELS } from '@/lib/constants'
 import type { Stage } from '@/lib/constants'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
 import { sendNotificationEmail } from '@/lib/email'
@@ -109,11 +109,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   // Create new stage
   const config = await prisma.stageConfig.findUnique({ where: { stage: nextStage } })
-  const baseTasks = customTasks && customTasks.length > 0
-    ? customTasks
-    : (config?.defaultChecklist as string[] | undefined)?.length
-      ? (config!.defaultChecklist as string[])
-      : DEFAULT_CHECKLISTS[nextStage as Stage] || []
+  // No silent defaults — the routing modal is the ask. Returns resume their
+  // prior stage below; everything else starts with exactly what was chosen.
+  const baseTasks = customTasks && customTasks.length > 0 ? customTasks : []
   // Sold delivery: replace defaults with the sold prep checklist (admin-supplied custom tasks still override)
   const tasks: (string | TaskInput)[] = soldDelivery
     ? (customTasks && customTasks.length > 0 ? customTasks : SOLD_DELIVERY_TASKS)

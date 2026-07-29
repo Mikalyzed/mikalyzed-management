@@ -206,7 +206,11 @@ export default function AddVehiclePage() {
         }
       })
     } else {
-      mechanicChecklist = [{ item: 'Inspect & clear' }]
+      // Ask-first policy: no silent placeholder tasks — a car doesn't enter
+      // recon until someone says what's being done to it.
+      setError('Add at least one task or select a template before adding the vehicle.')
+      setLoading(false)
+      return
     }
     // Pass the selected template's name through to the API so the stage is
     // scoped (e.g. "New Vehicle Inspection") and identifiable across the UI —
@@ -256,6 +260,12 @@ export default function AddVehiclePage() {
         body: JSON.stringify(data),
       })
       const result = await res.json()
+      if (res.ok && result.parked) {
+        // Car came back from external — it's in Pending Routing; routing resumes its prior tasks
+        alert(result.message || 'Back from external — route it from the recon board; its previous tasks resume.')
+        router.push('/vehicles')
+        return
+      }
       if (!res.ok) {
         if (result.error === 'completed' && result.vehicleId) {
           const reason = prompt(

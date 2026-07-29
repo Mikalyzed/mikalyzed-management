@@ -31,15 +31,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const firstStage: Stage = 'mechanic'
   const config = await prisma.stageConfig.findUnique({ where: { stage: firstStage } })
-  // No more legacy DEFAULT_CHECKLISTS fallback — mechanic templates live in the DB
-  // ("New Vehicle Inspection", "Sold Vehicle Inspection").  If the request doesn't
-  // send a checklist, fall through to the DB stage config or a single placeholder.
-  const fallback: string[] = (config?.defaultChecklist as string[] | undefined)?.length
-    ? config!.defaultChecklist as string[]
-    : ['Inspect & clear']
-  const rawChecklist = body.mechanicChecklist && body.mechanicChecklist.length > 0
-    ? body.mechanicChecklist
-    : fallback
+  // Ask-first policy: no silent default checklists — the caller must send
+  // tasks or a template.
+  if (!body.mechanicChecklist || body.mechanicChecklist.length === 0) {
+    return NextResponse.json({ error: 'Add tasks or pick a template before restarting recon.' }, { status: 400 })
+  }
+  const rawChecklist = body.mechanicChecklist
   const checklist = rawChecklist.map((entry) => {
     if (typeof entry === 'string') return { item: entry, done: false, note: '' }
     return { item: entry.item, done: false, note: '', ...(entry.type ? { type: entry.type } : {}) }
