@@ -759,14 +759,9 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                 onOpen={() => setExternalModalId(e.id)}
               />
               <button
-                style={miniBtn} disabled={busy}
-                title="Called the shop — expected back in a week"
-                onClick={() => act(() => fetch(`/api/external/${e.id}`, {
-                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ expectedReturn: new Date(Date.now() + 7 * 86400000).toISOString() }),
-                }))}
-              >+1 wk</button>
-              <button style={miniBtn} disabled={busy} onClick={() => setExternalModalId(e.id)}>Open ›</button>
+                style={{ ...miniBtn, width: '100%', justifyContent: 'center', display: 'inline-flex', padding: '5px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }}
+                disabled={busy} onClick={() => setExternalModalId(e.id)}
+              >Open ›</button>
             </div>
           ))}
 
@@ -790,7 +785,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                   />
                   <button
                     className="att-mech-btn"
-                    style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy}
+                    style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }} disabled={busy}
                     onClick={() => sendToMechanic(v.vehicleId, v.vehicle, [v.id])}
                   >→ Add Vehicle to Recon</button>
                 </div>
@@ -801,7 +796,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                     <CarLead stock={v.stock} vehicle={v.vehicle} sold={v.sold} detail={`${group.length} parts arrived — no install plan`} />
                     <button
                       className="att-mech-btn att-hide-mobile"
-                      style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy}
+                      style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }} disabled={busy}
                       onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
                     >→ Add Vehicle to Recon</button>
                   </div>
@@ -817,7 +812,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                   <div className="att-mobile-only" style={{ padding: '0 14px 10px' }}>
                     <button
                       className="att-mech-btn"
-                      style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy}
+                      style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }} disabled={busy}
                       onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
                     >→ Add Vehicle to Recon</button>
                   </div>
