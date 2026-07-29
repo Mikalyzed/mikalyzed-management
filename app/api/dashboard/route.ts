@@ -392,9 +392,21 @@ export async function GET(request: Request) {
     }
   }
 
+  // Watchlist reference count for the dashboards (page lives at /watchlist)
+  let watchlistCount: number | null = null
+  if (user.role === 'admin' || user.role === 'shop_coordinator') {
+    if (coordinator) {
+      watchlistCount = (coordinator.watchlist as unknown[]).length
+    } else {
+      const wlReport = await buildVehicleStatusReport()
+      watchlistCount = detectBottlenecks(wlReport).length
+    }
+  }
+
   return NextResponse.json({
     newForYou,
     coordinator,
+    watchlistCount,
     attention,
     overview,
     user: { name: user.name, role: user.role, id: user.id },

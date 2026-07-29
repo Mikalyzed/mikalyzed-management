@@ -273,6 +273,18 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
               </>
             )}
 
+            {/* Not-sent repairs: the forward action is sending it out */}
+            {repair.status === 'pending' && (
+              <button
+                style={{ ...btn, width: '100%', padding: '10px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', marginBottom: 8 }}
+                disabled={saving}
+                onClick={async () => {
+                  if (!confirm(`Mark as sent to ${repair.shopName} today?${repair.partOnly ? '' : ' The car will show as at the shop.'}`)) return
+                  await patch({ status: 'sent', fromStatus: 'pending', sentDate: new Date().toISOString() })
+                }}
+              >✓ Mark Sent Today</button>
+            )}
+
             {/* Terminal actions: 50/50, then Close full width */}
             <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <button

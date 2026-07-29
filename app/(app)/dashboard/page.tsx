@@ -33,6 +33,7 @@ type DashboardData = {
     tasks: Array<{ id: string; title: string; description: string | null; priority: number; stock: string | null; createdAt: string }>
     parts: Array<{ id: string; name: string; status: string; stock: string; vehicle: string; createdAt: string }>
   } | null
+  watchlistCount?: number | null
   coordinator?: {
     sourceQueue: Array<{ partId: string; part: string; stock: string; vehicle: string; ageDays: number }>
     externalOut: Array<{ externalId: string; stock: string; vehicle: string; shop: string; status: string; expectedBack: string | null; overdueDays: number; toInstall: number }>
@@ -442,30 +443,28 @@ function CoordinatorBoard({ c, onChanged }: {
         </div>
       )}
 
-      {/* ── Shop Watchlist — same rules as the morning meeting ── */}
+      {/* ── Shop Watchlist — its own page; referenced here with a preview ── */}
       {c.watchlist.length > 0 && (
-        <div className="card" style={{ marginBottom: 24, padding: 22 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-            <div style={eyebrow}>Shop Watchlist · {c.watchlist.length}</div>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Same catches as the morning meeting</span>
-          </div>
-          {c.watchlist.map((b, i) => (
-            <div key={i} style={itemRow}>
-              <span style={{
-                width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-                background: b.severity === 'crit' ? '#e11d48' : '#f59e0b',
-              }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexWrap: 'wrap' }}>
-                  {b.stock && <span style={stockChip}>#{b.stock}</span>}
-                  <span style={{ fontSize: 12, fontWeight: 650, color: b.severity === 'crit' ? '#b91c1c' : '#b45309', whiteSpace: 'nowrap' }}>{b.issue}</span>
-                </div>
-                <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.vehicle ?? '—'}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.45 }}>{b.detail}</div>
+        <Link href="/watchlist" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+          <div className="card" style={{ marginBottom: 24, padding: 22, cursor: 'pointer' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>
+                Shop Watchlist · {c.watchlist.length}
               </div>
+              <span style={{ fontSize: 13, fontWeight: 650, color: '#1d4ed8' }}>Open ›</span>
             </div>
-          ))}
-        </div>
+            {c.watchlist.slice(0, 3).map((b, i) => (
+              <p key={i} style={{ fontSize: 12.5, margin: '4px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', marginRight: 8, background: b.severity === 'crit' ? '#e11d48' : '#f59e0b' }} />
+                <span style={{ fontWeight: 650 }}>{b.issue}</span>
+                <span style={{ color: 'var(--text-muted)' }}> — {b.vehicle ?? '—'}</span>
+              </p>
+            ))}
+            {c.watchlist.length > 3 && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0' }}>+ {c.watchlist.length - 3} more…</p>
+            )}
+          </div>
+        </Link>
       )}
     </>
   )
@@ -1354,6 +1353,24 @@ function DashboardInner() {
         const fresh = await fetch(dashboardUrl()).then(r => r.json()).catch(() => null)
         if (fresh) setData(fresh)
       }} />}
+
+      {typeof data.watchlistCount === 'number' && data.watchlistCount > 0 && (
+        <Link href="/watchlist" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+          <div className="card" style={{ marginBottom: 24, padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+            <span style={{
+              minWidth: 26, height: 22, padding: '0 7px', borderRadius: 100,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+              background: 'rgba(180,83,9,0.10)', color: '#b45309',
+            }}>{data.watchlistCount}</span>
+            <span style={{ flex: 1, fontSize: 13.5 }}>
+              <span style={{ fontWeight: 700 }}>Shop Watchlist:</span>{' '}
+              <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>rule catches waiting to be worked</span>
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 650, color: '#1d4ed8' }}>Open ›</span>
+          </div>
+        </Link>
+      )}
 
       {data.overview && !coordinatorFocus && <OverviewGrid o={data.overview} />}
 
