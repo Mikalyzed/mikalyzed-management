@@ -600,6 +600,11 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
 
   return (
     <div className="card" style={{ marginBottom: 24, padding: 22, borderLeft: rows.length ? '3px solid #d97706' : '3px solid #16a34a' }}>
+      <style>{`
+        @media (max-width: 640px) {
+          .att-mech-btn { width: 100%; justify-content: center; display: inline-flex; margin-top: 2px; padding: 9px 0 !important; }
+        }
+      `}</style>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: rows.length ? 8 : 0 }}>
         <div>
           <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>Attention</div>
@@ -758,9 +763,10 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                     onOpen={() => setDetailPartId(v.id)}
                   />
                   <button
+                    className="att-mech-btn"
                     style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy}
                     onClick={() => sendToMechanic(v.vehicleId, v.vehicle, [v.id])}
-                  >→ Mechanic</button>
+                  >→ Add Vehicle to Recon</button>
                 </div>
               )
               return (
@@ -768,9 +774,10 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                   <div style={{ ...itemRow, paddingBottom: 4 }}>
                     <CarLead stock={v.stock} vehicle={v.vehicle} sold={v.sold} detail={`${group.length} parts arrived — no install plan`} />
                     <button
+                      className="att-mech-btn"
                       style={{ ...miniBtn, background: '#1a1a1a', color: '#fff', border: 'none' }} disabled={busy}
                       onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
-                    >→ Mechanic</button>
+                    >→ Add Vehicle to Recon</button>
                   </div>
                   {group.map(p => (
                     <div key={p.id} style={{ ...itemRow, flexWrap: 'nowrap', borderTop: 'none', paddingTop: 3, paddingBottom: 6, paddingLeft: 26 }}>
