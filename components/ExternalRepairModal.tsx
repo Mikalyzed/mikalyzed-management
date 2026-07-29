@@ -28,13 +28,24 @@ const STATUS_UI: Record<string, { label: string; color: string; bg: string }> = 
   returned: { label: 'Returned', color: '#16a34a', bg: '#f0fdf4' },
 }
 
+const QUICK_DAYS = [
+  { d: 1, label: '1d' },
+  { d: 3, label: '3d' },
+  { d: 7, label: '1wk' },
+  { d: 14, label: '2wk' },
+]
+
+const DAY_MS = 86400000
+
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null
+const fmtShort = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
 /**
- * External repair snapshot + actions — the dashboard's way to work an
- * external without leaving the page: push the return date, log a follow-up
- * call, mark ready / returned. Same PATCH endpoints as the External page.
+ * External repair action flow. Updating the expected-back date (quick chip or
+ * manual date) REQUIRES logging what the shop said — the date change and the
+ * follow-up note commit together, so the history always explains the moves.
  */
 export default function ExternalRepairModal({ externalId, onClose, onChanged }: {
   externalId: string
@@ -44,7 +55,11 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
   const [repair, setRepair] = useState<Repair | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [dateInput, setDateInput] = useState('')
+  // Staged date update: chip or manual date + the required note
+  const [pendingDate, setPendingDate] = useState<string | null>(null) // YYYY-MM-DD
+  const [selectedChip, setSelectedChip] = useState<number | null>(null)
+  const [updateNote, setUpdateNote] = useState('')
+  // Note-only follow-up (no date change)
   const [followNote, setFollowNote] = useState('')
   const [showFollowForm, setShowFollowForm] = useState(false)
 
@@ -52,10 +67,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
     .then(r => r.json())
     .then(d => {
       const rep: Repair | undefined = (d.repairs || [])[0]
-      if (rep) {
-        setRepair(rep)
-        setDateInput(rep.expectedReturn ? rep.expectedReturn.slice(0, 10) : '')
-      }
+      if (rep) setRepair(rep)
     })
     .catch(() => {})
 
@@ -86,17 +98,37 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
     textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px',
   }
   const btn: React.CSSProperties = {
-    display: 'inline-flex', alignItems: 'center', gap: 6,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
     border: '1px solid var(--border)', background: 'var(--bg-card, #fff)', color: 'var(--text-primary)',
     borderRadius: 9, padding: '6px 13px', fontSize: 12.5, fontWeight: 600,
     cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
   }
 
-  const overdueDays = repair?.expectedReturn && new Date(repair.expectedReturn).getTime() < Date.now() && !['returned'].includes(repair.status)
-    ? Math.floor((Date.now() - new Date(repair.expectedReturn).getTime()) / 86400000)
+  const currentDate = repair?.expectedReturn ? repair.expectedReturn.slice(0, 10) : ''
+  const hasDateChange = !!pendingDate && pendingDate !== currentDate
+  const daysOut = repair?.sentDate ? Math.max(0, Math.floor((Date.now() - new Date(repair.sentDate).getTime()) / DAY_MS)) : null
+  const overdueDays = repair?.expectedReturn && new Date(repair.expectedReturn).getTime() < Date.now() && repair.status !== 'returned'
+    ? Math.floor((Date.now() - new Date(repair.expectedReturn).getTime()) / DAY_MS)
     : 0
   const su = repair ? (STATUS_UI[repair.status] ?? STATUS_UI.pending) : STATUS_UI.pending
   const followUps = (repair?.followUps ?? []).filter(f => f?.note)
+
+  const clearStaged = () => { setPendingDate(null); setSelectedChip(null); setUpdateNote('') }
+
+  const toggleChip = (d: number) => {
+    if (selectedChip === d) { clearStaged(); return }
+    setSelectedChip(d)
+    setPendingDate(new Date(Date.now() + d * DAY_MS).toISOString().slice(0, 10))
+  }
+
+  const commitUpdate = async () => {
+    if (!hasDateChange || !updateNote.trim()) return
+    const ok = await patch({
+      expectedReturn: pendingDate,
+      addFollowUp: { note: updateNote.trim(), etaDays: selectedChip ?? undefined },
+    })
+    if (ok) clearStaged()
+  }
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }}>
@@ -127,6 +159,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
             <p style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '0 0 12px' }}>
               At <span style={{ fontWeight: 650 }}>{repair.shopName}</span>
               {repair.sentDate ? ` · sent ${fmtDate(repair.sentDate)}` : ' · not sent yet'}
+              {daysOut != null && <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}> · {daysOut}d out</span>}
               {overdueDays > 0 && <span style={{ color: '#b91c1c', fontWeight: 650 }}> · {overdueDays}d overdue</span>}
             </p>
 
@@ -139,25 +172,56 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
               </>
             )}
 
-            <p style={eyebrow}>Expected Back</p>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            <p style={eyebrow}>
+              Expected Back{currentDate ? ` — ${fmtShort(currentDate)}` : ' — no date set'}
+            </p>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: hasDateChange ? 10 : 16 }}>
+              {QUICK_DAYS.map(q => {
+                const on = selectedChip === q.d
+                return (
+                  <button
+                    key={q.d}
+                    disabled={saving}
+                    onClick={() => toggleChip(q.d)}
+                    style={{
+                      ...btn, padding: '5px 14px', borderRadius: 100, fontWeight: 650,
+                      background: on ? '#eaf0fe' : 'var(--bg-card, #fff)',
+                      color: on ? '#1d4ed8' : 'var(--text-secondary)',
+                      border: on ? '1px solid #bfd3fc' : '1px solid var(--border)',
+                    }}
+                  >{q.label}</button>
+                )
+              })}
               <input
-                type="date" value={dateInput} onChange={e => setDateInput(e.target.value)}
-                style={{ flex: 1, minWidth: 150, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 10, fontSize: 13.5 }}
+                type="date"
+                value={pendingDate ?? currentDate}
+                disabled={saving}
+                onChange={e => { setPendingDate(e.target.value || null); setSelectedChip(null) }}
+                style={{ flex: 1, minWidth: 130, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5 }}
               />
-              <button
-                style={btn} disabled={saving || !dateInput}
-                onClick={() => patch({ expectedReturn: dateInput })}
-              >Save Date</button>
-              <button
-                style={btn} disabled={saving}
-                title="Pushed a week out"
-                onClick={() => {
-                  const base = repair.expectedReturn ? new Date(repair.expectedReturn).getTime() : Date.now()
-                  patch({ expectedReturn: new Date(Math.max(base, Date.now()) + 7 * 86400000).toISOString() })
-                }}
-              >+1 wk</button>
             </div>
+
+            {/* A new date only commits WITH the reason — the history must explain it */}
+            {hasDateChange && (
+              <div style={{ border: '1px solid #bfd3fc', background: '#f6f9ff', borderRadius: 10, padding: '10px 12px', marginBottom: 16 }}>
+                <p style={{ fontSize: 12, fontWeight: 650, color: '#1d4ed8', margin: '0 0 6px' }}>
+                  New date: {fmtShort(pendingDate!)} — what did the shop say?
+                </p>
+                <textarea
+                  autoFocus rows={2} value={updateNote} onChange={e => setUpdateNote(e.target.value)}
+                  placeholder="Required — e.g. Called Rev Auto, compressor came in, one more week."
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5, resize: 'vertical', marginBottom: 8, background: '#fff' }}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    style={{ ...btn, flex: 1, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', opacity: updateNote.trim() ? 1 : 0.5 }}
+                    disabled={saving || !updateNote.trim()}
+                    onClick={commitUpdate}
+                  >Update — back {fmtShort(pendingDate!)}</button>
+                  <button style={btn} disabled={saving} onClick={clearStaged}>Cancel</button>
+                </div>
+              </div>
+            )}
 
             {followUps.length > 0 && (
               <>
@@ -166,7 +230,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                   {followUps.slice(-5).reverse().map((f, i) => (
                     <div key={i} style={{ padding: '7px 12px', fontSize: 12.5, borderBottom: '1px solid var(--border-light, #f0f0ec)', display: 'flex', gap: 10 }}>
                       <span style={{ color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                        {f.date ? new Date(f.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+                        {f.date ? fmtShort(f.date) : '—'}
                       </span>
                       <span style={{ flex: 1, minWidth: 0 }}>{f.note}</span>
                     </div>
@@ -184,7 +248,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                 />
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
-                    style={{ ...btn, background: '#1a1a1a', color: '#fff', border: 'none' }}
+                    style={{ ...btn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc' }}
                     disabled={saving || !followNote.trim()}
                     onClick={async () => {
                       const ok = await patch({ addFollowUp: { note: followNote.trim() } })
@@ -195,29 +259,28 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-                <button style={btn} disabled={saving} onClick={() => setShowFollowForm(true)}>+ Follow-Up</button>
-                {['sent', 'in_progress'].includes(repair.status) && (
-                  <button
-                    style={{ ...btn, color: '#16a34a' }} disabled={saving}
-                    onClick={() => patch({ status: 'ready', fromStatus: repair.status })}
-                  >✓ Ready for Pickup</button>
-                )}
-                {['sent', 'in_progress', 'ready'].includes(repair.status) && (
-                  <button
-                    style={{ ...btn, color: '#16a34a' }} disabled={saving}
-                    onClick={async () => {
-                      if (!confirm(`Mark this ${repair.partOnly ? 'part' : 'car'} as returned from ${repair.shopName}?${repair.partOnly ? '' : ' The car goes to Pending Routing on the recon board.'}`)) return
-                      const ok = await patch({ status: 'returned', fromStatus: repair.status })
-                      if (ok) onClose()
-                    }}
-                  >✓ Returned</button>
-                )}
-              </div>
+              <button style={{ ...btn, marginBottom: 12 }} disabled={saving} onClick={() => setShowFollowForm(true)}>+ Follow-Up</button>
             )}
 
+            {/* Terminal actions: 50/50, then Close full width */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <button
+                style={{ ...btn, flex: 1, padding: '10px 0', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', opacity: ['sent', 'in_progress'].includes(repair.status) ? 1 : 0.45 }}
+                disabled={saving || !['sent', 'in_progress'].includes(repair.status)}
+                onClick={() => patch({ status: 'ready', fromStatus: repair.status })}
+              >✓ Ready for Pickup</button>
+              <button
+                style={{ ...btn, flex: 1, padding: '10px 0', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', opacity: ['sent', 'in_progress', 'ready'].includes(repair.status) ? 1 : 0.45 }}
+                disabled={saving || !['sent', 'in_progress', 'ready'].includes(repair.status)}
+                onClick={async () => {
+                  if (!confirm(`Mark this ${repair.partOnly ? 'part' : 'car'} as returned from ${repair.shopName}?${repair.partOnly ? '' : ' The car goes to Pending Routing on the recon board.'}`)) return
+                  const ok = await patch({ status: 'returned', fromStatus: repair.status })
+                  if (ok) onClose()
+                }}
+              >✓ Returned</button>
+            </div>
             <button onClick={onClose} style={{
-              width: '100%', marginTop: 12, padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
+              width: '100%', padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
               background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
             }}>Close</button>
           </>
