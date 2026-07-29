@@ -1346,6 +1346,8 @@ function DashboardInner() {
         if (fresh) setData(fresh)
       }} />}
 
+      {data.overview && !coordinatorFocus && <OverviewGrid o={data.overview} />}
+
       {typeof data.watchlistCount === 'number' && data.watchlistCount > 0 && (
         <Link href="/watchlist" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
           <div className="card" style={{ marginBottom: 24, padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
@@ -1361,7 +1363,6 @@ function DashboardInner() {
         </Link>
       )}
 
-      {data.overview && !coordinatorFocus && <OverviewGrid o={data.overview} />}
 
       {data.coordinator && <CoordinatorBoard c={data.coordinator} onChanged={async () => {
         const fresh = await fetch(dashboardUrl()).then(r => r.json()).catch(() => null)
