@@ -555,12 +555,12 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                         style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', fontWeight: 650 }}
                         disabled={busy}
                         onClick={() => createTow(false)}
-                      >Not Scheduled Yet</button>
+                      >Not Scheduled</button>
                       <button
                         style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650, opacity: towDate ? 1 : 0.5 }}
                         disabled={busy || !towDate}
                         onClick={() => createTow(true)}
-                      >Create — Scheduled</button>
+                      >Schedule</button>
                     </div>
                     <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '7px 0 0', lineHeight: 1.45 }}>
                       No date is fine — it goes in as unscheduled and the system reminds until a pickup date is set.
