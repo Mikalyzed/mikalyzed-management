@@ -12,11 +12,17 @@ export async function GET(request: Request) {
   const status = searchParams.get('status')
   const mine = searchParams.get('mine')
 
+  const stock = searchParams.get('stock')
+
   const where: Record<string, unknown> = {}
   if (category) where.category = category
   if (assigneeId) where.assigneeId = assigneeId
   if (status) where.status = status
   if (mine === '1') where.assigneeId = user.id
+  if (stock) {
+    where.stockNumbers = { array_contains: stock }
+    if (!status) where.status = { notIn: ['done', 'skipped'] }
+  }
 
   const tasks = await prisma.task.findMany({
     where,
@@ -26,6 +32,23 @@ export async function GET(request: Request) {
     },
     orderBy: [{ priority: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'desc' }],
   })
+
+  // Vehicle-jacket view: enrich linked missions with their record state
+  if (stock) {
+    const extIds = tasks.map(t => t.externalRepairId).filter((x): x is string => !!x)
+    const trIds = tasks.map(t => t.transportRequestId).filter((x): x is string => !!x)
+    const [exts, trs] = await Promise.all([
+      extIds.length ? prisma.externalRepair.findMany({ where: { id: { in: extIds } }, select: { id: true, shopName: true, status: true } }) : [],
+      trIds.length ? prisma.transportRequest.findMany({ where: { id: { in: trIds } }, select: { id: true, status: true, scheduledDate: true } }) : [],
+    ])
+    const extById = new Map(exts.map(e => [e.id, e]))
+    const trById = new Map(trs.map(t => [t.id, t]))
+    return NextResponse.json(tasks.map(t => ({
+      ...t,
+      linkedExternal: t.externalRepairId ? extById.get(t.externalRepairId) ?? null : null,
+      linkedTransport: t.transportRequestId ? trById.get(t.transportRequestId) ?? null : null,
+    })))
+  }
 
   return NextResponse.json(tasks)
 }

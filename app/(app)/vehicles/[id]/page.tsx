@@ -336,7 +336,36 @@ export default function VehicleDetailV2() {
   const [media, setMedia] = useState<MediaAsset[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'general' | 'recon' | 'marketing' | 'media' | 'files' | 'logs'>('general')
+  // Open tasks & missions tagged to this car — the jacket must show them
+  const [carTasks, setCarTasks] = useState<Array<{
+    id: string; title: string; status: string; missionType?: string | null; selfTransport?: boolean
+    assignee?: { id: string; name: string } | null
+    linkedExternal?: { id: string; shopName: string; status: string } | null
+    linkedTransport?: { id: string; status: string; scheduledDate: string | null } | null
+  }>>([])
   const [vehicleInfoSubTab, setVehicleInfoSubTab] = useState<'general' | 'build_title' | 'description' | 'purchase_info'>('general')
+
+  const [carParts, setCarParts] = useState<Array<{
+    id: string; name: string; status: string; expectedDelivery: string | null
+    trackingStatus: string | null; createdAt: string; updatedAt: string
+    assignedTo?: { id: string; name: string } | null
+  }>>([])
+
+  useEffect(() => {
+    const stock = vehicle?.stockNumber
+    if (!stock) return
+    fetch(`/api/board-tasks?stock=${encodeURIComponent(stock)}`)
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setCarTasks(d) })
+      .catch(() => {})
+    if (vehicle?.id) {
+      fetch(`/api/parts?vehicleId=${vehicle.id}`)
+        .then(r => r.json())
+        .then(d => { if (Array.isArray(d?.parts)) setCarParts(d.parts) })
+        .catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicle?.stockNumber])
   const [expandedStageId, setExpandedStageId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [canSeeMoney, setCanSeeMoney] = useState(false)
@@ -888,6 +917,8 @@ export default function VehicleDetailV2() {
         type TimelineEntry =
           | { kind: 'stage'; date: number; stage: ReconStage }
           | { kind: 'external'; date: number; external: ExternalRepairRecord }
+          | { kind: 'part'; date: number; part: (typeof carParts)[number] }
+          | { kind: 'task'; date: number; task: (typeof carTasks)[number] & { createdAt?: string } }
         const stageEntries: TimelineEntry[] = (vehicle.stages || []).map((s) => ({
           kind: 'stage',
           date: s.startedAt ? new Date(s.startedAt).getTime() : 0,
@@ -898,11 +929,107 @@ export default function VehicleDetailV2() {
           date: new Date(er.sentDate || er.createdAt).getTime(),
           external: er,
         }))
-        const entries = [...stageEntries, ...externalEntries].sort((a, b) => a.date - b.date)
+        const partEntries: TimelineEntry[] = carParts.map(pt => ({
+          kind: 'part', date: new Date(pt.createdAt).getTime(), part: pt,
+        }))
+        const taskEntries: TimelineEntry[] = carTasks.map(t => ({
+          kind: 'task', date: new Date((t as { createdAt?: string }).createdAt ?? Date.now()).getTime(), task: t,
+        }))
+        const entries = [...stageEntries, ...externalEntries, ...partEntries, ...taskEntries].sort((a, b) => a.date - b.date)
         const stageCount = stageEntries.length
         const externalCount = externalEntries.length
 
         return (
+            <>
+            {carTasks.length > 0 && (
+              <GlassCard>
+                <GlassEyebrow
+                  label="Open Tasks & Missions"
+                  subtitle={`${carTasks.length} open — worked from the coordinator board`}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {carTasks.map(t => {
+                    const cleanTitle = t.title.replace(/\s*\(#[A-Z0-9]+\)\s*$/i, '').replace(/\s*[—–-]\s*#[A-Z0-9]+\s*$/i, '')
+                    const ext = t.linkedExternal
+                    const tr = t.linkedTransport
+                    const isRetrieve = t.missionType === 'retrieve'
+                    let statusLine: string | null = null
+                    if (ext) {
+                      if (isRetrieve) {
+                        statusLine = ext.status === 'returned' ? 'Back home ✓'
+                          : t.selfTransport ? `Ready at ${ext.shopName} — driving it back ourselves`
+                          : tr ? `Ready at ${ext.shopName} — tow ${tr.scheduledDate ? 'scheduled ' + tr.scheduledDate.slice(5, 10).replace('-', '/') : 'requested'}`
+                          : `Ready at ${ext.shopName} — ride back not arranged`
+                      } else {
+                        statusLine = ['sent', 'in_progress', 'ready'].includes(ext.status) ? `At ${ext.shopName}`
+                          : ext.status === 'returned' ? `Back from ${ext.shopName}`
+                          : tr ? `${ext.shopName} — tow ${tr.scheduledDate ? 'scheduled ' + tr.scheduledDate.slice(5, 10).replace('-', '/') : 'requested, no date'}`
+                          : `${ext.shopName} — transport not arranged yet`
+                      }
+                    }
+                    return (
+                      <div key={t.id} style={{
+                        border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 12,
+                        padding: '10px 14px', background: 'var(--bg-card, #fff)',
+                        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+                      }}>
+                        <div style={{ flex: 1, minWidth: 200 }}>
+                          <p style={{ fontSize: 13, fontWeight: 600, margin: 0, lineHeight: 1.4 }}>{cleanTitle}</p>
+                          <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                            {t.assignee ? `→ ${t.assignee.name}` : 'Unassigned'}
+                            {statusLine && <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}> · {statusLine}</span>}
+                          </p>
+                        </div>
+                        {ext && (
+                          <span style={{
+                            fontSize: 10.5, fontWeight: 650, padding: '2px 9px', borderRadius: 100, whiteSpace: 'nowrap',
+                            background: ext.status === 'returned' ? '#f0fdf4' : ext.status === 'pending' ? '#f4f4f2' : '#eff6ff',
+                            color: ext.status === 'returned' ? '#16a34a' : ext.status === 'pending' ? '#6b6b6b' : '#2563eb',
+                          }}>
+                            {ext.status === 'pending' ? 'Not Sent' : ext.status === 'returned' ? 'Returned' : ext.status === 'ready' ? 'Ready' : 'Sent'}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </GlassCard>
+            )}
+            {carParts.length > 0 && (
+              <GlassCard>
+                <GlassEyebrow
+                  label="Parts"
+                  subtitle={`${carParts.filter(pt => pt.status !== 'received').length} inbound · ${carParts.filter(pt => pt.status === 'received').length} here`}
+                />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {[...carParts].sort((a, b) => (a.status === 'received' ? 1 : 0) - (b.status === 'received' ? 1 : 0)).map(pt => {
+                    const done = pt.status === 'received'
+                    const statusLabel = done ? 'Received' : pt.status === 'requested' ? 'Requested' : pt.status === 'sourced' ? 'Pending Approval' : pt.status === 'ready_to_order' ? 'Ready to Order' : 'Ordered'
+                    return (
+                      <div key={pt.id} style={{
+                        border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 12,
+                        padding: '9px 14px', background: 'var(--bg-card, #fff)',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                      }}>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: done ? 400 : 600, color: done ? 'var(--text-muted)' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {pt.name}
+                        </span>
+                        {!done && pt.expectedDelivery && (
+                          <span style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>
+                            exp {new Date(pt.expectedDelivery).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        )}
+                        <span style={{
+                          fontSize: 10.5, fontWeight: 650, padding: '2px 9px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0,
+                          background: done ? '#f0fdf4' : pt.status === 'requested' ? '#fef2f2' : pt.status === 'ordered' ? '#fefce8' : '#eff6ff',
+                          color: done ? '#16a34a' : pt.status === 'requested' ? '#ef4444' : pt.status === 'ordered' ? '#a16207' : '#2563eb',
+                        }}>{statusLabel}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </GlassCard>
+            )}
             <GlassCard>
               <GlassEyebrow
                 label="Recon History"
@@ -921,6 +1048,44 @@ export default function VehicleDetailV2() {
                   }} />
 
                   {entries.map((entry) => {
+                    if (entry.kind === 'part') {
+                      const pt = entry.part
+                      const done = pt.status === 'received'
+                      return (
+                        <div key={`pt-${pt.id}`} style={{ position: 'relative', paddingLeft: 30, padding: '7px 0 7px 30px' }}>
+                          <div aria-hidden style={{
+                            position: 'absolute', left: 3, top: 13, width: 9, height: 9, borderRadius: '50%',
+                            background: done ? '#dcfce7' : '#dbeafe',
+                            border: done ? '2px solid #16a34a' : '2px solid #2563eb', zIndex: 1,
+                          }} />
+                          <p style={{ fontSize: 12.5, margin: 0, lineHeight: 1.45 }}>
+                            <span style={{ fontWeight: 600 }}>Part — {pt.name.slice(0, 60)}</span>
+                            <span style={{ color: 'var(--text-muted)' }}>
+                              {' '}· {new Date(pt.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              {' '}· {done ? `received ${new Date(pt.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : pt.status.replace(/_/g, ' ')}
+                            </span>
+                          </p>
+                        </div>
+                      )
+                    }
+                    if (entry.kind === 'task') {
+                      const t = entry.task
+                      const cleanTitle = t.title.replace(/\s*\(#[A-Z0-9]+\)\s*$/i, '').replace(/\s*[—–-]\s*#[A-Z0-9]+\s*$/i, '')
+                      return (
+                        <div key={`tk-${t.id}`} style={{ position: 'relative', paddingLeft: 30, padding: '7px 0 7px 30px' }}>
+                          <div aria-hidden style={{
+                            position: 'absolute', left: 3, top: 13, width: 9, height: 9, borderRadius: '50%',
+                            background: '#f1edfd', border: '2px solid #8b5cf6', zIndex: 1,
+                          }} />
+                          <p style={{ fontSize: 12.5, margin: 0, lineHeight: 1.45 }}>
+                            <span style={{ fontWeight: 600 }}>Task — {cleanTitle.slice(0, 60)}</span>
+                            <span style={{ color: 'var(--text-muted)' }}>
+                              {t.assignee ? ` · ${t.assignee.name}` : ''} · open
+                            </span>
+                          </p>
+                        </div>
+                      )
+                    }
                     if (entry.kind === 'external') {
                       const er = entry.external
                       const isOpen = er.status !== 'returned'
@@ -1230,6 +1395,7 @@ export default function VehicleDetailV2() {
                 </p>
               )}
             </GlassCard>
+            </>
         )
       })()}
       {/* ═══ MARKETING TAB ═══ */}
