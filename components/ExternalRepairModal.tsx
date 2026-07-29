@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import ConfirmDialog, { type ConfirmState } from '@/components/ConfirmDialog'
 
 type Repair = {
   id: string
@@ -69,6 +70,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
   const [selectedChip, setSelectedChip] = useState<number | null>(null)
   const [updateNote, setUpdateNote] = useState('')
   const [customOpen, setCustomOpen] = useState(false)
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
 
   const load = () => fetch(`/api/external?id=${externalId}`)
     .then(r => r.json())
@@ -89,7 +91,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        window.alert(d.error || 'Could not update.')
+        setConfirmState({ title: 'Could not update', message: (d as { error?: string }).error || 'Try again.', hideCancel: true })
         return false
       }
       await load()
@@ -278,10 +280,12 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
               <button
                 style={{ ...btn, width: '100%', padding: '10px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', marginBottom: 8 }}
                 disabled={saving}
-                onClick={async () => {
-                  if (!confirm(`Mark as sent to ${repair.shopName} today?${repair.partOnly ? '' : ' The car will show as at the shop.'}`)) return
-                  await patch({ status: 'sent', fromStatus: 'pending', sentDate: new Date().toISOString() })
-                }}
+                onClick={() => setConfirmState({
+                  title: `Send to ${repair.shopName} today?`,
+                  message: repair.partOnly ? 'The part will show as out at the shop.' : 'The car will show as at the shop and leave the recon board.',
+                  confirmLabel: 'Mark Sent',
+                  onConfirm: () => { patch({ status: 'sent', fromStatus: 'pending', sentDate: new Date().toISOString() }) },
+                })}
               >✓ Mark Sent Today</button>
             )}
 
@@ -295,17 +299,19 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
               <button
                 style={{ ...btn, flex: 1, padding: '10px 0', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', opacity: ['sent', 'in_progress', 'ready'].includes(repair.status) ? 1 : 0.45 }}
                 disabled={saving || !['sent', 'in_progress', 'ready'].includes(repair.status)}
-                onClick={async () => {
-                  if (!confirm(`Mark this ${repair.partOnly ? 'part' : 'car'} as returned from ${repair.shopName}?${repair.partOnly ? '' : ' The car goes to Pending Routing on the recon board.'}`)) return
-                  const ok = await patch({ status: 'returned', fromStatus: repair.status })
-                  if (ok) onClose()
-                }}
+                onClick={() => setConfirmState({
+                  title: `Returned from ${repair.shopName}?`,
+                  message: repair.partOnly ? 'The part is marked back at the dealership.' : 'The car goes to Pending Routing on the recon board.',
+                  confirmLabel: '✓ Returned',
+                  onConfirm: async () => { const ok = await patch({ status: 'returned', fromStatus: repair.status }); if (ok) onClose() },
+                })}
               >✓ Returned</button>
             </div>
             <button onClick={onClose} style={{
               width: '100%', padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
               background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
             }}>Close</button>
+            <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
           </>
         )}
       </div>

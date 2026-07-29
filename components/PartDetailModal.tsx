@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { PART_STATUS_LABELS, PART_STATUS_COLORS, PART_LIVE_LABELS, PART_LIVE_COLORS, type PartRecord } from '@/lib/parts-ui'
+import ConfirmDialog, { type ConfirmState } from '@/components/ConfirmDialog'
 
 /**
  * Part Details — THE single part modal. The parts page and the dashboard's
@@ -23,6 +24,7 @@ export default function PartDetailModal({ partId, isAdmin, role, onClose, onChan
   const [editDelivery, setEditDelivery] = useState('')
   const [editImage, setEditImage] = useState<string | null>(null)
   const [editUploading, setEditUploading] = useState(false)
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
 
   useEffect(() => {
     fetch(`/api/parts?id=${partId}`)
@@ -49,7 +51,7 @@ export default function PartDetailModal({ partId, isAdmin, role, onClose, onChan
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        window.alert(d.error || 'Could not update the part.')
+        setConfirmState({ title: 'Could not update the part', message: (d as { error?: string }).error || 'Try again.', hideCancel: true })
         return false
       }
       onChanged()
@@ -143,11 +145,12 @@ export default function PartDetailModal({ partId, isAdmin, role, onClose, onChan
                       <button
                         key={s}
                         disabled={isCurrent || saving}
-                        onClick={async () => {
-                          if (!confirm(`Move "${part.name.trim()}" to ${PART_STATUS_LABELS[s]}?`)) return
-                          const ok = await updatePart({ status: s })
-                          if (ok) setPart({ ...part, status: s })
-                        }}
+                        onClick={() => setConfirmState({
+                          title: `Move to ${PART_STATUS_LABELS[s]}?`,
+                          message: part.name.trim(),
+                          confirmLabel: PART_STATUS_LABELS[s],
+                          onConfirm: async () => { const ok = await updatePart({ status: s }); if (ok) setPart({ ...part, status: s }) },
+                        })}
                         style={{
                           padding: '4px 12px', borderRadius: 100, fontSize: 11.5, fontWeight: 650,
                           background: isCurrent ? c.bg : 'var(--bg-card)',
@@ -253,27 +256,35 @@ export default function PartDetailModal({ partId, isAdmin, role, onClose, onChan
             {role !== 'shop_coordinator' && (
               <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-light, #f0f0ec)' }}>
                 {['sourced', 'ready_to_order', 'ordered', 'received'].includes(part.status) && (
-                  <button onClick={async () => {
-                    if (!confirm('Mark as wrong part and reset to Requested? The link will be cleared.')) return
-                    const ok = await updatePart({
-                      status: 'requested', url: null, tracking: null,
-                      expectedDelivery: null, orderImage: null,
-                    })
-                    if (ok) onClose()
-                  }} disabled={saving} style={{
+                  <button onClick={() => setConfirmState({
+                    title: 'Wrong part — reset to Requested?',
+                    message: 'The link, tracking, and receipt come off; it goes back to the source queue.',
+                    confirmLabel: 'Reset', tone: 'danger',
+                    onConfirm: async () => {
+                      const ok = await updatePart({
+                        status: 'requested', url: null, tracking: null,
+                        expectedDelivery: null, orderImage: null,
+                      })
+                      if (ok) onClose()
+                    },
+                  })} disabled={saving} style={{
                     border: 'none', background: 'none', color: '#b45309',
                     fontSize: 12.5, fontWeight: 600, cursor: 'pointer', minHeight: 0, padding: '4px 6px',
                   }}>Wrong part — reset</button>
                 )}
                 {isAdmin && (
-                  <button onClick={async () => {
-                    if (!confirm('Delete this part?')) return
-                    setSaving(true)
-                    await fetch(`/api/parts/${partId}`, { method: 'DELETE' })
-                    setSaving(false)
-                    onChanged()
-                    onClose()
-                  }} disabled={saving} style={{
+                  <button onClick={() => setConfirmState({
+                    title: 'Delete this part?',
+                    message: `"${part.name.trim()}" is removed for good.`,
+                    confirmLabel: 'Delete', tone: 'danger',
+                    onConfirm: async () => {
+                      setSaving(true)
+                      await fetch(`/api/parts/${partId}`, { method: 'DELETE' })
+                      setSaving(false)
+                      onChanged()
+                      onClose()
+                    },
+                  })} disabled={saving} style={{
                     border: 'none', background: 'none', color: '#ef4444',
                     fontSize: 12.5, fontWeight: 600, cursor: 'pointer', minHeight: 0, padding: '4px 6px',
                   }}>Delete part</button>
@@ -282,6 +293,7 @@ export default function PartDetailModal({ partId, isAdmin, role, onClose, onChan
             )}
           </>
         )}
+        <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
       </div>
     </div>
   )

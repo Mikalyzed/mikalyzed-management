@@ -7,6 +7,7 @@ import RouteVehicleModal from '@/components/RouteVehicleModal'
 import PartDetailModal from '@/components/PartDetailModal'
 import ExternalRepairModal from '@/components/ExternalRepairModal'
 import BoughtPartModal from '@/components/BoughtPartModal'
+import ConfirmDialog, { type ConfirmState } from '@/components/ConfirmDialog'
 import { CALENDAR_TYPE_LABELS, CALENDAR_TYPE_COLORS } from '@/lib/calendar'
 import ReconTaskCard from '@/components/ReconTaskCard'
 
@@ -520,6 +521,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
   const [routeVehicleId, setRouteVehicleId] = useState<string | null>(null)
   const [detailPartId, setDetailPartId] = useState<string | null>(null)
   const [externalModalId, setExternalModalId] = useState<string | null>(null)
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const flash = (msg: string) => {
     setToast(msg)
@@ -556,13 +558,20 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
         return
       }
       if (d.code === 'in_recon') {
-        if (window.confirm(`${vehicleLabel} is in recon at ${d.stage}. Open routing to move it to mechanic? The install tasks will be pre-filled.`)) {
-          setRouteVehicleId(vehicleId)
-        }
+        setConfirmState({
+          title: `Car is in recon at ${d.stage}`,
+          message: `${vehicleLabel} is mid-stage. Open routing to move it to mechanic? The install tasks pre-fill.`,
+          confirmLabel: 'Open Routing',
+          onConfirm: () => setRouteVehicleId(vehicleId),
+        })
       } else if (d.code === 'external') {
-        window.alert(`${vehicleLabel} is at ${d.shop}${d.expectedBack ? ` (expected back ${d.expectedBack})` : ''}. The install is queued — when the car returns and gets routed back into recon, these parts surface automatically in the routing modal.`)
+        setConfirmState({
+          title: `Car is at ${d.shop}`,
+          message: `${vehicleLabel}${d.expectedBack ? ` is expected back ${d.expectedBack}.` : ' is out at the shop.'} The install is queued — it surfaces automatically in routing when the car returns.`,
+          hideCancel: true,
+        })
       } else {
-        window.alert(d.error || 'Could not send to mechanic.')
+        flash(d.error || 'Could not send to mechanic.')
       }
     } finally {
       setBusy(false)
@@ -826,6 +835,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
         </div>
       ))}
 
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
       {toast && (
         <div role="status" style={{
           position: 'fixed', left: '50%', bottom: 28, transform: 'translateX(-50%)', zIndex: 1400,

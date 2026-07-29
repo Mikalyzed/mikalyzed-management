@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import ExternalRepairModal from '@/components/ExternalRepairModal'
 import PartDetailModal from '@/components/PartDetailModal'
 import RouteVehicleModal from '@/components/RouteVehicleModal'
+import ConfirmDialog, { type ConfirmState } from '@/components/ConfirmDialog'
 
 type Fix =
   | { kind: 'external_return_date'; externalId: string }
@@ -53,6 +54,7 @@ export default function WatchlistPage() {
   const [externalId, setExternalId] = useState<string | null>(null)
   const [partId, setPartId] = useState<string | null>(null)
   const [routeVehicleId, setRouteVehicleId] = useState<string | null>(null)
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
   const [role, setRole] = useState('')
 
   const notify = (msg: string) => {
@@ -109,13 +111,20 @@ export default function WatchlistPage() {
         notify(`${vehicleLabel} is in the Mechanic lane with its install task — assign it from the dashboard or recon board.`)
         await load()
       } else if (d.code === 'in_recon') {
-        if (window.confirm(`${vehicleLabel} is in recon at ${d.stage}. Open routing to move it to mechanic? The install pre-fills.`)) {
-          setRouteVehicleId(vehicleId)
-        }
+        setConfirmState({
+          title: `Car is in recon at ${d.stage}`,
+          message: `${vehicleLabel} is mid-stage. Open routing to move it to mechanic? The install tasks pre-fill.`,
+          confirmLabel: 'Open Routing',
+          onConfirm: () => setRouteVehicleId(vehicleId),
+        })
       } else if (d.code === 'external') {
-        window.alert(`${vehicleLabel} is at ${d.shop}${d.expectedBack ? ` (expected back ${d.expectedBack})` : ''}. The install is queued — it surfaces automatically in routing when the car returns.`)
+        setConfirmState({
+          title: `Car is at ${d.shop}`,
+          message: `${vehicleLabel}${d.expectedBack ? ` is expected back ${d.expectedBack}.` : ' is out at the shop.'} The install is queued — it surfaces automatically in routing when the car returns.`,
+          hideCancel: true,
+        })
       } else {
-        window.alert(d.error || 'Could not send to mechanic.')
+        notify(d.error || 'Could not send to mechanic.')
       }
     } finally { setBusy(false) }
   }
@@ -187,7 +196,12 @@ export default function WatchlistPage() {
         return (
           <button
             style={redBtn} disabled={busy}
-            onClick={() => { if (confirm(`Remove "${f.item}" from the checklist?`)) removeTask(f) }}
+            onClick={() => setConfirmState({
+              title: 'Remove this task?',
+              message: `"${f.item}" comes off the mechanic checklist. The part-flow install task stays.`,
+              confirmLabel: 'Remove Task', tone: 'danger',
+              onConfirm: () => removeTask(f),
+            })}
           >Remove Task</button>
         )
       default:
@@ -274,6 +288,7 @@ export default function WatchlistPage() {
       {externalId && (
         <ExternalRepairModal externalId={externalId} onClose={() => setExternalId(null)} onChanged={load} />
       )}
+      <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
       {routeVehicleId && (
         <RouteVehicleModal
           vehicleId={routeVehicleId}
