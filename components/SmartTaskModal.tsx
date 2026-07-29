@@ -29,6 +29,12 @@ export default function SmartTaskModal({ onClose, onCreated }: {
   const [question, setQuestion] = useState<{ prompt: string; options: string[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // A fetch can land mid-deploy and return an empty/HTML body — never crash on it
+  const safeJson = async (res: Response) => {
+    const txt = await res.text().catch(() => '')
+    try { return txt ? JSON.parse(txt) : {} } catch { return {} }
+  }
+
   const propose = async (fullText: string) => {
     setBusy(true)
     setError(null)
@@ -37,8 +43,8 @@ export default function SmartTaskModal({ onClose, onCreated }: {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'propose', text: fullText }),
       })
-      const d = await res.json()
-      if (!res.ok) { setError(d.error || 'Could not read that.'); return }
+      const d = await safeJson(res)
+      if (!res.ok) { setError(d.error || 'Could not read that — try again in a moment.'); return }
       setProposal(d.proposal)
       setQuestion(d.question ?? null)
     } finally { setBusy(false) }
@@ -61,8 +67,8 @@ export default function SmartTaskModal({ onClose, onCreated }: {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'create', proposal }),
       })
-      const d = await res.json()
-      if (!res.ok) { setError(d.error || 'Could not create.'); return }
+      const d = await safeJson(res)
+      if (!res.ok) { setError(d.error || 'Could not create — try again in a moment.'); return }
       onCreated()
       onClose()
     } finally { setBusy(false) }
