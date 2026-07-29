@@ -582,7 +582,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
 
   const itemRow: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-    padding: '8px 14px 8px 40px',
+    padding: '8px 14px',
     fontSize: 12.5, borderTop: '1px solid var(--border-light, #f0f0ec)',
     background: 'var(--bg-card, #fff)',
   }
@@ -773,7 +773,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                     >→ Mechanic</button>
                   </div>
                   {group.map(p => (
-                    <div key={p.id} style={{ ...itemRow, flexWrap: 'nowrap', borderTop: 'none', paddingTop: 3, paddingBottom: 6, paddingLeft: 46 }}>
+                    <div key={p.id} style={{ ...itemRow, flexWrap: 'nowrap', borderTop: 'none', paddingTop: 3, paddingBottom: 6, paddingLeft: 26 }}>
                       <span style={{
                         flex: 1, minWidth: 0, fontWeight: 500, fontSize: 12.5, lineHeight: 1.4,
                         display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
