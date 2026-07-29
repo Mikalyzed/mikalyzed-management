@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import ExternalRepairModal from '@/components/ExternalRepairModal'
 import PartDetailModal from '@/components/PartDetailModal'
+import RouteVehicleModal from '@/components/RouteVehicleModal'
 
 type Fix =
   | { kind: 'external_return_date'; externalId: string }
@@ -13,6 +14,7 @@ type Fix =
   | { kind: 'install_tasks'; vehicleId: string; canCreate: boolean; parts: Array<{ id: string; name: string }> }
   | { kind: 'confirm_received'; partId: string }
   | { kind: 'remove_task'; stageId: string; idx: number; item: string }
+  | { kind: 'send_to_mechanic'; vehicleId: string; partId: string }
 
 type Item = {
   severity: 'crit' | 'warn'
@@ -28,6 +30,7 @@ const DAY_MS = 86400000
 
 const blueBtn: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+  flex: 1, // one action fills the card; two split 50/50; three split thirds
   background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc',
   borderRadius: 9, padding: '6px 13px', fontSize: 12.5, fontWeight: 650,
   cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
@@ -49,6 +52,7 @@ export default function WatchlistPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [externalId, setExternalId] = useState<string | null>(null)
   const [partId, setPartId] = useState<string | null>(null)
+  const [routeVehicleId, setRouteVehicleId] = useState<string | null>(null)
   const [role, setRole] = useState('')
 
   const notify = (msg: string) => {
@@ -91,6 +95,30 @@ export default function WatchlistPage() {
       body: JSON.stringify({ checklist }),
     })
   }, 'Task removed.')
+
+  /** Stranded part → mechanic, with the dashboard's ask-first 409 handling. */
+  const sendToMechanic = async (vehicleId: string, vehicleLabel: string, partId: string) => {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/vehicles/${vehicleId}/send-to-mechanic`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partIds: [partId] }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok) {
+        notify(`${vehicleLabel} is in the Mechanic lane with its install task — assign it from the dashboard or recon board.`)
+        await load()
+      } else if (d.code === 'in_recon') {
+        if (window.confirm(`${vehicleLabel} is in recon at ${d.stage}. Open routing to move it to mechanic? The install pre-fills.`)) {
+          setRouteVehicleId(vehicleId)
+        }
+      } else if (d.code === 'external') {
+        window.alert(`${vehicleLabel} is at ${d.shop}${d.expectedBack ? ` (expected back ${d.expectedBack})` : ''}. The install is queued — it surfaces automatically in routing when the car returns.`)
+      } else {
+        window.alert(d.error || 'Could not send to mechanic.')
+      }
+    } finally { setBusy(false) }
+  }
 
   const actionsFor = (it: Item) => {
     const f = it.fix
@@ -148,6 +176,13 @@ export default function WatchlistPage() {
             }), 'Install tasks created.')}
           >✓ Create Install Tasks</button>
         ) : null
+      case 'send_to_mechanic':
+        return (
+          <button
+            style={blueBtn} disabled={busy}
+            onClick={() => sendToMechanic(f.vehicleId, it.vehicle ?? 'This car', f.partId)}
+          >→ Add Vehicle to Recon</button>
+        )
       case 'remove_task':
         return (
           <button
@@ -238,6 +273,13 @@ export default function WatchlistPage() {
 
       {externalId && (
         <ExternalRepairModal externalId={externalId} onClose={() => setExternalId(null)} onChanged={load} />
+      )}
+      {routeVehicleId && (
+        <RouteVehicleModal
+          vehicleId={routeVehicleId}
+          onClose={() => setRouteVehicleId(null)}
+          onRouted={async () => { setRouteVehicleId(null); await load() }}
+        />
       )}
       {partId && (
         <PartDetailModal

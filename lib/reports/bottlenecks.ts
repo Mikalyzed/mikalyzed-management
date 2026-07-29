@@ -24,6 +24,7 @@ export type BottleneckFix =
   | { kind: 'install_tasks'; vehicleId: string; canCreate: boolean; parts: Array<{ id: string; name: string }> }
   | { kind: 'confirm_received'; partId: string }
   | { kind: 'remove_task'; stageId: string; idx: number; item: string }
+  | { kind: 'send_to_mechanic'; vehicleId: string; partId: string } // stranded part → car into mechanic
 
 export type Bottleneck = {
   severity: 'crit' | 'warn'
@@ -223,6 +224,7 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
         detail: (p as { soldCar?: boolean }).soldCar
           ? `"${p.part}" arrived but this car is marked sold — install it before delivery, or return the part.`
           : `"${p.part}" arrived but this car has no active recon stage to carry the install. Route it into recon (the install task will surface in routing) or log where the part is being held.`,
+        fix: { kind: 'send_to_mechanic', vehicleId: p.vehicleId, partId: p.partId },
       })
     }
   }
