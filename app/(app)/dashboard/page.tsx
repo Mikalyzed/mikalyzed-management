@@ -504,6 +504,9 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
   const [open, setOpen] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [assignFor, setAssignFor] = useState<string | null>(null) // stageId|item key
+  // Fixed coords for the assign popover — the row container clips overflow,
+  // so an absolutely-positioned dropdown would render underneath it.
+  const [assignPos, setAssignPos] = useState<{ top: number; right: number } | null>(null)
   const [routeVehicleId, setRouteVehicleId] = useState<string | null>(null)
   const [detailPartId, setDetailPartId] = useState<string | null>(null)
   const [externalModalId, setExternalModalId] = useState<string | null>(null)
@@ -652,14 +655,28 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
             return (
               <div key={k} style={{ ...itemRow, position: 'relative', flexWrap: 'wrap' }}>
                 <CarLead stock={it.stock} vehicle={it.vehicle} detail={it.item} />
-                <button style={miniBtn} disabled={busy} onClick={() => setAssignFor(assignFor === k ? null : k)}>
+                <button
+                  style={miniBtn} disabled={busy}
+                  onClick={(e) => {
+                    if (assignFor === k) { setAssignFor(null); return }
+                    const r = e.currentTarget.getBoundingClientRect()
+                    // Clamp so the list never runs off the bottom of the screen
+                    const estHeight = Math.min(a.mechanics.length, 5) * 37 + 8
+                    setAssignPos({
+                      top: Math.min(r.bottom + 4, window.innerHeight - estHeight - 12),
+                      right: Math.max(8, window.innerWidth - r.right),
+                    })
+                    setAssignFor(k)
+                  }}
+                >
                   Assign ▾
                 </button>
-                {assignFor === k && (
+                {assignFor === k && assignPos && (
                   <span style={{
-                    position: 'absolute', right: 4, top: 'calc(100% - 2px)', zIndex: 30, minWidth: 160,
+                    position: 'fixed', right: assignPos.right, top: assignPos.top, zIndex: 1200, minWidth: 160,
+                    maxHeight: 200, overflowY: 'auto',
                     background: 'var(--bg-card, #fff)', border: '1px solid var(--border)', borderRadius: 10,
-                    boxShadow: '0 8px 24px rgba(24,24,27,0.16)', overflow: 'hidden', display: 'block',
+                    boxShadow: '0 8px 24px rgba(24,24,27,0.16)', display: 'block',
                   }}>
                     {a.mechanics.map(m => (
                       <button
