@@ -839,6 +839,11 @@ model Task {
   sortOrder     Int       @default(0) @map("sort_order")
   subtasks      Json      @default("[]") // Array of { item: string, done: boolean }
   stockNumbers  Json      @default("[]") @map("stock_numbers") // Array of stock numbers tagged to this task
+  // Mission links — a coordination task tied to real records lets the UI
+  // derive live checkpoints (external logged / transport arranged / at shop)
+  // instead of a flat checkbox nobody updates.
+  externalRepairId   String? @map("external_repair_id")
+  transportRequestId String? @map("transport_request_id")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 

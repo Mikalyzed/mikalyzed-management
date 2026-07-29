@@ -112,14 +112,55 @@ export async function GET(request: Request) {
     take: 10,
   })
 
-  // Board tasks assigned to me
-  const myBoardTasks = await prisma.task.findMany({
+  // Board tasks assigned to me — mission-linked tasks carry live checkpoint
+  // state derived from their external repair / transport request records.
+  const myBoardTasksRaw = await prisma.task.findMany({
     where: {
       assigneeId: user.id,
       status: { notIn: ['done', 'skipped'] },
     },
     orderBy: [{ priority: 'desc' }, { dueDate: 'asc' }, { createdAt: 'desc' }],
     take: 10,
+  })
+  const linkedExtIds = myBoardTasksRaw.map(t => t.externalRepairId).filter((x): x is string => !!x)
+  const linkedTrIds = myBoardTasksRaw.map(t => t.transportRequestId).filter((x): x is string => !!x)
+  const [linkedExts, linkedTrs] = await Promise.all([
+    linkedExtIds.length ? prisma.externalRepair.findMany({
+      where: { id: { in: linkedExtIds } },
+      select: { id: true, shopName: true, status: true, stockNumber: true, expectedReturn: true },
+    }) : Promise.resolve([]),
+    linkedTrIds.length ? prisma.transportRequest.findMany({
+      where: { id: { in: linkedTrIds } },
+      select: { id: true, status: true, scheduledDate: true, carrierInfo: true },
+    }) : Promise.resolve([]),
+  ])
+  const missionVehicles = linkedExts.length ? await prisma.vehicle.findMany({
+    where: { stockNumber: { in: linkedExts.map(e => e.stockNumber) } },
+    select: { id: true, stockNumber: true, year: true, make: true, model: true, vin: true },
+  }) : []
+  const mvByStock = new Map(missionVehicles.map(v => [v.stockNumber, v]))
+  const extById = new Map(linkedExts.map(e => [e.id, e]))
+  const trById = new Map(linkedTrs.map(t => [t.id, t]))
+  const myBoardTasks = myBoardTasksRaw.map(t => {
+    const ext = t.externalRepairId ? extById.get(t.externalRepairId) : null
+    const tr = t.transportRequestId ? trById.get(t.transportRequestId) : null
+    return {
+      ...t,
+      mission: ext ? {
+        externalId: ext.id,
+        shop: ext.shopName,
+        externalStatus: ext.status,
+        stock: ext.stockNumber,
+        vehicleId: mvByStock.get(ext.stockNumber)?.id ?? null,
+        vehicleDesc: (() => { const v = mvByStock.get(ext.stockNumber); return v ? `${v.year ?? ''} ${v.make} ${v.model}`.trim() : ext.stockNumber })(),
+        vin: mvByStock.get(ext.stockNumber)?.vin ?? null,
+        transportId: tr?.id ?? null,
+        transportStatus: tr?.status ?? null,
+        transportDate: tr?.scheduledDate?.toISOString().slice(0, 10) ?? null,
+        // The system's read: pickup happened (sent+) means the coordination worked
+        looksDone: ['sent', 'in_progress', 'ready', 'returned'].includes(ext.status),
+      } : null,
+    }
   })
 
   // Parts I'm assigned to find/source (still in 'requested' status — open to-do)

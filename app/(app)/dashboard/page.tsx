@@ -84,6 +84,12 @@ type DashboardData = {
   }>
   myBoardTasks: Array<{
     id: string; title: string; category: string; status: string; priority: number; dueDate: string | null
+    mission?: {
+      externalId: string; shop: string; externalStatus: string; stock: string
+      vehicleId: string | null; vehicleDesc: string; vin: string | null
+      transportId: string | null; transportStatus: string | null; transportDate: string | null
+      looksDone: boolean
+    } | null
   }>
   myParts: Array<{
     id: string; name: string; status: string; url: string | null
@@ -427,6 +433,73 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                 )}
               </div>
               <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.45, marginTop: 5 }}>{t.title}</div>
+              {/* Mission checkpoints — derived live from the linked records */}
+              {t.mission && (() => {
+                const m = t.mission
+                const chip = (done: boolean, label: string) => (
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    fontSize: 10.5, fontWeight: 650, padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap',
+                    background: done ? '#f0fdf4' : 'var(--bg-card, #fff)',
+                    color: done ? '#16a34a' : 'var(--text-muted)',
+                    border: done ? '1px solid #bbf7d0' : '1px solid var(--border)',
+                  }}>{done ? '✓' : '○'} {label}</span>
+                )
+                const transportArranged = !!m.transportId
+                const atShop = m.looksDone
+                return (
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 7, alignItems: 'center' }}>
+                    {chip(true, `External logged — ${m.shop}`)}
+                    {chip(transportArranged, m.transportDate ? `Transport ${m.transportDate.slice(5)}` : 'Transport arranged')}
+                    {chip(atShop, m.externalStatus === 'returned' ? 'Back already' : `At ${m.shop}`)}
+                    {!transportArranged && !atShop && m.vehicleId && (
+                      <button
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true)
+                          try {
+                            const res = await fetch('/api/transport', {
+                              method: 'POST', headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                vehicleId: m.vehicleId,
+                                vehicleDescription: `${m.vehicleDesc} (#${m.stock})`,
+                                vin: m.vin || undefined,
+                                pickupLocation: 'Mikalyzed — Warehouse',
+                                deliveryLocation: m.shop,
+                                purpose: 'other',
+                                purposeNote: t.title,
+                              }),
+                            })
+                            if (res.ok) {
+                              const d = await res.json().catch(() => ({}))
+                              const trId = d.request?.id ?? d.id
+                              if (trId) {
+                                await fetch(`/api/board-tasks/${t.id}`, {
+                                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ transportRequestId: trId }),
+                                })
+                              }
+                              await onChanged()
+                            }
+                          } finally { setBusy(false) }
+                        }}
+                        style={{
+                          border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
+                          borderRadius: 100, padding: '2px 10px', fontSize: 10.5, fontWeight: 650,
+                          cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
+                        }}
+                      >+ Transport Request</button>
+                    )}
+                  </div>
+                )
+              })()}
+              {t.mission?.looksDone && (
+                <p style={{ fontSize: 11.5, fontWeight: 650, color: '#16a34a', margin: '6px 0 0' }}>
+                  {t.mission.externalStatus === 'returned'
+                    ? `Already back from ${t.mission.shop} — this looks done.`
+                    : `The car is at ${t.mission.shop} — this coordination looks done.`}
+                </p>
+              )}
             </div>
             <button
               style={{ ...miniBtn, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650, flexShrink: 0 }}
@@ -441,7 +514,7 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                   await onChanged()
                 } finally { setBusy(false) }
               }}
-            >✓ Done</button>
+            >{t.mission?.looksDone ? '✓ Complete It' : '✓ Done'}</button>
           </div>
         ))}
 
