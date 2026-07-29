@@ -443,26 +443,18 @@ function CoordinatorBoard({ c, onChanged }: {
         </div>
       )}
 
-      {/* ── Shop Watchlist — its own page; referenced here with a preview ── */}
+      {/* ── Shop Watchlist — one-line reference; the page does the work ── */}
       {c.watchlist.length > 0 && (
         <Link href="/watchlist" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
-          <div className="card" style={{ marginBottom: 24, padding: 22, cursor: 'pointer' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-muted)' }}>
-                Shop Watchlist · {c.watchlist.length}
-              </div>
-              <span style={{ fontSize: 13, fontWeight: 650, color: '#1d4ed8' }}>Open ›</span>
-            </div>
-            {c.watchlist.slice(0, 3).map((b, i) => (
-              <p key={i} style={{ fontSize: 12.5, margin: '4px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', marginRight: 8, background: b.severity === 'crit' ? '#e11d48' : '#f59e0b' }} />
-                <span style={{ fontWeight: 650 }}>{b.issue}</span>
-                <span style={{ color: 'var(--text-muted)' }}> — {b.vehicle ?? '—'}</span>
-              </p>
-            ))}
-            {c.watchlist.length > 3 && (
-              <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0' }}>+ {c.watchlist.length - 3} more…</p>
-            )}
+          <div className="card" style={{ marginBottom: 24, padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+            <span style={{
+              minWidth: 26, height: 22, padding: '0 7px', borderRadius: 100,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+              background: 'rgba(180,83,9,0.10)', color: '#b45309',
+            }}>{c.watchlist.length}</span>
+            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>Bottlenecks Detected</span>
+            <span style={{ fontSize: 13, fontWeight: 650, color: '#1d4ed8' }}>Open ›</span>
           </div>
         </Link>
       )}
@@ -1363,10 +1355,7 @@ function DashboardInner() {
               fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
               background: 'rgba(180,83,9,0.10)', color: '#b45309',
             }}>{data.watchlistCount}</span>
-            <span style={{ flex: 1, fontSize: 13.5 }}>
-              <span style={{ fontWeight: 700 }}>Shop Watchlist:</span>{' '}
-              <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>rule catches waiting to be worked</span>
-            </span>
+            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>Bottlenecks Detected</span>
             <span style={{ fontSize: 13, fontWeight: 650, color: '#1d4ed8' }}>Open ›</span>
           </div>
         </Link>
