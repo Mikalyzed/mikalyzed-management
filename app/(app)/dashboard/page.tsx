@@ -433,88 +433,122 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                 )}
               </div>
               <div style={{ fontWeight: 600, fontSize: 13, lineHeight: 1.45, marginTop: 5 }}>{t.title}</div>
-              {/* Mission checkpoints — derived live from the linked records */}
+              {/* Mission checkpoints — each row is derived from a real record
+                  AND actionable in place. The task can only complete once the
+                  checkpoints say the work actually happened. */}
               {t.mission && (() => {
                 const m = t.mission
-                const chip = (done: boolean, label: string) => (
-                  <span style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    fontSize: 10.5, fontWeight: 650, padding: '2px 8px', borderRadius: 100, whiteSpace: 'nowrap',
-                    background: done ? '#f0fdf4' : 'var(--bg-card, #fff)',
-                    color: done ? '#16a34a' : 'var(--text-muted)',
-                    border: done ? '1px solid #bbf7d0' : '1px solid var(--border)',
-                  }}>{done ? '✓' : '○'} {label}</span>
-                )
                 const transportArranged = !!m.transportId
                 const atShop = m.looksDone
+                const row = (done: boolean, label: string, action?: React.ReactNode) => (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px',
+                    borderBottom: '1px solid var(--border-light, #f0f0ec)', background: 'var(--bg-card, #fff)',
+                  }}>
+                    <span style={{
+                      width: 17, height: 17, borderRadius: '50%', flexShrink: 0,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 10, fontWeight: 800,
+                      background: done ? '#16a34a' : 'var(--bg-primary, #f8f8f6)',
+                      color: done ? '#fff' : 'var(--text-muted)',
+                      border: done ? 'none' : '1px solid var(--border)',
+                    }}>{done ? '✓' : ''}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: done ? 500 : 600, color: done ? 'var(--text-muted)' : 'var(--text-primary)' }}>{label}</span>
+                    {action}
+                  </div>
+                )
+                const rowBtn: React.CSSProperties = {
+                  border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
+                  borderRadius: 8, padding: '3px 11px', fontSize: 11.5, fontWeight: 650,
+                  cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap', flexShrink: 0,
+                }
                 return (
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 7, alignItems: 'center' }}>
-                    {chip(true, `External logged — ${m.shop}`)}
-                    {chip(transportArranged, m.transportDate ? `Transport ${m.transportDate.slice(5)}` : 'Transport arranged')}
-                    {chip(atShop, m.externalStatus === 'returned' ? 'Back already' : `At ${m.shop}`)}
-                    {!transportArranged && !atShop && m.vehicleId && (
-                      <button
-                        disabled={busy}
-                        onClick={async () => {
-                          setBusy(true)
-                          try {
-                            const res = await fetch('/api/transport', {
-                              method: 'POST', headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                vehicleId: m.vehicleId,
-                                vehicleDescription: `${m.vehicleDesc} (#${m.stock})`,
-                                vin: m.vin || undefined,
-                                pickupLocation: 'Mikalyzed — Warehouse',
-                                deliveryLocation: m.shop,
-                                purpose: 'other',
-                                purposeNote: t.title,
-                              }),
-                            })
-                            if (res.ok) {
-                              const d = await res.json().catch(() => ({}))
-                              const trId = d.request?.id ?? d.id
-                              if (trId) {
-                                await fetch(`/api/board-tasks/${t.id}`, {
-                                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ transportRequestId: trId }),
+                  <div style={{ border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 10, marginTop: 8, overflow: 'hidden' }}>
+                    {row(true, `External logged — ${m.shop}`,
+                      <button style={rowBtn} disabled={busy} onClick={() => setExternalActionId(m.externalId)}>Open ›</button>
+                    )}
+                    {row(transportArranged, transportArranged
+                      ? `Transport arranged${m.transportDate ? ` — ${m.transportDate.slice(5).replace('-', '/')}` : ''}`
+                      : 'Transport arranged',
+                      transportArranged
+                        ? <Link href="/transport" style={{ ...rowBtn, textDecoration: 'none' }}>Open ›</Link>
+                        : (m.vehicleId ? (
+                          <button
+                            style={rowBtn} disabled={busy}
+                            onClick={async () => {
+                              setBusy(true)
+                              try {
+                                const res = await fetch('/api/transport', {
+                                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    vehicleId: m.vehicleId,
+                                    vehicleDescription: `${m.vehicleDesc} (#${m.stock})`,
+                                    vin: m.vin || undefined,
+                                    pickupLocation: 'Mikalyzed — Warehouse',
+                                    deliveryLocation: m.shop,
+                                    purpose: 'other',
+                                    purposeNote: t.title,
+                                  }),
                                 })
-                              }
-                              await onChanged()
-                            }
-                          } finally { setBusy(false) }
-                        }}
-                        style={{
-                          border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
-                          borderRadius: 100, padding: '2px 10px', fontSize: 10.5, fontWeight: 650,
-                          cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
-                        }}
-                      >+ Transport Request</button>
+                                if (res.ok) {
+                                  const d = await res.json().catch(() => ({}))
+                                  const trId = d.request?.id ?? d.id
+                                  if (trId) {
+                                    await fetch(`/api/board-tasks/${t.id}`, {
+                                      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ transportRequestId: trId }),
+                                    })
+                                  }
+                                  await onChanged()
+                                }
+                              } finally { setBusy(false) }
+                            }}
+                          >+ Create</button>
+                        ) : undefined)
+                    )}
+                    {row(atShop, m.externalStatus === 'returned' ? `Back from ${m.shop} already` : `At ${m.shop}`,
+                      !atShop
+                        ? <button style={rowBtn} disabled={busy} onClick={() => setExternalActionId(m.externalId)}>Mark Sent ›</button>
+                        : undefined
                     )}
                   </div>
                 )
               })()}
+              {/* Completion is EARNED: the button appears once the records say the work happened */}
               {t.mission?.looksDone && (
-                <p style={{ fontSize: 11.5, fontWeight: 650, color: '#16a34a', margin: '6px 0 0' }}>
-                  {t.mission.externalStatus === 'returned'
-                    ? `Already back from ${t.mission.shop} — this looks done.`
-                    : `The car is at ${t.mission.shop} — this coordination looks done.`}
-                </p>
+                <button
+                  style={{ ...miniBtn, width: '100%', justifyContent: 'center', display: 'inline-flex', marginTop: 8, padding: '7px 0', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650 }}
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true)
+                    try {
+                      await fetch(`/api/board-tasks/${t.id}`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'done' }),
+                      })
+                      await onChanged()
+                    } finally { setBusy(false) }
+                  }}
+                >{t.mission.externalStatus === 'returned' ? `✓ Complete — already back from ${t.mission.shop}` : `✓ Complete — the car is at ${t.mission.shop}`}</button>
               )}
             </div>
-            <button
-              style={{ ...miniBtn, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650, flexShrink: 0 }}
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true)
-                try {
-                  await fetch(`/api/board-tasks/${t.id}`, {
-                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: 'done' }),
-                  })
-                  await onChanged()
-                } finally { setBusy(false) }
-              }}
-            >{t.mission?.looksDone ? '✓ Complete It' : '✓ Done'}</button>
+            {/* Plain tasks keep the simple Done; mission tasks earn it via checkpoints */}
+            {!t.mission && (
+              <button
+                style={{ ...miniBtn, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650, flexShrink: 0 }}
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  try {
+                    await fetch(`/api/board-tasks/${t.id}`, {
+                      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: 'done' }),
+                    })
+                    await onChanged()
+                  } finally { setBusy(false) }
+                }}
+              >✓ Done</button>
+            )}
           </div>
         ))}
 
