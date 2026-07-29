@@ -550,14 +550,14 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                       type="date" value={towDate} onChange={e => setTowDate(e.target.value)}
                       style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5, background: '#fff' }}
                     />
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                       <button
-                        style={{ ...miniBtn, fontWeight: 650 }}
+                        style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', fontWeight: 650 }}
                         disabled={busy}
                         onClick={() => createTow(false)}
                       >Not Scheduled Yet</button>
                       <button
-                        style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650, opacity: towDate ? 1 : 0.5 }}
+                        style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650, opacity: towDate ? 1 : 0.5 }}
                         disabled={busy || !towDate}
                         onClick={() => createTow(true)}
                       >Create — Scheduled</button>
