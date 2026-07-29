@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import ConfirmDialog, { type ConfirmState } from '@/components/ConfirmDialog'
 
 type Repair = {
@@ -72,12 +72,20 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
   const [updateNote, setUpdateNote] = useState('')
   const [customOpen, setCustomOpen] = useState(false)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
+  // What the send plan was when the modal opened — tapping a lit chip
+  // reverts to this instead of wiping the date.
+  const originalPlannedRef = useRef<string | null | undefined>(undefined)
 
   const load = () => fetch(`/api/external?id=${externalId}`)
     .then(r => r.json())
     .then(d => {
       const rep: Repair | undefined = (d.repairs || [])[0]
-      if (rep) setRepair(rep)
+      if (rep) {
+        if (originalPlannedRef.current === undefined) {
+          originalPlannedRef.current = rep.plannedSendDate ? rep.plannedSendDate.slice(0, 10) : null
+        }
+        setRepair(rep)
+      }
     })
     .catch(() => {})
 
@@ -216,7 +224,11 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                         <button
                           key={q.d}
                           disabled={saving}
-                          onClick={() => patch({ plannedSendDate: on ? null : localYmd(Date.now() + q.d * DAY_MS) })}
+                          onClick={() => patch({
+                            plannedSendDate: on
+                              ? (originalPlannedRef.current !== localYmd(Date.now() + q.d * DAY_MS) ? originalPlannedRef.current ?? null : null)
+                              : localYmd(Date.now() + q.d * DAY_MS),
+                          })}
                           style={{
                             flex: 1, padding: '8px 0', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', minHeight: 0,
                             border: 'none', borderLeft: qi === 0 ? 'none' : '1px solid var(--border-light, #f0f0ec)',
