@@ -8,6 +8,7 @@ import PartDetailModal from '@/components/PartDetailModal'
 import ExternalRepairModal from '@/components/ExternalRepairModal'
 import BoughtPartModal from '@/components/BoughtPartModal'
 import ConfirmDialog, { type ConfirmState } from '@/components/ConfirmDialog'
+import SmartTaskModal from '@/components/SmartTaskModal'
 import { CALENDAR_TYPE_LABELS, CALENDAR_TYPE_COLORS } from '@/lib/calendar'
 import ReconTaskCard from '@/components/ReconTaskCard'
 
@@ -337,6 +338,7 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
   const [assignTab, setAssignTab] = useState<'all' | 'tasks' | 'parts'>('all')
   const [towAskFor, setTowAskFor] = useState<string | null>(null) // task id
   const [towDate, setTowDate] = useState('')
+  const [addTaskOpen, setAddTaskOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const eyebrow: React.CSSProperties = {
@@ -387,7 +389,17 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                   ].filter(Boolean).join(' · ')}
             </p>
           </div>
-          <Link href="/parts" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>Parts page →</Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              onClick={() => setAddTaskOpen(true)}
+              style={{
+                border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
+                borderRadius: 9, padding: '6px 14px', fontSize: 12.5, fontWeight: 650,
+                cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
+              }}
+            >+ Add Task</button>
+            <Link href="/parts" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>Parts page →</Link>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -589,6 +601,24 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                 )
               })()}
 
+              {/* Simple tasks: one full-width Complete at the bottom */}
+              {!t.mission && (
+                <button
+                  style={{ ...miniBtn, width: '100%', justifyContent: 'center', display: 'inline-flex', marginTop: 9, padding: '7px 0', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650 }}
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true)
+                    try {
+                      await fetch(`/api/board-tasks/${t.id}`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'done' }),
+                      })
+                      await onChanged()
+                    } finally { setBusy(false) }
+                  }}
+                >✓ Complete</button>
+              )}
+
               {/* Completion is EARNED: the button appears once the records say the work happened */}
               {t.mission?.looksDone && (
                 <button
@@ -607,23 +637,6 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
                 >{t.mission.externalStatus === 'returned' ? `✓ Complete — already back from ${t.mission.shop}` : `✓ Complete — the car is at ${t.mission.shop}`}</button>
               )}
             </div>
-            {/* Plain tasks keep the simple Done; mission tasks earn it via checkpoints */}
-            {!t.mission && (
-              <button
-                style={{ ...miniBtn, background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650, flexShrink: 0 }}
-                disabled={busy}
-                onClick={async () => {
-                  setBusy(true)
-                  try {
-                    await fetch(`/api/board-tasks/${t.id}`, {
-                      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ status: 'done' }),
-                    })
-                    await onChanged()
-                  } finally { setBusy(false) }
-                }}
-              >✓ Done</button>
-            )}
           </div>
         ))}
 
@@ -671,6 +684,9 @@ function CoordinatorBoard({ c, tasks, onChanged }: {
           </div>
         ))}
 
+        {addTaskOpen && (
+          <SmartTaskModal onClose={() => setAddTaskOpen(false)} onCreated={onChanged} />
+        )}
         {boughtPart && (
           <BoughtPartModal
             part={boughtPart}
