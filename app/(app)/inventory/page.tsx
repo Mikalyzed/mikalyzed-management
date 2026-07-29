@@ -692,6 +692,7 @@ function SatinTag({ children, tone }: { children: React.ReactNode; tone: { bg: s
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
       padding: '5px 11px',
       minWidth: 92,
+      whiteSpace: 'nowrap',
       fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
       textTransform: 'uppercase',
       color: tone.fg,
