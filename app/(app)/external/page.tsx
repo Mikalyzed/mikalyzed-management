@@ -176,6 +176,16 @@ export default function ExternalRepairsPage() {
         return desc.includes(q)
       })
     }
+    // Overdue floats to the top of All — the fires get addressed first.
+    if (filter === 'all') {
+      const isOverdue = (r: (typeof list)[number]) => {
+        if (r.status === 'returned') return false
+        const daysOut = getDaysOut(r.sentDate)
+        const hasFollowUp = Array.isArray((r as { followUps?: unknown[] }).followUps) && ((r as { followUps?: unknown[] }).followUps!.length > 0)
+        return !!(daysOut !== null && r.estimatedDays && daysOut > r.estimatedDays && !hasFollowUp)
+      }
+      list = [...list].sort((a, b) => (isOverdue(b) ? 1 : 0) - (isOverdue(a) ? 1 : 0))
+    }
     return list
   })()
 
