@@ -330,7 +330,7 @@ function NewForYouCard({ n, onAcknowledge }: {
 // ─── Shop Coordinator Board — Lenny's whole loop on one page ───
 type CreatedTaskPayload = {
   taskId?: string; partId?: string; externalRepairId: string | null; stock: string | null
-  proposal: { title: string; kind: 'coordination' | 'simple' | 'part_request'; shop: string | null; work: string | null; vehicleId: string | null; vehicleLabel: string | null; assigneeId: string | null; assigneeName: string | null }
+  proposal: { title: string; kind: 'coordination' | 'simple' | 'part_request' | 'shop_work'; shop: string | null; work: string | null; vehicleId: string | null; vehicleLabel: string | null; assigneeId: string | null; assigneeName: string | null }
 }
 
 function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
