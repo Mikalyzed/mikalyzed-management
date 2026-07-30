@@ -302,22 +302,29 @@ export default function WatchlistPage() {
                     const fixRef = it.fix
                     return (
                       <div style={{ border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 8, marginTop: 6, overflow: 'hidden' }}>
+                        <div style={{ padding: '5px 10px', fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border-light, #f0f0ec)', background: 'var(--bg-primary, #f8f8f6)' }}>
+                          Check off what's already on the car
+                        </div>
                         {fixRef.parts.map(pt => (
                           <div key={pt.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', fontSize: 12, borderBottom: '1px solid var(--border-light, #f0f0ec)', lineHeight: 1.4 }}>
                             <span style={{ flex: 1, minWidth: 0 }}>{pt.name}</span>
                             {/* Already on the car? One tap closes it out — no task created.
                                 Create Install Tasks below handles whatever remains. */}
+                            {/* Tap the box to check it off as already installed */}
                             <button
                               disabled={busy}
+                              aria-label={`Mark ${pt.name} as installed`}
                               onClick={() => run(() => fetch('/api/parts/install-tasks', {
                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ vehicleId: fixRef.vehicleId, partIds: [pt.id], mode: 'mark' }),
-                              }), `"${pt.name.slice(0, 40)}" marked installed — it drops off this card.`)}
+                              }), `"${pt.name.slice(0, 40)}" checked off — it drops from this card.`)}
                               style={{
-                                border: 'none', background: 'none', padding: '2px 4px', minHeight: 0,
-                                fontSize: 11.5, fontWeight: 650, color: '#1d4ed8', cursor: 'pointer', whiteSpace: 'nowrap',
+                                width: 20, height: 20, borderRadius: 6, flexShrink: 0, padding: 0, minHeight: 0,
+                                border: '2px solid var(--border)', background: '#fff', cursor: 'pointer',
                               }}
-                            >Mark Installed ›</button>
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = '#16a34a' }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)' }}
+                            />
                           </div>
                         ))}
                       </div>
