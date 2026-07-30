@@ -856,15 +856,11 @@ export default function ExternalRepairsPage() {
                       )}
                       {r.status === 'ready' && (
                         <button
-                          onClick={async () => {
+                          onClick={() => {
                             if (!isAdmin) {
-                              // Coordinator: park it in Pending Routing and propose the
-                              // next stage from the recon board — routing is admin's call
-                              await fetch(`/api/external/${r.id}`, {
-                                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ status: 'returned', fromStatus: r.status }),
-                              })
-                              load()
+                              // Coordinator: the shared modal handles Returned + the
+                              // where-next request that goes to admin for approval
+                              setActionModalId(r.id)
                               return
                             }
                             setReconModal(r); setReconStage('mechanic'); setReconCloseExternal(true)

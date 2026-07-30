@@ -76,6 +76,12 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
   // reverts to this instead of wiping the date.
   const originalPlannedRef = useRef<string | null | undefined>(undefined)
   const [linkedTask, setLinkedTask] = useState<{ id: string; missionType: string | null; transportRequestId: string | null; selfTransport: boolean } | null>(null)
+  const [myRole, setMyRole] = useState('')
+  const [askNextStage, setAskNextStage] = useState(false)
+  const [nextStagePick, setNextStagePick] = useState('detailing')
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(d => setMyRole(d.user?.role || '')).catch(() => {})
+  }, [])
   const [whoTookIt, setWhoTookIt] = useState('')
   const [askWhoTookIt, setAskWhoTookIt] = useState(false)
 
@@ -449,11 +455,15 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                   title: `Returned from ${repair.shopName}?`,
                   message: repair.partOnly
                     ? 'The part is marked back at the dealership.'
-                    : 'The car lands in Pending Routing — you pick its next stage there (recon board or your dashboard routing queue).',
+                    : myRole === 'shop_coordinator'
+                      ? 'Next you pick where it should go — the request goes to admin for approval.'
+                      : 'The car lands in Pending Routing — you pick its next stage there (recon board or your dashboard routing queue).',
                   confirmLabel: '✓ Returned',
                   onConfirm: async () => {
                     const ok = await patch({ status: 'returned', fromStatus: repair.status })
-                    if (ok && !repair.partOnly) {
+                    if (ok && !repair.partOnly && myRole === 'shop_coordinator') {
+                      setAskNextStage(true)
+                    } else if (ok && !repair.partOnly) {
                       setConfirmState({
                         title: 'Back home — now route it',
                         message: `The ${repair.make} is in Pending Routing. Open the recon board (or dashboard routing queue) to send it to its next stage.`,
@@ -467,6 +477,64 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                 })}
               >✓ Returned</button>
             </div>
+            )}
+            {askNextStage && (
+              <div style={{ border: '1px solid #bfd3fc', background: '#f6f9ff', borderRadius: 12, padding: '12px 14px', marginBottom: 8 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, margin: '0 0 3px' }}>It's back — where should it go next?</p>
+                <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 10px' }}>Your request goes to admin's routing queue for approval.</p>
+                <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: '#fff', marginBottom: 10 }}>
+                  {(['mechanic', 'detailing', 'content', 'publish'] as const).map((st, si) => (
+                    <button
+                      key={st}
+                      disabled={saving}
+                      onClick={() => setNextStagePick(st)}
+                      style={{
+                        flex: 1, minWidth: 0, padding: '9px 0', border: 'none',
+                        borderLeft: si === 0 ? 'none' : '1px solid var(--border-light, #f0f0ec)',
+                        background: nextStagePick === st ? '#eaf0fe' : '#fff',
+                        fontSize: 12, fontWeight: 650, minHeight: 0, cursor: 'pointer',
+                        color: nextStagePick === st ? '#1d4ed8' : 'var(--text-secondary)',
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}
+                    >{st.charAt(0).toUpperCase() + st.slice(1)}</button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button style={{ ...btn, flex: 1 }} disabled={saving} onClick={onClose}>Skip</button>
+                  <button
+                    style={{ ...btn, flex: 1.4, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc' }}
+                    disabled={saving}
+                    onClick={async () => {
+                      setSaving(true)
+                      try {
+                        const vres = await fetch(`/api/vehicles/resolve?stockNumber=${encodeURIComponent(repair.stockNumber)}`).catch(() => null)
+                        let vehicleId: string | null = null
+                        if (vres?.ok) {
+                          const vd = await vres.json().catch(() => ({}))
+                          vehicleId = vd.vehicle?.id ?? vd.id ?? null
+                        }
+                        if (!vehicleId) {
+                          const all = await fetch(`/api/vehicles?stockNumber=${encodeURIComponent(repair.stockNumber)}`).then(r => r.json()).catch(() => null)
+                          vehicleId = all?.vehicles?.[0]?.id ?? null
+                        }
+                        if (vehicleId) {
+                          await fetch(`/api/vehicles/${vehicleId}/propose-route`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ stage: nextStagePick }),
+                          })
+                        }
+                        setAskNextStage(false)
+                        setConfirmState({
+                          title: 'Request sent',
+                          message: `Admin sees "${nextStagePick.charAt(0).toUpperCase() + nextStagePick.slice(1)}" requested on their routing queue — one approval and it goes.`,
+                          hideCancel: true,
+                          onConfirm: () => onClose(),
+                        })
+                      } finally { setSaving(false) }
+                    }}
+                  >Send Request</button>
+                </div>
+              </div>
             )}
             <button onClick={onClose} style={{
               width: '100%', padding: '12px 0', borderRadius: 10, border: '1px solid var(--border)',
