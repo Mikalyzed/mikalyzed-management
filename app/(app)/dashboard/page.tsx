@@ -916,14 +916,14 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
   }
 
   const rows: Array<{ key: string; n: number; area: string; label: string; crit?: boolean }> = [
-    { key: 'routing', n: a.routing.length, area: 'Recon Board', label: 'Cars waiting to be routed' },
-    { key: 'installs', n: a.installsTotal, area: 'Recon Board', label: 'Arrived parts — assign the install' },
-    { key: 'delivered', n: a.delivered.length, area: 'Parts', label: 'Carrier says delivered — confirm received', crit: true },
-    { key: 'approvals', n: a.approvals.length, area: 'Parts', label: 'Sourced parts awaiting approval' },
-    { key: 'stuck', n: a.stuck.length, area: 'Parts', label: 'Stuck in requested 7+ days' },
-    { key: 'stranded', n: (a.stranded ?? []).length, area: 'Parts', label: 'Part here — car not in recon, no install plan', crit: true },
-    { key: 'overdue', n: a.overdue.length, area: 'External', label: 'Repairs past their return date', crit: true },
-    { key: 'noDate', n: (a.noDate ?? []).length, area: 'External', label: 'Out with no return date', crit: true },
+    { key: 'routing', n: a.routing.length, area: 'Recon Board', label: 'Waiting to Be Routed' },
+    { key: 'installs', n: a.installsTotal, area: 'Recon Board', label: 'Assign the Install' },
+    { key: 'delivered', n: a.delivered.length, area: 'Parts', label: 'Carrier Says Delivered', crit: true },
+    { key: 'approvals', n: a.approvals.length, area: 'Parts', label: 'Awaiting Approval' },
+    { key: 'stuck', n: a.stuck.length, area: 'Parts', label: 'Stuck in Requested' },
+    { key: 'stranded', n: (a.stranded ?? []).length, area: 'Parts', label: 'Here — Car Not in Recon', crit: true },
+    { key: 'overdue', n: a.overdue.length, area: 'External', label: 'Past Return Date', crit: true },
+    { key: 'noDate', n: (a.noDate ?? []).length, area: 'External', label: 'No Return Date', crit: true },
   ].filter(r => r.n > 0)
 
   // One section per AREA; the issues inside are sub-sections — the card
@@ -1012,10 +1012,10 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
             textTransform: 'uppercase', letterSpacing: '0.05em',
             color: r.crit ? '#b91c1c' : 'var(--text-muted)',
             borderTop: '1px solid var(--border-light, #f0f0ec)', background: 'var(--bg-card, #fff)',
-            display: 'flex', alignItems: 'center', gap: 7,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
           }}>
-            {r.label}
-            <span style={{ fontVariantNumeric: 'tabular-nums' }}>· {r.n}</span>
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{r.n}</span>
           </div>
 
           {r.key === 'routing' && a.routing.map(v => (
@@ -1203,15 +1203,23 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                       onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
                     >→ Add Vehicle to Recon</button>
                   </div>
-                  {group.map(p => (
-                    <div key={p.id} style={{ ...itemRow, flexWrap: 'nowrap', borderTop: 'none', paddingTop: 3, paddingBottom: 6, paddingLeft: 26 }}>
-                      <span style={{
-                        flex: 1, minWidth: 0, fontWeight: 500, fontSize: 12.5, lineHeight: 1.4,
-                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                      }}>{p.name}</span>
-                      <button style={miniBtn} disabled={busy} onClick={() => setDetailPartId(p.id)}>Open ›</button>
-                    </div>
-                  ))}
+                  <div style={{ margin: '0 14px 4px', border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 10, overflow: 'hidden', background: 'var(--bg-primary, #f8f8f6)' }}>
+                    {group.map((p, pi) => (
+                      <div key={p.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', fontSize: 12.5,
+                        borderTop: pi === 0 ? 'none' : '1px solid var(--border-light, #f0f0ec)',
+                      }}>
+                        <span style={{
+                          flex: 1, minWidth: 0, fontWeight: 500, lineHeight: 1.4,
+                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                        }}>{p.name}</span>
+                        <button
+                          disabled={busy} onClick={() => setDetailPartId(p.id)}
+                          style={{ border: 'none', background: 'none', padding: 0, minHeight: 0, fontSize: 12, fontWeight: 650, color: '#1d4ed8', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                        >Open ›</button>
+                      </div>
+                    ))}
+                  </div>
                   <div className="att-mobile-only" style={{ padding: '0 14px 10px' }}>
                     <button
                       className="att-mech-btn"
