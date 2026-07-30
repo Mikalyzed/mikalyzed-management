@@ -81,6 +81,9 @@ model Vehicle {
   newUsed           String?   @map("new_used") // New / Used
   status            String    @default("mechanic")
   currentStageId    String?   @map("current_stage_id")
+  // Coordinator's routing suggestion for an awaiting_routing car — admin
+  // approves (routes) or overrides; cleared on routing.
+  routingProposal   Json?     @map("routing_proposal") // { stage, byId, byName, at }
   currentAssigneeId String?   @map("current_assignee_id")
   notes             String?
   createdById       String?   @map("created_by")

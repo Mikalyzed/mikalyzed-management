@@ -42,7 +42,7 @@ type DashboardData = {
     watchlist: Array<{ severity: string; stock: string | null; vehicle: string | null; where: string | null; issue: string; detail: string }>
   } | null
   attention?: {
-    routing: Array<{ id: string; stock: string; vehicle: string }>
+    routing: Array<{ id: string; stock: string; vehicle: string; proposal?: { stage?: string; byName?: string } | null }>
     installs: Array<{ stageId: string; item: string; stock: string; vehicle: string }>
     installsTotal: number
     delivered: Array<{ id: string; name: string; stock: string; vehicle: string }>
@@ -854,6 +854,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
   // so an absolutely-positioned dropdown would render underneath it.
   const [assignPos, setAssignPos] = useState<{ top: number; right: number } | null>(null)
   const [routeVehicleId, setRouteVehicleId] = useState<string | null>(null)
+  const [routeInitialStage, setRouteInitialStage] = useState<string | undefined>(undefined)
   const [detailPartId, setDetailPartId] = useState<string | null>(null)
   const [externalModalId, setExternalModalId] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
@@ -1020,13 +1021,18 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
 
           {r.key === 'routing' && a.routing.map(v => (
             <div key={v.id} style={itemRow}>
-              <CarLead stock={v.stock} vehicle={v.vehicle} detail="Finished its stage — waiting to be routed" />
+              <CarLead
+                stock={v.stock} vehicle={v.vehicle}
+                detail={v.proposal?.stage
+                  ? <span style={{ color: '#1d4ed8', fontWeight: 600 }}>{v.proposal.byName ?? 'Coordinator'} suggests {v.proposal.stage.charAt(0).toUpperCase() + v.proposal.stage.slice(1)}</span>
+                  : 'Finished its stage — waiting to be routed'}
+              />
               <button
                 className="att-mech-btn"
-                style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }}
+                style={{ ...miniBtn, background: v.proposal?.stage ? '#f0fdf4' : '#eaf0fe', color: v.proposal?.stage ? '#16a34a' : '#1d4ed8', border: v.proposal?.stage ? '1px solid #bbf7d0' : '1px solid #bfd3fc', fontWeight: 650 }}
                 disabled={busy}
-                onClick={() => setRouteVehicleId(v.id)}
-              >Route →</button>
+                onClick={() => { setRouteInitialStage(v.proposal?.stage); setRouteVehicleId(v.id) }}
+              >{v.proposal?.stage ? '✓ Approve →' : 'Route →'}</button>
             </div>
           ))}
 
@@ -1272,7 +1278,8 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
       {routeVehicleId && (
         <RouteVehicleModal
           vehicleId={routeVehicleId}
-          onClose={() => setRouteVehicleId(null)}
+          initialStage={routeInitialStage}
+          onClose={() => { setRouteVehicleId(null); setRouteInitialStage(undefined) }}
           onRouted={async () => {
             setRouteVehicleId(null)
             await onAction()

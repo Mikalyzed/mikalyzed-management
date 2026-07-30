@@ -415,8 +415,8 @@ export default function AddVehiclePage() {
         {/* Starting Stage */}
         <SectionCard>
           <SectionCardLabel>Starting Stage</SectionCardLabel>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {(['mechanic', 'detailing', 'content', 'publish'] as const).map((stage) => {
+          <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+            {(['mechanic', 'detailing', 'content', 'publish'] as const).map((stage, si) => {
               const labels: Record<string, string> = { mechanic: 'Mechanic', detailing: 'Detailing', content: 'Content', publish: 'Publish' }
               const active = startingStage === stage
               return (
@@ -425,15 +425,16 @@ export default function AddVehiclePage() {
                   type="button"
                   onClick={() => setStartingStage(stage)}
                   style={{
-                    padding: '10px 18px',
-                    borderRadius: '10px',
-                    border: active ? '2px solid #1a1a1a' : '1px solid var(--border)',
-                    background: active ? '#fafaf8' : '#ffffff',
-                    fontSize: '14px',
-                    fontWeight: active ? 600 : 500,
-                    color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    flex: 1, minWidth: 0, padding: '9px 0',
+                    border: 'none',
+                    borderLeft: si === 0 ? 'none' : '1px solid var(--border-light, #f0f0ec)',
+                    background: active ? '#eaf0fe' : '#fff',
+                    fontSize: 12.5,
+                    fontWeight: 650,
+                    color: active ? '#1d4ed8' : 'var(--text-secondary)',
                     cursor: 'pointer',
-                    minHeight: 'auto',
+                    minHeight: 0,
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     transition: 'all 0.15s',
                   }}
                 >

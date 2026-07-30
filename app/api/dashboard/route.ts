@@ -274,7 +274,7 @@ export async function GET(request: Request) {
     const [routingVehicles, activeStages, deliveredParts, approvalParts, overdueExternals, noDateExternals, stuckParts, strandedParts, mechanics] = await Promise.all([
       prisma.vehicle.findMany({
         where: { status: 'awaiting_routing' },
-        select: { id: true, stockNumber: true, year: true, make: true, model: true },
+        select: { id: true, stockNumber: true, year: true, make: true, model: true, routingProposal: true },
         take: 15,
       }),
       prisma.vehicleStage.findMany({
@@ -336,7 +336,10 @@ export async function GET(request: Request) {
     attention = {
       // Routing + part approval are ADMIN decisions — the coordinator sources
       // and installs; showing him queues he can't act on is just noise.
-      routing: isCoordinator ? [] : routingVehicles.map(v => ({ id: v.id, stock: v.stockNumber, vehicle: vName(v) })),
+      routing: isCoordinator ? [] : routingVehicles.map(v => ({
+        id: v.id, stock: v.stockNumber, vehicle: vName(v),
+        proposal: (v.routingProposal as { stage?: string; byName?: string } | null) ?? null,
+      })),
       installs: installItems.slice(0, 15),
       installsTotal: installItems.length,
       delivered: deliveredParts.map(p => ({ id: p.id, name: p.name, stock: p.vehicle.stockNumber, vehicle: vName(p.vehicle) })),

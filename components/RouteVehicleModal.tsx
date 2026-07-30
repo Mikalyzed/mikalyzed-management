@@ -34,12 +34,18 @@ export type RoutingVehicle = {
 }
 type RoutingTemplate = { id: string; name: string; isDefault: boolean; items: { item: string; type?: string; fields?: unknown }[] }
 
-export default function RouteVehicleModal({ vehicle: vehicleProp, vehicleId, onClose, onRouted }: {
+export default function RouteVehicleModal({ vehicle: vehicleProp, vehicleId, onClose, onRouted, initialStage }: {
   vehicle?: RoutingVehicle | null
   vehicleId?: string
   onClose: () => void
   onRouted: () => void | Promise<void>
+  /** Preselect a stage (e.g. approving a coordinator's proposal) */
+  initialStage?: string
 }) {
+  const [myRole, setMyRole] = useState<string>('')
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(d => setMyRole(d.user?.role || '')).catch(() => {})
+  }, [])
   const [vehicle, setVehicle] = useState<RoutingVehicle | null>(vehicleProp ?? null)
   const [mechanics, setMechanics] = useState<{ id: string; name: string }[]>([])
   const [routingNext, setRoutingNext] = useState<string>('detailing')
@@ -62,7 +68,7 @@ export default function RouteVehicleModal({ vehicle: vehicleProp, vehicleId, onC
     const fixes = extractIssueFixTasks(checklist as never)
     const installs = v.pendingInstalls || []
     const shouldGoToMechanic = fixes.length > 0 || installs.length > 0
-    setRoutingNext(shouldGoToMechanic ? 'mechanic' : 'detailing')
+    setRoutingNext(initialStage || (shouldGoToMechanic ? 'mechanic' : 'detailing'))
     setRoutingReason('')
     setRoutingTasks([
       ...fixes.map(f => f.note ? `${f.item} — ${f.note}` : f.item),
@@ -81,7 +87,8 @@ export default function RouteVehicleModal({ vehicle: vehicleProp, vehicleId, onC
     setRoutingScopeName('')
     setRoutingSoldDelivery(false)
     setRoutingSelectedTemplateIds([])
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialStage])
 
   // Resolve the vehicle: use the prop, or fetch the single car by id.
   useEffect(() => {
@@ -575,6 +582,17 @@ export default function RouteVehicleModal({ vehicle: vehicleProp, vehicleId, onC
                   approvedAddedIndices.push(i)
                 }
               })
+              if (myRole === 'shop_coordinator') {
+                // Coordinator can't route — he PROPOSES; admin approves from
+                // their routing queue with the modal preloaded to this stage.
+                await fetch(`/api/vehicles/${routingVehicle.id}/propose-route`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ stage: routingNext }),
+                })
+                setRoutingSaving(false)
+                await onRouted()
+                return
+              }
               await fetch(`/api/vehicles/${routingVehicle.id}/route-stage`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -600,7 +618,9 @@ export default function RouteVehicleModal({ vehicle: vehicleProp, vehicleId, onC
               opacity: routingSaving ? 0.5 : 1,
             }}
           >
-            {routingSaving ? 'Routing...' : 'Confirm Route'}
+            {routingSaving
+              ? (myRole === 'shop_coordinator' ? 'Sending…' : 'Routing...')
+              : (myRole === 'shop_coordinator' ? 'Propose to Admin' : 'Confirm Route')}
           </button>
         </div>
       </div>

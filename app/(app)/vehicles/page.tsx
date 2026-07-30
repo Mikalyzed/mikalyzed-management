@@ -974,7 +974,7 @@ export default function VehiclesPage() {
       )}
 
       {/* Pending Routing — admin only */}
-      {isAdmin && vehicles.some(v => v.status === 'awaiting_routing') && (
+      {(isAdmin || myRole === 'shop_coordinator') && vehicles.some(v => v.status === 'awaiting_routing') && (
         <div style={{
           position: 'relative', overflow: 'hidden',
           background: 'linear-gradient(180deg, #fffdf6, var(--bg-card) 64%)',

@@ -200,6 +200,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: nextStage,
         currentStageId: newStage.id,
         currentAssigneeId: newAssigneeId,
+        routingProposal: Prisma.DbNull,
       },
     })
 
