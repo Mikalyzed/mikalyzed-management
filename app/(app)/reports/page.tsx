@@ -92,6 +92,7 @@ const ROLE_PILL: Record<string, { bg: string; color: string; border: string }> =
   detailer: { bg: '#eaf0fe', color: '#1d4ed8', border: '#eaf0fe' },
   content: { bg: '#fdf3e7', color: '#92400e', border: '#fdf3e7' },
   coordinator: { bg: '#f0fdf4', color: '#16a34a', border: '#f0fdf4' },
+  shop_coordinator: { bg: '#f0fdf4', color: '#16a34a', border: '#f0fdf4' },
   porter: { bg: '#eaf0fe', color: '#1d4ed8', border: '#eaf0fe' },
 }
 
