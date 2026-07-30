@@ -1017,7 +1017,9 @@ export default function VehiclesPage() {
               if (partsInPipeline.length > 0) reviewChips.push({ label: `${partsInPipeline.length} part${partsInPipeline.length === 1 ? '' : 's'} in pipeline`, fg: '#b45309', bg: '#fdf3e7', dot: '#f59e0b' })
               const allTasksDone = totalCount > 0 && doneCount >= totalCount
               const showDonePill = !!v.lastCompletedStage && totalCount > 0
+              const proposal = (v as { routingProposal?: { stage?: string; byName?: string } | null }).routingProposal ?? null
               const routingSub: string[] = []
+              if (proposal?.stage) routingSub.push(`${proposal.byName ?? 'Coordinator'} requests ${STAGE_LABELS[proposal.stage as keyof typeof STAGE_LABELS] ?? proposal.stage}`)
               if (!showDonePill) routingSub.push(v.lastCompletedStage ? `Completed ${STAGE_LABELS[v.lastCompletedStage as keyof typeof STAGE_LABELS] || v.lastCompletedStage}` : 'Awaiting next stage assignment')
               if (last?.scopeName) routingSub.push(last.scopeName)
               if (last?.assignee) routingSub.push(last.assignee.name)
@@ -1468,6 +1470,7 @@ export default function VehiclesPage() {
       {/* Routing Modal — shared component (same one the dashboard uses) */}
       {routingVehicle && (
         <RouteVehicleModal
+          initialStage={(routingVehicle as { routingProposal?: { stage?: string } | null } | null)?.routingProposal?.stage}
           vehicle={routingVehicle}
           onClose={() => setRoutingVehicle(null)}
           onRouted={async () => {
