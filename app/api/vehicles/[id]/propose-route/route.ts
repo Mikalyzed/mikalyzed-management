@@ -27,9 +27,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'Car is not in Pending Routing.' }, { status: 409 })
   }
 
+  const checklist = Array.isArray(body.checklist) ? body.checklist : null
+  const estimatedHours = typeof body.estimatedHours === 'string' && body.estimatedHours ? body.estimatedHours : null
+  const notes = typeof body.notes === 'string' && body.notes ? body.notes : null
   await prisma.vehicle.update({
     where: { id },
-    data: { routingProposal: { stage, byId: user.id, byName: user.name, at: new Date().toISOString() } },
+    data: {
+      routingProposal: {
+        stage, byId: user.id, byName: user.name, at: new Date().toISOString(),
+        ...(checklist ? { checklist } : {}),
+        ...(estimatedHours ? { estimatedHours } : {}),
+        ...(notes ? { notes } : {}),
+      },
+    },
   })
   await prisma.activityLog.create({
     data: {

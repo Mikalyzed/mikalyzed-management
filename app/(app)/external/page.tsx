@@ -944,8 +944,7 @@ export default function ExternalRepairsPage() {
                 </div>
               </div>
 
-              {/* Estimated Hours (admin decides tasks/hours at approval for requests) */}
-              {isAdmin && (
+              {/* Estimated Hours */}
               <div style={{ marginBottom: 16 }}>
                 <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
                   Estimated Hours
@@ -960,9 +959,6 @@ export default function ExternalRepairsPage() {
                 />
               </div>
 
-              )}
-
-              {isAdmin && (
               <div style={{ marginBottom: 20 }}>
                 <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
                   Tasks / Checklist
@@ -1055,7 +1051,6 @@ export default function ExternalRepairsPage() {
                   >Add</button>
                 </div>
               </div>
-              )}
 
               {/* Notes */}
               <div style={{ marginBottom: 8 }}>
@@ -1167,8 +1162,8 @@ export default function ExternalRepairsPage() {
 
                   try {
                     if (!isAdmin) {
-                      // Coordinator: mark returned (parks in Pending Routing) and
-                      // file the stage REQUEST — admin approves from the routing queue.
+                      // Coordinator: mark returned (parks in Pending Routing) and file
+                      // the FULL request — stage, tasks, hours — admin approves as-is.
                       await fetch(`/api/external/${(reconModal as any).id}`, {
                         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ status: 'returned' }),
@@ -1178,7 +1173,12 @@ export default function ExternalRepairsPage() {
                       if (vid) {
                         await fetch(`/api/vehicles/${vid}/propose-route`, {
                           method: 'POST', headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ stage: reconStage }),
+                          body: JSON.stringify({
+                            stage: reconStage,
+                            checklist: mechanicChecklist.length > 0 ? mechanicChecklist : undefined,
+                            estimatedHours: reconEstHours || undefined,
+                            notes: reconNotes || undefined,
+                          }),
                         })
                       }
                       setReconModal(null)

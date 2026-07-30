@@ -42,7 +42,7 @@ type DashboardData = {
     watchlist: Array<{ severity: string; stock: string | null; vehicle: string | null; where: string | null; issue: string; detail: string }>
   } | null
   attention?: {
-    routing: Array<{ id: string; stock: string; vehicle: string; proposal?: { stage?: string; byName?: string } | null }>
+    routing: Array<{ id: string; stock: string; vehicle: string; proposal?: { stage?: string; byName?: string; checklist?: Array<{ item: string; type?: string } | string>; estimatedHours?: string; notes?: string } | null }>
     installs: Array<{ stageId: string; item: string; stock: string; vehicle: string }>
     installsTotal: number
     delivered: Array<{ id: string; name: string; stock: string; vehicle: string }>
@@ -1024,14 +1024,44 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
               <CarLead
                 stock={v.stock} vehicle={v.vehicle}
                 detail={v.proposal?.stage
-                  ? <span style={{ color: '#1d4ed8', fontWeight: 600 }}>{v.proposal.byName ?? 'Coordinator'} suggests {v.proposal.stage.charAt(0).toUpperCase() + v.proposal.stage.slice(1)}</span>
+                  ? <span style={{ color: '#1d4ed8', fontWeight: 600 }}>
+                      {v.proposal.byName ?? 'Coordinator'} requests {v.proposal.stage.charAt(0).toUpperCase() + v.proposal.stage.slice(1)}
+                      {v.proposal.checklist?.length ? ` · ${v.proposal.checklist.length} task${v.proposal.checklist.length === 1 ? '' : 's'}` : ''}
+                      {v.proposal.estimatedHours ? ` · ${v.proposal.estimatedHours}h` : ''}
+                    </span>
                   : 'Finished its stage — waiting to be routed'}
+                onOpen={v.proposal?.stage ? () => { setRouteInitialStage(v.proposal?.stage); setRouteVehicleId(v.id) } : undefined}
               />
               <button
                 className="att-mech-btn"
                 style={{ ...miniBtn, background: v.proposal?.stage ? '#f0fdf4' : '#eaf0fe', color: v.proposal?.stage ? '#16a34a' : '#1d4ed8', border: v.proposal?.stage ? '1px solid #bbf7d0' : '1px solid #bfd3fc', fontWeight: 650 }}
                 disabled={busy}
-                onClick={() => { setRouteInitialStage(v.proposal?.stage); setRouteVehicleId(v.id) }}
+                onClick={async () => {
+                  const prop = v.proposal
+                  if (prop?.stage) {
+                    // One-tap approval: execute the coordinator's package as filed
+                    setBusy(true)
+                    try {
+                      const res = await fetch(`/api/vehicles/${v.id}/route-stage`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          nextStage: prop.stage,
+                          tasks: prop.checklist ?? [],
+                          estimatedHours: prop.estimatedHours ?? null,
+                          reason: `Approved — requested by ${prop.byName ?? 'coordinator'}`,
+                        }),
+                      })
+                      if (res.ok) {
+                        flash(`${v.vehicle} routed to ${prop.stage} — ${prop.byName ?? 'coordinator'}'s request approved as filed.`)
+                        await onAction()
+                      } else {
+                        flash('Could not route — open the request to review it.')
+                      }
+                    } finally { setBusy(false) }
+                    return
+                  }
+                  setRouteInitialStage(undefined); setRouteVehicleId(v.id)
+                }}
               >{v.proposal?.stage ? '✓ Approve →' : 'Route →'}</button>
             </div>
           ))}
