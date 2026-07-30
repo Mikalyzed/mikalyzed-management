@@ -153,9 +153,14 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
 
   const commitUpdate = async () => {
     if (!hasDateChange || !updateNote.trim()) return
+    // Record how many days this push ADDS vs the previous expected date —
+    // the history must show the slippage, not just the words.
+    const base = currentDate ? new Date(currentDate + 'T00:00:00').getTime() : Date.now()
+    const target = new Date(pendingDate! + 'T00:00:00').getTime()
+    const deltaDays = Math.round((target - base) / DAY_MS)
     const ok = await patch({
       expectedReturn: pendingDate,
-      addFollowUp: { note: updateNote.trim(), etaDays: selectedChip ?? undefined },
+      addFollowUp: { note: updateNote.trim(), etaDays: deltaDays !== 0 ? deltaDays : undefined },
     })
     if (ok) clearStaged()
   }
@@ -356,11 +361,18 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                 <p style={eyebrow}>Follow-Up History</p>
                 <div style={{ border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 10, marginBottom: 14, overflow: 'hidden' }}>
                   {followUps.slice(-5).reverse().map((f, i) => (
-                    <div key={i} style={{ padding: '7px 12px', fontSize: 12.5, borderBottom: '1px solid var(--border-light, #f0f0ec)', display: 'flex', gap: 10 }}>
+                    <div key={i} style={{ padding: '7px 12px', fontSize: 12.5, borderBottom: '1px solid var(--border-light, #f0f0ec)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                       <span style={{ color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                         {f.date ? fmtShort(f.date) : '—'}
                       </span>
                       <span style={{ flex: 1, minWidth: 0 }}>{f.note}</span>
+                      {typeof f.etaDays === 'number' && f.etaDays !== 0 && (
+                        <span style={{
+                          fontSize: 10.5, fontWeight: 700, padding: '1px 8px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0,
+                          background: f.etaDays > 0 ? '#fdecef' : '#f0fdf4',
+                          color: f.etaDays > 0 ? '#b91c1c' : '#16a34a',
+                        }}>{f.etaDays > 0 ? `+${f.etaDays}d` : `${f.etaDays}d`}</span>
+                      )}
                     </div>
                   ))}
                 </div>
