@@ -857,16 +857,7 @@ export default function ExternalRepairsPage() {
                       )}
                       {r.status === 'ready' && (
                         <button
-                          onClick={() => {
-                            if (!isAdmin) {
-                              // Coordinator: straight into the Returned flow (confirm →
-                              // where-next request that goes to admin for approval)
-                              setActionIntent('returned')
-                              setActionModalId(r.id)
-                              return
-                            }
-                            setReconModal(r); setReconStage('mechanic'); setReconCloseExternal(true)
-                          }}
+                          onClick={() => { setReconModal(r); setReconStage('mechanic'); setReconCloseExternal(true) }}
                           style={actionBtn('#f0fdf4', '#16a34a')}
                         >Mark Returned</button>
                       )}
@@ -953,7 +944,8 @@ export default function ExternalRepairsPage() {
                 </div>
               </div>
 
-              {/* Estimated Hours */}
+              {/* Estimated Hours (admin decides tasks/hours at approval for requests) */}
+              {isAdmin && (
               <div style={{ marginBottom: 16 }}>
                 <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
                   Estimated Hours
@@ -968,7 +960,9 @@ export default function ExternalRepairsPage() {
                 />
               </div>
 
-              {/* Tasks / Checklist */}
+              )}
+
+              {isAdmin && (
               <div style={{ marginBottom: 20 }}>
                 <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
                   Tasks / Checklist
@@ -1061,6 +1055,7 @@ export default function ExternalRepairsPage() {
                   >Add</button>
                 </div>
               </div>
+              )}
 
               {/* Notes */}
               <div style={{ marginBottom: 8 }}>
@@ -1171,6 +1166,27 @@ export default function ExternalRepairsPage() {
                   }
 
                   try {
+                    if (!isAdmin) {
+                      // Coordinator: mark returned (parks in Pending Routing) and
+                      // file the stage REQUEST — admin approves from the routing queue.
+                      await fetch(`/api/external/${(reconModal as any).id}`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'returned' }),
+                      })
+                      const all = await fetch(`/api/vehicles?stockNumber=${encodeURIComponent(reconModal.stockNumber)}`).then(r2 => r2.json()).catch(() => null)
+                      const vid = all?.vehicles?.[0]?.id ?? null
+                      if (vid) {
+                        await fetch(`/api/vehicles/${vid}/propose-route`, {
+                          method: 'POST', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ stage: reconStage }),
+                        })
+                      }
+                      setReconModal(null)
+                      setReconError('')
+                      load()
+                      setSendingToRecon(false)
+                      return
+                    }
                     // POST vehicle FIRST — when the prior flow PATCHed external
                     // to 'returned' first, the helper flipped Vehicle.status to
                     // 'awaiting_routing' before this call ran, which made the
@@ -1226,7 +1242,9 @@ export default function ExternalRepairsPage() {
               >
                 {sendingToRecon
                   ? 'Sending...'
-                  : reconCloseExternal ? 'Send to Recon' : 'Add to Recon + Keep External'}
+                  : !isAdmin
+                    ? `Request ${RECON_STAGES.find(st => st.value === reconStage)?.label ?? reconStage} — Admin Approves`
+                    : reconCloseExternal ? 'Send to Recon' : 'Add to Recon + Keep External'}
               </button>
 
               {/* Secondary row — 50/50 split below the primary action */}
