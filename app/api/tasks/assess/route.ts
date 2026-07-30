@@ -23,7 +23,7 @@ const ASSESS_TOOL: Anthropic.Tool = {
     type: 'object',
     properties: {
       title: { type: 'string', description: 'Short clean imperative action, e.g. "Coordinate with Willy — tow to GWT for suspension". No stock numbers.' },
-      kind: { type: 'string', enum: ['coordination', 'simple', 'part_request'], description: 'coordination = a car/part goes to an OUTSIDE shop or needs transport arranged. part_request = buying/getting/ordering a PART for a car. simple = any other direct action someone just does.' },
+      kind: { type: 'string', enum: ['coordination', 'simple', 'part_request', 'shop_work'], description: 'coordination = a car/part goes to an OUTSIDE shop or needs transport arranged. part_request = buying/getting/ordering a PART for a car. shop_work = repair/fix/install work OUR mechanics do on the car in-house. simple = any other direct action (move a car, call someone, errands).' },
       stock: { type: 'string', description: 'Stock number ONLY if the text contains one (e.g. N101146).' },
       vehicleWords: { type: 'string', description: 'The words describing the car, exactly from the text (e.g. "blue 94 chevy pickup"). Omit if no car mentioned.' },
       assigneeName: { type: 'string', description: 'Person the task is assigned to, only if the text names one.' },
@@ -85,6 +85,47 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, partId: part.id, kind: 'part_request', stock: vehicle.stockNumber })
     }
 
+    // In-house repair work belongs on the car's MECHANIC CHECKLIST, where the
+    // mechanic/hours/inspection machinery lives — not on a to-do list.
+    if (c.kind === 'shop_work') {
+      if (!vehicle) return NextResponse.json({ error: 'Shop work needs a car — say which vehicle it is on.' }, { status: 400 })
+      const activeStage = await prisma.vehicleStage.findFirst({
+        where: { vehicleId: vehicle.id, status: { in: ['pending', 'in_progress'] } },
+        orderBy: { startedAt: 'desc' },
+        select: { id: true, stage: true, checklist: true },
+      })
+      if (activeStage && activeStage.stage === 'mechanic') {
+        const existing = Array.isArray(activeStage.checklist) ? activeStage.checklist as Array<Record<string, unknown>> : []
+        const have = existing.some(x => String(x?.item ?? '').trim().toLowerCase() === title.toLowerCase())
+        if (!have) {
+          await prisma.vehicleStage.update({
+            where: { id: activeStage.id },
+            data: { checklist: [...existing, { item: title, done: false, note: '', addedByMechanic: true, approved: 'approved', assigneeId: null, assigneeName: null }] as object[] },
+          })
+        }
+        await prisma.activityLog.create({
+          data: {
+            entityType: 'vehicle', entityId: vehicle.id, action: 'task_added_to_checklist', actorId: user.id,
+            details: { item: title, stage: 'mechanic', via: 'smart_add_task' },
+          },
+        }).catch(() => {})
+        return NextResponse.json({ ok: true, kind: 'shop_work', placed: 'mechanic_checklist', stock: vehicle.stockNumber })
+      }
+      // Car isn't in mechanic — a coordinator task carries the work until it
+      // can be routed there (the checklist item gets added at routing).
+      const task = await prisma.task.create({
+        data: {
+          title: `${title} (#${vehicle.stockNumber})`,
+          description: 'Shop work — the car is not in mechanic right now. Route it into mechanic and add this to the checklist (routing pre-fills carry-over tasks).',
+          category: 'operations', priority: 1,
+          assigneeId: typeof c.assigneeId === 'string' && c.assigneeId ? c.assigneeId : null,
+          createdById: user.id,
+          stockNumbers: [vehicle.stockNumber],
+        },
+      })
+      return NextResponse.json({ ok: true, kind: 'shop_work', placed: 'task', taskId: task.id, stock: vehicle.stockNumber })
+    }
+
     let externalRepairId: string | null = null
     if (c.kind === 'coordination' && typeof c.shop === 'string' && c.shop.trim() && vehicle) {
       // Reuse an open external at the same shop instead of doubling up
@@ -142,7 +183,7 @@ export async function POST(req: Request) {
     tools: [ASSESS_TOOL],
     system:
       'You structure ONE dealership shop task from the admin\'s words. Use ONLY what the text says — never invent shops, people, cars, or work. ' +
-      'kind=coordination when a car or part goes to an OUTSIDE shop or a tow/transport must be arranged; kind=part_request when someone needs to BUY/GET/ORDER a part for a car; kind=simple for other direct actions (move a car inside, clean something, call someone). ' +
+      'kind=coordination when a car or part goes to an OUTSIDE shop or a tow/transport must be arranged; kind=part_request when someone needs to BUY/GET/ORDER a part for a car; kind=shop_work when OUR mechanics fix/repair/install something on the car in-house; kind=simple for other direct actions (move a car inside, call someone). ' +
       'Ask a question ONLY for critical ambiguity in the text (e.g. two possible meanings). Title is short and clean.',
     messages: [{ role: 'user', content: text }],
   })
@@ -194,10 +235,21 @@ export async function POST(req: Request) {
   }
   if (!assignee) assignee = team.find(u => u.role === 'shop_coordinator') ?? null
 
+  let mechanicActive = false
+  if (vehicle && a.kind === 'shop_work') {
+    const st = await prisma.vehicleStage.findFirst({
+      where: { vehicleId: vehicle.id, status: { in: ['pending', 'in_progress'] } },
+      orderBy: { startedAt: 'desc' },
+      select: { stage: true },
+    })
+    mechanicActive = st?.stage === 'mechanic'
+  }
+
   return NextResponse.json({
     proposal: {
+      mechanicActive,
       title: (a.title ?? text.slice(0, 80)).trim(),
-      kind: a.kind === 'coordination' ? 'coordination' : a.kind === 'part_request' ? 'part_request' : 'simple',
+      kind: a.kind === 'coordination' ? 'coordination' : a.kind === 'part_request' ? 'part_request' : a.kind === 'shop_work' ? 'shop_work' : 'simple',
       partName: a.kind === 'part_request' ? ((a as { partName?: string }).partName?.trim() || null) : null,
       shop: a.shop?.trim() || null,
       work: a.work?.trim() || null,

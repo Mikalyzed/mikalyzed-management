@@ -4,8 +4,9 @@ import { useState } from 'react'
 
 type Proposal = {
   title: string
-  kind: 'coordination' | 'simple' | 'part_request'
+  kind: 'coordination' | 'simple' | 'part_request' | 'shop_work'
   partName?: string | null
+  mechanicActive?: boolean
   shop: string | null
   work: string | null
   vehicleId: string | null
@@ -140,13 +141,21 @@ export default function SmartTaskModal({ onClose, onCreated }: {
             { n: '✓', label: `Part requested — ${proposal.partName ?? proposal.title}`, sub: `Lands in ${proposal.assigneeName?.split(' ')[0] ?? 'the'} Source Queue now`, green: true },
             { n: '2', label: 'Sourced', sub: 'Link pasted (goes to admin approval) or bought In Store' },
             { n: '3', label: 'Ordered → Received', sub: 'Tracking watches delivery; the install task creates itself on arrival' },
-          ] : []
+          ] : proposal.kind === 'shop_work' ? (proposal.mechanicActive ? [
+            { n: '✓', label: 'Added to the mechanic checklist', sub: 'Goes on the car\'s active mechanic stage now', green: true },
+            { n: '2', label: 'Assign the mechanic', sub: 'Unassigned — hand it off from the board or dashboard' },
+            { n: '3', label: 'Checked off when done', sub: 'Completion date stamps automatically' },
+          ] : [
+            { n: '✓', label: 'Held as a task', sub: 'Car is not in mechanic — the work waits with the coordinator', green: true },
+            { n: '2', label: 'Route the car to mechanic', sub: 'Routing carries the work onto the fresh checklist' },
+            { n: '3', label: 'Checked off when done', sub: 'Completion date stamps automatically' },
+          ]) : []
           return (
           <div style={{ border: '1px solid var(--border)', background: 'var(--bg-primary, #f8f8f6)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
               <p style={{ ...eyebrow, margin: 0 }}>This creates</p>
-              <span style={{ fontSize: 10.5, fontWeight: 650, color: proposal.kind === 'simple' ? 'var(--text-muted)' : proposal.kind === 'part_request' ? '#92400e' : '#1d4ed8' }}>
-                {proposal.kind === 'coordination' ? 'Coordination' : proposal.kind === 'part_request' ? 'Part Request' : 'Simple task'}
+              <span style={{ fontSize: 10.5, fontWeight: 650, color: proposal.kind === 'simple' ? 'var(--text-muted)' : proposal.kind === 'part_request' ? '#92400e' : proposal.kind === 'shop_work' ? '#16a34a' : '#1d4ed8' }}>
+                {proposal.kind === 'coordination' ? 'Coordination' : proposal.kind === 'part_request' ? 'Part Request' : proposal.kind === 'shop_work' ? 'Shop Work' : 'Simple task'}
               </span>
             </div>
 
@@ -198,7 +207,7 @@ export default function SmartTaskModal({ onClose, onCreated }: {
             <button
               onClick={create} disabled={busy}
               style={{ flex: 1.4, padding: '11px 0', borderRadius: 10, border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
-            >{busy ? 'Creating…' : proposal.kind === 'part_request' ? 'Create Part Request' : 'Create Task'}</button>
+            >{busy ? 'Creating…' : proposal.kind === 'part_request' ? 'Create Part Request' : proposal.kind === 'shop_work' && proposal.mechanicActive ? 'Add to Checklist' : 'Create Task'}</button>
           ) : (
             <button
               onClick={() => propose(text)} disabled={busy || !text.trim()}
