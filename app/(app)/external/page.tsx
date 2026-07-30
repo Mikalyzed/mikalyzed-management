@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import VehicleSearch from '@/components/VehicleSearch'
 import VendorSearch, { VendorResult } from '@/components/VendorSearch'
 import AddPartModal from '@/components/AddPartModal'
+import ExternalRepairModal from '@/components/ExternalRepairModal'
 
 type InventoryPick = {
   stockNumber: string; vin: string | null
@@ -123,6 +124,7 @@ export default function ExternalRepairsPage() {
   const [followUpSaving, setFollowUpSaving] = useState(false)
   const [expandedFollowUps, setExpandedFollowUps] = useState<string | null>(null)
   const [editRepairModal, setEditRepairModal] = useState<ExternalRepair | null>(null)
+  const [actionModalId, setActionModalId] = useState<string | null>(null)
   const [editRepairSaving, setEditRepairSaving] = useState(false)
   const [editStatus, setEditStatus] = useState('')
   const [editReason, setEditReason] = useState('')
@@ -580,7 +582,7 @@ export default function ExternalRepairsPage() {
                 onClick={(e) => {
                   // Don't open modal if click landed on a button or interactive element
                   if ((e.target as HTMLElement).closest('button, a, select, input, textarea')) return
-                  setEditRepairModal(r); setEditStatus(r.status); setEditReason('')
+                  setActionModalId(r.id)
                 }}
                 style={{
                   background: overdue ? 'var(--danger-bg)' : '#ffffff',
@@ -591,30 +593,41 @@ export default function ExternalRepairsPage() {
                   cursor: 'pointer',
                 }}>
                 {/* Header - Clickable for admin */}
-                <div className="ext-card-padding" style={{ cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && (setEditRepairModal(r), setEditStatus(r.status), setEditReason(''))}>
+                <div className="ext-card-padding">
                   {/* Bottleneck-card layout: stock chip top-left aligned with the
                       status pills top-right; vehicle name full-width underneath. */}
-                  <div className="ext-card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-                    <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
-                      STOCK #{r.stockNumber}
-                    </p>
-                    <div className="ext-card-badges" style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                      {overdue && <span className="badge badge-blocked">Overdue</span>}
-                      {r.atDealership && (
-                        <span style={{
-                          fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
-                          background: '#dbeafe', color: '#1d4ed8', whiteSpace: 'nowrap',
-                        }}>In-House</span>
-                      )}
-                      {r.partOnly && (
-                        <span style={{
-                          fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4,
-                          background: '#fef3c7', color: '#a16207', whiteSpace: 'nowrap',
-                        }}>Part Only</span>
-                      )}
-                      <span className={`badge ${r.status === 'returned' ? 'badge-done' : r.status === 'ready' ? 'badge-content' : r.status === 'in_progress' ? 'badge-in-progress' : 'badge-pending'}`}>
-                        {STATUS_LABELS[r.status]}
-                      </span>
+                  <div className="ext-card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                    <span style={{
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                      fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)',
+                      background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border)',
+                      padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0,
+                    }}>#{r.stockNumber}</span>
+                    <div className="ext-card-badges" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', minWidth: 0 }}>
+                      {(() => {
+                        const pill = (label: string, color: string, bg: string) => (
+                          <span key={label} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            fontSize: 10.5, fontWeight: 650, padding: '2px 9px', borderRadius: 100,
+                            whiteSpace: 'nowrap', color, background: bg,
+                          }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                            {label}
+                          </span>
+                        )
+                        const out: React.ReactNode[] = []
+                        if (overdue) out.push(pill('Overdue', '#b91c1c', '#fdecef'))
+                        if (r.atDealership) out.push(pill('In-House', '#1d4ed8', '#eaf0fe'))
+                        if (r.partOnly) out.push(pill('Part Only', '#92400e', '#fdf3e7'))
+                        out.push(
+                          r.status === 'returned' ? pill('Returned', '#16a34a', '#f0fdf4')
+                          : r.status === 'ready' ? pill('Ready', '#16a34a', '#f0fdf4')
+                          : r.status === 'in_progress' ? pill('In Progress', '#b45309', '#fdf3e7')
+                          : r.status === 'sent' ? pill('Sent', '#2563eb', '#eff6ff')
+                          : pill('Not Scheduled', '#6b6b6b', '#f4f4f2')
+                        )
+                        return out
+                      })()}
                     </div>
                   </div>
                   <div style={{ marginBottom: '16px', minWidth: 0 }}>
@@ -635,7 +648,7 @@ export default function ExternalRepairsPage() {
                     background: overdue ? 'rgba(255,255,255,0.6)' : 'var(--bg-primary)',
                     borderRadius: '12px',
                     cursor: isAdmin ? 'pointer' : 'default',
-                  }} onClick={() => isAdmin && (setEditRepairModal(r), setEditStatus(r.status), setEditReason(''))}>
+                  }}>
                     <div>
                       <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Shop</p>
                       <p style={{ fontSize: '14px', fontWeight: 600 }}>{r.shopName}</p>
@@ -649,9 +662,16 @@ export default function ExternalRepairsPage() {
                       <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>Timeline</p>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         {isPending ? (
+                          (r as { plannedSendDate?: string | null }).plannedSendDate ? (
+                            <div style={{ fontSize: '13px' }}>
+                              <span style={{ color: 'var(--text-secondary)' }}>Going out: </span>
+                              <span style={{ fontWeight: 650 }}>{new Date((r as { plannedSendDate?: string }).plannedSendDate!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                            </div>
+                          ) : (
                           <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                            Not yet scheduled — use the Schedule button when ready.
+                            Not yet scheduled — tap the card to set a send date.
                           </div>
+                          )
                         ) : (
                           <>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
@@ -699,7 +719,7 @@ export default function ExternalRepairsPage() {
 
                 {/* Follow-up History - Clickable for admin */}
                 {(r as any).followUps && Array.isArray((r as any).followUps) && (r as any).followUps.length > 0 && (
-                  <div className="ext-notes-area" style={{ padding: '12px 14px', cursor: isAdmin ? 'pointer' : 'default' }} onClick={() => isAdmin && (setEditRepairModal(r), setEditStatus(r.status), setEditReason(''))}>
+                  <div className="ext-notes-area" style={{ padding: '12px 14px' }}>
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
@@ -765,6 +785,12 @@ export default function ExternalRepairsPage() {
                         })}
                         style={actionBtn('#f3e8ff', '#7c3aed')}
                       >+ Add Part</button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => { setEditRepairModal(r); setEditStatus(r.status); setEditReason('') }}
+                          style={actionBtn('#fff', '#6b6b6b')}
+                        >Edit</button>
+                      )}
                       {r.status === 'pending' && (
                         <button
                           onClick={() => {
@@ -782,19 +808,19 @@ export default function ExternalRepairsPage() {
                             stockNumber: r.stockNumber,
                             vehicleDesc: `${r.year} ${r.make} ${r.model}`,
                           })}
-                          style={actionBtn('#fef2f2', '#ef4444')}
+                          style={actionBtn('#eaf0fe', '#1d4ed8')}
                         >Log Follow-up</button>
                       )}
                       {r.status === 'sent' && (
                         <button
                           onClick={() => updateStatus(r.id, 'in_progress')}
-                          style={actionBtn('#f9fafb', '#1a1a1a')}
+                          style={actionBtn('#eaf0fe', '#1d4ed8')}
                         >Mark In Progress</button>
                       )}
                       {r.status === 'in_progress' && (
                         <button
                           onClick={() => updateStatus(r.id, 'ready')}
-                          style={actionBtn('#f9fafb', '#1a1a1a')}
+                          style={actionBtn('#f0fdf4', '#16a34a')}
                         >Ready for Pickup</button>
                       )}
                       {r.status === 'ready' && (
@@ -811,6 +837,15 @@ export default function ExternalRepairsPage() {
           })}
         </div>
       )}
+      {/* Shared external action modal — same flows as the dashboard/Issues */}
+      {actionModalId && (
+        <ExternalRepairModal
+          externalId={actionModalId}
+          onClose={() => setActionModalId(null)}
+          onChanged={load}
+        />
+      )}
+
       {/* Return to Recon Modal — Full Form */}
       {reconModal && (
         <div
