@@ -990,12 +990,10 @@ export default function ExternalRepairsPage() {
                               )}
                               style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#1d4ed8', flexShrink: 0 }}
                             />
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <p style={{ fontSize: 13, fontWeight: 600, color: checked ? '#1d4ed8' : 'var(--text-primary)' }}>{t.name}</p>
-                              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                                {t.items.length} item{t.items.length === 1 ? '' : 's'}
-                              </p>
-                            </div>
+                            <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: checked ? '#1d4ed8' : 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {t.name}
+                              <span style={{ fontWeight: 500, color: 'var(--text-muted)' }}> · {t.items.length} item{t.items.length === 1 ? '' : 's'}</span>
+                            </span>
                           </label>
                         )
                       })}
