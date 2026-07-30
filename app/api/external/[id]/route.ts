@@ -95,6 +95,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         date: followupDate.toISOString(),
         etaDays: body.addFollowUp.etaDays || null,
         note: body.addFollowUp.note,
+        by: user.name,
         calculatedDeadline: calculatedDeadline
       }
       

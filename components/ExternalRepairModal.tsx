@@ -19,7 +19,7 @@ type Repair = {
   plannedSendDate: string | null
   expectedReturn: string | null
   notes: string | null
-  followUps: Array<{ date?: string; note?: string; etaDays?: number | null }> | null
+  followUps: Array<{ date?: string; note?: string; etaDays?: number | null; by?: string | null }> | null
 }
 
 const STATUS_UI: Record<string, { label: string; color: string; bg: string }> = {
@@ -365,7 +365,10 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                       <span style={{ color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
                         {f.date ? fmtShort(f.date) : '—'}
                       </span>
-                      <span style={{ flex: 1, minWidth: 0 }}>{f.note}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        {f.note}
+                        {f.by && <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}> — {f.by}</span>}
+                      </span>
                       {typeof f.etaDays === 'number' && f.etaDays !== 0 && (
                         <span style={{
                           fontSize: 10.5, fontWeight: 700, padding: '1px 8px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0,

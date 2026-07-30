@@ -771,9 +771,10 @@ export default function ExternalRepairsPage() {
                           }}>
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 500 }}>
                               {new Date(followUp.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                              {followUp.by && <span style={{ fontWeight: 650 }}> · {followUp.by}</span>}
                               {followUp.etaDays && (
-                                <span style={{ fontWeight: 600, color: '#8b5cf6', marginLeft: '10px' }}>
-                                  +{followUp.etaDays}d ETA
+                                <span style={{ fontWeight: 600, color: followUp.etaDays > 0 ? '#b91c1c' : '#16a34a', marginLeft: '10px' }}>
+                                  {followUp.etaDays > 0 ? '+' : ''}{followUp.etaDays}d
                                 </span>
                               )}
                             </div>
