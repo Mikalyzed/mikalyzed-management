@@ -856,7 +856,19 @@ export default function ExternalRepairsPage() {
                       )}
                       {r.status === 'ready' && (
                         <button
-                          onClick={() => { setReconModal(r); setReconStage('mechanic'); setReconCloseExternal(true) }}
+                          onClick={async () => {
+                            if (!isAdmin) {
+                              // Coordinator: park it in Pending Routing and propose the
+                              // next stage from the recon board — routing is admin's call
+                              await fetch(`/api/external/${r.id}`, {
+                                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: 'returned', fromStatus: r.status }),
+                              })
+                              load()
+                              return
+                            }
+                            setReconModal(r); setReconStage('mechanic'); setReconCloseExternal(true)
+                          }}
                           style={actionBtn('#f0fdf4', '#16a34a')}
                         >Mark Returned</button>
                       )}
@@ -917,8 +929,8 @@ export default function ExternalRepairsPage() {
                 <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
                   Starting Stage
                 </p>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {RECON_STAGES.map(s => {
+                <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+                  {RECON_STAGES.map((s, si) => {
                     const active = reconStage === s.value
                     return (
                       <button
@@ -926,12 +938,15 @@ export default function ExternalRepairsPage() {
                         type="button"
                         onClick={() => setReconStage(s.value)}
                         style={{
-                          padding: '10px 18px', borderRadius: 10,
-                          border: active ? '2px solid #1a1a1a' : '1px solid var(--border)',
-                          background: active ? '#fafaf8' : '#fff',
-                          fontSize: 14, fontWeight: active ? 600 : 500,
-                          color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
-                          cursor: 'pointer', minHeight: 'auto', transition: 'all 0.15s',
+                          flex: 1, minWidth: 0, padding: '9px 0',
+                          border: 'none',
+                          borderLeft: si === 0 ? 'none' : '1px solid var(--border-light, #f0f0ec)',
+                          background: active ? '#eaf0fe' : '#fff',
+                          fontSize: 12.5, fontWeight: 650,
+                          color: active ? '#1d4ed8' : 'var(--text-secondary)',
+                          cursor: 'pointer', minHeight: 0,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          transition: 'all 0.15s',
                         }}
                       >{s.label}</button>
                     )
@@ -1207,13 +1222,11 @@ export default function ExternalRepairsPage() {
                 }}
                 disabled={sendingToRecon}
                 style={{
-                  width: '100%', padding: '14px 0', borderRadius: 12, border: 'none',
-                  background: 'linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%)',
-                  color: '#fff',
+                  width: '100%', padding: '13px 0', borderRadius: 12,
+                  border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
                   fontSize: 14, fontWeight: 700, letterSpacing: '-0.005em',
                   cursor: 'pointer',
                   opacity: sendingToRecon ? 0.5 : 1,
-                  boxShadow: '0 4px 14px -4px rgba(30, 64, 175, 0.45), inset 0 1px 0 rgba(255,255,255,0.18)',
                 }}
               >
                 {sendingToRecon
