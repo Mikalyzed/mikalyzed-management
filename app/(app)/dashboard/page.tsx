@@ -369,85 +369,14 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
     fontSize: 12.5, borderBottom: '1px solid var(--border-light, #f0f0ec)',
   }
 
-  const submitLink = async (partId: string) => {
-    if (!linkInput.trim()) return
-    setBusy(true)
-    try {
-      await fetch(`/api/parts/${partId}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: linkInput.trim(), status: 'sourced' }),
-      })
-      setLinkFor(null); setLinkInput('')
-      await onChanged()
-    } finally { setBusy(false) }
-  }
+  // External-linked missions live in the Waiting on External section — the
+  // coordinator owns ALL externals as a domain; Assignments is tasks + parts.
+  const missionTasks = (tasks || []).filter(t => t.mission)
+  const plainTasks = (tasks || []).filter(t => !t.mission)
+  const missionExternalIds = new Set(missionTasks.map(t => t.mission!.externalId))
 
-  return (
-    <>
-      {/* ── Assignments — his tasks + parts to source, tabbed ── */}
-      <div className="card" style={{ marginBottom: 24, padding: 22 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div>
-            <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Assignments</h2>
-            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-              {(tasks || []).length + c.sourceQueue.length === 0
-                ? 'All caught up ✓'
-                : [
-                    (tasks || []).length ? `${(tasks || []).length} task${(tasks || []).length === 1 ? '' : 's'}` : null,
-                    c.sourceQueue.length ? `${c.sourceQueue.length} part${c.sourceQueue.length === 1 ? '' : 's'} to source` : null,
-                  ].filter(Boolean).join(' · ')}
-            </p>
-          </div>
-          <button
-            onClick={() => setAddTaskOpen(true)}
-            style={{
-              border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
-              borderRadius: 9, padding: '6px 14px', fontSize: 12.5, fontWeight: 650,
-              cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
-            }}
-          >+ Add Task</button>
-        </div>
+  const renderTaskCard = (t: NonNullable<DashboardData['myBoardTasks']>[number]) => (
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
-          {([
-            { key: 'all', label: 'All', n: (tasks || []).length + c.sourceQueue.length },
-            { key: 'tasks', label: 'Tasks', n: (tasks || []).length },
-            { key: 'parts', label: 'Parts', n: c.sourceQueue.length },
-          ] as const).map(t => {
-            const on = assignTab === t.key
-            return (
-              <button
-                key={t.key}
-                onClick={() => setAssignTab(t.key)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7,
-                  border: on ? '1px solid #1a1a1a' : '1px solid var(--border)',
-                  background: on ? '#1a1a1a' : 'var(--bg-card, #fff)',
-                  color: on ? '#fff' : 'var(--text-secondary)',
-                  borderRadius: 100, padding: '6px 14px', fontSize: 12.5, fontWeight: 600,
-                  cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
-                }}
-              >
-                {t.label}
-                <span style={{
-                  fontSize: 10.5, fontWeight: 700, padding: '1px 7px', borderRadius: 100, fontVariantNumeric: 'tabular-nums',
-                  background: on ? 'rgba(255,255,255,0.18)' : 'var(--bg-primary, #f8f8f6)',
-                  color: on ? '#fff' : 'var(--text-muted)',
-                }}>{t.n}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        {(tasks || []).length + c.sourceQueue.length === 0 && (
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>No open tasks and every requested part has been sourced. ✓</p>
-        )}
-
-        {assignTab === 'all' && (tasks || []).length > 0 && (
-          <div style={{ ...eyebrow, margin: '2px 0 8px' }}>Tasks</div>
-        )}
-        {assignTab !== 'parts' && (tasks || []).map(t => (
           <div key={t.id} style={{
             background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border-light, #f0f0ec)',
             borderRadius: 12, padding: '11px 14px', marginBottom: 8,
@@ -696,7 +625,87 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
               )}
             </div>
           </div>
-        ))}
+  )
+
+  const submitLink = async (partId: string) => {
+    if (!linkInput.trim()) return
+    setBusy(true)
+    try {
+      await fetch(`/api/parts/${partId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: linkInput.trim(), status: 'sourced' }),
+      })
+      setLinkFor(null); setLinkInput('')
+      await onChanged()
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <>
+      {/* ── Assignments — his tasks + parts to source, tabbed ── */}
+      <div className="card" style={{ marginBottom: 24, padding: 22 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div>
+            <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Assignments</h2>
+            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+              {plainTasks.length + c.sourceQueue.length === 0
+                ? 'All caught up ✓'
+                : [
+                    plainTasks.length ? `${plainTasks.length} task${plainTasks.length === 1 ? '' : 's'}` : null,
+                    c.sourceQueue.length ? `${c.sourceQueue.length} part${c.sourceQueue.length === 1 ? '' : 's'} to source` : null,
+                  ].filter(Boolean).join(' · ')}
+            </p>
+          </div>
+          <button
+            onClick={() => setAddTaskOpen(true)}
+            style={{
+              border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
+              borderRadius: 9, padding: '6px 14px', fontSize: 12.5, fontWeight: 650,
+              cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
+            }}
+          >+ Add Task</button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
+          {([
+            { key: 'all', label: 'All', n: plainTasks.length + c.sourceQueue.length },
+            { key: 'tasks', label: 'Tasks', n: plainTasks.length },
+            { key: 'parts', label: 'Parts', n: c.sourceQueue.length },
+          ] as const).map(t => {
+            const on = assignTab === t.key
+            return (
+              <button
+                key={t.key}
+                onClick={() => setAssignTab(t.key)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  border: on ? '1px solid #1a1a1a' : '1px solid var(--border)',
+                  background: on ? '#1a1a1a' : 'var(--bg-card, #fff)',
+                  color: on ? '#fff' : 'var(--text-secondary)',
+                  borderRadius: 100, padding: '6px 14px', fontSize: 12.5, fontWeight: 600,
+                  cursor: 'pointer', minHeight: 0, whiteSpace: 'nowrap',
+                }}
+              >
+                {t.label}
+                <span style={{
+                  fontSize: 10.5, fontWeight: 700, padding: '1px 7px', borderRadius: 100, fontVariantNumeric: 'tabular-nums',
+                  background: on ? 'rgba(255,255,255,0.18)' : 'var(--bg-primary, #f8f8f6)',
+                  color: on ? '#fff' : 'var(--text-muted)',
+                }}>{t.n}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {plainTasks.length + c.sourceQueue.length === 0 && (
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>No open tasks and every requested part has been sourced. ✓</p>
+        )}
+
+        {assignTab === 'all' && plainTasks.length > 0 && (
+          <div style={{ ...eyebrow, margin: '2px 0 8px' }}>Tasks</div>
+        )}
+        {assignTab !== 'parts' && plainTasks.map(renderTaskCard)}
 
         {assignTab === 'all' && c.sourceQueue.length > 0 && (
           <div style={{ ...eyebrow, margin: '10px 0 8px' }}>Parts to Source</div>
@@ -754,14 +763,17 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
         )}
       </div>
 
-      {/* ── Waiting on External ── */}
-      {c.externalOut.length > 0 && (
+      {/* ── Waiting on External — the coordinator owns ALL of these, whoever
+             created them. Pickup/delivery missions render here as steppers;
+             the rest are rows. ── */}
+      {(c.externalOut.length > 0 || missionTasks.length > 0) && (
         <div className="card" style={{ marginBottom: 24, padding: 22 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-            <div style={eyebrow}>Waiting on External · {c.externalOut.length}</div>
+            <div style={eyebrow}>Waiting on External · {c.externalOut.length + missionTasks.filter(t => !c.externalOut.some(e => e.externalId === t.mission!.externalId)).length}</div>
             <Link href="/external" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>External page →</Link>
           </div>
-          {c.externalOut.map(e => (
+          {missionTasks.map(renderTaskCard)}
+          {c.externalOut.filter(e => !missionExternalIds.has(e.externalId)).map(e => (
             <div
               key={e.externalId}
               role="button"
