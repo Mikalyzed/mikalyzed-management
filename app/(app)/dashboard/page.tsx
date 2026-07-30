@@ -926,6 +926,13 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
     { key: 'noDate', n: (a.noDate ?? []).length, area: 'External', label: 'Out with no return date', crit: true },
   ].filter(r => r.n > 0)
 
+  // One section per AREA; the issues inside are sub-sections — the card
+  // stays three rows tall no matter how many rule types fire.
+  const groups = ['Recon Board', 'Parts', 'External']
+    .map(area => ({ area, rows: rows.filter(r => r.area === area) }))
+    .filter(g => g.rows.length > 0)
+    .map(g => ({ ...g, n: g.rows.reduce((s, r) => s + r.n, 0), crit: g.rows.some(r => r.crit) }))
+
   const itemRow: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
     padding: '8px 14px',
@@ -966,15 +973,15 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
       {rows.length === 0 && (
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '6px 0 0' }}>Nothing pending — routing, parts, and externals are all handled. ✓</p>
       )}
-      {rows.map((r) => (
-        <div key={r.key} style={{
+      {groups.map((g) => (
+        <div key={g.area} style={{
           background: 'var(--bg-primary, #f8f8f6)',
           border: '1px solid var(--border-light, #f0f0ec)',
           borderRadius: 12, marginBottom: 8, overflow: 'hidden',
         }}>
           <button
-            onClick={() => setOpen(open === r.key ? null : r.key)}
-            aria-expanded={open === r.key}
+            onClick={() => setOpen(open === g.area ? null : g.area)}
+            aria-expanded={open === g.area}
             style={{
               display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', width: '100%',
               textAlign: 'left',
@@ -986,17 +993,32 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
               minWidth: 26, height: 22, padding: '0 7px', borderRadius: 100,
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-              background: r.crit ? 'rgba(185,28,28,0.10)' : 'rgba(180,83,9,0.10)',
-              color: r.crit ? '#b91c1c' : '#b45309',
-            }}>{r.n}</span>
+              background: g.crit ? 'rgba(185,28,28,0.10)' : 'rgba(180,83,9,0.10)',
+              color: g.crit ? '#b91c1c' : '#b45309',
+            }}>{g.n}</span>
             <span style={{ flex: 1, minWidth: 0, letterSpacing: '-0.005em' }}>
-              <span style={{ fontWeight: 700 }}>{r.area}:</span>{' '}
-              <span style={{ fontWeight: 500, color: 'var(--text-secondary)' }}>{r.label}</span>
+              <span style={{ fontWeight: 700 }}>{g.area}</span>{' '}
+              <span style={{ fontWeight: 500, color: 'var(--text-secondary)', fontSize: 12.5 }}>
+                · {g.rows.length === 1 ? g.rows[0].label : `${g.rows.length} things need a look`}
+              </span>
             </span>
-            <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 11, transform: open === r.key ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>▸</span>
+            <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 11, transform: open === g.area ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s ease' }}>▸</span>
           </button>
 
-          {open === r.key && r.key === 'routing' && a.routing.map(v => (
+          {open === g.area && g.rows.map((r) => (
+          <div key={r.key}>
+          <div style={{
+            padding: '9px 14px 3px', fontSize: 11, fontWeight: 700,
+            textTransform: 'uppercase', letterSpacing: '0.05em',
+            color: r.crit ? '#b91c1c' : 'var(--text-muted)',
+            borderTop: '1px solid var(--border-light, #f0f0ec)', background: 'var(--bg-card, #fff)',
+            display: 'flex', alignItems: 'center', gap: 7,
+          }}>
+            {r.label}
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>· {r.n}</span>
+          </div>
+
+          {r.key === 'routing' && a.routing.map(v => (
             <div key={v.id} style={itemRow}>
               <CarLead stock={v.stock} vehicle={v.vehicle} detail="Finished its stage — waiting to be routed" />
               <button
@@ -1008,7 +1030,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
             </div>
           ))}
 
-          {open === r.key && r.key === 'installs' && a.installs.map(it => {
+          {r.key === 'installs' && a.installs.map(it => {
             const k = `${it.stageId}|${it.item}`
             return (
               <div key={k} style={{ ...itemRow, position: 'relative', flexWrap: 'wrap' }}>
@@ -1053,7 +1075,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
             )
           })}
 
-          {open === r.key && r.key === 'delivered' && a.delivered.map(p => (
+          {r.key === 'delivered' && a.delivered.map(p => (
             <div key={p.id} style={itemRow}>
               <CarLead stock={p.stock} vehicle={p.vehicle} detail={`${p.name} — carrier says delivered`} onOpen={() => setDetailPartId(p.id)} />
               <button
@@ -1066,7 +1088,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
             </div>
           ))}
 
-          {open === r.key && r.key === 'approvals' && a.approvals.map(p => (
+          {r.key === 'approvals' && a.approvals.map(p => (
             <div key={p.id} style={itemRow}>
               <CarLead
                 stock={p.stock} vehicle={p.vehicle}
@@ -1121,7 +1143,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
             </div>
           ))}
 
-          {open === r.key && r.key === 'overdue' && a.overdue.map(e => (
+          {r.key === 'overdue' && a.overdue.map(e => (
             <div key={e.id} style={itemRow}>
               <CarLead
                 stock={e.stock} vehicle={e.vehicle}
@@ -1135,7 +1157,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
             </div>
           ))}
 
-          {open === r.key && r.key === 'noDate' && (a.noDate ?? []).map(e => (
+          {r.key === 'noDate' && (a.noDate ?? []).map(e => (
             <div key={e.id} style={itemRow}>
               <CarLead
                 stock={e.stock} vehicle={e.vehicle}
@@ -1146,7 +1168,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
             </div>
           ))}
 
-          {open === r.key && r.key === 'stranded' && (() => {
+          {r.key === 'stranded' && (() => {
             // One block per car — a car with several stranded parts reads as
             // one problem with N parts, not N separate rows.
             const byStock = new Map<string, typeof a.stranded>()
@@ -1202,7 +1224,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
             })
           })()}
 
-          {open === r.key && r.key === 'stuck' && a.stuck.map(p => (
+          {r.key === 'stuck' && a.stuck.map(p => (
             <div key={p.id} style={itemRow}>
               <CarLead
                 stock={p.stock} vehicle={p.vehicle}
@@ -1211,6 +1233,8 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
               />
               <button style={miniBtn} disabled={busy} onClick={() => setDetailPartId(p.id)}>Open ›</button>
             </div>
+          ))}
+          </div>
           ))}
         </div>
       ))}
