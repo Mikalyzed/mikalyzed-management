@@ -1169,67 +1169,58 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
           ))}
 
           {r.key === 'stranded' && (() => {
-            // One block per car — a car with several stranded parts reads as
-            // one problem with N parts, not N separate rows.
+            // One tight card per car: header line → its parts → the one action.
             const byStock = new Map<string, typeof a.stranded>()
             for (const p of a.stranded ?? []) {
               if (!byStock.has(p.stock)) byStock.set(p.stock, [])
               byStock.get(p.stock)!.push(p)
             }
-            return Array.from(byStock.values()).map(group => {
-              const v = group[0]
-              if (group.length === 1) return (
-                <div key={v.id} style={itemRow}>
-                  <CarLead
-                    stock={v.stock} vehicle={v.vehicle}
-                    sold={v.sold}
-                    detail={v.name}
-                    onOpen={() => setDetailPartId(v.id)}
-                  />
-                  <button
-                    className="att-mech-btn"
-                    style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }} disabled={busy}
-                    onClick={() => sendToMechanic(v.vehicleId, v.vehicle, [v.id])}
-                  >→ Add Vehicle to Recon</button>
-                </div>
-              )
-              return (
-                <div key={v.stock}>
-                  <div style={{ ...itemRow, paddingBottom: 4 }}>
-                    <CarLead stock={v.stock} vehicle={v.vehicle} sold={v.sold} detail={`${group.length} parts arrived — no install plan`} />
-                    <button
-                      className="att-mech-btn att-hide-mobile"
-                      style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }} disabled={busy}
-                      onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
-                    >→ Add Vehicle to Recon</button>
-                  </div>
-                  <div style={{ margin: '0 14px 4px', border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 10, overflow: 'hidden', background: 'var(--bg-primary, #f8f8f6)' }}>
-                    {group.map((p, pi) => (
-                      <div key={p.id} style={{
-                        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', fontSize: 12.5,
-                        borderTop: pi === 0 ? 'none' : '1px solid var(--border-light, #f0f0ec)',
-                      }}>
-                        <span style={{
-                          flex: 1, minWidth: 0, fontWeight: 500, lineHeight: 1.4,
-                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                        }}>{p.name}</span>
-                        <button
-                          disabled={busy} onClick={() => setDetailPartId(p.id)}
-                          style={{ border: 'none', background: 'none', padding: 0, minHeight: 0, fontSize: 12, fontWeight: 650, color: '#1d4ed8', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
-                        >Open ›</button>
+            return (
+              <div style={{ background: 'var(--bg-card, #fff)', padding: '8px 14px 10px' }}>
+                {Array.from(byStock.values()).map(group => {
+                  const v = group[0]
+                  return (
+                    <div key={v.stock} style={{
+                      border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 12,
+                      background: 'var(--bg-primary, #f8f8f6)', overflow: 'hidden', marginBottom: 8,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', minWidth: 0 }}>
+                        <span style={stockChip}>#{v.stock}</span>
+                        <span style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 13, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {v.vehicle}
+                        </span>
+                        {v.sold && (
+                          <span style={{ fontSize: 10.5, fontWeight: 650, color: '#b91c1c', background: '#fdecef', border: '1px solid #fecaca', padding: '1px 8px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0 }}>Sold</span>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                  <div className="att-mobile-only" style={{ padding: '0 14px 10px' }}>
-                    <button
-                      className="att-mech-btn"
-                      style={{ ...miniBtn, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }} disabled={busy}
-                      onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
-                    >→ Add Vehicle to Recon</button>
-                  </div>
-                </div>
-              )
-            })
+                      {group.map(p => (
+                        <div key={p.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                          fontSize: 12.5, borderTop: '1px solid var(--border-light, #f0f0ec)',
+                          background: 'var(--bg-card, #fff)',
+                        }}>
+                          <span style={{
+                            flex: 1, minWidth: 0, fontWeight: 500, lineHeight: 1.4,
+                            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                          }}>{p.name}</span>
+                          <button
+                            disabled={busy} onClick={() => setDetailPartId(p.id)}
+                            style={{ border: 'none', background: 'none', padding: 0, minHeight: 0, fontSize: 12, fontWeight: 650, color: '#1d4ed8', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                          >Open ›</button>
+                        </div>
+                      ))}
+                      <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border-light, #f0f0ec)', background: 'var(--bg-card, #fff)' }}>
+                        <button
+                          style={{ ...miniBtn, width: '100%', justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }}
+                          disabled={busy}
+                          onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
+                        >→ Add Vehicle to Recon</button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
           })()}
 
           {r.key === 'stuck' && a.stuck.map(p => (
