@@ -921,7 +921,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
     { key: 'delivered', n: a.delivered.length, area: 'Parts', label: 'Carrier Says Delivered', crit: true },
     { key: 'approvals', n: a.approvals.length, area: 'Parts', label: 'Awaiting Approval' },
     { key: 'stuck', n: a.stuck.length, area: 'Parts', label: 'Stuck in Requested' },
-    { key: 'stranded', n: (a.stranded ?? []).length, area: 'Parts', label: 'Here — Car Not in Recon', crit: true },
+    { key: 'stranded', n: (a.stranded ?? []).length, area: 'Parts', label: 'No Install Plan', crit: true },
     { key: 'overdue', n: a.overdue.length, area: 'External', label: 'Past Return Date', crit: true },
     { key: 'noDate', n: (a.noDate ?? []).length, area: 'External', label: 'No Return Date', crit: true },
   ].filter(r => r.n > 0)
