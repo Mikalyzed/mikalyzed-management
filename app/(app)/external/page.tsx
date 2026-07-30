@@ -342,23 +342,22 @@ export default function ExternalRepairsPage() {
         }
       `}</style>
 
-      {/* Header */}
+      {/* Header — search + add, no title (matches the Parts page) */}
       <div className="ext-header">
-        <h1 className="page-h1-mobile-pad" style={{ fontWeight: 700, letterSpacing: '-0.02em' }}>External Repairs</h1>
-        <div className="ext-controls" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0 }}>
+        <div className="ext-controls page-h1-mobile-pad" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0, marginBottom: 16 }}>
           <input
-            type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search vehicles..."
-            style={{ flex: 1, minWidth: 0, padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', fontSize: 14 }}
+            type="search" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search vehicles, shops…"
+            style={{ flex: 1, minWidth: 0, padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 14, background: 'var(--bg-card, #fff)', outline: 'none' }}
           />
           <button
             onClick={() => setShowAdd(true)}
             className="ext-add-btn"
             style={{
-              padding: '10px 20px', borderRadius: '12px', border: 'none',
-              background: '#1a1a1a', color: '#dffd6e',
-              fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px',
-              display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0,
+              padding: '9px 16px', borderRadius: 10,
+              border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
+              fontSize: 13, fontWeight: 650, cursor: 'pointer', minHeight: 0,
+              display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, whiteSpace: 'nowrap',
             }}
           >
             + <span>Add Repair</span>
@@ -366,8 +365,9 @@ export default function ExternalRepairsPage() {
         </div>
       </div>
 
-      {/* Filter tabs — horizontal scroll pill style (matches Parts page) */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', overflowX: 'auto', paddingBottom: '2px' }}>
+      {/* Filter tabs — horizontal scroll pills, scrollbar hidden */}
+      <style>{`.ext-tabs::-webkit-scrollbar { display: none; }`}</style>
+      <div className="ext-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '2px', scrollbarWidth: 'none' }}>
         {(() => {
           const TABS = [
             { key: 'all', label: 'All Vehicles' },
@@ -387,21 +387,21 @@ export default function ExternalRepairsPage() {
                 key={tab.key}
                 onClick={() => setFilter(tab.key)}
                 style={{
-                  padding: '8px 16px', borderRadius: '8px',
+                  padding: '7px 15px', borderRadius: 100,
                   border: `1px solid ${active ? '#1a1a1a' : 'var(--border)'}`,
-                  background: active ? '#1a1a1a' : '#fff',
-                  color: active ? '#dffd6e' : 'var(--text-secondary)',
-                  fontSize: '14px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                  display: 'flex', alignItems: 'center', gap: '6px',
-                  flexShrink: 0,
+                  background: active ? '#1a1a1a' : 'var(--bg-card, #fff)',
+                  color: active ? '#fff' : 'var(--text-secondary)',
+                  fontSize: '13px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                  display: 'inline-flex', alignItems: 'center', gap: 7,
+                  flexShrink: 0, minHeight: 0,
                 }}
               >
                 {tab.label}
                 {count > 0 && (
                   <span style={{
-                    background: active ? 'rgba(223,253,110,0.2)' : 'var(--border)',
-                    color: active ? '#dffd6e' : 'var(--text-muted)',
-                    fontSize: '12px', fontWeight: 600, padding: '2px 6px', borderRadius: '4px',
+                    background: active ? 'rgba(255,255,255,0.18)' : 'var(--bg-primary, #f8f8f6)',
+                    color: active ? '#fff' : 'var(--text-muted)',
+                    fontSize: '10.5px', fontWeight: 700, padding: '1px 7px', borderRadius: 100, fontVariantNumeric: 'tabular-nums',
                   }}>{count}</span>
                 )}
               </button>
