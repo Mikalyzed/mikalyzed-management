@@ -684,6 +684,26 @@ export default function ExternalRepairsPage() {
                           )
                         ) : (
                           <>
+                            {/* The answer to "when do I get the car back?" leads */}
+                            {(() => {
+                              const er = (r as { expectedReturn?: string | null }).expectedReturn
+                              if (!er) return (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                  <span style={{ color: '#b45309', fontWeight: 600 }}>Expected back:</span>
+                                  <span style={{ fontWeight: 650, color: '#b45309' }}>no date — get one from the shop</span>
+                                </div>
+                              )
+                              const past = new Date(er).getTime() < Date.now()
+                              const lateDays = past ? Math.floor((Date.now() - new Date(er).getTime()) / 86400000) : 0
+                              return (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                                  <span style={{ color: past ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: past ? 600 : 400 }}>Expected back:</span>
+                                  <span style={{ fontWeight: 700, color: past ? 'var(--danger)' : 'var(--text-primary)' }}>
+                                    {new Date(er).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}{past ? ` — ${lateDays}d ago` : ''}
+                                  </span>
+                                </div>
+                              )
+                            })()}
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
                               <span style={{ color: 'var(--text-secondary)' }}>Total out:</span>
                               <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{daysOut}d</span>
