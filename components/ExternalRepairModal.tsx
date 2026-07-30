@@ -66,6 +66,7 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged, in
   intent?: 'returned'
 }) {
   const intentFiredRef = useRef(false)
+  const proceedingRef = useRef(false)
   const [repair, setRepair] = useState<Repair | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -107,9 +108,12 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged, in
               : 'Next you pick where it should go — the request goes to admin for approval.',
             confirmLabel: '✓ Returned',
             onConfirm: async () => {
-              const ok = await patch({ status: 'returned', fromStatus: rep.status })
-              if (ok && !rep.partOnly) setAskNextStage(true)
-              else if (ok) onClose()
+              proceedingRef.current = true
+              try {
+                const ok = await patch({ status: 'returned', fromStatus: rep.status })
+                if (ok && !rep.partOnly) setAskNextStage(true)
+                else if (ok) onClose()
+              } finally { proceedingRef.current = false }
             },
           })
         }
@@ -187,6 +191,83 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged, in
       addFollowUp: { note: updateNote.trim(), etaDays: deltaDays !== 0 ? deltaDays : undefined },
     })
     if (ok) clearStaged()
+  }
+
+  // Intent mode ('returned'): the card behind the flow is noise — render
+  // ONLY the confirm and then the where-next panel on the bare overlay.
+  if (intent === 'returned') {
+    const flowDone = !confirmState && !askNextStage && intentFiredRef.current && !proceedingRef.current
+    if (repair && flowDone) {
+      // Every dialog dismissed and nothing pending — the flow is over
+      setTimeout(onClose, 0)
+    }
+    return (
+      <div onClick={() => { if (!saving && !askNextStage) onClose() }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: 20 }}>
+        {loading && <p style={{ color: '#fff', fontSize: 13 }}>Loading…</p>}
+        {askNextStage && repair && (
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 420, padding: 22, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <span style={{
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+                fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)',
+                background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border)',
+                padding: '1px 6px', borderRadius: 6, whiteSpace: 'nowrap', flexShrink: 0,
+              }}>#{repair.stockNumber}</span>
+              <span style={{ fontWeight: 700, fontSize: 13.5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {`${repair.year ?? ''} ${repair.make} ${repair.model}`.trim()}
+              </span>
+            </div>
+            <p style={{ fontSize: 14.5, fontWeight: 700, margin: '0 0 3px' }}>It's back — where should it go next?</p>
+            <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 10px' }}>Your request goes to admin's routing queue for approval.</p>
+            <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden', background: '#fff', marginBottom: 10 }}>
+              {(['mechanic', 'detailing', 'content', 'publish'] as const).map((st, si) => (
+                <button
+                  key={st}
+                  disabled={saving}
+                  onClick={() => setNextStagePick(st)}
+                  style={{
+                    flex: 1, minWidth: 0, padding: '9px 0', border: 'none',
+                    borderLeft: si === 0 ? 'none' : '1px solid var(--border-light, #f0f0ec)',
+                    background: nextStagePick === st ? '#eaf0fe' : '#fff',
+                    fontSize: 12, fontWeight: 650, minHeight: 0, cursor: 'pointer',
+                    color: nextStagePick === st ? '#1d4ed8' : 'var(--text-secondary)',
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}
+                >{st.charAt(0).toUpperCase() + st.slice(1)}</button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button style={{ ...btn, flex: 1 }} disabled={saving} onClick={onClose}>Skip</button>
+              <button
+                style={{ ...btn, flex: 1.4, background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc' }}
+                disabled={saving}
+                onClick={async () => {
+                  setSaving(true)
+                  try {
+                    const all = await fetch(`/api/vehicles?stockNumber=${encodeURIComponent(repair.stockNumber)}`).then(r => r.json()).catch(() => null)
+                    const vehicleId = all?.vehicles?.[0]?.id ?? null
+                    if (vehicleId) {
+                      await fetch(`/api/vehicles/${vehicleId}/propose-route`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ stage: nextStagePick }),
+                      })
+                    }
+                    setAskNextStage(false)
+                    setConfirmState({
+                      title: 'Request sent',
+                      message: `Admin sees "${nextStagePick.charAt(0).toUpperCase() + nextStagePick.slice(1)}" requested on their routing queue — one approval and it goes.`,
+                      hideCancel: true,
+                      onConfirm: () => onClose(),
+                    })
+                  } finally { setSaving(false) }
+                }}
+              >Send Request</button>
+            </div>
+          </div>
+        )}
+        <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
+      </div>
+    )
   }
 
   return (
