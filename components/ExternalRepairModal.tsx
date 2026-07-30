@@ -447,9 +447,23 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
                 disabled={saving || !['sent', 'in_progress', 'ready'].includes(repair.status)}
                 onClick={() => setConfirmState({
                   title: `Returned from ${repair.shopName}?`,
-                  message: repair.partOnly ? 'The part is marked back at the dealership.' : 'The car goes to Pending Routing on the recon board.',
+                  message: repair.partOnly
+                    ? 'The part is marked back at the dealership.'
+                    : 'The car lands in Pending Routing — you pick its next stage there (recon board or your dashboard routing queue).',
                   confirmLabel: '✓ Returned',
-                  onConfirm: async () => { const ok = await patch({ status: 'returned', fromStatus: repair.status }); if (ok) onClose() },
+                  onConfirm: async () => {
+                    const ok = await patch({ status: 'returned', fromStatus: repair.status })
+                    if (ok && !repair.partOnly) {
+                      setConfirmState({
+                        title: 'Back home — now route it',
+                        message: `The ${repair.make} is in Pending Routing. Open the recon board (or dashboard routing queue) to send it to its next stage.`,
+                        hideCancel: true,
+                        onConfirm: () => onClose(),
+                      })
+                    } else if (ok) {
+                      onClose()
+                    }
+                  },
                 })}
               >✓ Returned</button>
             </div>
