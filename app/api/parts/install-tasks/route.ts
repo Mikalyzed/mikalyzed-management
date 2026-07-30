@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { getSessionUser } from '@/lib/auth'
+import { getSessionUser, requireRole } from '@/lib/auth'
 
 /**
  * POST /api/parts/install-tasks — Morning Meeting bottleneck fix for
@@ -17,7 +17,8 @@ import { getSessionUser } from '@/lib/auth'
 export async function POST(req: Request) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (user.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Install tasks are the shop coordinator's lane (admin implicit)
+  if (!requireRole(user.role, ['shop_coordinator'])) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json().catch(() => ({}))
   const vehicleId = typeof body.vehicleId === 'string' ? body.vehicleId : null
