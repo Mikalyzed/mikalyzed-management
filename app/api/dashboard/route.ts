@@ -332,12 +332,15 @@ export async function GET(request: Request) {
         .filter(c => c?.fromPart && !c?.assigneeId && !c?.done)
         .map(c => ({ stageId: s.id, item: String(c.item ?? ''), stock: s.vehicle.stockNumber, vehicle: vName(s.vehicle) })),
     )
+    const isCoordinator = user.role === 'shop_coordinator'
     attention = {
-      routing: routingVehicles.map(v => ({ id: v.id, stock: v.stockNumber, vehicle: vName(v) })),
+      // Routing + part approval are ADMIN decisions — the coordinator sources
+      // and installs; showing him queues he can't act on is just noise.
+      routing: isCoordinator ? [] : routingVehicles.map(v => ({ id: v.id, stock: v.stockNumber, vehicle: vName(v) })),
       installs: installItems.slice(0, 15),
       installsTotal: installItems.length,
       delivered: deliveredParts.map(p => ({ id: p.id, name: p.name, stock: p.vehicle.stockNumber, vehicle: vName(p.vehicle) })),
-      approvals: approvalParts.map(p => ({ id: p.id, name: p.name, url: p.url, stock: p.vehicle.stockNumber, vehicle: vName(p.vehicle) })),
+      approvals: isCoordinator ? [] : approvalParts.map(p => ({ id: p.id, name: p.name, url: p.url, stock: p.vehicle.stockNumber, vehicle: vName(p.vehicle) })),
       overdue: overdueExternals.map(e => ({
         id: e.id, stock: e.stockNumber, vehicle: vName(e), shop: e.shopName,
         overdueDays: Math.floor((Date.now() - (e.expectedReturn?.getTime() ?? Date.now())) / 86400000),

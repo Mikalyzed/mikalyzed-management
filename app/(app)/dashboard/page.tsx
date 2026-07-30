@@ -857,6 +857,8 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
   const [detailPartId, setDetailPartId] = useState<string | null>(null)
   const [externalModalId, setExternalModalId] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
+  const [declineFor, setDeclineFor] = useState<string | null>(null) // part id
+  const [declineReason, setDeclineReason] = useState('')
   const [toast, setToast] = useState<string | null>(null)
   const flash = (msg: string) => {
     setToast(msg)
@@ -1080,11 +1082,42 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
               >✓ Approve</button>
               <button
                 style={{ ...miniBtn, color: '#b91c1c' }} disabled={busy}
-                onClick={() => act(() => fetch(`/api/parts/${p.id}`, {
-                  method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ status: 'requested', url: null }),
-                }))}
+                onClick={() => { setDeclineFor(declineFor === p.id ? null : p.id); setDeclineReason('') }}
               >✗</button>
+              {declineFor === p.id && (
+                <div style={{ width: '100%', border: '1px solid #fecaca', background: '#fdecef', borderRadius: 10, padding: '10px 12px', marginTop: 4 }}>
+                  <p style={{ fontSize: 12.5, fontWeight: 650, margin: '0 0 7px' }}>Not approving this one — what happens instead?</p>
+                  <input
+                    autoFocus value={declineReason} onChange={e => setDeclineReason(e.target.value)}
+                    placeholder="Reason — e.g. too expensive, wrong side, find OEM…"
+                    style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12.5, background: '#fff', marginBottom: 8 }}
+                  />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      style={{ ...miniBtn, flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '6px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650, opacity: declineReason.trim() ? 1 : 0.5 }}
+                      disabled={busy || !declineReason.trim()}
+                      onClick={() => act(async () => {
+                        const res = await fetch(`/api/parts/${p.id}`, {
+                          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status: 'requested', url: null, notes: `Find another — ${declineReason.trim()}` }),
+                        })
+                        setDeclineFor(null)
+                        return res
+                      })}
+                    >Find Another</button>
+                    <button
+                      style={{ ...miniBtn, flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '6px 0', color: '#b91c1c', fontWeight: 650 }}
+                      disabled={busy}
+                      onClick={() => setConfirmState({
+                        title: 'Not needed anymore?',
+                        message: `"${p.name.slice(0, 60)}" is removed from the pipeline for good.`,
+                        confirmLabel: 'Remove Part', tone: 'danger',
+                        onConfirm: () => { act(async () => { const res = await fetch(`/api/parts/${p.id}`, { method: 'DELETE' }); setDeclineFor(null); return res }) },
+                      })}
+                    >Not Needed</button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
 
