@@ -81,6 +81,22 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
     }
   }
 
+  // 1b. Out at the shop with NO return date — invisible to overdue nagging
+  // until someone gets a date on record.
+  for (const e of r.externalRepairs) {
+    if (['sent', 'in_progress', 'ready'].includes(e.status) && !e.expectedBack && e.createdAgoDays >= 2) {
+      out.push({
+        severity: 'warn',
+        stock: e.stock,
+        vehicle: e.vehicle,
+        where: whereOf(e.stock),
+        issue: `No return date from ${e.shop}`,
+        detail: `Out for: ${e.work.slice(0, 60)}. Call the shop and get a date on record — without one this can never go overdue.`,
+        fix: { kind: 'external_return_date', externalId: e.externalId },
+      })
+    }
+  }
+
   // 2. External repairs created but never sent to the shop. A planned send
   // date that passed fires immediately; no plan at all gets a 5-day grace.
   const todayStr = new Date().toISOString().slice(0, 10)

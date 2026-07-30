@@ -48,6 +48,7 @@ type DashboardData = {
     delivered: Array<{ id: string; name: string; stock: string; vehicle: string }>
     approvals: Array<{ id: string; name: string; url: string | null; stock: string; vehicle: string }>
     overdue: Array<{ id: string; stock: string; vehicle: string; shop: string; overdueDays: number }>
+    noDate: Array<{ id: string; stock: string; vehicle: string; shop: string; outDays: number }>
     stuck: Array<{ id: string; name: string; stock: string; vehicle: string; ageDays: number }>
     stranded: Array<{ id: string; name: string; stock: string; vehicleId: string; vehicle: string; sold: boolean }>
     mechanics: Array<{ id: string; name: string }>
@@ -920,6 +921,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
     { key: 'stuck', n: a.stuck.length, area: 'Parts', label: 'Stuck in requested 7+ days' },
     { key: 'stranded', n: (a.stranded ?? []).length, area: 'Parts', label: 'Part here — car not in recon, no install plan', crit: true },
     { key: 'overdue', n: a.overdue.length, area: 'External', label: 'Repairs past their return date', crit: true },
+    { key: 'noDate', n: (a.noDate ?? []).length, area: 'External', label: 'Out with no return date', crit: true },
   ].filter(r => r.n > 0)
 
   const itemRow: React.CSSProperties = {
@@ -1097,6 +1099,17 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                 style={{ ...miniBtn, width: '100%', justifyContent: 'center', display: 'inline-flex', padding: '5px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }}
                 disabled={busy} onClick={() => setExternalModalId(e.id)}
               >Open ›</button>
+            </div>
+          ))}
+
+          {open === r.key && r.key === 'noDate' && (a.noDate ?? []).map(e => (
+            <div key={e.id} style={itemRow}>
+              <CarLead
+                stock={e.stock} vehicle={e.vehicle}
+                detail={<span style={{ color: '#b91c1c', fontWeight: 600 }}>{e.outDays}d at {e.shop} — no date on record</span>}
+                onOpen={() => setExternalModalId(e.id)}
+              />
+              <button style={{ ...miniBtn, width: '100%', justifyContent: 'center', display: 'inline-flex', padding: '5px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }} disabled={busy} onClick={() => setExternalModalId(e.id)}>Get a Date ›</button>
             </div>
           ))}
 

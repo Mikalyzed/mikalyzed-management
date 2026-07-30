@@ -271,7 +271,7 @@ export async function GET(request: Request) {
   let attention: Record<string, unknown> | null = null
   if (user.role === 'admin' || user.role === 'shop_coordinator') {
     const vName = (v: { year: number | null; make: string; model: string }) => `${v.year ?? ''} ${v.make} ${v.model}`.trim()
-    const [routingVehicles, activeStages, deliveredParts, approvalParts, overdueExternals, stuckParts, strandedParts, mechanics] = await Promise.all([
+    const [routingVehicles, activeStages, deliveredParts, approvalParts, overdueExternals, noDateExternals, stuckParts, strandedParts, mechanics] = await Promise.all([
       prisma.vehicle.findMany({
         where: { status: 'awaiting_routing' },
         select: { id: true, stockNumber: true, year: true, make: true, model: true },
@@ -295,6 +295,17 @@ export async function GET(request: Request) {
         where: { status: { in: ['sent', 'in_progress', 'ready'] }, expectedReturn: { lt: new Date() } },
         select: { id: true, stockNumber: true, year: true, make: true, model: true, shopName: true, expectedReturn: true },
         orderBy: { expectedReturn: 'asc' },
+        take: 15,
+      }),
+      // Out at a shop with NO return date on record — can't even go overdue
+      prisma.externalRepair.findMany({
+        where: {
+          status: { in: ['sent', 'in_progress', 'ready'] },
+          expectedReturn: null,
+          sentDate: { lt: new Date(Date.now() - 2 * 86400000) },
+        },
+        select: { id: true, stockNumber: true, year: true, make: true, model: true, shopName: true, sentDate: true },
+        orderBy: { sentDate: 'asc' },
         take: 15,
       }),
       prisma.part.findMany({
@@ -330,6 +341,10 @@ export async function GET(request: Request) {
       overdue: overdueExternals.map(e => ({
         id: e.id, stock: e.stockNumber, vehicle: vName(e), shop: e.shopName,
         overdueDays: Math.floor((Date.now() - (e.expectedReturn?.getTime() ?? Date.now())) / 86400000),
+      })),
+      noDate: noDateExternals.map(e => ({
+        id: e.id, stock: e.stockNumber, vehicle: vName(e), shop: e.shopName,
+        outDays: Math.floor((Date.now() - (e.sentDate?.getTime() ?? Date.now())) / 86400000),
       })),
       stuck: stuckParts.map(p => ({
         id: p.id, name: p.name, stock: p.vehicle.stockNumber, vehicle: vName(p.vehicle),
