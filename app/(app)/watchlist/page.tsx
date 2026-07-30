@@ -56,7 +56,7 @@ export default function WatchlistPage() {
   const [partId, setPartId] = useState<string | null>(null)
   const [routeVehicleId, setRouteVehicleId] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
-  const [expandedParts, setExpandedParts] = useState<Set<number>>(new Set())
+  const [expandedParts, setExpandedParts] = useState<Set<string>>(new Set())
   const [role, setRole] = useState('')
 
   const notify = (msg: string) => {
@@ -286,7 +286,8 @@ export default function WatchlistPage() {
                   <button
                     onClick={() => setExpandedParts(prev => {
                       const next = new Set(prev)
-                      if (next.has(i)) next.delete(i); else next.add(i)
+                      const key = `${it.stock}|install`
+                      if (next.has(key)) next.delete(key); else next.add(key)
                       return next
                     })}
                     style={{
@@ -295,9 +296,9 @@ export default function WatchlistPage() {
                       fontSize: 12, fontWeight: 650, color: '#1d4ed8',
                     }}
                   >
-                    {expandedParts.has(i) ? '▾ Hide parts' : `▸ Show ${it.fix.parts.length} parts`}
+                    {expandedParts.has(`${it.stock}|install`) ? '▾ Hide parts' : `▸ Show ${it.fix.parts.length} parts`}
                   </button>
-                  {expandedParts.has(i) && (() => {
+                  {expandedParts.has(`${it.stock}|install`) && (() => {
                     const fixRef = it.fix
                     return (
                       <div style={{ border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 8, marginTop: 6, overflow: 'hidden' }}>
@@ -311,12 +312,12 @@ export default function WatchlistPage() {
                               onClick={() => run(() => fetch('/api/parts/install-tasks', {
                                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ vehicleId: fixRef.vehicleId, partIds: [pt.id], mode: 'mark' }),
-                              }), 'Marked installed — no task needed.')}
+                              }), `"${pt.name.slice(0, 40)}" marked installed — it drops off this card.`)}
                               style={{
                                 border: 'none', background: 'none', padding: '2px 4px', minHeight: 0,
-                                fontSize: 11.5, fontWeight: 650, color: '#16a34a', cursor: 'pointer', whiteSpace: 'nowrap',
+                                fontSize: 11.5, fontWeight: 650, color: '#1d4ed8', cursor: 'pointer', whiteSpace: 'nowrap',
                               }}
-                            >✓ Installed</button>
+                            >Mark Installed ›</button>
                           </div>
                         ))}
                       </div>
