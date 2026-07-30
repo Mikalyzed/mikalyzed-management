@@ -1023,8 +1023,7 @@ export default function ExternalRepairsPage() {
 
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
-                    className="input"
-                    placeholder="Add a task..."
+                    placeholder="Add a task…"
                     value={reconNewTask}
                     onChange={e => setReconNewTask(e.target.value)}
                     onKeyDown={e => {
@@ -1034,7 +1033,7 @@ export default function ExternalRepairsPage() {
                         if (t) { setReconCustomTasks([...reconCustomTasks, t]); setReconNewTask('') }
                       }
                     }}
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, minWidth: 0, padding: '8px 12px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 13.5, background: '#fff' }}
                   />
                   <button
                     type="button"
@@ -1043,8 +1042,8 @@ export default function ExternalRepairsPage() {
                       if (t) { setReconCustomTasks([...reconCustomTasks, t]); setReconNewTask('') }
                     }}
                     style={{
-                      padding: '8px 16px', borderRadius: 10, border: '1px solid var(--border)',
-                      background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', minHeight: 'auto',
+                      padding: '8px 14px', borderRadius: 10, border: '1px solid #bfd3fc',
+                      background: '#eaf0fe', color: '#1d4ed8', fontSize: 13, fontWeight: 650, cursor: 'pointer', minHeight: 0, flexShrink: 0,
                     }}
                   >Add</button>
                 </div>
