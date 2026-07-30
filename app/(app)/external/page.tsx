@@ -954,19 +954,18 @@ export default function ExternalRepairsPage() {
                 </div>
               </div>
 
-              {/* Estimated Hours */}
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
+              {/* Estimated Hours — one compact row */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
                   Estimated Hours
                 </label>
                 <input
                   type="number"
                   step="0.5"
-                  className="input"
                   placeholder="e.g. 4"
                   value={reconEstHours}
                   onChange={e => setReconEstHours(e.target.value)}
-                  style={{ maxWidth: 160 }}
+                  style={{ width: 90, padding: '7px 10px', borderRadius: 9, border: '1px solid var(--border)', fontSize: 13.5, background: '#fff' }}
                 />
               </div>
 
@@ -980,20 +979,17 @@ export default function ExternalRepairsPage() {
                     New Vehicle Inspection / Sold Vehicle Inspection. */}
                 {reconTemplates.length > 0 && (
                   <div style={{ marginBottom: 12 }}>
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
-                      Check the inspection(s) needed for this vehicle.
-                    </p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {reconTemplates.map(t => {
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {reconTemplates.filter(t => (t.items?.length ?? 0) > 0).map(t => {
                         const checked = reconSelectedTemplateIds.includes(t.id)
                         return (
                           <label
                             key={t.id}
                             style={{
-                              display: 'flex', alignItems: 'center', gap: 12,
-                              padding: '10px 14px', borderRadius: 10,
-                              border: checked ? '2px solid #1a1a1a' : '1px solid var(--border)',
-                              background: checked ? '#fafaf8' : '#fff',
+                              display: 'flex', alignItems: 'center', gap: 10,
+                              padding: '8px 12px', borderRadius: 10,
+                              border: checked ? '1px solid #bfd3fc' : '1px solid var(--border)',
+                              background: checked ? '#eaf0fe' : '#fff',
                               cursor: 'pointer', transition: 'all 0.15s ease',
                             }}
                           >
@@ -1003,10 +999,10 @@ export default function ExternalRepairsPage() {
                               onChange={() => setReconSelectedTemplateIds(prev =>
                                 prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id]
                               )}
-                              style={{ width: 18, height: 18, cursor: 'pointer', accentColor: '#1a1a1a' }}
+                              style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#1d4ed8', flexShrink: 0 }}
                             />
-                            <div style={{ flex: 1 }}>
-                              <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{t.name}</p>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontSize: 13, fontWeight: 600, color: checked ? '#1d4ed8' : 'var(--text-primary)' }}>{t.name}</p>
                               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                                 {t.items.length} item{t.items.length === 1 ? '' : 's'}
                               </p>
