@@ -310,9 +310,9 @@ export default function ExternalRepairsPage() {
     <div>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg) } }
-        .ext-header { display: flex; flex-direction: column; align-items: stretch; margin-bottom: 24px; gap: 12px; }
+        .ext-header { display: flex; flex-direction: column; align-items: stretch; margin-bottom: 0; gap: 12px; }
         .ext-header h1 { font-size: 24px; }
-        .ext-add-btn { min-height: 38px !important; padding: 8px 14px !important; border-radius: 8px !important; }
+        .ext-add-btn { min-height: 0 !important; padding: 9px 14px !important; border-radius: 10px !important; }
         .ext-add-btn span { display: none; }
         .ext-card-padding { padding: 16px 16px 12px; }
         .ext-info-grid { grid-template-columns: 1fr !important; }
@@ -329,7 +329,7 @@ export default function ExternalRepairsPage() {
              the page and the heading is redundant.  Stays on mobile where the
              nav is collapsed. */
           .ext-header h1 { display: none; }
-          .ext-add-btn { min-height: 44px !important; padding: 10px 20px !important; border-radius: 12px !important; }
+          .ext-add-btn { min-height: 0 !important; padding: 9px 16px !important; border-radius: 10px !important; }
           .ext-add-btn span { display: inline; }
           .ext-card-padding { padding: 20px 24px 16px; }
           .ext-info-grid { grid-template-columns: repeat(3, 1fr) !important; }
@@ -344,7 +344,7 @@ export default function ExternalRepairsPage() {
 
       {/* Header — search + add, no title (matches the Parts page) */}
       <div className="ext-header">
-        <div className="ext-controls page-h1-mobile-pad" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0, marginBottom: 16 }}>
+        <div className="ext-controls page-h1-mobile-pad" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', minWidth: 0, marginBottom: 14 }}>
           <input
             type="search" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search vehicles, shops…"
@@ -370,7 +370,7 @@ export default function ExternalRepairsPage() {
       <div className="ext-tabs" style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '2px', scrollbarWidth: 'none' }}>
         {(() => {
           const TABS = [
-            { key: 'all', label: 'All Vehicles' },
+            { key: 'all', label: 'All' },
             { key: 'pending', label: 'Pending' },
             { key: 'sent', label: 'Scheduled' },
             { key: 'in_progress', label: 'In Progress' },
