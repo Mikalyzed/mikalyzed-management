@@ -58,11 +58,14 @@ const localYmd = (t: number) => {
  * manual date) REQUIRES logging what the shop said — the date change and the
  * follow-up note commit together, so the history always explains the moves.
  */
-export default function ExternalRepairModal({ externalId, onClose, onChanged }: {
+export default function ExternalRepairModal({ externalId, onClose, onChanged, intent }: {
   externalId: string
   onClose: () => void
   onChanged: () => void
+  /** 'returned' opens straight into the mark-returned flow */
+  intent?: 'returned'
 }) {
+  const intentFiredRef = useRef(false)
   const [repair, setRepair] = useState<Repair | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -95,6 +98,21 @@ export default function ExternalRepairModal({ externalId, onClose, onChanged }: 
         }
         setRepair(rep)
         setLinkedTask(d.linkedTask ?? null)
+        if (intent === 'returned' && !intentFiredRef.current && ['sent', 'in_progress', 'ready'].includes(rep.status)) {
+          intentFiredRef.current = true
+          setConfirmState({
+            title: `Returned from ${rep.shopName}?`,
+            message: rep.partOnly
+              ? 'The part is marked back at the dealership.'
+              : 'Next you pick where it should go — the request goes to admin for approval.',
+            confirmLabel: '✓ Returned',
+            onConfirm: async () => {
+              const ok = await patch({ status: 'returned', fromStatus: rep.status })
+              if (ok && !rep.partOnly) setAskNextStage(true)
+              else if (ok) onClose()
+            },
+          })
+        }
       }
     })
     .catch(() => {})

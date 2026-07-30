@@ -125,6 +125,7 @@ export default function ExternalRepairsPage() {
   const [expandedFollowUps, setExpandedFollowUps] = useState<string | null>(null)
   const [editRepairModal, setEditRepairModal] = useState<ExternalRepair | null>(null)
   const [actionModalId, setActionModalId] = useState<string | null>(null)
+  const [actionIntent, setActionIntent] = useState<'returned' | undefined>(undefined)
   const [editRepairSaving, setEditRepairSaving] = useState(false)
   const [editStatus, setEditStatus] = useState('')
   const [editReason, setEditReason] = useState('')
@@ -858,8 +859,9 @@ export default function ExternalRepairsPage() {
                         <button
                           onClick={() => {
                             if (!isAdmin) {
-                              // Coordinator: the shared modal handles Returned + the
-                              // where-next request that goes to admin for approval
+                              // Coordinator: straight into the Returned flow (confirm →
+                              // where-next request that goes to admin for approval)
+                              setActionIntent('returned')
                               setActionModalId(r.id)
                               return
                             }
@@ -880,7 +882,8 @@ export default function ExternalRepairsPage() {
       {actionModalId && (
         <ExternalRepairModal
           externalId={actionModalId}
-          onClose={() => setActionModalId(null)}
+          intent={actionIntent}
+          onClose={() => { setActionModalId(null); setActionIntent(undefined) }}
           onChanged={load}
         />
       )}
