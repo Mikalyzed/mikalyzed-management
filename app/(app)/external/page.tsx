@@ -954,18 +954,18 @@ export default function ExternalRepairsPage() {
                 </div>
               </div>
 
-              {/* Estimated Hours — one compact row */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
-                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-secondary)' }}>
+              {/* Estimated Hours */}
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
                   Estimated Hours
-                </label>
+                </p>
                 <input
                   type="number"
                   step="0.5"
                   placeholder="e.g. 4"
                   value={reconEstHours}
                   onChange={e => setReconEstHours(e.target.value)}
-                  style={{ width: 90, padding: '7px 10px', borderRadius: 9, border: '1px solid var(--border)', fontSize: 13.5, background: '#fff' }}
+                  style={{ width: '100%', padding: '8px 12px', borderRadius: 10, border: '1px solid var(--border)', fontSize: 13.5, background: '#fff' }}
                 />
               </div>
 
