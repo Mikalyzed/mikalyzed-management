@@ -4,7 +4,8 @@ import { useState } from 'react'
 
 type Proposal = {
   title: string
-  kind: 'coordination' | 'simple'
+  kind: 'coordination' | 'simple' | 'part_request'
+  partName?: string | null
   shop: string | null
   work: string | null
   vehicleId: string | null
@@ -21,7 +22,7 @@ type Proposal = {
  */
 export default function SmartTaskModal({ onClose, onCreated }: {
   onClose: () => void
-  onCreated: (created: { taskId: string; externalRepairId: string | null; stock: string | null; proposal: Proposal }) => void
+  onCreated: (created: { taskId?: string; partId?: string; externalRepairId: string | null; stock: string | null; proposal: Proposal }) => void
 }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -69,7 +70,7 @@ export default function SmartTaskModal({ onClose, onCreated }: {
       })
       const d = await safeJson(res)
       if (!res.ok) { setError(d.error || 'Could not create — try again in a moment.'); return }
-      onCreated({ taskId: d.taskId, externalRepairId: d.externalRepairId ?? null, stock: d.stock ?? null, proposal })
+      onCreated({ taskId: d.taskId, partId: d.partId, externalRepairId: d.externalRepairId ?? null, stock: d.stock ?? null, proposal })
       onClose()
     } finally { setBusy(false) }
   }
@@ -135,13 +136,17 @@ export default function SmartTaskModal({ onClose, onCreated }: {
             { n: '✓', label: `External logged — ${proposal.shop ?? 'shop'}`, sub: `${proposal.work ?? 'work as described'} · created now as Not Scheduled`, green: true },
             { n: '2', label: 'Transport arranged', sub: `${proposal.assigneeName?.split(' ')[0] ?? 'The assignee'} sets up the tow (or drive) from the card` },
             { n: '3', label: `At ${proposal.shop ?? 'the shop'}`, sub: 'Marked Sent when it actually leaves' },
+          ] : proposal.kind === 'part_request' ? [
+            { n: '✓', label: `Part requested — ${proposal.partName ?? proposal.title}`, sub: `Lands in ${proposal.assigneeName?.split(' ')[0] ?? 'the'} Source Queue now`, green: true },
+            { n: '2', label: 'Sourced', sub: 'Link pasted (goes to admin approval) or bought In Store' },
+            { n: '3', label: 'Ordered → Received', sub: 'Tracking watches delivery; the install task creates itself on arrival' },
           ] : []
           return (
           <div style={{ border: '1px solid var(--border)', background: 'var(--bg-primary, #f8f8f6)', borderRadius: 12, padding: '12px 14px', marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
               <p style={{ ...eyebrow, margin: 0 }}>This creates</p>
-              <span style={{ fontSize: 10.5, fontWeight: 650, color: proposal.kind === 'coordination' ? '#1d4ed8' : 'var(--text-muted)' }}>
-                {proposal.kind === 'coordination' ? 'Coordination' : 'Simple task'}
+              <span style={{ fontSize: 10.5, fontWeight: 650, color: proposal.kind === 'simple' ? 'var(--text-muted)' : proposal.kind === 'part_request' ? '#92400e' : '#1d4ed8' }}>
+                {proposal.kind === 'coordination' ? 'Coordination' : proposal.kind === 'part_request' ? 'Part Request' : 'Simple task'}
               </span>
             </div>
 
@@ -193,7 +198,7 @@ export default function SmartTaskModal({ onClose, onCreated }: {
             <button
               onClick={create} disabled={busy}
               style={{ flex: 1.4, padding: '11px 0', borderRadius: 10, border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', minHeight: 0 }}
-            >{busy ? 'Creating…' : 'Create Task'}</button>
+            >{busy ? 'Creating…' : proposal.kind === 'part_request' ? 'Create Part Request' : 'Create Task'}</button>
           ) : (
             <button
               onClick={() => propose(text)} disabled={busy || !text.trim()}

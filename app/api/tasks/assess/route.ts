@@ -23,12 +23,13 @@ const ASSESS_TOOL: Anthropic.Tool = {
     type: 'object',
     properties: {
       title: { type: 'string', description: 'Short clean imperative action, e.g. "Coordinate with Willy — tow to GWT for suspension". No stock numbers.' },
-      kind: { type: 'string', enum: ['coordination', 'simple'], description: 'coordination = a car/part goes to an OUTSIDE shop or needs transport arranged. simple = a direct action someone just does.' },
+      kind: { type: 'string', enum: ['coordination', 'simple', 'part_request'], description: 'coordination = a car/part goes to an OUTSIDE shop or needs transport arranged. part_request = buying/getting/ordering a PART for a car. simple = any other direct action someone just does.' },
       stock: { type: 'string', description: 'Stock number ONLY if the text contains one (e.g. N101146).' },
       vehicleWords: { type: 'string', description: 'The words describing the car, exactly from the text (e.g. "blue 94 chevy pickup"). Omit if no car mentioned.' },
       assigneeName: { type: 'string', description: 'Person the task is assigned to, only if the text names one.' },
       shop: { type: 'string', description: 'Outside shop/vendor name EXACTLY as written, only for kind=coordination when the text names one.' },
       work: { type: 'string', description: 'What the outside shop will do, only if stated.' },
+      partName: { type: 'string', description: 'Only for kind=part_request: the part to get, cleanly named (e.g. "New radio").' },
       question: {
         type: 'object',
         description: 'Ask ONLY when something critical is ambiguous in the text itself.',
@@ -60,6 +61,29 @@ export async function POST(req: Request) {
     const vehicle = typeof c.vehicleId === 'string' && c.vehicleId
       ? await prisma.vehicle.findUnique({ where: { id: c.vehicleId }, select: { id: true, stockNumber: true, year: true, make: true, model: true, color: true } })
       : null
+
+    // A part is not a to-do — it enters the PARTS PIPELINE (source → approve →
+    // order → track → receive → install task) where all the machinery lives.
+    if (c.kind === 'part_request') {
+      if (!vehicle) return NextResponse.json({ error: 'Part requests need a car — say which vehicle it is for.' }, { status: 400 })
+      const partName = typeof c.partName === 'string' && c.partName.trim() ? c.partName.trim() : title
+      const part = await prisma.part.create({
+        data: {
+          vehicleId: vehicle.id,
+          name: partName,
+          status: 'requested',
+          requestedById: user.id,
+          assignedToId: typeof c.assigneeId === 'string' && c.assigneeId ? c.assigneeId : null,
+        },
+      })
+      await prisma.activityLog.create({
+        data: {
+          entityType: 'part', entityId: part.id, action: 'part_created', actorId: user.id,
+          details: { partName, status: 'requested', stockNumber: vehicle.stockNumber, via: 'smart_add_task' },
+        },
+      }).catch(() => {})
+      return NextResponse.json({ ok: true, partId: part.id, kind: 'part_request', stock: vehicle.stockNumber })
+    }
 
     let externalRepairId: string | null = null
     if (c.kind === 'coordination' && typeof c.shop === 'string' && c.shop.trim() && vehicle) {
@@ -118,7 +142,7 @@ export async function POST(req: Request) {
     tools: [ASSESS_TOOL],
     system:
       'You structure ONE dealership shop task from the admin\'s words. Use ONLY what the text says — never invent shops, people, cars, or work. ' +
-      'kind=coordination when a car or part goes to an OUTSIDE shop or a tow/transport must be arranged; kind=simple for direct actions (move a car inside, clean something, call someone with no car movement). ' +
+      'kind=coordination when a car or part goes to an OUTSIDE shop or a tow/transport must be arranged; kind=part_request when someone needs to BUY/GET/ORDER a part for a car; kind=simple for other direct actions (move a car inside, clean something, call someone). ' +
       'Ask a question ONLY for critical ambiguity in the text (e.g. two possible meanings). Title is short and clean.',
     messages: [{ role: 'user', content: text }],
   })
@@ -173,7 +197,8 @@ export async function POST(req: Request) {
   return NextResponse.json({
     proposal: {
       title: (a.title ?? text.slice(0, 80)).trim(),
-      kind: a.kind === 'coordination' ? 'coordination' : 'simple',
+      kind: a.kind === 'coordination' ? 'coordination' : a.kind === 'part_request' ? 'part_request' : 'simple',
+      partName: a.kind === 'part_request' ? ((a as { partName?: string }).partName?.trim() || null) : null,
       shop: a.shop?.trim() || null,
       work: a.work?.trim() || null,
       vehicleId: vehicle?.id ?? null,
