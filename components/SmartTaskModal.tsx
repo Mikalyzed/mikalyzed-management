@@ -6,9 +6,16 @@ type Proposal = {
   title: string
   kind: 'coordination' | 'simple' | 'part_request' | 'shop_work'
   partName?: string | null
+  installVenue?: 'external' | 'inhouse' | null
+  installShop?: string | null
   mechanicActive?: boolean
   shop: string | null
   work: string | null
+  pickupWhen?: string | null
+  pickupDate?: string | null
+  returnWhen?: string | null
+  expectedReturn?: string | null
+  returnDays?: number | null
   vehicleId: string | null
   vehicleLabel: string | null
   assigneeId: string | null
@@ -26,9 +33,13 @@ export default function SmartTaskModal({ onClose, onCreated }: {
   onCreated: (created: { taskId?: string; partId?: string; externalRepairId: string | null; stock: string | null; proposal: Proposal }) => void
 }) {
   const [text, setText] = useState('')
+  // The ORIGINAL wording (first thing typed), preserved through answer merges —
+  // this is what the learning loop keys on so answers become the lesson.
+  const [sourceText, setSourceText] = useState('')
   const [busy, setBusy] = useState(false)
   const [proposal, setProposal] = useState<Proposal | null>(null)
-  const [question, setQuestion] = useState<{ prompt: string; options: string[] } | null>(null)
+  const [question, setQuestion] = useState<{ prompt: string; options: string[]; input?: 'days' } | null>(null)
+  const [daysInput, setDaysInput] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   // A fetch can land mid-deploy and return an empty/HTML body — never crash on it
@@ -38,6 +49,9 @@ export default function SmartTaskModal({ onClose, onCreated }: {
   }
 
   const propose = async (fullText: string) => {
+    // The first pass (no merged "Answer:" lines) is the original wording — keep it
+    // for the learning loop so tap-choice answers become the lesson, not the phrasing.
+    if (!fullText.includes('\n\nAnswer:')) setSourceText(fullText)
     setBusy(true)
     setError(null)
     try {
@@ -57,6 +71,7 @@ export default function SmartTaskModal({ onClose, onCreated }: {
     setText(merged)
     setProposal(null)
     setQuestion(null)
+    setDaysInput('')
     propose(merged)
   }
 
@@ -67,7 +82,7 @@ export default function SmartTaskModal({ onClose, onCreated }: {
     try {
       const res = await fetch('/api/tasks/assess', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'create', proposal }),
+        body: JSON.stringify({ mode: 'create', proposal, sourceText: sourceText || text }),
       })
       const d = await safeJson(res)
       if (!res.ok) { setError(d.error || 'Could not create — try again in a moment.'); return }
@@ -112,36 +127,76 @@ export default function SmartTaskModal({ onClose, onCreated }: {
         {question && (
           <div style={{ border: '1px solid #bfd3fc', background: '#f6f9ff', borderRadius: 10, padding: '10px 12px', marginBottom: 10 }}>
             <p style={{ fontSize: 12.5, fontWeight: 650, margin: '0 0 8px' }}>{question.prompt}</p>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {question.options.map(o => (
-                <button
-                  key={o} disabled={busy}
-                  onClick={() => answerQuestion(o)}
-                  style={{
-                    border: '1px solid #bfd3fc', background: '#fff', color: '#1d4ed8',
-                    borderRadius: 100, padding: '5px 12px', fontSize: 12, fontWeight: 650,
-                    cursor: 'pointer', minHeight: 0,
-                  }}
-                >{o}</button>
-              ))}
-            </div>
-            {question.options.length === 0 && (
-              <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: 0 }}>Add the detail to your text above and press Structure again.</p>
+            {question.input === 'days' ? (
+              <>
+                {/* Fill-in on top, full width */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                  <input
+                    type="number" min={0} inputMode="numeric" value={daysInput}
+                    onChange={e => setDaysInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && daysInput.trim()) answerQuestion(`${daysInput.trim()} days`) }}
+                    placeholder="Number of days"
+                    style={{ flex: 1, minWidth: 0, padding: '9px 12px', border: '1px solid #bfd3fc', borderRadius: 10, fontSize: 13, background: '#fff' }}
+                  />
+                  <button
+                    disabled={busy || !daysInput.trim()}
+                    onClick={() => answerQuestion(`${daysInput.trim()} days`)}
+                    style={{ border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8', borderRadius: 10, padding: '0 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer', minHeight: 0, opacity: daysInput.trim() ? 1 : 0.5 }}
+                  >Set</button>
+                </div>
+                {/* Buttons underneath, full-width split */}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {question.options.map(o => (
+                    <button
+                      key={o} disabled={busy}
+                      onClick={() => answerQuestion(o)}
+                      style={{ flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', border: '1px solid #bfd3fc', background: '#fff', color: '#1d4ed8', borderRadius: 10, padding: '9px 0', fontSize: 12.5, fontWeight: 650, cursor: 'pointer', minHeight: 0 }}
+                    >{o}</button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {question.options.map(o => (
+                    <button
+                      key={o} disabled={busy}
+                      onClick={() => answerQuestion(o)}
+                      style={{ border: '1px solid #bfd3fc', background: '#fff', color: '#1d4ed8', borderRadius: 100, padding: '5px 12px', fontSize: 12, fontWeight: 650, cursor: 'pointer', minHeight: 0 }}
+                    >{o}</button>
+                  ))}
+                </div>
+                {question.options.length === 0 && (
+                  <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: 0 }}>Add the detail to your text above and press Structure again.</p>
+                )}
+              </>
             )}
           </div>
         )}
 
         {proposal && !question && (() => {
           const stockPart = proposal.vehicleLabel?.split(' · ') ?? []
+          const prettyPickup = proposal.pickupDate
+            ? new Date(`${proposal.pickupDate}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+            : null
+          const prettyReturn = proposal.expectedReturn
+            ? new Date(`${proposal.expectedReturn}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+            : null
           const previewSteps = proposal.kind === 'coordination' ? [
-            { n: '✓', label: `External logged — ${proposal.shop ?? 'shop'}`, sub: `${proposal.work ?? 'work as described'} · created now as Not Scheduled`, green: true },
-            { n: '2', label: 'Transport arranged', sub: `${proposal.assigneeName?.split(' ')[0] ?? 'The assignee'} sets up the tow (or drive) from the card` },
-            { n: '3', label: `At ${proposal.shop ?? 'the shop'}`, sub: 'Marked Sent when it actually leaves' },
-          ] : proposal.kind === 'part_request' ? [
+            { n: '✓', label: `External logged — ${proposal.shop ?? 'shop'}`, sub: `${proposal.work ?? 'work as described'} · ${prettyPickup ? `going out ${prettyPickup}` : 'created now as Not Scheduled'}`, green: true },
+            { n: '2', label: 'Transport arranged', sub: prettyPickup
+                ? `Pickup caught: ${prettyPickup}${proposal.pickupWhen ? ` ("${proposal.pickupWhen}")` : ''} — pre-filled on the tow, confirm from the card`
+                : `${proposal.assigneeName?.split(' ')[0] ?? 'The assignee'} sets up the tow (or drive) from the card` },
+            { n: '3', label: `At ${proposal.shop ?? 'the shop'}`, sub: prettyReturn ? `Expected back ${prettyReturn} — marked Sent when it leaves` : 'Marked Sent when it actually leaves' },
+          ] : proposal.kind === 'part_request' ? (proposal.installVenue === 'external' ? [
+            { n: '✓', label: `Part requested — ${proposal.partName ?? proposal.title}`, sub: `Lands in ${proposal.assigneeName?.split(' ')[0] ?? 'the'} Source Queue now`, green: true },
+            { n: '2', label: 'Sourced → Ordered → Received', sub: 'Live stage shows on the Parts page as it moves' },
+            { n: '3', label: `External repair created now — ${proposal.installShop ?? 'outside shop'}`, sub: 'Shows as "Waiting on Part" on the External board. When the part is received, Lenny gets a "Send to the shop to install" mission and you\'re both alerted' },
+          ] : [
             { n: '✓', label: `Part requested — ${proposal.partName ?? proposal.title}`, sub: `Lands in ${proposal.assigneeName?.split(' ')[0] ?? 'the'} Source Queue now`, green: true },
             { n: '2', label: 'Sourced', sub: 'Link pasted (goes to admin approval) or bought In Store' },
             { n: '3', label: 'Ordered → Received', sub: 'Tracking watches delivery; the install task creates itself on arrival' },
-          ] : proposal.kind === 'shop_work' ? (proposal.mechanicActive ? [
+          ]) : proposal.kind === 'shop_work' ? (proposal.mechanicActive ? [
             { n: '✓', label: 'Added to the mechanic checklist', sub: 'Goes on the car\'s active mechanic stage now', green: true },
             { n: '2', label: 'Assign the mechanic', sub: 'Unassigned — hand it off from the board or dashboard' },
             { n: '3', label: 'Checked off when done', sub: 'Completion date stamps automatically' },
