@@ -94,6 +94,7 @@ type DashboardData = {
       externalId: string; shop: string; externalStatus: string; stock: string
       vehicleId: string | null; vehicleDesc: string; vin: string | null
       transportId: string | null; transportStatus: string | null; transportDate: string | null
+      pickupDate: string | null; plannedSend: string | null
       looksDone: boolean
     } | null
   }>
@@ -223,6 +224,30 @@ function OverviewGrid({ o }: { o: NonNullable<DashboardData['overview']> }) {
   )
 }
 
+// One-card shop pulse for the coordinator (he's on mobile): Recon · Parts ·
+// External as a single tappable strip, instead of three full admin KPI cards.
+function CoordinatorOverview({ o }: { o: NonNullable<DashboardData['overview']> }) {
+  const partsPipe = o.parts.requested + o.parts.approval + o.parts.readyToOrder + o.parts.ordered
+  const segs = [
+    { label: 'Recon', hero: o.inventory.inRecon, sub: `${o.inventory.inStock} in stock`, href: '/vehicles', hot: false },
+    { label: 'Parts', hero: partsPipe, sub: `${o.parts.requested} to source`, href: '/parts', hot: false },
+    { label: 'External', hero: o.external.open, sub: o.external.overdue > 0 ? `${o.external.overdue} overdue` : `${o.external.notSent} not sent`, href: '/external', hot: o.external.overdue > 0 },
+  ]
+  return (
+    <div className="card" style={{ marginBottom: 24, padding: '14px 6px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
+        {segs.map((s, i) => (
+          <Link key={s.label} href={s.href} style={{ textDecoration: 'none', color: 'inherit', textAlign: 'center', padding: '2px 8px', borderLeft: i > 0 ? '1px solid var(--border-light, #f0f0ec)' : 'none' }}>
+            <div style={{ fontSize: 10.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' }}>{s.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 700, fontVariantNumeric: 'tabular-nums', margin: '3px 0 1px', letterSpacing: '-0.01em' }}>{s.hero}</div>
+            <div style={{ fontSize: 11, fontWeight: s.hot ? 650 : 500, color: s.hot ? '#b91c1c' : 'var(--text-muted)' }}>{s.sub}</div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // Refetch with one retry — an action's refresh can land mid-deploy and fail;
 // silently keeping stale data makes buttons look broken when they worked.
 async function fetchDashboardFresh(): Promise<DashboardData | null> {
@@ -331,7 +356,7 @@ function NewForYouCard({ n, onAcknowledge }: {
 // ─── Shop Coordinator Board — Lenny's whole loop on one page ───
 type CreatedTaskPayload = {
   taskId?: string; partId?: string; externalRepairId: string | null; stock: string | null
-  proposal: { title: string; kind: 'coordination' | 'simple' | 'part_request' | 'shop_work'; shop: string | null; work: string | null; vehicleId: string | null; vehicleLabel: string | null; assigneeId: string | null; assigneeName: string | null }
+  proposal: { title: string; kind: 'coordination' | 'simple' | 'part_request' | 'shop_work'; shop: string | null; work: string | null; vehicleId: string | null; vehicleLabel: string | null; assigneeId: string | null; assigneeName: string | null; pickupWhen?: string | null; pickupDate?: string | null }
 }
 
 function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
@@ -347,6 +372,9 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
   const [assignTab, setAssignTab] = useState<'all' | 'tasks' | 'parts'>('all')
   const [towAskFor, setTowAskFor] = useState<string | null>(null) // task id
   const [towDate, setTowDate] = useState('')
+  const [doneOpen, setDoneOpen] = useState<string | null>(null) // task id whose completed steps are expanded
+  const [sendDateFor, setSendDateFor] = useState<string | null>(null) // task id changing its send date
+  const [sendDateVal, setSendDateVal] = useState('')
   const [addTaskOpen, setAddTaskOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -418,11 +446,17 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                 const m = t.mission
                 const transportArranged = !!m.transportId
                 const steps: Array<{ done: boolean; label: string; sub: string; action?: React.ReactNode }> = []
+                // Step CTAs match the Parts "+ Link / In Store" buttons: full-width
+                // split, rounded, soft-tint blue. Strip any trailing "›".
                 const textLink = (label: string, onClick: () => void) => (
                   <button
                     disabled={busy} onClick={onClick}
-                    style={{ border: 'none', background: 'none', padding: 0, minHeight: 0, fontSize: 12, fontWeight: 650, color: '#1d4ed8', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
-                  >{label}</button>
+                    style={{
+                      ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex',
+                      padding: '9px 0', fontSize: 12.5, fontWeight: 650, borderRadius: 10,
+                      background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc',
+                    }}
+                  >{label.replace(/\s*›\s*$/, '')}</button>
                 )
                 if (m.missionType === 'retrieve') {
                   // Bringing it back: ride is a CHOICE — tow or drive it ourselves
@@ -452,8 +486,8 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                             } finally { setBusy(false) }
                           }))
                       : (
-                        <span style={{ display: 'inline-flex', gap: 10, flexShrink: 0 }}>
-                          {m.vehicleId ? textLink('Tow ›', () => { setTowAskFor(towAskFor === t.id ? null : t.id); setTowDate('') }) : null}
+                        <>
+                          {m.vehicleId ? textLink('Tow ›', () => { setTowAskFor(towAskFor === t.id ? null : t.id); setTowDate(m.pickupDate || '') }) : null}
                           {textLink('Ourselves ›', async () => {
                             setBusy(true)
                             try {
@@ -461,7 +495,7 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                               await onChanged()
                             } finally { setBusy(false) }
                           })}
-                        </span>
+                        </>
                       ),
                   })
                   steps.push({
@@ -472,10 +506,13 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                   })
                 } else {
                 const atShop = m.looksDone
+                const prettyPlanned = m.plannedSend
+                  ? new Date(`${m.plannedSend}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                  : null
                 steps.push({
                   done: true,
                   label: 'External logged',
-                  sub: `${m.shop} · ${m.externalStatus === 'pending' ? 'Not Scheduled' : m.externalStatus === 'returned' ? 'Returned' : m.externalStatus === 'ready' ? 'Ready for pickup' : 'Sent'}`,
+                  sub: `${m.shop} · ${m.externalStatus === 'pending' ? (prettyPlanned ? `Going out ${prettyPlanned}` : 'Not Scheduled') : m.externalStatus === 'returned' ? 'Returned' : m.externalStatus === 'ready' ? 'Ready for pickup' : 'Sent'}`,
                   action: textLink('Open ›', () => setExternalActionId(m.externalId)),
                 })
                 steps.push({
@@ -487,42 +524,68 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                       ? (m.transportDate ? `Scheduled ${m.transportDate.slice(5).replace('-', '/')}` : 'Requested — no date yet')
                       : 'No tow scheduled yet',
                   action: transportArranged
-                    ? <Link href="/transport" style={{ fontSize: 12, fontWeight: 650, color: '#1d4ed8', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0, minHeight: 0 }}>Open ›</Link>
-                    : (!m.selfTransport && m.vehicleId ? textLink('Create ›', () => { setTowAskFor(towAskFor === t.id ? null : t.id); setTowDate('') }) : undefined),
+                    ? <Link href="/transport" style={{ border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8', borderRadius: 100, padding: '4px 12px', fontSize: 11.5, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0, alignSelf: 'center', minHeight: 0 }}>Open</Link>
+                    : (!m.selfTransport && m.vehicleId ? textLink('Create ›', () => { setTowAskFor(towAskFor === t.id ? null : t.id); setTowDate(m.pickupDate || '') }) : undefined),
                 })
                 steps.push({
                   done: atShop,
                   label: m.externalStatus === 'returned' ? 'Back already' : `At ${m.shop}`,
                   sub: atShop
                     ? (m.externalStatus === 'returned' ? 'This mission is moot — complete it' : 'Pickup happened')
-                    : 'Waiting on the pickup',
-                  action: !atShop ? textLink('Send ›', () => setExternalActionId(m.externalId)) : undefined,
+                    : (prettyPlanned ? `Going out ${prettyPlanned} — mark Sent when it leaves` : 'Waiting on the pickup'),
+                  action: !atShop ? (
+                    <>
+                      {textLink('Mark Sent', () => setExternalActionId(m.externalId))}
+                      {textLink('Change Date', () => { setSendDateFor(sendDateFor === t.id ? null : t.id); setSendDateVal(m.plannedSend || '') })}
+                    </>
+                  ) : undefined,
                 })
                 }
+                // One active step at a time. Completed steps collapse behind a
+                // tappable "✓ N done" line (expand to review them); the person
+                // sees the step they're ON (real number, its actions at the
+                // bottom) plus any upcoming steps, muted.
+                const numbered = steps.map((st, i) => ({ ...st, num: i + 1 }))
+                const doneSteps = numbered.filter(st => st.done)
+                const visibleSteps = numbered.filter(st => !st.done)
+                const isDoneOpen = doneOpen === t.id
+                const stepRow = (st: { num: number; label: string; sub: string; action?: React.ReactNode }, tone: 'active' | 'up' | 'done') => (
+                  <div key={st.num} style={{ padding: '5px 0' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
+                      <span style={{
+                        width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 10, fontWeight: 800, boxSizing: 'border-box',
+                        background: tone === 'active' ? '#eaf0fe' : tone === 'done' ? '#16a34a' : 'var(--bg-primary, #f8f8f6)',
+                        color: tone === 'active' ? '#1d4ed8' : tone === 'done' ? '#fff' : 'var(--text-muted)',
+                        border: tone === 'active' ? '2px solid #bfd3fc' : tone === 'done' ? '2px solid #16a34a' : '2px solid var(--border)',
+                      }}>{tone === 'done' ? '✓' : st.num}</span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 12.5, fontWeight: tone === 'active' ? 650 : 500, lineHeight: 1.3, color: tone === 'active' ? 'var(--text-primary)' : 'var(--text-muted)' }}>{st.label}</span>
+                        <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{st.sub}</span>
+                      </span>
+                    </div>
+                    {/* Active step's actions span the full width, starting at the number */}
+                    {tone === 'active' && st.action && (
+                      <div style={{ display: 'flex', gap: 8, marginTop: 9 }}>{st.action}</div>
+                    )}
+                  </div>
+                )
                 return (
-                  <div style={{ position: 'relative', marginTop: 10, paddingLeft: 2 }}>
-                    {/* connector spine */}
-                    <div aria-hidden style={{ position: 'absolute', left: 10, top: 12, bottom: 12, width: 2, background: 'var(--border-light, #f0f0ec)', borderRadius: 2 }} />
-                    {steps.map((st, si) => (
-                      <div key={si} style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: si === steps.length - 1 ? '5px 0 0' : '5px 0 12px', position: 'relative' }}>
-                        <span style={{
-                          width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1,
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 10, fontWeight: 800, zIndex: 1,
-                          background: st.done ? '#16a34a' : 'var(--bg-primary, #f8f8f6)',
-                          color: st.done ? '#fff' : 'var(--text-muted)',
-                          border: st.done ? '2px solid #16a34a' : '2px solid var(--border)',
-                          boxSizing: 'border-box',
-                        }}>{st.done ? '✓' : si + 1}</span>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ display: 'block', fontSize: 12.5, fontWeight: st.done ? 500 : 650, lineHeight: 1.3, color: st.done ? 'var(--text-muted)' : 'var(--text-primary)' }}>
-                            {st.label}
-                          </span>
-                          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{st.sub}</span>
-                        </span>
-                        {st.action}
-                      </div>
-                    ))}
+                  <div style={{ marginTop: 10 }}>
+                    {doneSteps.length > 0 && (
+                      <>
+                        <button
+                          onClick={() => setDoneOpen(isDoneOpen ? null : t.id)}
+                          style={{ border: 'none', background: 'none', padding: '2px 0', minHeight: 0, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 650, color: '#16a34a', marginBottom: 4 }}
+                        >
+                          <span aria-hidden style={{ transform: isDoneOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', fontSize: 9 }}>▸</span>
+                          ✓ {doneSteps.length} step{doneSteps.length === 1 ? '' : 's'} done
+                        </button>
+                        {isDoneOpen && <div style={{ paddingLeft: 2, marginBottom: 4, opacity: 0.85 }}>{doneSteps.map(st => stepRow(st, 'done'))}</div>}
+                      </>
+                    )}
+                    {visibleSteps.map((st, si) => stepRow(st, si === 0 ? 'active' : 'up'))}
                   </div>
                 )
               })()}
@@ -555,6 +618,14 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                           body: JSON.stringify({ transportRequestId: trId }),
                         })
                       }
+                      // Keep the external's planned send-out hand-in-hand with the
+                      // tow date — the car reaches the shop the day it's picked up.
+                      if (withDate && towDate && m.externalStatus === 'pending') {
+                        await fetch(`/api/external/${m.externalId}`, {
+                          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ plannedSendDate: towDate }),
+                        }).catch(() => {})
+                      }
                       setTowAskFor(null); setTowDate('')
                       await onChanged()
                     }
@@ -562,7 +633,10 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                 }
                 return (
                   <div style={{ border: '1px solid #bfd3fc', background: '#f6f9ff', borderRadius: 10, padding: '10px 12px', marginTop: 8 }}>
-                    <p style={{ fontSize: 12, fontWeight: 650, margin: '0 0 7px' }}>When is the pickup?</p>
+                    <p style={{ fontSize: 12, fontWeight: 650, margin: '0 0 7px' }}>
+                      When is the pickup?
+                      {m.pickupDate && towDate === m.pickupDate && <span style={{ fontWeight: 600, color: '#1d4ed8' }}> · caught from the request — confirm or change</span>}
+                    </p>
                     <input
                       type="date" value={towDate} onChange={e => setTowDate(e.target.value)}
                       style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5, background: '#fff' }}
@@ -585,6 +659,39 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                   </div>
                 )
               })()}
+
+              {/* Change the external's planned send-out date from the send step */}
+              {t.mission && sendDateFor === t.id && (
+                <div style={{ border: '1px solid #bfd3fc', background: '#f6f9ff', borderRadius: 10, padding: '10px 12px', marginTop: 8 }}>
+                  <p style={{ fontSize: 12, fontWeight: 650, margin: '0 0 7px' }}>When is it going out?</p>
+                  <input
+                    type="date" value={sendDateVal} onChange={e => setSendDateVal(e.target.value)}
+                    style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 9, fontSize: 12.5, background: '#fff' }}
+                  />
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button
+                      style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', fontWeight: 650 }}
+                      disabled={busy}
+                      onClick={() => { setSendDateFor(null); setSendDateVal('') }}
+                    >Cancel</button>
+                    <button
+                      style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650, opacity: sendDateVal ? 1 : 0.5 }}
+                      disabled={busy || !sendDateVal}
+                      onClick={async () => {
+                        setBusy(true)
+                        try {
+                          await fetch(`/api/external/${t.mission!.externalId}`, {
+                            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ plannedSendDate: sendDateVal }),
+                          })
+                          setSendDateFor(null); setSendDateVal('')
+                          await onChanged()
+                        } finally { setBusy(false) }
+                      }}
+                    >Save Date</button>
+                  </div>
+                </div>
+              )}
 
               {/* Simple tasks: one full-width Complete at the bottom */}
               {!t.mission && (
@@ -648,10 +755,10 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
           <div>
             <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Assignments</h2>
             <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '2px 0 0' }}>
-              {plainTasks.length + c.sourceQueue.length === 0
+              {plainTasks.length + missionTasks.length + c.sourceQueue.length === 0
                 ? 'All caught up ✓'
                 : [
-                    plainTasks.length ? `${plainTasks.length} task${plainTasks.length === 1 ? '' : 's'}` : null,
+                    (plainTasks.length + missionTasks.length) ? `${plainTasks.length + missionTasks.length} task${plainTasks.length + missionTasks.length === 1 ? '' : 's'}` : null,
                     c.sourceQueue.length ? `${c.sourceQueue.length} part${c.sourceQueue.length === 1 ? '' : 's'} to source` : null,
                   ].filter(Boolean).join(' · ')}
             </p>
@@ -669,8 +776,8 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
         {/* Tabs */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, overflowX: 'auto' }}>
           {([
-            { key: 'all', label: 'All', n: plainTasks.length + c.sourceQueue.length },
-            { key: 'tasks', label: 'Tasks', n: plainTasks.length },
+            { key: 'all', label: 'All', n: plainTasks.length + missionTasks.length + c.sourceQueue.length },
+            { key: 'tasks', label: 'Tasks', n: plainTasks.length + missionTasks.length },
             { key: 'parts', label: 'Parts', n: c.sourceQueue.length },
           ] as const).map(t => {
             const on = assignTab === t.key
@@ -698,14 +805,17 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
           })}
         </div>
 
-        {plainTasks.length + c.sourceQueue.length === 0 && (
+        {plainTasks.length + missionTasks.length + c.sourceQueue.length === 0 && (
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>No open tasks and every requested part has been sourced. ✓</p>
         )}
 
-        {assignTab === 'all' && plainTasks.length > 0 && (
+        {assignTab === 'all' && (plainTasks.length > 0 || missionTasks.length > 0) && (
           <div style={{ ...eyebrow, margin: '2px 0 8px' }}>Tasks</div>
         )}
+        {/* Plain to-dos and coordination missions live under ONE "Tasks" list —
+            no separate Missions heading; a mission just renders as a stepper. */}
         {assignTab !== 'parts' && plainTasks.map(renderTaskCard)}
+        {assignTab !== 'parts' && missionTasks.map(renderTaskCard)}
 
         {assignTab === 'all' && c.sourceQueue.length > 0 && (
           <div style={{ ...eyebrow, margin: '10px 0 8px' }}>Parts to Source</div>
@@ -763,16 +873,15 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
         )}
       </div>
 
-      {/* ── Waiting on External — the coordinator owns ALL of these, whoever
-             created them. Pickup/delivery missions render here as steppers;
-             the rest are rows. ── */}
-      {(c.externalOut.length > 0 || missionTasks.length > 0) && (
+      {/* ── Waiting on External — a passive reference of what's physically out
+             at shops with NO active mission (the actionable missions live up in
+             Assignments now). Pure "here's what's out" list. ── */}
+      {c.externalOut.filter(e => !missionExternalIds.has(e.externalId)).length > 0 && (
         <div className="card" style={{ marginBottom: 24, padding: 22 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
-            <div style={eyebrow}>Waiting on External · {c.externalOut.length + missionTasks.filter(t => !c.externalOut.some(e => e.externalId === t.mission!.externalId)).length}</div>
+            <div style={eyebrow}>Waiting on External · {c.externalOut.filter(e => !missionExternalIds.has(e.externalId)).length}</div>
             <Link href="/external" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', textDecoration: 'none', minHeight: 'auto' }}>External page →</Link>
           </div>
-          {missionTasks.map(renderTaskCard)}
           {c.externalOut.filter(e => !missionExternalIds.has(e.externalId)).map(e => (
             <div
               key={e.externalId}
@@ -1774,6 +1883,7 @@ function DashboardInner() {
                   stock: created.stock ?? '', vehicleId: created.proposal.vehicleId,
                   vehicleDesc: created.proposal.vehicleLabel?.split(' · ')[1] ?? '',
                   vin: null, transportId: null, transportStatus: null, transportDate: null,
+                  pickupDate: created.proposal.pickupDate ?? null, plannedSend: created.proposal.pickupDate ?? null,
                   looksDone: false,
                 } : null,
               }, ...(prev.myBoardTasks || [])],
@@ -1805,18 +1915,35 @@ function DashboardInner() {
   }
 
   const isAdmin = data.user.role === 'admin'
+  const isCoordinator = data.user.role === 'shop_coordinator'
   const hasAssignments = data.myReconTasks.length > 0 || data.myEventTasks.length > 0 || data.myCalendarItems.length > 0 || (data.myBoardTasks || []).length > 0 || (data.myParts || []).length > 0
+
+  // Issues Detected — a reference queue. Admins see it up top; the coordinator
+  // sees it BELOW his own board so his actual work comes first (he's on mobile).
+  const issuesCard = (typeof data.watchlistCount === 'number' && data.watchlistCount > 0) ? (
+    <Link href="/watchlist" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+      <div className="card" style={{ marginBottom: 24, padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+        <span style={{
+          minWidth: 26, height: 22, padding: '0 7px', borderRadius: 100,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+          background: 'rgba(180,83,9,0.10)', color: '#b45309',
+        }}>{data.watchlistCount}</span>
+        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>Issues Detected</span>
+        <span style={{ fontSize: 13, fontWeight: 650, color: '#1d4ed8' }}>Open ›</span>
+      </div>
+    </Link>
+  ) : null
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, letterSpacing: '-0.02em' }}>Dashboard</h1>
-          <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>Welcome back, {data.user.name}.</p>
+      {/* No title/greeting for anyone — it just eats space. Admins keep the
+          quick-add button, right-aligned where the header used to be. */}
+      {isAdmin && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
+          <AddButton />
         </div>
-        {isAdmin && <AddButton />}
-      </div>
+      )}
 
       {/* ═══ Fleet Financials (admin + sales_manager only) ═══ */}
       {data.newForYou && <NewForYouCard n={data.newForYou} onAcknowledge={async () => {
@@ -1824,28 +1951,19 @@ function DashboardInner() {
         if (fresh) setData(fresh)
       }} />}
 
+      {/* Coordinator's one-card shop pulse (Recon · Parts · External). */}
+      {isCoordinator && data.overview && <CoordinatorOverview o={data.overview} />}
+
       {data.attention && <AttentionCard a={data.attention} isAdmin={isAdmin} role={data.user.role} onAction={async () => {
         const fresh = await fetchDashboardFresh()
         if (fresh) setData(fresh)
       }} />}
 
-      {data.overview && !coordinatorFocus && <OverviewGrid o={data.overview} />}
+      {/* Domain KPI grid — admin overview, NOT the coordinator's board. */}
+      {data.overview && !coordinatorFocus && !isCoordinator && <OverviewGrid o={data.overview} />}
 
-      {typeof data.watchlistCount === 'number' && data.watchlistCount > 0 && (
-        <Link href="/watchlist" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
-          <div className="card" style={{ marginBottom: 24, padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
-            <span style={{
-              minWidth: 26, height: 22, padding: '0 7px', borderRadius: 100,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-              background: 'rgba(180,83,9,0.10)', color: '#b45309',
-            }}>{data.watchlistCount}</span>
-            <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700 }}>Issues Detected</span>
-            <span style={{ fontSize: 13, fontWeight: 650, color: '#1d4ed8' }}>Open ›</span>
-          </div>
-        </Link>
-      )}
-
+      {/* Admin sees Issues Detected up top; the coordinator gets it below his board. */}
+      {!isCoordinator && issuesCard}
 
       {data.coordinator && <CoordinatorBoard c={data.coordinator} tasks={data.myBoardTasks || []} onChanged={async () => {
         const fresh = await fetchDashboardFresh()
@@ -1868,12 +1986,16 @@ function DashboardInner() {
               stock: created.stock ?? '', vehicleId: created.proposal.vehicleId,
               vehicleDesc: created.proposal.vehicleLabel?.split(' · ')[1] ?? '',
               vin: null, transportId: null, transportStatus: null, transportDate: null,
+              pickupDate: created.proposal.pickupDate ?? null, plannedSend: created.proposal.pickupDate ?? null,
               looksDone: false,
             } : null,
           }, ...(prev.myBoardTasks || [])],
         } : prev)
         fetchDashboardFresh().then(fresh => { if (fresh) setData(fresh) })
       }} />}
+
+      {/* Coordinator sees Issues Detected here — under his own board. */}
+      {isCoordinator && issuesCard}
 
       {(isAdmin || data.user.role === 'sales_manager') && financials && <FleetFinancialsWidget f={financials} />}
 

@@ -1346,6 +1346,7 @@ details[open] .parts-banner-chevron { transform: rotate(90deg); }
     width: 100% !important;
     padding: 12px !important;
     font-size: 14px !important;
+    justify-content: center !important;
   }
 
   /* Action buttons → full-width row at the bottom, slim modern style */

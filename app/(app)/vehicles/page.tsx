@@ -1097,8 +1097,8 @@ export default function VehiclesPage() {
                       }}
                       style={{
                         display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0,
-                        padding: '9px 15px', borderRadius: 10, border: 'none',
-                        background: '#1a1a1a', color: '#dffd6e', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                        padding: '9px 15px', borderRadius: 10, border: '1px solid #bfd3fc',
+                        background: '#eaf0fe', color: '#1d4ed8', fontSize: 13, fontWeight: 650, cursor: 'pointer',
                       }}
                     >
                       Route

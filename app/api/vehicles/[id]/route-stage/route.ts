@@ -109,9 +109,33 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   // Create new stage
   const config = await prisma.stageConfig.findUnique({ where: { stage: nextStage } })
-  // No silent defaults — the routing modal is the ask. Returns resume their
-  // prior stage below; everything else starts with exactly what was chosen.
-  const baseTasks = customTasks && customTasks.length > 0 ? customTasks : []
+  // When the admin didn't hand-pick tasks, seed the stage from its configured
+  // DEFAULT checklist template — a NAMED, admin-managed default (e.g. "Publish
+  // Checklist"), not the old hardcoded 8-item fallback. This makes the default
+  // attach consistently across every routing path. Sold-delivery and
+  // resume-from-external still take priority below: both run only when
+  // adminGaveCustom is false, and injecting here into baseTasks (not
+  // customTasks) keeps adminGaveCustom false, so this never shadows them.
+  let defaultTemplateTasks: TaskInput[] = []
+  if (!soldDelivery && !(customTasks && customTasks.length > 0)) {
+    const tpl = await prisma.checklistTemplate.findFirst({
+      where: { stage: nextStage, isDefault: true },
+      select: { items: true },
+    })
+    if (tpl && Array.isArray(tpl.items)) {
+      defaultTemplateTasks = (tpl.items as Array<Record<string, unknown>>)
+        .map(it => {
+          const item = typeof it.item === 'string' ? it.item.trim() : ''
+          if (!item) return null
+          const entry: TaskInput = { item }
+          if (typeof it.type === 'string') entry.type = it.type
+          if (it.fields != null) entry.fields = it.fields
+          return entry
+        })
+        .filter((x): x is TaskInput => x !== null)
+    }
+  }
+  const baseTasks = customTasks && customTasks.length > 0 ? customTasks : defaultTemplateTasks
   // Sold delivery: replace defaults with the sold prep checklist (admin-supplied custom tasks still override)
   const tasks: (string | TaskInput)[] = soldDelivery
     ? (customTasks && customTasks.length > 0 ? customTasks : SOLD_DELIVERY_TASKS)

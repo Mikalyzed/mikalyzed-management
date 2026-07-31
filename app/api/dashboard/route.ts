@@ -127,7 +127,7 @@ export async function GET(request: Request) {
   const [linkedExts, linkedTrs] = await Promise.all([
     linkedExtIds.length ? prisma.externalRepair.findMany({
       where: { id: { in: linkedExtIds } },
-      select: { id: true, shopName: true, status: true, stockNumber: true, expectedReturn: true },
+      select: { id: true, shopName: true, status: true, stockNumber: true, expectedReturn: true, plannedSendDate: true },
     }) : Promise.resolve([]),
     linkedTrIds.length ? prisma.transportRequest.findMany({
       where: { id: { in: linkedTrIds } },
@@ -165,6 +165,11 @@ export async function GET(request: Request) {
         transportId: tr?.id ?? null,
         transportStatus: tr?.status ?? null,
         transportDate: tr?.scheduledDate?.toISOString().slice(0, 10) ?? null,
+        // A pickup date caught from the original request — pre-fills the tow form.
+        pickupDate: t.scheduledDate?.toISOString().slice(0, 10) ?? null,
+        // The external's planned send-out date — when set, "External logged"
+        // shows "Going out <date>" instead of "Not Scheduled".
+        plannedSend: ext.plannedSendDate?.toISOString().slice(0, 10) ?? null,
         // deliver = done once the car is out; retrieve = done once it's back
         looksDone: t.missionType === 'retrieve'
           ? ext.status === 'returned'
