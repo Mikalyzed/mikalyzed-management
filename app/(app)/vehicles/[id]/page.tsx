@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { extractIssueFixTasks } from '@/lib/inspection-issues'
 import RichTypeReadout from '@/components/RichTypeReadout'
+import PartDetailModal from '@/components/PartDetailModal'
 import { useParams, useRouter } from 'next/navigation'
 import { AddCustomerModal } from '@/components/AddCustomerModal'
 import {
@@ -349,6 +350,7 @@ export default function VehicleDetailV2() {
     id: string; name: string; status: string; expectedDelivery: string | null
     trackingStatus: string | null; createdAt: string; updatedAt: string
     price: string | null; url: string | null; installTaskCreatedAt: string | null
+    installVenue?: 'external' | 'inhouse' | null; installShop?: string | null
     requestedBy?: { id: string; name: string } | null
     assignedTo?: { id: string; name: string } | null
   }>>([])
@@ -370,6 +372,8 @@ export default function VehicleDetailV2() {
   }, [vehicle?.stockNumber])
   const [expandedStageId, setExpandedStageId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [userRole, setUserRole] = useState('')
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null)
   const [canSeeMoney, setCanSeeMoney] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [showEdit, setShowEdit] = useState(false)
@@ -396,7 +400,7 @@ export default function VehicleDetailV2() {
         if (!txt) return null
         try { return JSON.parse(txt) } catch { return null }
       })
-      .then((d) => setParts(d?.parts || []))
+      .then((d) => { setParts(d?.parts || []); if (Array.isArray(d?.parts)) setCarParts(d.parts) })
       .catch(() => {})
 
   const refreshActivity = () =>
@@ -467,6 +471,7 @@ export default function VehicleDetailV2() {
       acc[k] = v
       return acc
     }, {} as Record<string, string>)
+    if (cookies.mm_user_role) setUserRole(cookies.mm_user_role)
     if (cookies.mm_user_role === 'admin') setIsAdmin(true)
     if (cookies.mm_user_role === 'admin' || cookies.mm_user_role === 'sales_manager') setCanSeeMoney(true)
     if (cookies.mm_user_id) setCurrentUserId(decodeURIComponent(cookies.mm_user_id))
@@ -1007,12 +1012,19 @@ export default function VehicleDetailV2() {
                   {[...carParts].sort((a, b) => (a.status === 'received' ? 1 : 0) - (b.status === 'received' ? 1 : 0)).map(pt => {
                     const done = pt.status === 'received'
                     const statusLabel = done ? 'Received' : pt.status === 'requested' ? 'Requested' : pt.status === 'sourced' ? 'Pending Approval' : pt.status === 'ready_to_order' ? 'Ready to Order' : 'Ordered'
+                    const isExternal = pt.installVenue === 'external'
+                    // Who/where installs — the "full visibility" line.
+                    const installLabel = isExternal
+                      ? (done ? `at ${pt.installShop || 'outside shop'} to install` : `installs at ${pt.installShop || 'outside shop'} (outside)`)
+                      : (done ? (pt.installTaskCreatedAt ? 'install task on the checklist' : 'no install task yet') : null)
                     return (
-                      <div key={pt.id} style={{
-                        border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 12,
-                        padding: '10px 14px', background: 'var(--bg-card, #fff)',
-                        display: 'flex', alignItems: 'flex-start', gap: 10,
-                      }}>
+                      <div key={pt.id}
+                        onClick={() => setSelectedPartId(pt.id)}
+                        style={{
+                          border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 12,
+                          padding: '10px 14px', background: 'var(--bg-card, #fff)',
+                          display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer',
+                        }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontSize: 13, fontWeight: done ? 500 : 600, color: done ? 'var(--text-muted)' : 'var(--text-primary)', margin: 0, lineHeight: 1.4 }}>
                             {pt.name}
@@ -1027,7 +1039,7 @@ export default function VehicleDetailV2() {
                               pt.assignedTo ? `→ ${pt.assignedTo.name}` : null,
                               pt.price ? pt.price : null,
                               done ? `received ${new Date(pt.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : null,
-                              done ? (pt.installTaskCreatedAt ? 'install task on the checklist' : 'no install task yet') : null,
+                              installLabel,
                             ].filter(Boolean).join(' · ')}
                           </p>
                         </div>
@@ -1037,6 +1049,9 @@ export default function VehicleDetailV2() {
                             background: done ? '#f0fdf4' : pt.status === 'requested' ? '#fef2f2' : pt.status === 'ordered' ? '#fefce8' : '#eff6ff',
                             color: done ? '#16a34a' : pt.status === 'requested' ? '#ef4444' : pt.status === 'ordered' ? '#a16207' : '#2563eb',
                           }}>{statusLabel}</span>
+                          {isExternal && (
+                            <span style={{ fontSize: 10.5, fontWeight: 650, padding: '2px 9px', borderRadius: 100, whiteSpace: 'nowrap', background: '#fdf3e7', color: '#92400e' }}>Outside Install</span>
+                          )}
                           {!done && pt.expectedDelivery && (
                             <span style={{ fontSize: 11, fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>
                               exp {new Date(pt.expectedDelivery).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -1108,6 +1123,15 @@ export default function VehicleDetailV2() {
                     if (entry.kind === 'external') {
                       const er = entry.external
                       const isOpen = er.status !== 'returned'
+                      // A tow attached to this repair (via its mission task) — surface
+                      // it here so the jacket shows the ride, not just the repair.
+                      const towTask = carTasks.find(ct => ct.linkedExternal?.id === er.id && ct.linkedTransport)
+                      const tow = towTask?.linkedTransport ?? null
+                      const towLabel = tow
+                        ? (tow.scheduledDate
+                            ? `Tow scheduled ${new Date(`${tow.scheduledDate.slice(0, 10)}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                            : 'Tow requested — no pickup date yet')
+                        : (towTask?.selfTransport ? 'Driven over ourselves — no tow' : null)
                       return (
                         <div key={`er-${er.id}`} style={{ position: 'relative', paddingLeft: 30 }}>
                           {/* Amber dot — external repair lives off-site */}
@@ -1151,6 +1175,18 @@ export default function VehicleDetailV2() {
                               <p style={{ fontSize: 12, color: 'rgba(0,0,0,0.55)', marginTop: 6, fontStyle: 'italic' }}>
                                 ↳ {er.notes}
                               </p>
+                            )}
+                            {towLabel && (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8,
+                                fontSize: 11, fontWeight: 650, padding: '3px 10px', borderRadius: 100,
+                                background: tow?.scheduledDate ? '#eff6ff' : '#f4f4f2',
+                                color: tow?.scheduledDate ? '#1d4ed8' : 'rgba(0,0,0,0.55)',
+                                border: `1px solid ${tow?.scheduledDate ? '#bfdbfe' : 'rgba(0,0,0,0.1)'}`,
+                              }}>
+                                <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%', background: tow?.scheduledDate ? '#1d4ed8' : 'rgba(0,0,0,0.4)', flexShrink: 0 }} />
+                                {towLabel}
+                              </span>
                             )}
                           </div>
                         </div>
@@ -1534,6 +1570,17 @@ export default function VehicleDetailV2() {
             await refreshVehicle()
             setShowSetFlooring(false)
           }}
+        />
+      )}
+
+      {/* ═══ PART DETAIL MODAL — full part action surface incl. "Install at an outside shop" ═══ */}
+      {selectedPartId && (
+        <PartDetailModal
+          partId={selectedPartId}
+          isAdmin={isAdmin}
+          role={userRole}
+          onClose={() => setSelectedPartId(null)}
+          onChanged={() => { refreshParts() }}
         />
       )}
     </div>

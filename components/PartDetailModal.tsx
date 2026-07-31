@@ -25,6 +25,8 @@ export default function PartDetailModal({ partId, isAdmin, role, onClose, onChan
   const [editImage, setEditImage] = useState<string | null>(null)
   const [editUploading, setEditUploading] = useState(false)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
+  const [extShop, setExtShop] = useState('')
+  const [showExtForm, setShowExtForm] = useState(false)
 
   useEffect(() => {
     fetch(`/api/parts?id=${partId}`)
@@ -56,6 +58,39 @@ export default function PartDetailModal({ partId, isAdmin, role, onClose, onChan
       }
       onChanged()
       return true
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Assign this part's install to an outside shop. Not-yet-received → a gated
+  // mission ("Waiting on part"); already received → a live mission + alert.
+  const assignExternal = async () => {
+    const shop = extShop.trim()
+    if (!shop) return
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/parts/${partId}/external-install`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shop }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setConfirmState({ title: 'Could not set the outside install', message: (d as { error?: string }).error || 'Try again.', hideCancel: true })
+        return
+      }
+      const d = await res.json().catch(() => ({}))
+      setShowExtForm(false)
+      setExtShop('')
+      onChanged()
+      setConfirmState({
+        title: d.gated ? `Install set — waiting on the part` : `Install mission created`,
+        message: d.gated
+          ? `The mission to ${shop} goes live the moment this part is marked received.`
+          : `Part's in hand — take it to ${shop} to install. Lenny and admin were alerted.`,
+        hideCancel: true,
+        onConfirm: onClose,
+      })
     } finally {
       setSaving(false)
     }
@@ -117,6 +152,45 @@ export default function PartDetailModal({ partId, isAdmin, role, onClose, onChan
               }}>#{part.vehicle.stockNumber}</span>
               {`${part.vehicle.year ?? ''} ${part.vehicle.make} ${part.vehicle.model}`.trim()}
             </p>
+
+            {/* Outside-install plan: this part installs at an external vendor.
+                Show the plan if set; otherwise offer to assign one. */}
+            {part.status !== 'requested' || part.installVenue === 'external' ? (
+              part.installVenue === 'external' ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 12px',
+                  padding: '8px 11px', borderRadius: 9, background: '#fdf3e7', border: '1px solid #f6e0c0',
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#d97706', flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: '#92400e', lineHeight: 1.35 }}>
+                    Installs at <strong style={{ fontWeight: 700 }}>{part.installShop || 'an outside shop'}</strong> (outside)
+                    {part.status !== 'received' && <span style={{ display: 'block', fontSize: 11, opacity: 0.85 }}>Mission goes live when this part is received.</span>}
+                  </span>
+                </div>
+              ) : showExtForm ? (
+                <div style={{ margin: '4px 0 12px', padding: '10px 11px', borderRadius: 10, background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border)' }}>
+                  <label style={{ display: 'block', fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Install at outside shop</label>
+                  <div style={{ display: 'flex', gap: 7 }}>
+                    <input
+                      autoFocus value={extShop} onChange={e => setExtShop(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') assignExternal() }}
+                      placeholder="Shop name, e.g. Garage 27"
+                      style={{ flex: 1, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13 }}
+                    />
+                    <button onClick={assignExternal} disabled={saving || !extShop.trim()} style={{
+                      border: '1px solid #bfd3fc', background: '#eaf0fe', color: '#1d4ed8',
+                      borderRadius: 8, padding: '0 14px', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                      opacity: !extShop.trim() ? 0.5 : 1, whiteSpace: 'nowrap',
+                    }}>{saving ? '…' : 'Set'}</button>
+                  </div>
+                  <button onClick={() => { setShowExtForm(false); setExtShop('') }} style={{ marginTop: 7, border: 'none', background: 'none', color: 'var(--text-muted)', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Cancel</button>
+                </div>
+              ) : (
+                <button onClick={() => setShowExtForm(true)} className="prt-btn" style={{ margin: '2px 0 12px', fontSize: 12 }}>
+                  Install at an outside shop ›
+                </button>
+              )
+            ) : null}
             {part.status === 'ordered' && part.trackingStatus && (
               <p style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, margin: '0 0 6px', color: PART_LIVE_COLORS[part.trackingStatus] ?? '#6b6b6b' }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: PART_LIVE_COLORS[part.trackingStatus] ?? '#6b6b6b', flexShrink: 0 }} />

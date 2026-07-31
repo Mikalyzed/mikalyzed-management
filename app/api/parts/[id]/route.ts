@@ -4,7 +4,7 @@ import { getSessionUser, requireRole } from '@/lib/auth'
 import { sendNotificationEmail } from '@/lib/email'
 import { createTracker, isEasyPostConfigured } from '@/lib/easypost'
 import { partsRequestEmail } from '@/lib/email-templates'
-import { notifyPartReceived } from '@/lib/part-notifications'
+import { notifyPartReceived, notifyReadyToInstall } from '@/lib/part-notifications'
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
@@ -159,6 +159,59 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       triggeredByUserId: user.id,
     })
 
+    // EXTERNAL INSTALL: this part was requested with "install it at an outside
+    // vendor once it lands." The gated mission was created up front (pending,
+    // partOnly, blockedOnPartId = this part). Now that the part is here, un-gate
+    // it — it becomes a live pending external ready to send — and stand up the
+    // deliver mission for the coordinator. Skip the in-house checklist path.
+    const gatedExternal = part.installVenue === 'external'
+      ? await prisma.externalRepair.findFirst({
+          where: { blockedOnPartId: id, status: 'pending' },
+          select: { id: true, shopName: true },
+        })
+      : null
+    if (gatedExternal) {
+      await prisma.externalRepair.update({
+        where: { id: gatedExternal.id },
+        data: { blockedOnPartId: null },
+      })
+      // Stamp installTaskCreatedAt so the "no install plan" watchlist rules treat
+      // this part as handled — its install lives on the external mission now.
+      await prisma.part.update({ where: { id }, data: { installTaskCreatedAt: new Date() } })
+      const missionTitle = `Send to ${gatedExternal.shopName} to install ${part.name} (#${part.vehicle.stockNumber})`.slice(0, 200)
+      const dup = await prisma.task.findFirst({
+        where: { externalRepairId: gatedExternal.id, status: { not: 'done' } },
+        select: { id: true },
+      })
+      if (!dup) {
+        await prisma.task.create({
+          data: {
+            title: missionTitle,
+            description: `The ${part.name} arrived — take it to ${gatedExternal.shopName} for install. Arrange the ride from the mission card.`,
+            category: 'operations',
+            priority: 1,
+            createdById: user.id,
+            stockNumbers: [part.vehicle.stockNumber],
+            externalRepairId: gatedExternal.id,
+            missionType: 'deliver',
+          },
+        }).catch(() => {})
+      }
+      await prisma.activityLog.create({
+        data: {
+          entityType: 'external_repair', entityId: gatedExternal.id, action: 'external_unblocked', actorId: user.id,
+          details: { partName: part.name, shop: gatedExternal.shopName, stockNumber: part.vehicle.stockNumber, trigger: 'part_received' },
+        },
+      }).catch(() => {})
+      notifyReadyToInstall({
+        externalRepairId: gatedExternal.id,
+        partName: part.name,
+        shopName: gatedExternal.shopName,
+        vehicleStockNumber: part.vehicle.stockNumber,
+        vehicleDesc: `${part.vehicle.year ?? ''} ${part.vehicle.make} ${part.vehicle.model}`.trim(),
+        triggeredByUserId: user.id,
+      })
+    } else {
     // If the vehicle is actively in mechanic right now, append an Install task
     // to the current stage's checklist so the mechanic sees it without having
     // to wait for the next routing cycle. Stamps installTaskCreatedAt to keep
@@ -231,6 +284,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }).catch(() => {})
       }
     }
+    } // end in-house install branch (else of external un-gate)
   }
 
   if (!statusChangeLogged) {

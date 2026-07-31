@@ -92,3 +92,45 @@ export async function notifyCarrierDelivered(args: {
     console.error('[notifyCarrierDelivered]', e)
   }
 }
+
+
+/**
+ * Fires when a received part un-gates its external install mission (the part
+ * has an install-at-outside-vendor plan and just arrived). Tells the shop
+ * coordinator + admins the mission is live: take the part to the shop. Links
+ * to the external repair so the notification opens straight to the mission.
+ * Fire-and-forget.
+ */
+export async function notifyReadyToInstall(args: {
+  externalRepairId: string
+  partName: string
+  shopName: string
+  vehicleStockNumber: string
+  vehicleDesc: string
+  triggeredByUserId: string
+}): Promise<void> {
+  try {
+    const recipients = await prisma.user.findMany({
+      where: { role: { in: ['admin', 'shop_coordinator'] }, isActive: true },
+      select: { id: true },
+    })
+    const ids = recipients.map(r => r.id).filter(id => id !== args.triggeredByUserId)
+    if (ids.length === 0) return
+
+    const title = `Ready to install — ${args.vehicleStockNumber}`
+    const message = `"${args.partName}" arrived for ${args.vehicleDesc}. Take it to ${args.shopName} to install — the mission is now live.`
+
+    await prisma.notification.createMany({
+      data: ids.map(userId => ({
+        userId,
+        type: 'external_ready_to_install',
+        title,
+        message,
+        entityType: 'external_repair',
+        entityId: args.externalRepairId,
+      })),
+    })
+  } catch (e) {
+    console.error('[notifyReadyToInstall]', e)
+  }
+}

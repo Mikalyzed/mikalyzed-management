@@ -11,16 +11,31 @@ export async function GET(request: Request) {
     where: id ? { id } : undefined,
     orderBy: [{ status: 'asc' }, { sentDate: 'desc' }],
   })
+  // Attach the blocked part (name + live tracking) to any repair still gated on
+  // a part that hasn't landed, so the card can show "Waiting on <part> · <status>".
+  const blockedIds = repairs.map(r => r.blockedOnPartId).filter((v): v is string => !!v)
+  const blockedParts = blockedIds.length
+    ? await prisma.part.findMany({
+        where: { id: { in: blockedIds } },
+        select: { id: true, name: true, status: true, trackingStatus: true, expectedDelivery: true },
+      })
+    : []
+  const partById = new Map(blockedParts.map(p => [p.id, p]))
+  const withBlocked = repairs.map(r => ({
+    ...r,
+    blockedPart: r.blockedOnPartId ? partById.get(r.blockedOnPartId) ?? null : null,
+  }))
+
   // Single-repair fetch (the action modal): carry the linked mission task so
   // the modal can notice a skipped step (e.g. Sent without a ride arranged)
-  if (id && repairs.length === 1) {
+  if (id && withBlocked.length === 1) {
     const task = await prisma.task.findFirst({
       where: { externalRepairId: id, status: { notIn: ['done', 'skipped'] } },
       select: { id: true, missionType: true, transportRequestId: true, selfTransport: true },
     })
-    return NextResponse.json({ repairs, linkedTask: task })
+    return NextResponse.json({ repairs: withBlocked, linkedTask: task })
   }
-  return NextResponse.json({ repairs })
+  return NextResponse.json({ repairs: withBlocked })
 }
 
 export async function POST(request: Request) {

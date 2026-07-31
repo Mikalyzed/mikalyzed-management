@@ -17,6 +17,8 @@ export type PartRecord = {
   notes: string | null
   createdAt: string
   updatedAt: string
+  installVenue?: 'external' | 'inhouse' | null
+  installShop?: string | null
   vehicle: {
     id: string
     stockNumber: string

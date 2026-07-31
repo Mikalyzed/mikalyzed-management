@@ -31,6 +31,30 @@ type ExternalRepair = {
   status: string
   notes: string | null
   createdAt: string
+  // Set while this install mission is waiting on a part to arrive. blockedPart
+  // carries the part's name + live tracking so the card can show the wait.
+  blockedOnPartId?: string | null
+  blockedPart?: { id: string; name: string; status: string; trackingStatus: string | null; expectedDelivery: string | null } | null
+}
+
+// Human labels for the live carrier tracking states used in the waiting badge.
+const TRACK_LABELS: Record<string, string> = {
+  pre_transit: 'Label created',
+  in_transit: 'In transit',
+  out_for_delivery: 'Out for delivery',
+  delivered: 'Delivered — confirm receipt',
+  available_for_pickup: 'Ready for pickup',
+  return_to_sender: 'Returning to sender',
+  failure: 'Delivery issue',
+}
+
+// Fallback label from the part's pipeline status when there's no live carrier state.
+const PART_STAGE_LABEL: Record<string, string> = {
+  requested: 'Requested',
+  sourced: 'Sourced',
+  ready_to_order: 'Ready to order',
+  ordered: 'Ordered',
+  received: 'Received',
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -630,6 +654,11 @@ export default function ExternalRepairsPage() {
                         if (overdue) out.push(pill('Overdue', '#b91c1c', '#fdecef'))
                         if (r.atDealership) out.push(pill('In-House', '#1d4ed8', '#eaf0fe'))
                         if (r.partOnly) out.push(pill('Part Only', '#92400e', '#fdf3e7'))
+                        // Gated on a part → show the wait instead of "Not Scheduled".
+                        if (r.blockedOnPartId) {
+                          out.push(pill('Waiting on Part', '#92400e', '#fdf3e7'))
+                          return out
+                        }
                         out.push(
                           r.status === 'returned' ? pill('Returned', '#16a34a', '#f0fdf4')
                           : r.status === 'ready' ? pill('Ready', '#16a34a', '#f0fdf4')
@@ -650,6 +679,29 @@ export default function ExternalRepairsPage() {
                     </p>
                     {r.color && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>{r.color}</p>}
                   </div>
+
+                  {/* Waiting-on-part tracker: this install mission is gated until
+                      the part lands. Shows the part + live carrier status so the
+                      wait is visible; it goes live the moment the part is received. */}
+                  {r.blockedOnPartId && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16,
+                      padding: '9px 12px', borderRadius: 10,
+                      background: '#fdf3e7', border: '1px solid #f6e0c0',
+                    }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#d97706', flexShrink: 0 }} />
+                      <span style={{ fontSize: 12.5, color: '#92400e', lineHeight: 1.35, minWidth: 0 }}>
+                        <strong style={{ fontWeight: 700 }}>Waiting on part</strong>
+                        {r.blockedPart ? <> — {r.blockedPart.name}</> : null}
+                        {r.blockedPart?.trackingStatus ? (
+                          <span style={{ fontWeight: 600 }}> · {TRACK_LABELS[r.blockedPart.trackingStatus] ?? r.blockedPart.trackingStatus}</span>
+                        ) : r.blockedPart ? (
+                          <span style={{ opacity: 0.85 }}> · {PART_STAGE_LABEL[r.blockedPart.status] ?? r.blockedPart.status}</span>
+                        ) : null}
+                        <span style={{ display: 'block', fontSize: 11, opacity: 0.85, marginTop: 1 }}>Goes live to install once the part is received.</span>
+                      </span>
+                    </div>
+                  )}
 
                   {/* Info grid - Clickable for admin */}
                   <div className="ext-info-grid" style={{

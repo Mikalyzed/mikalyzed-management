@@ -102,6 +102,8 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
   const todayStr = new Date().toISOString().slice(0, 10)
   for (const e of r.externalRepairs) {
     if (e.status !== 'pending') continue
+    // Gated on a part that hasn't landed — legitimately waiting, not neglected.
+    if ((e as { blockedOnPart?: boolean }).blockedOnPart) continue
     const plannedSend = (e as { plannedSend?: string | null }).plannedSend ?? null
     if (plannedSend && plannedSend < todayStr) {
       out.push({
@@ -245,6 +247,9 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
   const reconStocks = new Set(r.recon.map(v => v.stock))
   for (const p of r.parts) {
     const touched = (p as { touchedAgeDays?: number }).touchedAgeDays ?? 99
+    // External-install parts carry their install as an outside-vendor mission,
+    // not a recon-checklist task — this "car not in recon" rule doesn't apply.
+    if ((p as { installExternal?: boolean }).installExternal) continue
     if (p.status === 'received' && !p.installTaskCreated && !reconStocks.has(p.stock) && touched <= 21) {
       out.push({
         severity: 'warn',
@@ -310,6 +315,7 @@ export function detectBottlenecks(r: VehicleStatusReport): Bottleneck[] {
   )
   const noInstall = new Map<string, { vehicle: string; vehicleId: string; parts: Array<{ id: string; name: string }> }>()
   for (const p of r.parts) {
+    if ((p as { installExternal?: boolean }).installExternal) continue
     if (p.status === 'received' && !p.installTaskCreated) {
       const cur = noInstall.get(p.stock) ?? { vehicle: p.vehicle, vehicleId: p.vehicleId, parts: [] }
       cur.parts.push({ id: p.partId, name: p.part })

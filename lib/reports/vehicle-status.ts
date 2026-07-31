@@ -46,7 +46,7 @@ export async function buildVehicleStatusReport() {
         },
         parts: {
           where: { status: { in: ['requested', 'sourced', 'ordered', 'received'] } },
-          select: { id: true, name: true, status: true, expectedDelivery: true, installTaskCreatedAt: true, createdAt: true, updatedAt: true, trackingStatus: true },
+          select: { id: true, name: true, status: true, expectedDelivery: true, installTaskCreatedAt: true, createdAt: true, updatedAt: true, trackingStatus: true, installVenue: true },
         },
       },
       orderBy: { stockNumber: 'asc' },
@@ -56,7 +56,7 @@ export async function buildVehicleStatusReport() {
       select: {
         id: true, stockNumber: true, year: true, make: true, model: true, shopName: true,
         repairDescription: true, status: true, sentDate: true, expectedReturn: true,
-        atDealership: true, partOnly: true, notes: true, createdAt: true, followUps: true, plannedSendDate: true,
+        atDealership: true, partOnly: true, notes: true, createdAt: true, followUps: true, plannedSendDate: true, blockedOnPartId: true,
       },
       orderBy: { expectedReturn: 'asc' },
     }),
@@ -81,7 +81,7 @@ export async function buildVehicleStatusReport() {
       },
       select: {
         id: true, name: true, status: true, expectedDelivery: true,
-        installTaskCreatedAt: true, createdAt: true, updatedAt: true, trackingStatus: true,
+        installTaskCreatedAt: true, createdAt: true, updatedAt: true, trackingStatus: true, installVenue: true,
         vehicle: { select: { id: true, stockNumber: true, year: true, make: true, model: true } },
       },
     }),
@@ -176,6 +176,9 @@ export async function buildVehicleStatusReport() {
       status: e.status,
       atDealership: e.atDealership,
       partOnly: e.partOnly,
+      // Gated on a part that hasn't landed yet — the mission is visible but the
+      // "never sent" watchlist rule skips it until the part is received.
+      blockedOnPart: !!e.blockedOnPartId,
       sent: e.sentDate?.toISOString().slice(0, 10) ?? null,
       plannedSend: e.plannedSendDate?.toISOString().slice(0, 10) ?? null,
       expectedBack: e.expectedReturn?.toISOString().slice(0, 10) ?? null,
@@ -210,6 +213,9 @@ export async function buildVehicleStatusReport() {
       ageDays: daysSince(p.createdAt) ?? 0,
       touchedAgeDays: daysSince(p.updatedAt) ?? 0,
       installTaskCreated: !!p.installTaskCreatedAt,
+      // External install: the install plan IS an outside-vendor mission, so the
+      // "no install task" rules must not flag it as unhandled.
+      installExternal: p.installVenue === 'external',
       soldCar: false,
     })))
     .concat(strayParts.map(p => ({
@@ -224,6 +230,7 @@ export async function buildVehicleStatusReport() {
       ageDays: daysSince(p.createdAt) ?? 0,
       touchedAgeDays: daysSince(p.updatedAt) ?? 0,
       installTaskCreated: !!p.installTaskCreatedAt,
+      installExternal: p.installVenue === 'external',
       soldCar: true,
     })))
     .sort((a, b) =>

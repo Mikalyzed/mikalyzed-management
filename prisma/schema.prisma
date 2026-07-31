@@ -295,6 +295,14 @@ model Part {
   // Stamped when admin generates an "Install [part]" task in mechanic via routing.
   // Used to prevent the same install from being re-suggested in future routing cycles.
   installTaskCreatedAt DateTime? @map("install_task_created_at")
+  // Where this part gets installed once it arrives, captured at request time.
+  // 'external' = an outside vendor installs it (a gated ExternalRepair is created
+  // now, waiting on this part); 'inhouse' = our mechanics install it (the existing
+  // received → mechanic-checklist flow). null = no install planned / unknown.
+  installVenue         String?   @map("install_venue")
+  // Vendor name when installVenue = 'external' (e.g. "Garage 27"). Purely for
+  // labels; the real link is ExternalRepair.blockedOnPartId pointing back here.
+  installShop          String?   @map("install_shop")
   // The stage during which this part was added (e.g. mechanic inspection).
   // Lets the vehicle history dropdown group parts under their originating stage.
   sourceStageId        String?   @map("source_stage_id")
@@ -714,10 +722,16 @@ model ExternalRepair {
   notes             String?
   followUps         Json      @default("[]") @map("follow_ups")
   createdById       String?   @map("created_by")
+  // Set when this external install is WAITING on a part to arrive: the mission
+  // is created up front (pending, partOnly) so it's visible, but stays gated
+  // until the part is received. Cleared on receive → the mission goes live and
+  // the "never sent" watchlist rule skips it while it's still blocked.
+  blockedOnPartId   String?   @map("blocked_on_part_id")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
   @@index([status])
+  @@index([blockedOnPartId])
   @@map("external_repairs")
 }
 
@@ -771,6 +785,23 @@ model MeetingPlanExample {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("meeting_plan_examples")
+}
+
+// Learn-as-you-use memory for the "+ Add Task" smart flow. Every confirmed
+// proposal (and the shape it resolved to — including answers to the tap-choice
+// clarifying questions) is saved here and replayed as few-shot on the next
+// classify, so the assistant catches on to this dealership's phrasings and
+// stops re-asking what it's already been told. `text` is the ORIGINAL input
+// (before any answer merges); `result` is the confirmed shape.
+model TaskAssessExample {
+  id          String   @id @default(uuid())
+  text        String
+  result      Json
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("task_assess_examples")
 }
 
 model Vendor {
