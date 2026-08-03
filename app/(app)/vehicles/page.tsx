@@ -210,6 +210,10 @@ export default function VehiclesPage() {
   } | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; stockNumber: string; desc: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  // "Flag for Mechanic": records an issue on the current stage so routing surfaces it.
+  const [flagModal, setFlagModal] = useState<{ vehicleId: string; stageId: string; stageLabel: string; checklist: unknown[] } | null>(null)
+  const [flagText, setFlagText] = useState('')
+  const [flagging, setFlagging] = useState(false)
   const [externalModal, setExternalModal] = useState<{ vehicleId: string; stockNumber: string; year: number | null; make: string; model: string; color: string | null; stageId: string | null } | null>(null)
   const [externalSubmitting, setExternalSubmitting] = useState(false)
   const [externalPending, setExternalPending] = useState(false)
@@ -730,6 +734,31 @@ export default function VehiclesPage() {
     } catch { /* ignore */ }
     setMoveModal(prev => prev ? { ...prev, saving: false } : null)
   }, [moveModal])
+
+  // Flag an issue on the current stage. Stored as a resolved checklist item with a
+  // note so it (a) doesn't block the stage from finishing and (b) is picked up by
+  // extractIssueFixTasks at routing → "needs mechanic" + a pre-filled "Fix:" task.
+  const submitFlag = useCallback(async () => {
+    if (!flagModal || !flagText.trim()) return
+    setFlagging(true)
+    try {
+      const issue = flagText.trim()
+      const flagItem = { item: issue, note: issue, done: true, mechanicFlag: true }
+      await fetch(`/api/stages/${flagModal.stageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ checklist: [...flagModal.checklist, flagItem] }),
+      })
+      setFlagModal(null)
+      setFlagText('')
+      // Refresh the open detail modal + board so the flag shows immediately.
+      if (flagModal.vehicleId) openModal(flagModal.vehicleId)
+      const res = await fetch('/api/vehicles')
+      const data = await res.json()
+      setVehicles(data.vehicles || [])
+    } catch { /* ignore */ }
+    setFlagging(false)
+  }, [flagModal, flagText])
 
   const handleCardMouseDown = useCallback((e: React.MouseEvent) => {
     mouseDownPos.current = { x: e.clientX, y: e.clientY }
@@ -1910,6 +1939,22 @@ export default function VehiclesPage() {
 
                       return (
                         <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {/* Flag an issue found mid-stage (e.g. a leak spotted during
+                              Content) WITHOUT moving the car. It rides along on this
+                              stage; when the car finishes and hits routing, the router
+                              flags "needs mechanic" and pre-fills the fix task. */}
+                          {currentStage.stage !== 'mechanic' && (
+                            <button
+                              onClick={() => { setFlagModal({ vehicleId: v.id, stageId: currentStage!.id, stageLabel: STAGE_LABELS[currentStage!.stage as keyof typeof STAGE_LABELS] || currentStage!.stage, checklist: Array.isArray(currentStage!.checklist) ? currentStage!.checklist : [] }); setFlagText('') }}
+                              style={{
+                                width: '100%', padding: '10px 14px', borderRadius: 10,
+                                border: '1px solid #fdba74', background: '#fff7ed', color: '#c2410c',
+                                fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                              }}
+                            >
+                              Flag for Mechanic
+                            </button>
+                          )}
                           {hasSkipTargets && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -2218,6 +2263,38 @@ export default function VehiclesPage() {
                 }}>{externalSubmitting ? 'Sending...' : 'Send to External'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Flag for Mechanic Modal */}
+      {flagModal && (
+        <div
+          onClick={() => !flagging && setFlagModal(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: 20 }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 420, padding: 24, boxShadow: '0 25px 60px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Flag for Mechanic</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>
+              Records the issue on {flagModal.stageLabel} without moving the car. When it finishes and reaches routing, you&apos;ll be told it needs a mechanic — with this pre-filled as the fix.
+            </p>
+            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 6, display: 'block' }}>What does the mechanic need to check or fix?</label>
+            <input
+              autoFocus
+              value={flagText}
+              onChange={e => setFlagText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && flagText.trim() && !flagging) submitFlag() }}
+              placeholder="e.g. Leak at valve cover"
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e5e5e5', fontSize: 14, background: '#f8f8f6', outline: 'none', marginBottom: 20 }}
+            />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setFlagModal(null)} disabled={flagging} style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: '1px solid #e5e5e5', background: '#fff', color: '#555', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button
+                onClick={submitFlag}
+                disabled={flagging || !flagText.trim()}
+                style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: 'none', background: flagText.trim() ? '#c2410c' : '#e5e5e5', color: '#fff', fontSize: 14, fontWeight: 700, cursor: flagText.trim() ? 'pointer' : 'default' }}
+              >{flagging ? 'Flagging…' : 'Flag It'}</button>
+            </div>
           </div>
         </div>
       )}
