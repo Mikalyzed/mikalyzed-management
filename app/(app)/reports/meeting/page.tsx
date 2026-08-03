@@ -49,6 +49,7 @@ type BottleneckFix =
   | { kind: 'install_tasks'; vehicleId: string; canCreate: boolean; parts: Array<{ id: string; name: string }> }
   | { kind: 'confirm_received'; partId: string }
   | { kind: 'remove_task'; stageId: string; idx: number; item: string }
+  | { kind: 'send_to_mechanic'; vehicleId: string; partId: string }
 type Bottleneck = {
   severity: 'crit' | 'warn'
   stock: string | null
@@ -533,7 +534,7 @@ export default function MorningMeetingPage() {
 
   /** Inline bottleneck remedies — each is a targeted PATCH through the
    *  normal endpoints; the rule stops firing once the data is fixed. */
-  async function fixBottleneck(b: Bottleneck, choice: number, note?: string) {
+  async function fixBottleneck(b: Bottleneck, choice: number, note?: string, opts?: { plan?: boolean; exactIso?: string }) {
     if (!b.fix) return
     const day = 86400000
     const iso = (days: number) => new Date(Date.now() + days * day).toISOString()
@@ -545,6 +546,13 @@ export default function MorningMeetingPage() {
       res = await fetch(`/api/external/${b.fix.externalId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expectedReturn: iso(choice), ...followUp }),
+      })
+    } else if (b.fix.kind === 'external_mark_sent' && opts?.plan) {
+      // Not sent yet — just PLAN the send date; the car stays pending (never
+      // flips out), and the "never sent" alert quiets until that date passes.
+      res = await fetch(`/api/external/${b.fix.externalId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plannedSendDate: opts.exactIso ?? iso(choice), ...followUp }),
       })
     } else if (b.fix.kind === 'external_mark_sent') {
       res = await fetch(`/api/external/${b.fix.externalId}`, {
@@ -588,6 +596,13 @@ export default function MorningMeetingPage() {
       res = await fetch(`/api/stages/${b.fix.stageId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scheduledDate: iso(choice) }),
+      })
+    } else if (b.fix.kind === 'send_to_mechanic') {
+      // Stranded part (car sold or not in recon): route the car into mechanic
+      // with an install task for this part so it gets handled before delivery.
+      res = await fetch(`/api/vehicles/${b.fix.vehicleId}/send-to-mechanic`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partIds: [b.fix.partId] }),
       })
     }
     if (res?.ok) { notify('Fixed — it will drop off the watchlist.'); loadReport() }
@@ -1205,16 +1220,17 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
   flagged: boolean
   external?: ExternalRow
   stuckPart?: PartRow
-  onFix: (b: Bottleneck, choice: number, note?: string) => Promise<void>
+  onFix: (b: Bottleneck, choice: number, note?: string, opts?: { plan?: boolean; exactIso?: string }) => Promise<void>
   onFollowup: (b: Bottleneck) => void
   onReturned: (id: string) => Promise<void>
   onDelete: (id: string, reason: string) => Promise<void>
   onInstall: (fix: Extract<BottleneckFix, { kind: 'install_tasks' }>, mode: 'create' | 'mark', partIds?: string[]) => Promise<void>
 }) {
-  type ModalKind = null | 'detail' | 'parts' | 'return_date' | 'mark_sent' | 'returned' | 'delete' | 'reschedule'
+  type ModalKind = null | 'detail' | 'parts' | 'return_date' | 'mark_sent' | 'plan_send' | 'hold' | 'returned' | 'delete' | 'reschedule'
   const [modal, setModal] = useState<ModalKind>(null)
   const [reason, setReason] = useState('')
   const [followNote, setFollowNote] = useState('') // "what did the shop say" on a date update
+  const [planDate, setPlanDate] = useState('') // exact planned send date (YYYY-MM-DD)
   const [busy, setBusy] = useState(false)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const crit = b.severity === 'crit'
@@ -1222,7 +1238,7 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
   const installFix = b.fix?.kind === 'install_tasks' ? b.fix : null
   const externalId = (b.fix?.kind === 'external_return_date' || b.fix?.kind === 'external_mark_sent') ? b.fix.externalId : null
 
-  const close = () => { setModal(null); setReason(''); setFollowNote('') }
+  const close = () => { setModal(null); setReason(''); setFollowNote(''); setPlanDate('') }
   const run = async (fn: () => Promise<void>) => {
     setBusy(true)
     try { await fn(); close() } finally { setBusy(false) }
@@ -1252,6 +1268,8 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
     verbs.push({ label: 'Delete', danger: true, onClick: () => setModal('delete') })
   } else if (b.fix?.kind === 'external_mark_sent') {
     verbs.push({ label: 'Mark sent', onClick: () => setModal('mark_sent') })
+    verbs.push({ label: 'Plan send', onClick: () => setModal('plan_send') })
+    verbs.push({ label: 'Hold', onClick: () => setModal('hold') })
     verbs.push({ label: '✓ Returned', onClick: () => setModal('returned') })
     verbs.push({ label: 'Delete', danger: true, onClick: () => setModal('delete') })
   } else if (b.fix?.kind === 'clear_awaiting_parts') {
@@ -1265,6 +1283,8 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
     verbs.push({ label: '✓ Mark received', onClick: () => run(() => onFix(b, 0)) })
   } else if (b.fix?.kind === 'remove_task') {
     verbs.push({ label: 'Remove — use parts flow', onClick: () => run(() => onFix(b, 0)) })
+  } else if (b.fix?.kind === 'send_to_mechanic') {
+    verbs.push({ label: 'Add to recon', onClick: () => run(() => onFix(b, 0)) })
   } else if (installFix) {
     verbs.push({ label: 'Parts…', onClick: openDetail })
   }
@@ -1333,15 +1353,17 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
           display: 'flex', gap: 6, alignItems: 'center', padding: '10px 12px',
           borderTop: '1px solid var(--border-light)', background: 'var(--bg-primary)',
         }}>
-          {verbs.map(v => (
-            <button
-              key={v.label}
-              className={v.danger ? 'mtg-btn mtg-btn-danger' : 'mtg-btn'}
-              disabled={busy}
-              style={{ fontSize: 12 }}
-              onClick={v.onClick}
-            >{v.label}</button>
-          ))}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', flex: 1, minWidth: 0 }}>
+            {verbs.map(v => (
+              <button
+                key={v.label}
+                className={v.danger ? 'mtg-btn mtg-btn-danger' : 'mtg-btn'}
+                disabled={busy}
+                style={{ fontSize: 12 }}
+                onClick={v.onClick}
+              >{v.label}</button>
+            ))}
+          </div>
           <button
             className="mtg-btn"
             title={flagged ? 'Flagged — follow-up is in the reminders strip' : 'Flag it — makes an urgent follow-up due today'}
@@ -1349,7 +1371,7 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
             aria-pressed={flagged}
             disabled={busy || flagged}
             style={{
-              marginLeft: 'auto', fontSize: 12, padding: '6px 10px',
+              fontSize: 12, padding: '6px 10px', flexShrink: 0, alignSelf: 'center',
               ...(flagged ? {
                 color: '#2563eb', background: 'var(--info-bg)',
                 borderColor: 'var(--info-border)', opacity: 1, cursor: 'default',
@@ -1369,6 +1391,8 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
               {modal === 'parts' && (b.vehicle ?? 'Parts')}
               {modal === 'return_date' && 'Update return date'}
               {modal === 'mark_sent' && 'Mark sent today'}
+              {modal === 'plan_send' && 'Plan the send date'}
+              {modal === 'hold' && 'Hold — not going out yet'}
               {modal === 'returned' && 'Car is back?'}
               {modal === 'delete' && 'Delete this repair?'}
               {modal === 'reschedule' && 'Reschedule the stage'}
@@ -1562,6 +1586,8 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
                 {modal === 'return_date' && `${b.vehicle} — when is it now expected back?`}
                 {modal === 'mark_sent' && `${b.vehicle} — sent to the shop today. When is it expected back?`}
+                {modal === 'plan_send' && `${b.vehicle} — not going out yet. Pick when it's planned to be sent (it stays pending until then).`}
+                {modal === 'hold' && `${b.vehicle} — it's staying put on purpose (waiting on other jobs to finish). Pick how long to hold it; the alert quiets until then, then it resurfaces so nobody forgets.`}
                 {modal === 'returned' && `${b.vehicle} will be parked for routing on the recon board.`}
                 {modal === 'delete' && `${b.vehicle} — this cannot be undone. The reason is recorded in the audit log.`}
                 {modal === 'reschedule' && `${b.vehicle} — pick the new date.`}
@@ -1577,18 +1603,37 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
                 style={{ width: '100%', resize: 'vertical', marginBottom: 16 }}
               />
             )}
-            {(modal === 'return_date' || modal === 'mark_sent') && (
+            {(modal === 'return_date' || modal === 'mark_sent' || modal === 'plan_send' || modal === 'hold') && (
               <>
-                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>What did the shop say?</label>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                  {modal === 'hold' ? "What's it waiting on?" : modal === 'plan_send' ? "Why not sent yet? / the plan" : 'What did the shop say?'}
+                </label>
                 <textarea
                   autoFocus rows={2}
                   className="mtg-input"
                   value={followNote}
                   onChange={e => setFollowNote(e.target.value)}
-                  placeholder="e.g. Waiting on a back-ordered wheel; called Willy, said end of week (optional but recommended)"
+                  placeholder={modal === 'hold' ? 'e.g. Holding until the engine work wraps up — no point sending it out mid-job (optional but recommended)' : modal === 'plan_send' ? 'e.g. Waiting on Rev Auto to confirm a slot; planning to drop it next Tuesday (optional but recommended)' : 'e.g. Waiting on a back-ordered wheel; called Willy, said end of week (optional but recommended)'}
                   style={{ width: '100%', resize: 'vertical', marginBottom: 14 }}
                 />
               </>
+            )}
+            {modal === 'plan_send' && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <input
+                  type="date"
+                  className="mtg-input"
+                  value={planDate}
+                  onChange={e => setPlanDate(e.target.value)}
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <button
+                  className="mtg-btn mtg-btn-dark"
+                  disabled={busy || !planDate}
+                  style={{ justifyContent: 'center', padding: '10px 16px', fontSize: 13, opacity: planDate ? 1 : 0.5 }}
+                  onClick={() => run(() => onFix(b, 0, followNote, { plan: true, exactIso: new Date(`${planDate}T12:00:00`).toISOString() }))}
+                >{busy ? '…' : 'Set date'}</button>
+              </div>
             )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {modal === 'return_date' && <>
@@ -1599,6 +1644,16 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
               {modal === 'mark_sent' && <>
                 {choiceBtn('Back in 1 week', () => run(() => onFix(b, 7, followNote)), true)}
                 {choiceBtn('Back in 2 weeks', () => run(() => onFix(b, 14, followNote)))}
+              </>}
+              {modal === 'plan_send' && <>
+                {choiceBtn('Tomorrow', () => run(() => onFix(b, 1, followNote, { plan: true })), true)}
+                {choiceBtn('In 3 days', () => run(() => onFix(b, 3, followNote, { plan: true })))}
+                {choiceBtn('In 1 week', () => run(() => onFix(b, 7, followNote, { plan: true })))}
+              </>}
+              {modal === 'hold' && <>
+                {choiceBtn('1 week', () => run(() => onFix(b, 7, followNote, { plan: true })), true)}
+                {choiceBtn('2 weeks', () => run(() => onFix(b, 14, followNote, { plan: true })))}
+                {choiceBtn('1 month', () => run(() => onFix(b, 30, followNote, { plan: true })))}
               </>}
               {modal === 'returned' && externalId &&
                 choiceBtn('Yes — mark returned', () => run(() => onReturned(externalId)), true)}
