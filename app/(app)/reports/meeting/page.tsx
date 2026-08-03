@@ -1226,7 +1226,7 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
   onDelete: (id: string, reason: string) => Promise<void>
   onInstall: (fix: Extract<BottleneckFix, { kind: 'install_tasks' }>, mode: 'create' | 'mark', partIds?: string[]) => Promise<void>
 }) {
-  type ModalKind = null | 'detail' | 'parts' | 'return_date' | 'mark_sent' | 'plan_send' | 'hold' | 'returned' | 'delete' | 'reschedule'
+  type ModalKind = null | 'detail' | 'parts' | 'return_date' | 'mark_sent' | 'plan_send' | 'hold' | 'returned' | 'delete' | 'reschedule' | 'actions'
   const [modal, setModal] = useState<ModalKind>(null)
   const [reason, setReason] = useState('')
   const [followNote, setFollowNote] = useState('') // "what did the shop say" on a date update
@@ -1354,15 +1354,24 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
           borderTop: '1px solid var(--border-light)', background: 'var(--bg-primary)',
         }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', flex: 1, minWidth: 0 }}>
-            {verbs.map(v => (
-              <button
-                key={v.label}
-                className={v.danger ? 'mtg-btn mtg-btn-danger' : 'mtg-btn'}
-                disabled={busy}
-                style={{ fontSize: 12 }}
-                onClick={v.onClick}
-              >{v.label}</button>
-            ))}
+            {/* Up to 2 actions show inline; more than that collapse to the primary
+                action + a "More" chooser so a problem card never sprouts 5 buttons. */}
+            {verbs.length <= 2 ? (
+              verbs.map(v => (
+                <button
+                  key={v.label}
+                  className={v.danger ? 'mtg-btn mtg-btn-danger' : 'mtg-btn'}
+                  disabled={busy}
+                  style={{ fontSize: 12 }}
+                  onClick={v.onClick}
+                >{v.label}</button>
+              ))
+            ) : (
+              <>
+                <button className="mtg-btn" disabled={busy} style={{ fontSize: 12 }} onClick={verbs[0].onClick}>{verbs[0].label}</button>
+                <button className="mtg-btn" disabled={busy} style={{ fontSize: 12 }} onClick={() => setModal('actions')}>More ▾</button>
+              </>
+            )}
           </div>
           <button
             className="mtg-btn"
@@ -1396,6 +1405,7 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
               {modal === 'returned' && 'Car is back?'}
               {modal === 'delete' && 'Delete this repair?'}
               {modal === 'reschedule' && 'Reschedule the stage'}
+              {modal === 'actions' && (b.vehicle ?? 'Choose an action')}
             </h3>
             {(modal === 'detail' || modal === 'parts') && b.where && (
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 2 }}>
@@ -1581,8 +1591,26 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
               </div>
             )}
 
+            {/* ── Action chooser (the "More" popup) ─────────────────── */}
+            {modal === 'actions' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+                {b.issue && (
+                  <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 4px', lineHeight: 1.5 }}>{b.issue}</p>
+                )}
+                {verbs.slice(1).map(v => (
+                  <button
+                    key={v.label}
+                    className={v.danger ? 'mtg-btn mtg-btn-danger' : 'mtg-btn'}
+                    disabled={busy}
+                    style={{ width: '100%', justifyContent: 'center', padding: '11px 14px', fontSize: 13.5 }}
+                    onClick={v.onClick}
+                  >{v.label}</button>
+                ))}
+              </div>
+            )}
+
             {/* ── Small action modals ───────────────────────────────── */}
-            {modal !== 'detail' && modal !== 'parts' && (
+            {modal !== 'detail' && modal !== 'parts' && modal !== 'actions' && (
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 16px', lineHeight: 1.5 }}>
                 {modal === 'return_date' && `${b.vehicle} — when is it now expected back?`}
                 {modal === 'mark_sent' && `${b.vehicle} — sent to the shop today. When is it expected back?`}
