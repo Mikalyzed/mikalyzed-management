@@ -4,6 +4,26 @@ import { getSessionUser } from '@/lib/auth'
 import { recomputeInventoryStatus } from '@/lib/inventory-status'
 import { markVehicleAsAtExternal, markVehicleReturnedFromExternal } from '@/lib/external-repair-flow'
 
+/**
+ * A mission's tow is done the moment the external moves — the car left (sent) or
+ * came home (returned). Close the linked TransportRequest so a completed tow stops
+ * tripping the "pickup date passed" watchlist rule (which treats any
+ * requested/scheduled transport with a past date as live). Idempotent: only
+ * touches still-open transports.
+ */
+async function closeLinkedTransports(externalRepairId: string, missionTypes: string[]) {
+  const tasks = await prisma.task.findMany({
+    where: { externalRepairId, transportRequestId: { not: null }, missionType: { in: missionTypes } },
+    select: { transportRequestId: true },
+  })
+  const ids = tasks.map(t => t.transportRequestId).filter((x): x is string => !!x)
+  if (ids.length === 0) return
+  await prisma.transportRequest.updateMany({
+    where: { id: { in: ids }, status: { in: ['requested', 'scheduled'] } },
+    data: { status: 'completed' },
+  }).catch(() => {})
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -151,6 +171,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         stockNumber: updated.stockNumber,
         externalRepairId: id,
       })
+      // The outbound (deliver) tow is done — close its transport.
+      await closeLinkedTransports(id, ['deliver'])
     } else if (data.status === 'returned') {
       // Car came back — park in awaiting_routing for admin to route (only if no other
       // active externals remain for this stock).
@@ -158,6 +180,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         stockNumber: updated.stockNumber,
         externalRepairId: id,
       })
+      // Round trip complete — close any still-open tow for this mission (deliver or retrieve).
+      await closeLinkedTransports(id, ['deliver', 'retrieve'])
     }
   }
 
