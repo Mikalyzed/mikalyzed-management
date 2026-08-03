@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getSessionUser } from '@/lib/auth'
+import { consumeReturnQueue } from '@/lib/return-queue'
 
 // Work-hours window (ET). Overridable via env for local dev/testing —
 // e.g. MECH_WORK_START=0 MECH_WORK_END=24 disables the gate entirely.
@@ -475,7 +476,7 @@ export async function POST(req: NextRequest) {
   const user = await getSessionUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { action, stageId, pauseReason, pauseDetail, partName, expectedDate, trackingNumber } = await req.json()
+  const { action, stageId, pauseReason, pauseDetail, partName, expectedDate, trackingNumber, proposeStage } = await req.json()
 
   const stage = await prisma.vehicleStage.findUnique({ where: { id: stageId } })
   if (!stage || stage.stage !== 'mechanic') {
@@ -653,11 +654,100 @@ export async function POST(req: NextRequest) {
 
       if (openSiblings > 0) break
 
+      // If this car was kicked to mechanic to fix something mid-stage (e.g. a leak
+      // spotted during Content), a returnQueue entry sends it back to resume that
+      // stage instead of parking for routing. Only park when nothing is queued.
+      const resumed = await consumeReturnQueue(prisma, stage.vehicleId, user.id)
+      if (resumed) break
+
       // Car fully done — park in awaiting_routing for admin review (never auto-advance).
       await prisma.vehicle.update({
         where: { id: stage.vehicleId },
         data: { status: 'awaiting_routing', currentAssigneeId: null },
       })
+      const vehicleForNotify = await prisma.vehicle.findUnique({
+        where: { id: stage.vehicleId },
+        select: { stockNumber: true, year: true, make: true, model: true },
+      })
+      if (vehicleForNotify) {
+        const { notifyStageReadyForRouting } = await import('@/lib/stage-notifications')
+        notifyStageReadyForRouting({
+          stageId,
+          vehicleId: stage.vehicleId,
+          vehicleStockNumber: vehicleForNotify.stockNumber,
+          vehicleDesc: `${vehicleForNotify.year ?? ''} ${vehicleForNotify.make} ${vehicleForNotify.model}`.trim(),
+          triggeredByUserId: user.id,
+        })
+      }
+      break
+    }
+
+    case 'coordinator_advance': {
+      // The shop coordinator (admin implicit) advances a car OUT of the mechanic
+      // stage: bank everyone's time, mark the stage done, and park the car in
+      // Pending Routing. Optionally files a routing PROPOSAL for a chosen next
+      // stage that an admin one-tap approves; without one, the admin picks.
+      if (user.role !== 'shop_coordinator' && user.role !== 'admin') {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
+      const checklist = Array.isArray(stage.checklist) ? (stage.checklist as ChecklistItem[]) : []
+      // Bank any still-running timers so nobody loses logged hours, and stamp done.
+      for (const [k, t] of Object.entries(timers)) {
+        if (t.timerStartedAt) {
+          const banked = Math.floor((nowMs - new Date(t.timerStartedAt).getTime()) / 1000)
+          await logSession(stageId, stage.vehicleId, k, t.timerStartedAt, now, Math.max(0, banked))
+          timers[k] = { ...t, activeSeconds: (t.activeSeconds || 0) + Math.max(0, banked), timerStartedAt: null, autoPaused: false, done: true, doneAt: t.doneAt || now.toISOString() }
+        } else {
+          timers[k] = { ...t, done: true, doneAt: t.doneAt || now.toISOString() }
+        }
+      }
+      const finalChecklist = checklist.map(it => (it?.approved !== 'declined' ? { ...it, done: true } : it))
+      await persist({
+        checklist: finalChecklist as unknown as Prisma.InputJsonValue,
+        status: 'done',
+        completedAt: now,
+        awaitingParts: false,
+        awaitingPartsName: null,
+        awaitingPartsDate: null,
+        awaitingPartsTracking: null,
+        awaitingPartsSince: null,
+      })
+
+      // A queued return (car kicked to mechanic to fix something mid-stage) wins
+      // over a manual advance — resume the origin stage instead of parking.
+      const advResumed = await consumeReturnQueue(prisma, stage.vehicleId, user.id)
+      if (advResumed) {
+        await prisma.activityLog.create({
+          data: { entityType: 'vehicle', entityId: stage.vehicleId, action: 'coordinator_advance_resumed', actorId: user.id, details: { stage: stage.stage, via: 'mechanic_board' } },
+        }).catch(() => {})
+        break
+      }
+
+      // Optional proposed next stage (routed by an admin on approval).
+      const VALID_PROPOSE = ['detailing', 'content', 'publish', 'completed']
+      const proposed = typeof proposeStage === 'string' && VALID_PROPOSE.includes(proposeStage) ? proposeStage : null
+
+      await prisma.vehicle.update({
+        where: { id: stage.vehicleId },
+        data: {
+          status: 'awaiting_routing',
+          currentAssigneeId: null,
+          ...(proposed
+            ? { routingProposal: { stage: proposed, byId: user.id, byName: user.name, at: now.toISOString() } as Prisma.InputJsonValue }
+            : {}),
+        },
+      })
+
+      await prisma.activityLog.create({
+        data: {
+          entityType: 'vehicle',
+          entityId: stage.vehicleId,
+          action: proposed ? 'coordinator_advance_proposed' : 'coordinator_advance',
+          actorId: user.id,
+          details: { stage: stage.stage, scopeName: stage.scopeName, proposeStage: proposed, via: 'mechanic_board' },
+        },
+      }).catch(() => {})
+
       const vehicleForNotify = await prisma.vehicle.findUnique({
         where: { id: stage.vehicleId },
         select: { stockNumber: true, year: true, make: true, model: true },

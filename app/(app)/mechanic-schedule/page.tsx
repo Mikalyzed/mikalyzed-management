@@ -211,6 +211,7 @@ export default function MechanicBoard() {
   const [expectedDate, setExpectedDate] = useState('')
   const [trackingNumber, setTrackingNumber] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isCoordinator, setIsCoordinator] = useState(false)
   const [canBrowseLanes, setCanBrowseLanes] = useState(false)
   const [showAllQueued, setShowAllQueued] = useState(false)
   const [showRemainingWeek, setShowRemainingWeek] = useState(false)
@@ -238,6 +239,8 @@ export default function MechanicBoard() {
   const [sessionAddedParts, setSessionAddedParts] = useState<{ id: string; name: string; sourceItem: string; sourceSubField?: string }[]>([])
   const [addTaskJob, setAddTaskJob] = useState<JobCard | null>(null)
   const [addTaskItems, setAddTaskItems] = useState<{ name: string; hours: string; note: string }[]>([{ name: '', hours: '', note: '' }])
+  // Shop coordinator "Advance" chooser (park in Pending Routing, or propose a stage).
+  const [advanceJob, setAdvanceJob] = useState<JobCard | null>(null)
   const [addTaskSubmitting, setAddTaskSubmitting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<JobCard | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -265,6 +268,7 @@ export default function MechanicBoard() {
     fetchData()
     fetch('/api/auth/me').then(r => r.json()).then(d => {
       if (d.user?.role === 'admin') setIsAdmin(true)
+      if (d.user?.role === 'shop_coordinator') setIsCoordinator(true)
       // Shop coordinator browses every lane like an admin (view-only powers)
       if (d.user?.role === 'admin' || d.user?.role === 'shop_coordinator') setCanBrowseLanes(true)
     }).catch(() => {})
@@ -302,6 +306,14 @@ export default function MechanicBoard() {
       if (action === 'complete' || action === 'start') setSelectedJob(null)
     } catch { /* ignore */ }
     setActing(false)
+  }
+
+  // Coordinator advance: park the car in Pending Routing, or propose a next stage
+  // for admin approval. Closes the chooser + the detail modal on success.
+  const doAdvance = async (stageId: string, proposeStage?: string) => {
+    await doAction('coordinator_advance', stageId, proposeStage ? { proposeStage } : {})
+    setAdvanceJob(null)
+    setSelectedJob(null)
   }
 
   // Modal handlers: when mechanic clicks "Add task", we open estimateModal first to collect hours,
@@ -821,6 +833,9 @@ export default function MechanicBoard() {
     // Timer control is per-mechanic: if I work this car, my buttons reflect MY
     // timer; otherwise (admin/observer) fall back to the car's aggregate state.
     const iAmOnCar = !!data.currentUserId && (job.assignees || []).some(a => a.id === data.currentUserId)
+    // The shop coordinator isn't a mechanic (never "on" a car) but can advance a
+    // car out of the mechanic stage — park it in Pending Routing or propose where.
+    const canAdvance = isCoordinator && (job.status === 'in_progress' || job.status === 'pending')
     const myRunning = iAmOnCar ? !!job.myTimerRunning : job.timerRunning
     const isShared = (job.assignees?.length || 0) > 1
     // "My part" on a shared car = tasks I own (explicit to me, or original tasks
@@ -976,7 +991,7 @@ export default function MechanicBoard() {
         {/* Quick actions — mechanics only act on cars they're assigned to; admins
             keep full control (override/fix). Unassigned cars must be assigned by
             an admin first, so a mechanic sees no Start until it's theirs. */}
-        {showActions && (isAdmin || iAmOnCar) && (() => {
+        {showActions && (isAdmin || iAmOnCar || canAdvance) && (() => {
           // "Your part done" is a status pill, not an action — it spans the row.
           if (myPartDone) {
             return (
@@ -996,21 +1011,30 @@ export default function MechanicBoard() {
           // trailing button spans the full width (1→full, 2→50/50, 3→two + full).
           type Btn = { key: string; label: string; color: string; disabled?: boolean; title?: string; onClick: () => void }
           const btns: Btn[] = []
-          if (job.status === 'pending' && !myRunning) {
-            btns.push({ key: 'start', label: 'Start', color: '#3b82f6', disabled: acting || !data.isWorkHours, onClick: () => doAction('start', job.id) })
-          }
-          if (myRunning) {
-            btns.push({ key: 'pause', label: 'Pause', color: '#f59e0b', disabled: acting, onClick: () => { openJob(job); setShowPauseModal(true) } })
-            btns.push({ key: 'complete', label: isShared && tasksDone < tasksTotal ? 'Finish My Part' : 'Complete', color: '#22c55e', disabled: acting || (isShared && !myTasksAllDone), title: isShared && !myTasksAllDone ? 'Finish your own tasks first' : undefined, onClick: () => doAction('complete', job.id) })
-          }
-          if (!myRunning && job.status === 'in_progress') {
-            btns.push({ key: 'resume', label: iAmOnCar ? 'Resume' : 'Start', color: '#3b82f6', disabled: acting || !data.isWorkHours, onClick: () => doAction(iAmOnCar ? 'resume' : 'start', job.id) })
-          }
-          if (job.status === 'in_progress') {
-            btns.push({ key: 'addtask', label: 'Add Task', color: '#8b5cf6', disabled: acting, onClick: () => setAddTaskJob(job) })
-          }
-          if (isOver) {
-            btns.push({ key: 'moretime', label: 'Request More Time', color: '#ef4444', disabled: acting, onClick: () => setTimeExtJob(job) })
+          if (isAdmin || iAmOnCar) {
+            // Mechanic/admin timer controls.
+            if (job.status === 'pending' && !myRunning) {
+              btns.push({ key: 'start', label: 'Start', color: '#3b82f6', disabled: acting || !data.isWorkHours, onClick: () => doAction('start', job.id) })
+            }
+            if (myRunning) {
+              btns.push({ key: 'pause', label: 'Pause', color: '#f59e0b', disabled: acting, onClick: () => { openJob(job); setShowPauseModal(true) } })
+              btns.push({ key: 'complete', label: isShared && tasksDone < tasksTotal ? 'Finish My Part' : 'Complete', color: '#22c55e', disabled: acting || (isShared && !myTasksAllDone), title: isShared && !myTasksAllDone ? 'Finish your own tasks first' : undefined, onClick: () => doAction('complete', job.id) })
+            }
+            if (!myRunning && job.status === 'in_progress') {
+              btns.push({ key: 'resume', label: iAmOnCar ? 'Resume' : 'Start', color: '#3b82f6', disabled: acting || !data.isWorkHours, onClick: () => doAction(iAmOnCar ? 'resume' : 'start', job.id) })
+            }
+            if (job.status === 'in_progress') {
+              btns.push({ key: 'addtask', label: 'Add Task', color: '#8b5cf6', disabled: acting, onClick: () => setAddTaskJob(job) })
+            }
+            if (isOver) {
+              btns.push({ key: 'moretime', label: 'Request More Time', color: '#ef4444', disabled: acting, onClick: () => setTimeExtJob(job) })
+            }
+          } else if (canAdvance) {
+            // Shop coordinator: add work anywhere, and advance the car out of mechanic.
+            if (job.status === 'in_progress') {
+              btns.push({ key: 'addtask', label: 'Add Task', color: '#8b5cf6', disabled: acting, onClick: () => setAddTaskJob(job) })
+            }
+            btns.push({ key: 'advance', label: 'Advance ▸', color: '#3b82f6', disabled: acting, onClick: () => setAdvanceJob(job) })
           }
           if (btns.length === 0) return null
           return (
@@ -1706,7 +1730,7 @@ export default function MechanicBoard() {
                                 {/* Per-task hand-off: give this single task to a specific mechanic.
                                     Hidden for not-yet-approved added tasks — those use the
                                     Approve & assign control below (one action). */}
-                                {boardMechanics.length >= 2 && !(item.addedByMechanic && item.approved !== 'approved') && isAdmin && (
+                                {boardMechanics.length >= 2 && !(item.addedByMechanic && item.approved !== 'approved') && (isAdmin || isCoordinator) && (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                     <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Assign to:</span>
                                     {boardMechanics.map(m => {
@@ -2682,6 +2706,55 @@ export default function MechanicBoard() {
           </div>
         </div>
       )}
+
+      {/* Coordinator "Advance" chooser — park in Pending Routing or propose a stage */}
+      {advanceJob && (() => {
+        const j = advanceJob
+        const desc = `${j.vehicle.year ?? ''} ${j.vehicle.make} ${j.vehicle.model}`.trim()
+        const stageBtn = (label: string, stage: string) => (
+          <button key={stage} disabled={acting} onClick={() => doAdvance(j.id, stage)} style={{
+            padding: '11px 12px', borderRadius: 10, border: '1px solid #e2e5ea', background: '#fff',
+            fontSize: 13.5, fontWeight: 650, cursor: acting ? 'default' : 'pointer', color: 'var(--text-primary)',
+          }}>{label}</button>
+        )
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+          }} onClick={() => setAdvanceJob(null)}>
+            <div onClick={e => e.stopPropagation()} style={{
+              background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 420,
+              boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+            }}>
+              <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Advance #{j.vehicle.stockNumber}</p>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 18 }}>{desc}</p>
+
+              <button disabled={acting} onClick={() => doAdvance(j.id)} style={{
+                width: '100%', padding: '12px 0', borderRadius: 12, border: 'none', background: '#3b82f6', color: '#fff',
+                fontSize: 14, fontWeight: 700, cursor: acting ? 'default' : 'pointer', marginBottom: 8,
+              }}>Send to Pending Routing</button>
+              <p style={{ fontSize: 11.5, color: 'var(--text-muted)', margin: '0 0 18px', lineHeight: 1.5 }}>
+                Finishes the mechanic stage and parks the car for the admin to route.
+              </p>
+
+              <div style={{ fontSize: 11, fontWeight: 650, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 8 }}>
+                Or propose where it goes (admin approves)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 18 }}>
+                {stageBtn('Detailing', 'detailing')}
+                {stageBtn('Content', 'content')}
+                {stageBtn('Publish', 'publish')}
+                {stageBtn('Complete', 'completed')}
+              </div>
+
+              <button onClick={() => setAdvanceJob(null)} style={{
+                width: '100%', padding: '10px 0', borderRadius: 10, border: '1px solid #e2e5ea', background: '#fff',
+                fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)',
+              }}>Cancel</button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Time Extension Request Modal */}
       {timeExtJob && (
