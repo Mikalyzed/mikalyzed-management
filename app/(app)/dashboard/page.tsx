@@ -1037,6 +1037,29 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
     }
   }
 
+  /** "The install actually happened, nobody logged it." Stamp the parts handled
+   *  (mode:'mark' — no task created) so the car drops off the No Install Plan
+   *  queue. Reversible via the part record; matches the watchlist's mark action. */
+  const markInstalled = async (vehicleId: string, vehicleLabel: string, partIds: string[]) => {
+    setBusy(true)
+    try {
+      const res = await fetch('/api/parts/install-tasks', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId, partIds, mode: 'mark' }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (res.ok) {
+        await onAction()
+        const n = d.stamped ?? partIds.length
+        flash(`Marked ${n} part${n === 1 ? '' : 's'} installed on ${vehicleLabel}.`)
+      } else {
+        flash(d.error || 'Could not mark installed.')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const rows: Array<{ key: string; n: number; area: string; label: string; crit?: boolean }> = [
     { key: 'routing', n: a.routing.length, area: 'Recon Board', label: 'Waiting to Be Routed' },
     { key: 'installs', n: a.installsTotal, area: 'Recon Board', label: 'Assign the Install' },
@@ -1366,12 +1389,18 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                           >Open ›</button>
                         </div>
                       ))}
-                      <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border-light, #f0f0ec)', background: 'var(--bg-card, #fff)' }}>
+                      <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border-light, #f0f0ec)', background: 'var(--bg-card, #fff)', display: 'flex', flexDirection: 'column', gap: 6 }}>
                         <button
                           style={{ ...miniBtn, width: '100%', justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }}
                           disabled={busy}
                           onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
                         >→ Add Vehicle to Recon</button>
+                        {/* Escape hatch: the work was already done and never logged. */}
+                        <button
+                          style={{ ...miniBtn, width: '100%', justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650 }}
+                          disabled={busy}
+                          onClick={() => markInstalled(v.vehicleId, v.vehicle, group.map(g => g.id))}
+                        >✓ Already Installed</button>
                       </div>
                     </div>
                   )

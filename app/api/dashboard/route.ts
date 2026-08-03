@@ -347,7 +347,9 @@ export async function GET(request: Request) {
       })),
       installs: installItems.slice(0, 15),
       installsTotal: installItems.length,
-      delivered: deliveredParts.map(p => ({ id: p.id, name: p.name, stock: p.vehicle.stockNumber, vehicle: vName(p.vehicle) })),
+      // Receiving a part (carrier delivered → mark received) is an ADMIN action —
+      // the coordinator doesn't take receipt, so this queue is noise on his board.
+      delivered: isCoordinator ? [] : deliveredParts.map(p => ({ id: p.id, name: p.name, stock: p.vehicle.stockNumber, vehicle: vName(p.vehicle) })),
       approvals: isCoordinator ? [] : approvalParts.map(p => ({ id: p.id, name: p.name, url: p.url, stock: p.vehicle.stockNumber, vehicle: vName(p.vehicle) })),
       overdue: overdueExternals.map(e => ({
         id: e.id, stock: e.stockNumber, vehicle: vName(e), shop: e.shopName,
