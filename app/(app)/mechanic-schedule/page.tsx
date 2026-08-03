@@ -976,47 +976,52 @@ export default function MechanicBoard() {
         {/* Quick actions — mechanics only act on cars they're assigned to; admins
             keep full control (override/fix). Unassigned cars must be assigned by
             an admin first, so a mechanic sees no Start until it's theirs. */}
-        {showActions && (isAdmin || iAmOnCar) && (
-          <div className="mech-actions" style={{ display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12, flexWrap: 'wrap' }} onClick={e => e.stopPropagation()}>
-            {myPartDone ? (
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-                borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0',
-                color: '#166534', fontSize: 13, fontWeight: 700,
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                Your part done
-              </span>
-            ) : (
-              <>
-                {job.status === 'pending' && !myRunning && (
-                  <ActionBtn label="Start" color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction('start', job.id)} />
-                )}
-                {myRunning && (
-                  <>
-                    <ActionBtn label="Pause" color="#f59e0b" disabled={acting} onClick={() => { openJob(job); setShowPauseModal(true) }} />
-                    <ActionBtn
-                      label={isShared && tasksDone < tasksTotal ? 'Finish My Part' : 'Complete'}
-                      color="#22c55e"
-                      disabled={acting || (isShared && !myTasksAllDone)}
-                      title={isShared && !myTasksAllDone ? 'Finish your own tasks first' : undefined}
-                      onClick={() => doAction('complete', job.id)}
-                    />
-                  </>
-                )}
-                {!myRunning && job.status === 'in_progress' && (
-                  <ActionBtn label={iAmOnCar ? 'Resume' : 'Start'} color="#3b82f6" disabled={acting || !data.isWorkHours} onClick={() => doAction(iAmOnCar ? 'resume' : 'start', job.id)} />
-                )}
-              </>
-            )}
-            {job.status === 'in_progress' && (
-              <ActionBtn label="Add Task" color="#8b5cf6" disabled={acting} onClick={() => setAddTaskJob(job)} />
-            )}
-            {isOver && (
-              <ActionBtn className="mech-action-full" label="Request More Time" color="#ef4444" disabled={acting} onClick={() => setTimeExtJob(job)} />
-            )}
-          </div>
-        )}
+        {showActions && (isAdmin || iAmOnCar) && (() => {
+          // "Your part done" is a status pill, not an action — it spans the row.
+          if (myPartDone) {
+            return (
+              <div className="mech-actions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 'auto', paddingTop: 12 }} onClick={e => e.stopPropagation()}>
+                <span style={{
+                  gridColumn: '1 / -1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  padding: '8px 14px', borderRadius: 10, background: '#f0fdf4', border: '1px solid #bbf7d0',
+                  color: '#166534', fontSize: 13, fontWeight: 700,
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  Your part done
+                </span>
+              </div>
+            )
+          }
+          // Collect the visible actions, then lay them out two-per-row; an odd
+          // trailing button spans the full width (1→full, 2→50/50, 3→two + full).
+          type Btn = { key: string; label: string; color: string; disabled?: boolean; title?: string; onClick: () => void }
+          const btns: Btn[] = []
+          if (job.status === 'pending' && !myRunning) {
+            btns.push({ key: 'start', label: 'Start', color: '#3b82f6', disabled: acting || !data.isWorkHours, onClick: () => doAction('start', job.id) })
+          }
+          if (myRunning) {
+            btns.push({ key: 'pause', label: 'Pause', color: '#f59e0b', disabled: acting, onClick: () => { openJob(job); setShowPauseModal(true) } })
+            btns.push({ key: 'complete', label: isShared && tasksDone < tasksTotal ? 'Finish My Part' : 'Complete', color: '#22c55e', disabled: acting || (isShared && !myTasksAllDone), title: isShared && !myTasksAllDone ? 'Finish your own tasks first' : undefined, onClick: () => doAction('complete', job.id) })
+          }
+          if (!myRunning && job.status === 'in_progress') {
+            btns.push({ key: 'resume', label: iAmOnCar ? 'Resume' : 'Start', color: '#3b82f6', disabled: acting || !data.isWorkHours, onClick: () => doAction(iAmOnCar ? 'resume' : 'start', job.id) })
+          }
+          if (job.status === 'in_progress') {
+            btns.push({ key: 'addtask', label: 'Add Task', color: '#8b5cf6', disabled: acting, onClick: () => setAddTaskJob(job) })
+          }
+          if (isOver) {
+            btns.push({ key: 'moretime', label: 'Request More Time', color: '#ef4444', disabled: acting, onClick: () => setTimeExtJob(job) })
+          }
+          if (btns.length === 0) return null
+          return (
+            <div className="mech-actions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 'auto', paddingTop: 12 }} onClick={e => e.stopPropagation()}>
+              {btns.map((b, i) => {
+                const spanFull = btns.length % 2 === 1 && i === btns.length - 1
+                return <ActionBtn key={b.key} label={b.label} color={b.color} disabled={b.disabled} title={b.title} onClick={b.onClick} style={spanFull ? { gridColumn: '1 / -1' } : undefined} />
+              })}
+            </div>
+          )
+        })()}
       </div>
     )
   }
@@ -1042,10 +1047,9 @@ export default function MechanicBoard() {
           .msch-tabs { grid-row: 2; grid-column: 1 / -1; justify-self: end; }
           /* When OWH isn't present, tabs still go on row 2 right side */
           .msch-header.no-owh .msch-tabs { grid-row: 1; grid-column: 2; }
-          /* Quick actions: buttons share the row evenly; Request More Time wraps to its own row */
+          /* Quick actions: 2-per-row grid (see renderCard); tighten spacing/size on mobile */
           .mech-actions { gap: 6px !important; }
-          .mech-actions > button { flex: 1 1 0; min-width: 0; padding: 8px 10px !important; font-size: 13px !important; min-height: 36px; }
-          .mech-actions > button.mech-action-full { flex: 1 0 100%; }
+          .mech-actions > button { min-width: 0; padding: 8px 10px !important; font-size: 13px !important; min-height: 36px; }
         }
       `}</style>
 
@@ -1378,6 +1382,11 @@ export default function MechanicBoard() {
         }}>
           <div onClick={e => e.stopPropagation()} style={{
             background: '#fff', borderRadius: 20, width: '100%', maxWidth: 900,
+            // A STABLE height for the job detail so switching tabs, reordering tasks,
+            // or expanding a row scrolls INSIDE the modal instead of resizing the box
+            // and re-centering it (which read as the modal "jumping around"). The small
+            // pause flow keeps its natural compact height.
+            height: showPauseModal ? undefined : 'min(88vh, 780px)',
             maxHeight: '95vh', display: 'flex', flexDirection: 'column',
             boxShadow: '0 25px 60px rgba(0,0,0,0.2)',
           }}>
@@ -3175,12 +3184,13 @@ function CardGrid({ children }: { children: React.ReactNode }) {
   return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gridAutoRows: '1fr', alignItems: 'stretch', gap: 12 }}>{children}</div>
 }
 
-function ActionBtn({ label, color, disabled, onClick, className, title }: { label: string; color: string; disabled?: boolean; onClick: () => void; className?: string; title?: string }) {
+function ActionBtn({ label, color, disabled, onClick, className, title, style }: { label: string; color: string; disabled?: boolean; onClick: () => void; className?: string; title?: string; style?: React.CSSProperties }) {
   return (
     <button onClick={onClick} disabled={disabled} className={className} title={title} style={{
       padding: '8px 16px', borderRadius: 10, border: 'none',
       background: disabled ? '#e5e5e5' : color, color: disabled ? '#999' : '#fff',
       fontSize: 13, fontWeight: 700, cursor: disabled ? 'default' : 'pointer',
+      ...style,
     }}>{label}</button>
   )
 }
