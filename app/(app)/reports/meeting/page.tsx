@@ -533,20 +533,23 @@ export default function MorningMeetingPage() {
 
   /** Inline bottleneck remedies — each is a targeted PATCH through the
    *  normal endpoints; the rule stops firing once the data is fixed. */
-  async function fixBottleneck(b: Bottleneck, choice: number) {
+  async function fixBottleneck(b: Bottleneck, choice: number, note?: string) {
     if (!b.fix) return
     const day = 86400000
     const iso = (days: number) => new Date(Date.now() + days * day).toISOString()
+    // A note ("what did the shop say") rides along as a stamped follow-up entry
+    // (author + days-added + recalculated deadline) so the history reads clearly.
+    const followUp = note?.trim() ? { addFollowUp: { etaDays: choice, note: note.trim() } } : {}
     let res: Response | null = null
     if (b.fix.kind === 'external_return_date') {
       res = await fetch(`/api/external/${b.fix.externalId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expectedReturn: iso(choice) }),
+        body: JSON.stringify({ expectedReturn: iso(choice), ...followUp }),
       })
     } else if (b.fix.kind === 'external_mark_sent') {
       res = await fetch(`/api/external/${b.fix.externalId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'sent', sentDate: new Date().toISOString(), estimatedDays: choice }),
+        body: JSON.stringify({ status: 'sent', sentDate: new Date().toISOString(), estimatedDays: choice, ...followUp }),
       })
     } else if (b.fix.kind === 'clear_awaiting_parts') {
       res = await fetch(`/api/stages/${b.fix.stageId}`, {
@@ -1202,7 +1205,7 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
   flagged: boolean
   external?: ExternalRow
   stuckPart?: PartRow
-  onFix: (b: Bottleneck, choice: number) => Promise<void>
+  onFix: (b: Bottleneck, choice: number, note?: string) => Promise<void>
   onFollowup: (b: Bottleneck) => void
   onReturned: (id: string) => Promise<void>
   onDelete: (id: string, reason: string) => Promise<void>
@@ -1211,6 +1214,7 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
   type ModalKind = null | 'detail' | 'parts' | 'return_date' | 'mark_sent' | 'returned' | 'delete' | 'reschedule'
   const [modal, setModal] = useState<ModalKind>(null)
   const [reason, setReason] = useState('')
+  const [followNote, setFollowNote] = useState('') // "what did the shop say" on a date update
   const [busy, setBusy] = useState(false)
   const [sel, setSel] = useState<Set<string>>(new Set())
   const crit = b.severity === 'crit'
@@ -1218,7 +1222,7 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
   const installFix = b.fix?.kind === 'install_tasks' ? b.fix : null
   const externalId = (b.fix?.kind === 'external_return_date' || b.fix?.kind === 'external_mark_sent') ? b.fix.externalId : null
 
-  const close = () => { setModal(null); setReason('') }
+  const close = () => { setModal(null); setReason(''); setFollowNote('') }
   const run = async (fn: () => Promise<void>) => {
     setBusy(true)
     try { await fn(); close() } finally { setBusy(false) }
@@ -1573,15 +1577,28 @@ function BottleneckCard({ b, flagged, external, stuckPart, onFix, onFollowup, on
                 style={{ width: '100%', resize: 'vertical', marginBottom: 16 }}
               />
             )}
+            {(modal === 'return_date' || modal === 'mark_sent') && (
+              <>
+                <label style={{ display: 'block', fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>What did the shop say?</label>
+                <textarea
+                  autoFocus rows={2}
+                  className="mtg-input"
+                  value={followNote}
+                  onChange={e => setFollowNote(e.target.value)}
+                  placeholder="e.g. Waiting on a back-ordered wheel; called Willy, said end of week (optional but recommended)"
+                  style={{ width: '100%', resize: 'vertical', marginBottom: 14 }}
+                />
+              </>
+            )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {modal === 'return_date' && <>
-                {choiceBtn('In 3 days', () => run(() => onFix(b, 3)), true)}
-                {choiceBtn('In 1 week', () => run(() => onFix(b, 7)))}
-                {choiceBtn('In 2 weeks', () => run(() => onFix(b, 14)))}
+                {choiceBtn('In 3 days', () => run(() => onFix(b, 3, followNote)), true)}
+                {choiceBtn('In 1 week', () => run(() => onFix(b, 7, followNote)))}
+                {choiceBtn('In 2 weeks', () => run(() => onFix(b, 14, followNote)))}
               </>}
               {modal === 'mark_sent' && <>
-                {choiceBtn('Back in 1 week', () => run(() => onFix(b, 7)), true)}
-                {choiceBtn('Back in 2 weeks', () => run(() => onFix(b, 14)))}
+                {choiceBtn('Back in 1 week', () => run(() => onFix(b, 7, followNote)), true)}
+                {choiceBtn('Back in 2 weeks', () => run(() => onFix(b, 14, followNote)))}
               </>}
               {modal === 'returned' && externalId &&
                 choiceBtn('Yes — mark returned', () => run(() => onReturned(externalId)), true)}
