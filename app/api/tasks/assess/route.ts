@@ -401,14 +401,20 @@ export async function POST(req: Request) {
     }
   }
 
-  // Assignee resolution — named person, else the shop coordinator
+  // Assignee resolution — named person, else the person ADDING the task (so it
+  // lands on their own Assignments, which filter strictly by assigneeId). Falls
+  // back to the shop coordinator only if the actor somehow isn't in the team.
   let assignee: { id: string; name: string } | null = null
   const team = await prisma.user.findMany({ where: { isActive: true }, select: { id: true, name: true, role: true } })
   if (a.assigneeName && a.assigneeName.trim()) {
     const q = a.assigneeName.toLowerCase()
     assignee = team.find(u => u.name.toLowerCase().startsWith(q) || u.name.toLowerCase().includes(q)) ?? null
   }
-  if (!assignee) assignee = team.find(u => u.role === 'shop_coordinator') ?? null
+  if (!assignee) {
+    assignee = team.find(u => u.id === user.id)
+      ?? team.find(u => u.role === 'shop_coordinator')
+      ?? null
+  }
 
   let mechanicActive = false
   if (vehicle && a.kind === 'shop_work') {
