@@ -24,13 +24,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const shop = typeof body.shop === 'string' ? body.shop.trim() : ''
   const vendorId = typeof body.vendorId === 'string' && body.vendorId ? body.vendorId : null
   const work = typeof body.work === 'string' ? body.work.trim() : ''
-  const expectedReturn = typeof body.expectedReturn === 'string' && body.expectedReturn ? new Date(body.expectedReturn) : null
+  // Not scheduled yet → create as pending with no dates (fill in later); otherwise
+  // it's going out now, so an expected-back date is required.
+  const pending = body.pending === true
+  const expectedReturn = !pending && typeof body.expectedReturn === 'string' && body.expectedReturn ? new Date(body.expectedReturn) : null
   if (!shop) return NextResponse.json({ error: 'Which shop is doing the work?' }, { status: 400 })
   if (!work) return NextResponse.json({ error: 'What work needs doing?' }, { status: 400 })
-  if (!expectedReturn || isNaN(expectedReturn.getTime())) return NextResponse.json({ error: 'When is it expected back?' }, { status: 400 })
-  // estimatedDays powers the overdue calc on the external card (days from sent → back).
+  if (!pending && (!expectedReturn || isNaN(expectedReturn.getTime()))) {
+    return NextResponse.json({ error: 'When is it expected back?' }, { status: 400 })
+  }
   const now = new Date()
-  const estimatedDays = Math.max(1, Math.round((expectedReturn.getTime() - now.getTime()) / 86400000))
+  // estimatedDays powers the overdue calc on the external card (days from sent → back).
+  const estimatedDays = expectedReturn ? Math.max(1, Math.round((expectedReturn.getTime() - now.getTime()) / 86400000)) : null
 
   const part = await prisma.part.findUnique({
     where: { id },
@@ -52,12 +57,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     externalRepairId = existing.id
     await prisma.externalRepair.update({
       where: { id: existing.id },
-      data: { shopName: shop, repairDescription: work, expectedReturn, estimatedDays, ...(vendorId ? { vendorId } : {}) },
+      data: {
+        shopName: shop, repairDescription: work, ...(vendorId ? { vendorId } : {}),
+        ...(pending
+          ? { status: 'pending', sentDate: null, expectedReturn: null, estimatedDays: null }
+          : { status: 'sent', sentDate: now, expectedReturn, estimatedDays }),
+      },
     })
   } else {
-    // Created as `sent` — the button IS the send action; it lands in the
-    // coordinator's "Waiting on External" list to track and mark Returned. The
-    // car never leaves (partOnly), so no vehicle side-effects.
+    // Scheduled → `sent` now (lands in "Waiting on External" to track + mark
+    // Returned). Not scheduled yet → `pending`, dates filled in later. Either way
+    // the car never leaves (partOnly), so no vehicle side-effects.
     const ext = await prisma.externalRepair.create({
       data: {
         stockNumber: part.vehicle.stockNumber,
@@ -66,12 +76,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         ...(vendorId ? { vendorId } : {}),
         partOnly: true,
         repairDescription: work,
-        status: 'sent',
-        sentDate: now,
-        expectedReturn,
-        estimatedDays,
+        status: pending ? 'pending' : 'sent',
+        sentDate: pending ? null : now,
+        expectedReturn: pending ? null : expectedReturn,
+        estimatedDays: pending ? null : estimatedDays,
         installPartId: id,
-        notes: `"${part.name}" out to ${shop} for: ${work}. Installs in-house on return.`,
+        notes: pending
+          ? `"${part.name}" going to ${shop} for: ${work} (not scheduled yet). Installs in-house on return.`
+          : `"${part.name}" out to ${shop} for: ${work}. Installs in-house on return.`,
         createdById: user.id,
       },
     })

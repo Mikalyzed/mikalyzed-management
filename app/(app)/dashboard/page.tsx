@@ -894,8 +894,9 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                 <span style={stockChip}>#{e.stock}</span>
                 <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.vehicle}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {e.partRepair ? `Part out — ${e.partRepair} · at ${e.shop}` : `At ${e.shop}`}
+                  {e.partRepair ? `${e.status === 'pending' ? 'Part to send' : 'Part out'} — ${e.partRepair} · ${e.shop}` : `At ${e.shop}`}
                   {e.expectedBack ? ` · back ${e.expectedBack}` : ''}
+                  {e.status === 'pending' && e.partRepair && <span style={{ color: '#92400e', fontWeight: 650 }}> · not scheduled</span>}
                   {e.overdueDays > 0 && <span style={{ color: '#b91c1c', fontWeight: 650 }}> · {e.overdueDays}d overdue</span>}
                   {!e.partRepair && e.toInstall > 0 && <span style={{ color: '#1d4ed8', fontWeight: 650 }}> · {e.toInstall} part{e.toInstall === 1 ? '' : 's'} to install on return</span>}
                   {e.partRepair && <span style={{ color: '#1d4ed8', fontWeight: 650 }}> · installs here on return</span>}
@@ -985,6 +986,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
   const [repairVendorId, setRepairVendorId] = useState<string | null>(null)
   const [repairWork, setRepairWork] = useState('')
   const [repairExpected, setRepairExpected] = useState('') // expected-back date (YYYY-MM-DD)
+  const [repairPending, setRepairPending] = useState(false) // not scheduled yet — fill dates later
   const [externalModalId, setExternalModalId] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
   const [declineFor, setDeclineFor] = useState<string | null>(null) // part id
@@ -1072,20 +1074,22 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
    *  in-house when the repair is marked Returned. Clears No Install Plan (a plan
    *  now exists) and stands up the external mission. */
   const sendForRepair = async () => {
-    if (!repairModal || !repairShop.trim() || !repairWork.trim() || !repairExpected) return
+    if (!repairModal || !repairShop.trim() || !repairWork.trim() || (!repairPending && !repairExpected)) return
     setBusy(true)
     try {
-      const expectedIso = new Date(`${repairExpected}T12:00:00`).toISOString()
+      const expectedIso = repairPending || !repairExpected ? null : new Date(`${repairExpected}T12:00:00`).toISOString()
       let ok = 0
       for (const pid of repairModal.partIds) {
         const res = await fetch(`/api/parts/${pid}/send-for-repair`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ shop: repairShop.trim(), vendorId: repairVendorId, work: repairWork.trim(), expectedReturn: expectedIso }),
+          body: JSON.stringify({ shop: repairShop.trim(), vendorId: repairVendorId, work: repairWork.trim(), pending: repairPending, expectedReturn: expectedIso }),
         })
         if (res.ok) ok++
       }
       await onAction()
-      flash(`Sent ${ok} part${ok === 1 ? '' : 's'} to ${repairShop.trim()} for ${repairWork.trim()}. Track it under Waiting on External; mark it Returned when it's back and it queues for install.`)
+      flash(repairPending
+        ? `Logged ${ok} part repair${ok === 1 ? '' : 's'} at ${repairShop.trim()} (not scheduled). Set the dates on the External Repairs card when it goes out.`
+        : `Sent ${ok} part${ok === 1 ? '' : 's'} to ${repairShop.trim()} for ${repairWork.trim()}. Track it under Waiting on External; mark it Returned when it's back and it queues for install.`)
       setRepairModal(null)
     } finally {
       setBusy(false)
@@ -1430,7 +1434,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                           <button
                             style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74', fontWeight: 650 }}
                             disabled={busy}
-                            onClick={() => { setRepairModal({ vehicleId: v.vehicleId, vehicle: v.vehicle, partIds: group.map(g => g.id), partNames: group.map(g => g.name) }); setRepairShop(''); setRepairVendorId(null); setRepairWork(''); setRepairExpected('') }}
+                            onClick={() => { setRepairModal({ vehicleId: v.vehicleId, vehicle: v.vehicle, partIds: group.map(g => g.id), partNames: group.map(g => g.name) }); setRepairShop(''); setRepairVendorId(null); setRepairWork(''); setRepairExpected(''); setRepairPending(false) }}
                           >→ Send Out</button>
                           <button
                             style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650 }}
@@ -1525,14 +1529,26 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
               placeholder="e.g. Reupholster the door panels"
               style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 12 }}
             />
-            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Expected back</label>
-            <input
-              type="date" value={repairExpected} onChange={e => setRepairExpected(e.target.value)}
-              min={new Date().toISOString().split('T')[0]}
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 20 }}
-            />
+            {/* Not scheduled yet → create as pending, fill dates later (parity with the external form). */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: repairPending ? '#fef3c7' : '#f9fafb', border: `1px solid ${repairPending ? '#fcd34d' : '#e2e5ea'}`, cursor: 'pointer', fontSize: 13, marginBottom: 12 }}>
+              <input type="checkbox" checked={repairPending} onChange={e => setRepairPending(e.target.checked)} style={{ width: 17, height: 17, cursor: 'pointer' }} />
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Not scheduled yet</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>Track it as pending — set the send/return dates later.</div>
+              </div>
+            </label>
+            {!repairPending && (
+              <>
+                <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Expected back</label>
+                <input
+                  type="date" value={repairExpected} onChange={e => setRepairExpected(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 20 }}
+                />
+              </>
+            )}
             {(() => {
-              const ready = !!repairShop.trim() && !!repairWork.trim() && !!repairExpected
+              const ready = !!repairShop.trim() && !!repairWork.trim() && (repairPending || !!repairExpected)
               return (
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setRepairModal(null)} disabled={busy} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #e2e5ea', background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)' }}>Cancel</button>
@@ -1540,7 +1556,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                     onClick={sendForRepair}
                     disabled={busy || !ready}
                     style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: ready ? '#c2410c' : '#e5e5e5', color: '#fff', fontSize: 14, fontWeight: 700, cursor: ready ? 'pointer' : 'default' }}
-                  >{busy ? 'Sending…' : 'Send Out'}</button>
+                  >{busy ? 'Saving…' : repairPending ? 'Save Pending' : 'Send Out'}</button>
                 </div>
               )
             })()}

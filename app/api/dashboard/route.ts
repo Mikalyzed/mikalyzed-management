@@ -418,9 +418,12 @@ export async function GET(request: Request) {
         .filter(pt => pt.status === 'requested')
         .map(pt => ({ partId: pt.partId, part: pt.part, stock: pt.stock, vehicle: pt.vehicle, ageDays: pt.ageDays })),
       externalOut: report.externalRepairs
-        // Cars out at a shop, PLUS parts sent out for work that install here on
-        // return (Send Out for Repair — partOnly + installPartId).
-        .filter(e => ['sent', 'in_progress', 'ready'].includes(e.status) && (!e.partOnly || !!e.installPartId))
+        // Cars out at a shop, PLUS parts out for work that install here on return
+        // (Send Out for Repair — partOnly + installPartId), including ones still
+        // pending (not scheduled yet) so they don't get forgotten.
+        .filter(e =>
+          (['sent', 'in_progress', 'ready'].includes(e.status) && !e.partOnly) ||
+          (e.partOnly && !!e.installPartId && ['pending', 'sent', 'in_progress', 'ready'].includes(e.status)))
         .map(e => ({
           externalId: e.externalId, stock: e.stock, vehicle: e.vehicle, shop: e.shop,
           status: e.status, expectedBack: e.expectedBack, overdueDays: e.overdueDays,
