@@ -39,7 +39,7 @@ type DashboardData = {
   watchlistCount?: number | null
   coordinator?: {
     sourceQueue: Array<{ partId: string; part: string; stock: string; vehicle: string; ageDays: number }>
-    externalOut: Array<{ externalId: string; stock: string; vehicle: string; shop: string; status: string; expectedBack: string | null; overdueDays: number; toInstall: number; partRepair?: string | null }>
+    externalOut: Array<{ externalId: string; stock: string; vehicle: string; shop: string; status: string; expectedBack: string | null; overdueDays: number; toInstall: number; partRepair?: string | null; plannedSend?: string | null }>
     watchlist: Array<{ severity: string; stock: string | null; vehicle: string | null; where: string | null; issue: string; detail: string }>
   } | null
   attention?: {
@@ -896,7 +896,9 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {e.partRepair ? `${e.status === 'pending' ? 'Part to send' : 'Part out'} — ${e.partRepair} · ${e.shop}` : `At ${e.shop}`}
                   {e.expectedBack ? ` · back ${e.expectedBack}` : ''}
-                  {e.status === 'pending' && e.partRepair && <span style={{ color: '#92400e', fontWeight: 650 }}> · not scheduled</span>}
+                  {e.status === 'pending' && e.partRepair && (
+                    <span style={{ color: '#92400e', fontWeight: 650 }}> · {e.plannedSend ? `going out ${e.plannedSend}` : 'not scheduled'}</span>
+                  )}
                   {e.overdueDays > 0 && <span style={{ color: '#b91c1c', fontWeight: 650 }}> · {e.overdueDays}d overdue</span>}
                   {!e.partRepair && e.toInstall > 0 && <span style={{ color: '#1d4ed8', fontWeight: 650 }}> · {e.toInstall} part{e.toInstall === 1 ? '' : 's'} to install on return</span>}
                   {e.partRepair && <span style={{ color: '#1d4ed8', fontWeight: 650 }}> · installs here on return</span>}
@@ -985,6 +987,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
   const [repairShop, setRepairShop] = useState('')
   const [repairVendorId, setRepairVendorId] = useState<string | null>(null)
   const [repairWork, setRepairWork] = useState('')
+  const [repairSendDate, setRepairSendDate] = useState('') // going-out date (YYYY-MM-DD); today = send now, future = planned
   const [repairExpected, setRepairExpected] = useState('') // expected-back date (YYYY-MM-DD)
   const [repairPending, setRepairPending] = useState(false) // not scheduled yet — fill dates later
   const [externalModalId, setExternalModalId] = useState<string | null>(null)
@@ -1078,11 +1081,12 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
     setBusy(true)
     try {
       const expectedIso = repairPending || !repairExpected ? null : new Date(`${repairExpected}T12:00:00`).toISOString()
+      const sendIso = repairPending || !repairSendDate ? null : new Date(`${repairSendDate}T12:00:00`).toISOString()
       let ok = 0
       for (const pid of repairModal.partIds) {
         const res = await fetch(`/api/parts/${pid}/send-for-repair`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ shop: repairShop.trim(), vendorId: repairVendorId, work: repairWork.trim(), pending: repairPending, expectedReturn: expectedIso }),
+          body: JSON.stringify({ shop: repairShop.trim(), vendorId: repairVendorId, work: repairWork.trim(), pending: repairPending, sendDate: sendIso, expectedReturn: expectedIso }),
         })
         if (res.ok) ok++
       }
@@ -1434,7 +1438,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                           <button
                             style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74', fontWeight: 650 }}
                             disabled={busy}
-                            onClick={() => { setRepairModal({ vehicleId: v.vehicleId, vehicle: v.vehicle, partIds: group.map(g => g.id), partNames: group.map(g => g.name) }); setRepairShop(''); setRepairVendorId(null); setRepairWork(''); setRepairExpected(''); setRepairPending(false) }}
+                            onClick={() => { setRepairModal({ vehicleId: v.vehicleId, vehicle: v.vehicle, partIds: group.map(g => g.id), partNames: group.map(g => g.name) }); setRepairShop(''); setRepairVendorId(null); setRepairWork(''); setRepairSendDate(new Date().toISOString().split('T')[0]); setRepairExpected(''); setRepairPending(false) }}
                           >→ Send Out</button>
                           <button
                             style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650 }}
@@ -1538,14 +1542,24 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
               </div>
             </label>
             {!repairPending && (
-              <>
-                <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Expected back</label>
-                <input
-                  type="date" value={repairExpected} onChange={e => setRepairExpected(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 20 }}
-                />
-              </>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Going out</label>
+                  <input
+                    type="date" value={repairSendDate} onChange={e => setRepairSendDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Expected back</label>
+                  <input
+                    type="date" value={repairExpected} onChange={e => setRepairExpected(e.target.value)}
+                    min={repairSendDate || new Date().toISOString().split('T')[0]}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }}
+                  />
+                </div>
+              </div>
             )}
             {(() => {
               const ready = !!repairShop.trim() && !!repairWork.trim() && (repairPending || !!repairExpected)

@@ -429,6 +429,7 @@ export async function GET(request: Request) {
           status: e.status, expectedBack: e.expectedBack, overdueDays: e.overdueDays,
           toInstall: toInstallByStock.get(e.stock) ?? 0,
           partRepair: e.partOnly && !!e.installPartId ? e.work : null,
+          plannedSend: e.plannedSend,
         })),
       watchlist: bottlenecks,
     }

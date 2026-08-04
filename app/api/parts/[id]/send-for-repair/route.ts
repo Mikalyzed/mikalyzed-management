@@ -24,9 +24,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const shop = typeof body.shop === 'string' ? body.shop.trim() : ''
   const vendorId = typeof body.vendorId === 'string' && body.vendorId ? body.vendorId : null
   const work = typeof body.work === 'string' ? body.work.trim() : ''
-  // Not scheduled yet → create as pending with no dates (fill in later); otherwise
-  // it's going out now, so an expected-back date is required.
+  // Three timings:
+  //  - Not scheduled yet → pending, no dates (fill later).
+  //  - Going out on a FUTURE date → pending + plannedSendDate (planned, not gone;
+  //    the "never sent" watchlist nags if that date passes).
+  //  - Going out today → sent now.
+  // A scheduled repair (either of the last two) needs an expected-back date.
   const pending = body.pending === true
+  const sendDate = !pending && typeof body.sendDate === 'string' && body.sendDate ? new Date(body.sendDate) : null
   const expectedReturn = !pending && typeof body.expectedReturn === 'string' && body.expectedReturn ? new Date(body.expectedReturn) : null
   if (!shop) return NextResponse.json({ error: 'Which shop is doing the work?' }, { status: 400 })
   if (!work) return NextResponse.json({ error: 'What work needs doing?' }, { status: 400 })
@@ -34,8 +39,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'When is it expected back?' }, { status: 400 })
   }
   const now = new Date()
-  // estimatedDays powers the overdue calc on the external card (days from sent → back).
-  const estimatedDays = expectedReturn ? Math.max(1, Math.round((expectedReturn.getTime() - now.getTime()) / 86400000)) : null
+  const sendDayValid = sendDate && !isNaN(sendDate.getTime())
+  // Future going-out date (calendar day after today) → planned rather than sent now.
+  const isPlanned = !pending && sendDayValid && sendDate!.toISOString().slice(0, 10) > now.toISOString().slice(0, 10)
+  const effectiveSend = isPlanned ? sendDate! : now
+  // estimatedDays powers the overdue calc on the external card (days from send → back).
+  const estimatedDays = expectedReturn ? Math.max(1, Math.round((expectedReturn.getTime() - effectiveSend.getTime()) / 86400000)) : null
+  // status/date shape for whichever timing applies.
+  const timing = pending
+    ? { status: 'pending', sentDate: null, plannedSendDate: null, expectedReturn: null, estimatedDays: null }
+    : isPlanned
+      ? { status: 'pending', sentDate: null, plannedSendDate: sendDate!, expectedReturn, estimatedDays }
+      : { status: 'sent', sentDate: now, plannedSendDate: null, expectedReturn, estimatedDays }
 
   const part = await prisma.part.findUnique({
     where: { id },
@@ -59,15 +74,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       where: { id: existing.id },
       data: {
         shopName: shop, repairDescription: work, ...(vendorId ? { vendorId } : {}),
-        ...(pending
-          ? { status: 'pending', sentDate: null, expectedReturn: null, estimatedDays: null }
-          : { status: 'sent', sentDate: now, expectedReturn, estimatedDays }),
+        ...timing,
       },
     })
   } else {
-    // Scheduled → `sent` now (lands in "Waiting on External" to track + mark
-    // Returned). Not scheduled yet → `pending`, dates filled in later. Either way
-    // the car never leaves (partOnly), so no vehicle side-effects.
+    // Sent now → lands in "Waiting on External" to track + mark Returned. Planned
+    // or not-scheduled → pending. Either way the car never leaves (partOnly), so
+    // no vehicle side-effects.
     const ext = await prisma.externalRepair.create({
       data: {
         stockNumber: part.vehicle.stockNumber,
@@ -76,14 +89,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         ...(vendorId ? { vendorId } : {}),
         partOnly: true,
         repairDescription: work,
-        status: pending ? 'pending' : 'sent',
-        sentDate: pending ? null : now,
-        expectedReturn: pending ? null : expectedReturn,
-        estimatedDays: pending ? null : estimatedDays,
+        ...timing,
         installPartId: id,
         notes: pending
           ? `"${part.name}" going to ${shop} for: ${work} (not scheduled yet). Installs in-house on return.`
-          : `"${part.name}" out to ${shop} for: ${work}. Installs in-house on return.`,
+          : isPlanned
+            ? `"${part.name}" scheduled to go to ${shop} for: ${work}. Installs in-house on return.`
+            : `"${part.name}" out to ${shop} for: ${work}. Installs in-house on return.`,
         createdById: user.id,
       },
     })
