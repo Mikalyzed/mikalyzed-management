@@ -1077,7 +1077,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
    *  in-house when the repair is marked Returned. Clears No Install Plan (a plan
    *  now exists) and stands up the external mission. */
   const sendForRepair = async () => {
-    if (!repairModal || !repairShop.trim() || !repairWork.trim() || (!repairPending && !repairExpected)) return
+    if (!repairModal || !repairShop.trim() || !repairWork.trim() || (!repairPending && !repairSendDate)) return
     setBusy(true)
     try {
       const expectedIso = repairPending || !repairExpected ? null : new Date(`${repairExpected}T12:00:00`).toISOString()
@@ -1556,7 +1556,7 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
               </>
             )}
             {(() => {
-              const ready = !!repairShop.trim() && !!repairWork.trim() && (repairPending || !!repairExpected)
+              const ready = !!repairShop.trim() && !!repairWork.trim() && (repairPending || !!repairSendDate)
               return (
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button onClick={() => setRepairModal(null)} disabled={busy} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #e2e5ea', background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)' }}>Cancel</button>

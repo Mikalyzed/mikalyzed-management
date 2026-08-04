@@ -35,22 +35,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const expectedReturn = !pending && typeof body.expectedReturn === 'string' && body.expectedReturn ? new Date(body.expectedReturn) : null
   if (!shop) return NextResponse.json({ error: 'Which shop is doing the work?' }, { status: 400 })
   if (!work) return NextResponse.json({ error: 'What work needs doing?' }, { status: 400 })
-  if (!pending && (!expectedReturn || isNaN(expectedReturn.getTime()))) {
-    return NextResponse.json({ error: 'When is it expected back?' }, { status: 400 })
-  }
+  // Expected-back is optional — a scheduled repair just needs to know it's going
+  // out (defaults to today if no date given). Ignore an unparseable date.
+  const expectedBack = expectedReturn && !isNaN(expectedReturn.getTime()) ? expectedReturn : null
   const now = new Date()
   const sendDayValid = sendDate && !isNaN(sendDate.getTime())
   // Future going-out date (calendar day after today) → planned rather than sent now.
   const isPlanned = !pending && sendDayValid && sendDate!.toISOString().slice(0, 10) > now.toISOString().slice(0, 10)
   const effectiveSend = isPlanned ? sendDate! : now
   // estimatedDays powers the overdue calc on the external card (days from send → back).
-  const estimatedDays = expectedReturn ? Math.max(1, Math.round((expectedReturn.getTime() - effectiveSend.getTime()) / 86400000)) : null
+  const estimatedDays = expectedBack ? Math.max(1, Math.round((expectedBack.getTime() - effectiveSend.getTime()) / 86400000)) : null
   // status/date shape for whichever timing applies.
   const timing = pending
     ? { status: 'pending', sentDate: null, plannedSendDate: null, expectedReturn: null, estimatedDays: null }
     : isPlanned
-      ? { status: 'pending', sentDate: null, plannedSendDate: sendDate!, expectedReturn, estimatedDays }
-      : { status: 'sent', sentDate: now, plannedSendDate: null, expectedReturn, estimatedDays }
+      ? { status: 'pending', sentDate: null, plannedSendDate: sendDate!, expectedReturn: expectedBack, estimatedDays }
+      : { status: 'sent', sentDate: now, plannedSendDate: null, expectedReturn: expectedBack, estimatedDays }
 
   const part = await prisma.part.findUnique({
     where: { id },
