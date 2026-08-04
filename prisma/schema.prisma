@@ -727,6 +727,11 @@ model ExternalRepair {
   // until the part is received. Cleared on receive → the mission goes live and
   // the "never sent" watchlist rule skips it while it's still blocked.
   blockedOnPartId   String?   @map("blocked_on_part_id")
+  // Set when a RECEIVED part is sent OUT for work (e.g. upholstery) and must be
+  // installed IN-HOUSE on return: marking this repair `returned` queues an
+  // "Install: <part>" task onto the car's mechanic recon. Distinct from
+  // installVenue:'external' (which means the outside shop installs it on the car).
+  installPartId     String?   @map("install_part_id")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 

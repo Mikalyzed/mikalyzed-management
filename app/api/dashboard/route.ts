@@ -418,11 +418,14 @@ export async function GET(request: Request) {
         .filter(pt => pt.status === 'requested')
         .map(pt => ({ partId: pt.partId, part: pt.part, stock: pt.stock, vehicle: pt.vehicle, ageDays: pt.ageDays })),
       externalOut: report.externalRepairs
-        .filter(e => !e.partOnly && ['sent', 'in_progress', 'ready'].includes(e.status))
+        // Cars out at a shop, PLUS parts sent out for work that install here on
+        // return (Send Out for Repair — partOnly + installPartId).
+        .filter(e => ['sent', 'in_progress', 'ready'].includes(e.status) && (!e.partOnly || !!e.installPartId))
         .map(e => ({
           externalId: e.externalId, stock: e.stock, vehicle: e.vehicle, shop: e.shop,
           status: e.status, expectedBack: e.expectedBack, overdueDays: e.overdueDays,
           toInstall: toInstallByStock.get(e.stock) ?? 0,
+          partRepair: e.partOnly && !!e.installPartId ? e.work : null,
         })),
       watchlist: bottlenecks,
     }

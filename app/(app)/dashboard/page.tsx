@@ -9,6 +9,7 @@ import ExternalRepairModal from '@/components/ExternalRepairModal'
 import BoughtPartModal from '@/components/BoughtPartModal'
 import ConfirmDialog, { type ConfirmState } from '@/components/ConfirmDialog'
 import SmartTaskModal from '@/components/SmartTaskModal'
+import VendorSearch from '@/components/VendorSearch'
 import { CALENDAR_TYPE_LABELS, CALENDAR_TYPE_COLORS } from '@/lib/calendar'
 import ReconTaskCard from '@/components/ReconTaskCard'
 
@@ -38,7 +39,7 @@ type DashboardData = {
   watchlistCount?: number | null
   coordinator?: {
     sourceQueue: Array<{ partId: string; part: string; stock: string; vehicle: string; ageDays: number }>
-    externalOut: Array<{ externalId: string; stock: string; vehicle: string; shop: string; status: string; expectedBack: string | null; overdueDays: number; toInstall: number }>
+    externalOut: Array<{ externalId: string; stock: string; vehicle: string; shop: string; status: string; expectedBack: string | null; overdueDays: number; toInstall: number; partRepair?: string | null }>
     watchlist: Array<{ severity: string; stock: string | null; vehicle: string | null; where: string | null; issue: string; detail: string }>
   } | null
   attention?: {
@@ -893,10 +894,11 @@ function CoordinatorBoard({ c, tasks, onChanged, onTaskCreated }: {
                 <span style={stockChip}>#{e.stock}</span>
                 <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.vehicle}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  At {e.shop}
+                  {e.partRepair ? `Part out — ${e.partRepair} · at ${e.shop}` : `At ${e.shop}`}
                   {e.expectedBack ? ` · back ${e.expectedBack}` : ''}
                   {e.overdueDays > 0 && <span style={{ color: '#b91c1c', fontWeight: 650 }}> · {e.overdueDays}d overdue</span>}
-                  {e.toInstall > 0 && <span style={{ color: '#1d4ed8', fontWeight: 650 }}> · {e.toInstall} part{e.toInstall === 1 ? '' : 's'} to install on return</span>}
+                  {!e.partRepair && e.toInstall > 0 && <span style={{ color: '#1d4ed8', fontWeight: 650 }}> · {e.toInstall} part{e.toInstall === 1 ? '' : 's'} to install on return</span>}
+                  {e.partRepair && <span style={{ color: '#1d4ed8', fontWeight: 650 }}> · installs here on return</span>}
                 </div>
               </div>
               {e.status === 'ready' && (
@@ -977,6 +979,12 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
   const [routeVehicleId, setRouteVehicleId] = useState<string | null>(null)
   const [routeInitialStage, setRouteInitialStage] = useState<string | undefined>(undefined)
   const [detailPartId, setDetailPartId] = useState<string | null>(null)
+  // "Send Out for Repair": part(s) go to an outside shop for work, install here on return.
+  const [repairModal, setRepairModal] = useState<{ vehicleId: string; vehicle: string; partIds: string[]; partNames: string[] } | null>(null)
+  const [repairShop, setRepairShop] = useState('')
+  const [repairVendorId, setRepairVendorId] = useState<string | null>(null)
+  const [repairWork, setRepairWork] = useState('')
+  const [repairExpected, setRepairExpected] = useState('') // expected-back date (YYYY-MM-DD)
   const [externalModalId, setExternalModalId] = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null)
   const [declineFor, setDeclineFor] = useState<string | null>(null) // part id
@@ -1055,6 +1063,30 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
       } else {
         flash(d.error || 'Could not mark installed.')
       }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Send the part(s) out to a shop for WORK (e.g. upholstery); they install
+   *  in-house when the repair is marked Returned. Clears No Install Plan (a plan
+   *  now exists) and stands up the external mission. */
+  const sendForRepair = async () => {
+    if (!repairModal || !repairShop.trim() || !repairWork.trim() || !repairExpected) return
+    setBusy(true)
+    try {
+      const expectedIso = new Date(`${repairExpected}T12:00:00`).toISOString()
+      let ok = 0
+      for (const pid of repairModal.partIds) {
+        const res = await fetch(`/api/parts/${pid}/send-for-repair`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ shop: repairShop.trim(), vendorId: repairVendorId, work: repairWork.trim(), expectedReturn: expectedIso }),
+        })
+        if (res.ok) ok++
+      }
+      await onAction()
+      flash(`Sent ${ok} part${ok === 1 ? '' : 's'} to ${repairShop.trim()} for ${repairWork.trim()}. Track it under Waiting on External; mark it Returned when it's back and it queues for install.`)
+      setRepairModal(null)
     } finally {
       setBusy(false)
     }
@@ -1364,14 +1396,17 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                       border: '1px solid var(--border-light, #f0f0ec)', borderRadius: 12,
                       background: 'var(--bg-primary, #f8f8f6)', overflow: 'hidden', marginBottom: 8,
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', minWidth: 0 }}>
-                        <span style={stockChip}>#{v.stock}</span>
-                        <span style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 13, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {/* Car-first: stock chip on top, full car name on its own line below. */}
+                      <div style={{ padding: '10px 12px', minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={stockChip}>#{v.stock}</span>
+                          {v.sold && (
+                            <span style={{ fontSize: 10.5, fontWeight: 650, color: '#b91c1c', background: '#fdecef', border: '1px solid #fecaca', padding: '1px 8px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0 }}>Sold</span>
+                          )}
+                        </div>
+                        <div style={{ fontWeight: 700, fontSize: 13, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {v.vehicle}
-                        </span>
-                        {v.sold && (
-                          <span style={{ fontSize: 10.5, fontWeight: 650, color: '#b91c1c', background: '#fdecef', border: '1px solid #fecaca', padding: '1px 8px', borderRadius: 100, whiteSpace: 'nowrap', flexShrink: 0 }}>Sold</span>
-                        )}
+                        </div>
                       </div>
                       {group.map(p => (
                         <div key={p.id} style={{
@@ -1390,17 +1425,25 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
                         </div>
                       ))}
                       <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border-light, #f0f0ec)', background: 'var(--bg-card, #fff)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {/* Top row 50/50: send the part out for work, or mark it already done. */}
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button
+                            style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#fff7ed', color: '#c2410c', border: '1px solid #fdba74', fontWeight: 650 }}
+                            disabled={busy}
+                            onClick={() => { setRepairModal({ vehicleId: v.vehicleId, vehicle: v.vehicle, partIds: group.map(g => g.id), partNames: group.map(g => g.name) }); setRepairShop(''); setRepairVendorId(null); setRepairWork(''); setRepairExpected('') }}
+                          >→ Send Out</button>
+                          <button
+                            style={{ ...miniBtn, flex: 1, minWidth: 0, justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650 }}
+                            disabled={busy}
+                            onClick={() => markInstalled(v.vehicleId, v.vehicle, group.map(g => g.id))}
+                          >✓ Installed</button>
+                        </div>
+                        {/* Primary (most common): route the car into recon to install in-house. */}
                         <button
                           style={{ ...miniBtn, width: '100%', justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#eaf0fe', color: '#1d4ed8', border: '1px solid #bfd3fc', fontWeight: 650 }}
                           disabled={busy}
                           onClick={() => sendToMechanic(v.vehicleId, v.vehicle, group.map(g => g.id))}
-                        >→ Add Vehicle to Recon</button>
-                        {/* Escape hatch: the work was already done and never logged. */}
-                        <button
-                          style={{ ...miniBtn, width: '100%', justifyContent: 'center', display: 'inline-flex', padding: '7px 0', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', fontWeight: 650 }}
-                          disabled={busy}
-                          onClick={() => markInstalled(v.vehicleId, v.vehicle, group.map(g => g.id))}
-                        >✓ Already Installed</button>
+                        >→ Send to Recon</button>
                       </div>
                     </div>
                   )
@@ -1452,6 +1495,57 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
           onClose={() => setExternalModalId(null)}
           onChanged={onAction}
         />
+      )}
+
+      {/* Send Out for Repair — part goes to an outside shop for work, installs here on return */}
+      {repairModal && (
+        <div onClick={() => !busy && setRepairModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 420, boxShadow: '0 20px 60px rgba(0,0,0,0.15)' }}>
+            <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>Send Out for Repair</p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16, lineHeight: 1.5 }}>
+              {repairModal.partNames.length === 1 ? repairModal.partNames[0] : `${repairModal.partNames.length} parts`} · {repairModal.vehicle}. It goes to the shop for work and comes back to the recon board to be installed.
+            </p>
+            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Which shop?</label>
+            <div style={{ marginBottom: 12 }}>
+              <VendorSearch
+                placeholder="Search saved shops…"
+                initialName={repairShop}
+                onSelect={v => { setRepairShop(v.name); setRepairVendorId(v.id) }}
+              />
+              {repairShop && (
+                <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span><strong>{repairShop}</strong></span>
+                  <button type="button" onClick={() => { setRepairShop(''); setRepairVendorId(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a', fontSize: 13, fontWeight: 600 }}>Clear</button>
+                </div>
+              )}
+            </div>
+            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>What work?</label>
+            <input
+              value={repairWork} onChange={e => setRepairWork(e.target.value)}
+              placeholder="e.g. Reupholster the door panels"
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 12 }}
+            />
+            <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Expected back</label>
+            <input
+              type="date" value={repairExpected} onChange={e => setRepairExpected(e.target.value)}
+              min={new Date().toISOString().split('T')[0]}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 20 }}
+            />
+            {(() => {
+              const ready = !!repairShop.trim() && !!repairWork.trim() && !!repairExpected
+              return (
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={() => setRepairModal(null)} disabled={busy} style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: '1px solid #e2e5ea', background: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-secondary)' }}>Cancel</button>
+                  <button
+                    onClick={sendForRepair}
+                    disabled={busy || !ready}
+                    style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: ready ? '#c2410c' : '#e5e5e5', color: '#fff', fontSize: 14, fontWeight: 700, cursor: ready ? 'pointer' : 'default' }}
+                  >{busy ? 'Sending…' : 'Send Out'}</button>
+                </div>
+              )
+            })()}
+          </div>
+        </div>
       )}
 
       {/* The real routing modal, natively — instant, no iframe */}

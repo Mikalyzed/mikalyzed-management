@@ -185,6 +185,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
+  // A part sent OUT for work (upholstery etc.) is back — queue its in-house install
+  // onto the car's mechanic recon. Fires for partOnly repairs linked to a part,
+  // independent of the car-status side-effects above (the car never left).
+  if (typeof data.status === 'string' && data.status === 'returned' && priorStatus !== 'returned' && updated.installPartId) {
+    const { queuePartInstallOnReturn } = await import('@/lib/part-install')
+    await queuePartInstallOnReturn(updated.installPartId, user.id)
+  }
+
   return NextResponse.json({ repair: updated })
 }
 

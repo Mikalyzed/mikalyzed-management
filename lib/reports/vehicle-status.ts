@@ -56,7 +56,7 @@ export async function buildVehicleStatusReport() {
       select: {
         id: true, stockNumber: true, year: true, make: true, model: true, shopName: true,
         repairDescription: true, status: true, sentDate: true, expectedReturn: true,
-        atDealership: true, partOnly: true, notes: true, createdAt: true, followUps: true, plannedSendDate: true, blockedOnPartId: true,
+        atDealership: true, partOnly: true, notes: true, createdAt: true, followUps: true, plannedSendDate: true, blockedOnPartId: true, installPartId: true,
       },
       orderBy: { expectedReturn: 'asc' },
     }),
@@ -176,6 +176,8 @@ export async function buildVehicleStatusReport() {
       status: e.status,
       atDealership: e.atDealership,
       partOnly: e.partOnly,
+      // A part sent OUT for work that installs in-house on return (Send Out for Repair).
+      installPartId: e.installPartId ?? null,
       // Gated on a part that hasn't landed yet — the mission is visible but the
       // "never sent" watchlist rule skips it until the part is received.
       blockedOnPart: !!e.blockedOnPartId,
