@@ -1534,8 +1534,8 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
               style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 12 }}
             />
             {/* Not scheduled yet → create as pending, fill dates later (parity with the external form). */}
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, background: repairPending ? '#fef3c7' : '#f9fafb', border: `1px solid ${repairPending ? '#fcd34d' : '#e2e5ea'}`, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>
-              <input type="checkbox" checked={repairPending} onChange={e => setRepairPending(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px', borderRadius: 10, background: repairPending ? '#fef3c7' : '#f9fafb', border: `1px solid ${repairPending ? '#fcd34d' : '#e2e5ea'}`, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>
+              <input type="checkbox" checked={repairPending} onChange={e => setRepairPending(e.target.checked)} style={{ width: 17, height: 17, cursor: 'pointer' }} />
               Not scheduled yet
             </label>
             {!repairPending && (
