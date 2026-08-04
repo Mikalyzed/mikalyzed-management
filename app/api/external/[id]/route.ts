@@ -162,6 +162,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
   }
 
+  // Keep the coordinator's board in sync: the "pick it up — it's ready" task only
+  // belongs while the external is actually READY. If it leaves ready (reverted by
+  // mistake, or the car came back / returned), remove any open pickup task so it
+  // stops lingering in their Assignments.
+  if (typeof data.status === 'string' && data.status !== priorStatus && data.status !== 'ready') {
+    await prisma.task.deleteMany({
+      where: { externalRepairId: id, missionType: 'retrieve', status: { not: 'done' } },
+    }).catch(() => {})
+  }
+
   // Vehicle status side-effects driven by external repair status transitions:
   if (typeof data.status === 'string' && data.status !== priorStatus && !partOnly) {
     if (data.status === 'sent' || data.status === 'in_progress') {
