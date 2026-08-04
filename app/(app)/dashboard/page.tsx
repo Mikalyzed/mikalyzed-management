@@ -1534,32 +1534,25 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
               style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 12 }}
             />
             {/* Not scheduled yet → create as pending, fill dates later (parity with the external form). */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: repairPending ? '#fef3c7' : '#f9fafb', border: `1px solid ${repairPending ? '#fcd34d' : '#e2e5ea'}`, cursor: 'pointer', fontSize: 13, marginBottom: 12 }}>
-              <input type="checkbox" checked={repairPending} onChange={e => setRepairPending(e.target.checked)} style={{ width: 17, height: 17, cursor: 'pointer' }} />
-              <div>
-                <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Not scheduled yet</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 1 }}>Track it as pending — set the send/return dates later.</div>
-              </div>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderRadius: 10, background: repairPending ? '#fef3c7' : '#f9fafb', border: `1px solid ${repairPending ? '#fcd34d' : '#e2e5ea'}`, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>
+              <input type="checkbox" checked={repairPending} onChange={e => setRepairPending(e.target.checked)} style={{ width: 16, height: 16, cursor: 'pointer' }} />
+              Not scheduled yet
             </label>
             {!repairPending && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Going out</label>
-                  <input
-                    type="date" value={repairSendDate} onChange={e => setRepairSendDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Expected back</label>
-                  <input
-                    type="date" value={repairExpected} onChange={e => setRepairExpected(e.target.value)}
-                    min={repairSendDate || new Date().toISOString().split('T')[0]}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none' }}
-                  />
-                </div>
-              </div>
+              <>
+                <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Going out</label>
+                <input
+                  type="date" value={repairSendDate} onChange={e => setRepairSendDate(e.target.value)}
+                  min={new Date().toISOString().split('T')[0]}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 12 }}
+                />
+                <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Expected back</label>
+                <input
+                  type="date" value={repairExpected} onChange={e => setRepairExpected(e.target.value)}
+                  min={repairSendDate || new Date().toISOString().split('T')[0]}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 20 }}
+                />
+              </>
             )}
             {(() => {
               const ready = !!repairShop.trim() && !!repairWork.trim() && (repairPending || !!repairExpected)
