@@ -1529,9 +1529,10 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
             </div>
             <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>What work?</label>
             <input
+              className="input"
               value={repairWork} onChange={e => setRepairWork(e.target.value)}
               placeholder="e.g. Reupholster the door panels"
-              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 12 }}
+              style={{ width: '100%', marginBottom: 12 }}
             />
             {/* Not scheduled yet → create as pending, fill dates later (parity with the external form). */}
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px', borderRadius: 10, background: repairPending ? '#fef3c7' : '#f9fafb', border: `1px solid ${repairPending ? '#fcd34d' : '#e2e5ea'}`, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 12 }}>
@@ -1542,15 +1543,15 @@ function AttentionCard({ a, isAdmin, role, onAction }: {
               <>
                 <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Going out</label>
                 <input
-                  type="date" value={repairSendDate} onChange={e => setRepairSendDate(e.target.value)}
+                  type="date" className="input" value={repairSendDate} onChange={e => setRepairSendDate(e.target.value)}
                   min={new Date().toISOString().split('T')[0]}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 12 }}
+                  style={{ width: '100%', marginBottom: 12 }}
                 />
                 <label style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, display: 'block' }}>Expected back</label>
                 <input
-                  type="date" value={repairExpected} onChange={e => setRepairExpected(e.target.value)}
+                  type="date" className="input" value={repairExpected} onChange={e => setRepairExpected(e.target.value)}
                   min={repairSendDate || new Date().toISOString().split('T')[0]}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid #e2e5ea', fontSize: 14, background: '#f9fafb', outline: 'none', marginBottom: 20 }}
+                  style={{ width: '100%', marginBottom: 20 }}
                 />
               </>
             )}
