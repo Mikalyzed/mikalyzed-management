@@ -362,6 +362,13 @@ export default function PartsOverviewPage() {
                     </span>
                   </div>
 
+                  {/* Note entered when the part was added. */}
+                  {part.notes && (
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
+                      <span style={{ fontWeight: 650, color: 'var(--text-muted)' }}>Note: </span>{part.notes}
+                    </p>
+                  )}
+
                   {/* Meta line — link is plain text, not a pill */}
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     {part.url && (

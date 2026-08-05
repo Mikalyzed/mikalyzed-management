@@ -205,6 +205,14 @@ export default function PartDetailModal({ partId, isAdmin, role, onClose, onChan
               </a>
             )}
 
+            {/* Note entered when the part was added. */}
+            {part.notes && (
+              <div style={{ margin: '2px 0 14px', padding: '9px 11px', borderRadius: 9, background: 'var(--bg-primary, #f8f8f6)', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 10.5, fontWeight: 650, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Note</div>
+                <div style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{part.notes}</div>
+              </div>
+            )}
+
             {/* Admin: move part to any other status (recover from mistaken clicks) */}
             {isAdmin && (
               <div style={{ margin: '8px 0 18px' }}>
